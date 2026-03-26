@@ -589,8 +589,9 @@ export function createCoastProperties30AAdapter(): ScraperAdapter<CoastDetailRec
     ),
     availabilityHorizonDays: Math.max(
       1,
-      Number(process.env.COASTPROPERTIES30A_AVAILABILITY_HORIZON_DAYS ?? "730") ||
-        730,
+      Number(
+        process.env.COASTPROPERTIES30A_AVAILABILITY_HORIZON_DAYS ?? "730",
+      ) || 730,
     ),
     maxCalendarAdvanceMonths: 24,
     isValidDetailUrl(value: string): string | null {
