@@ -655,7 +655,7 @@ async function run(): Promise<void> {
     const externalSourceDir = resolve(
       root,
       "src",
-      "core",
+      "lib",
       "data",
       "external-sources",
     );

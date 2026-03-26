@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { createScrapeProgress } from "../tooling/terminal/scrape-progress";
+
 type ScrapedLink = {
   link: string;
   source_url: string;
@@ -97,11 +99,17 @@ type StayAvailabilityData = {
       date: string;
       is_available: boolean;
       status_code: string;
+      is_available_for_checkin: boolean;
+      is_available_for_checkout: boolean;
+      booking_day_state: "bookable" | "blocked" | "unknown";
     }>;
     counts: {
       available: number;
       not_available: number;
       other: number;
+      booking_available: number;
+      booking_unavailable: number;
+      booking_unknown: number;
     };
   };
 };
@@ -135,10 +143,18 @@ const GROWTH_POLL_ROUNDS = 10;
 const DETAIL_FETCH_DELAY_MS = Number(
   process.env.STAYON30A_DETAIL_FETCH_DELAY_MS ?? "250",
 );
+const LISTING_FETCH_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.STAYON30A_FETCH_CONCURRENCY ?? "6") || 6,
+);
+const AVAILABILITY_HORIZON_DAYS = Math.max(
+  1,
+  Number(process.env.STAYON30A_AVAILABILITY_HORIZON_DAYS ?? "730") || 730,
+);
 const OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
-  "core",
+  "lib",
   "data",
   "external-sources",
   "stayon30a",
@@ -173,8 +189,27 @@ type StayObservedState = {
   disappeared_ids: string[];
 };
 
+type ListingFetchResult = {
+  rentalId: string;
+  detail: StayDetailData | null;
+  availability: StayAvailabilityData | null;
+};
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+function toElapsedMs(startedAt: number): number {
+  return Math.max(0, Date.now() - startedAt);
+}
+
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }
 
 function parseRunOptions(argv: string[]): RunOptions {
@@ -889,12 +924,14 @@ async function fetchAvailability(
     const today = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
     );
-    const oneYearLater = new Date(today);
-    oneYearLater.setUTCDate(oneYearLater.getUTCDate() + 365);
+    const horizonDate = new Date(today);
+    horizonDate.setUTCDate(
+      horizonDate.getUTCDate() + AVAILABILITY_HORIZON_DAYS,
+    );
 
     const filteredDays = allDays.filter((day) => {
       const dayDate = new Date(`${day.date}T00:00:00.000Z`);
-      return dayDate >= today && dayDate <= oneYearLater;
+      return dayDate >= today && dayDate <= horizonDate;
     });
 
     const summary: Record<string, number> = {};
@@ -905,7 +942,15 @@ async function fetchAvailability(
     const normalizedDays = filteredDays.map((day) => ({
       date: day.date,
       is_available: day.code === "Y",
+      is_available_for_checkin: day.code === "Y",
+      is_available_for_checkout: day.code === "Y",
       status_code: day.code,
+      booking_day_state:
+        day.code === "Y"
+          ? "bookable"
+          : day.code === "N"
+            ? "blocked"
+            : "unknown",
     }));
 
     const available = normalizedDays.filter(
@@ -933,6 +978,15 @@ async function fetchAvailability(
           available,
           not_available: notAvailable,
           other,
+          booking_available: normalizedDays.filter(
+            (day) => day.booking_day_state === "bookable",
+          ).length,
+          booking_unavailable: normalizedDays.filter(
+            (day) => day.booking_day_state === "blocked",
+          ).length,
+          booking_unknown: normalizedDays.filter(
+            (day) => day.booking_day_state === "unknown",
+          ).length,
         },
       };
 
@@ -952,8 +1006,15 @@ async function fetchAvailability(
 }
 
 async function run(): Promise<void> {
+  const startedAt = Date.now();
+  const progress = createScrapeProgress({ script: "stayon30a" });
+
   const options = parseRunOptions(process.argv);
   const anchorUrl = options.anchorUrl;
+  progress.phase(
+    `booting scraper (concurrency=${LISTING_FETCH_CONCURRENCY}, per-worker-delay=${DETAIL_FETCH_DELAY_MS}ms)`,
+  );
+
   const { chromium } = await loadPlaywright();
   const browser = await chromium.launch({ headless: true });
 
@@ -965,10 +1026,12 @@ async function run(): Promise<void> {
     let sortedIds: string[] = [];
 
     if (options.rentalId) {
+      progress.phase(`single listing mode for rental_id=${options.rentalId}`);
       sortedIds = [options.rentalId];
       totalUnits = 1;
       totalPages = 1;
     } else {
+      progress.phase("discovering rental IDs from load-more pages");
       const page = await browser.newPage();
 
       page.on("response", (response) => {
@@ -1108,6 +1171,9 @@ async function run(): Promise<void> {
       sortedIds = Array.from(idSet).sort(
         (left, right) => Number(left) - Number(right),
       );
+      progress.success(
+        `discovered ${sortedIds.length} listing IDs (clicks=${clicksPerformed}, api_total_units=${totalUnits ?? "unknown"})`,
+      );
     }
 
     await mkdir(OUTPUT_DETAILS_HTML_DIR, { recursive: true });
@@ -1121,15 +1187,64 @@ async function run(): Promise<void> {
     const failedDetailIds: string[] = [];
     const failedAvailabilityIds: string[] = [];
 
-    for (const rentalId of sortedIds) {
-      const detail = await fetchDetailPage(rentalId);
+    progress.phase(
+      `fetching ${sortedIds.length} detail + availability payloads with bounded concurrency`,
+    );
+
+    const listingResults: ListingFetchResult[] = new Array(sortedIds.length);
+    let nextIndex = 0;
+    let processedCount = 0;
+
+    const workerCount = Math.min(LISTING_FETCH_CONCURRENCY, sortedIds.length);
+    const workers: Array<Promise<void>> = [];
+
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        if (currentIndex >= sortedIds.length) {
+          return;
+        }
+
+        const rentalId = sortedIds[currentIndex] as string;
+        const [detail, availability] = await Promise.all([
+          fetchDetailPage(rentalId),
+          fetchAvailability(rentalId),
+        ]);
+
+        listingResults[currentIndex] = {
+          rentalId,
+          detail,
+          availability,
+        };
+
+        processedCount += 1;
+        if (processedCount % 10 === 0 || processedCount === sortedIds.length) {
+          progress.tick(
+            `processed ${processedCount}/${sortedIds.length} (${formatElapsed(toElapsedMs(startedAt))})`,
+          );
+        }
+
+        if (DETAIL_FETCH_DELAY_MS > 0) {
+          await sleep(DETAIL_FETCH_DELAY_MS);
+        }
+      }
+    };
+
+    for (let index = 0; index < workerCount; index += 1) {
+      workers.push(worker());
+    }
+    await Promise.all(workers);
+
+    for (const result of listingResults) {
+      const { rentalId, detail, availability } = result;
+
       if (detail) {
         detailRecords.push(detail);
       } else {
         failedDetailIds.push(rentalId);
       }
 
-      const availability = await fetchAvailability(rentalId);
       if (availability) {
         availabilityRecords.push(availability);
         const availabilityPath = resolve(
@@ -1157,8 +1272,6 @@ async function run(): Promise<void> {
           "utf8",
         );
       }
-
-      await sleep(DETAIL_FETCH_DELAY_MS);
     }
 
     const links: ScrapedLink[] = sortedIds.map((id) => ({
@@ -1223,7 +1336,7 @@ async function run(): Promise<void> {
     const externalSourceDir = resolve(
       root,
       "src",
-      "core",
+      "lib",
       "data",
       "external-sources",
     );
@@ -1272,6 +1385,11 @@ async function run(): Promise<void> {
         "utf8",
       );
     }
+
+    const elapsed = formatElapsed(toElapsedMs(startedAt));
+    progress.success(
+      `scrape complete in ${elapsed} (${detailRecords.length} details, ${availabilityRecords.length} availability)`,
+    );
 
     console.log("Stay on 30A full scrape complete.");
     console.log(`- source_url: ${anchorUrl}`);

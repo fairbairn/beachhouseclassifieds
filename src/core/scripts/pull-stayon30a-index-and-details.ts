@@ -51,7 +51,7 @@ type DetailMatchResult = {
 const STAYON30A_INDEX_PATH = resolve(
   process.cwd(),
   "src",
-  "core",
+  "lib",
   "data",
   "external-sources",
   "stayon30a_listings.json",
@@ -60,7 +60,7 @@ const STAYON30A_INDEX_PATH = resolve(
 const STAYON30A_OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
-  "core",
+  "lib",
   "data",
   "external-sources",
   "stayon30a",

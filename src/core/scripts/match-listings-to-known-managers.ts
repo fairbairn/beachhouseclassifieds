@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import {
   KNOWN_30A_PROPERTY_MANAGERS,
   type KnownManagerSeed,
-} from "../data/known-30a-property-managers";
+} from "@/lib/data/known-30a-property-managers";
 
 type ListingRecord = {
   listing_id: string;
