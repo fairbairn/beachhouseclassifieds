@@ -1,0 +1,8 @@
+# Copy to .users.local (or another environment-specific users file)
+# and customize locally for developer auth users.
+
+- name: Example Developer
+  email: dev@example.com
+  password: replace-with-min-8-chars
+  # IANA timezone (optional). Defaults to America/New_York when omitted.
+  timeZone: America/New_York
