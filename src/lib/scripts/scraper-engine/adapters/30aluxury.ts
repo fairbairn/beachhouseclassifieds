@@ -255,7 +255,8 @@ async function discoverListings(
       };
 
       for (const anchor of Array.from(document.querySelectorAll("a[href]"))) {
-        const hrefRaw = (anchor as HTMLAnchorElement).getAttribute("href") ?? "";
+        const hrefRaw =
+          (anchor as HTMLAnchorElement).getAttribute("href") ?? "";
         if (!hrefRaw) {
           continue;
         }
@@ -360,7 +361,11 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
   bookingRestrictions: string[];
 }> {
   return page.evaluate(() => {
-    const toIsoDate = (year: number, monthIndex: number, day: number): string => {
+    const toIsoDate = (
+      year: number,
+      monthIndex: number,
+      day: number,
+    ): string => {
       const candidate = new Date(Date.UTC(year, monthIndex, day));
       if (
         candidate.getUTCFullYear() !== year ||
@@ -372,7 +377,9 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
       return candidate.toISOString().slice(0, 10);
     };
 
-    const parseMonthHeader = (value: string): { year: number; monthIndex: number } | null => {
+    const parseMonthHeader = (
+      value: string,
+    ): { year: number; monthIndex: number } | null => {
       const cleaned = value.replace(/\s+/g, " ").trim();
       const match = cleaned.match(/^([A-Za-z]+)\s+(\d{4})$/);
       if (!match) {
@@ -430,7 +437,9 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
         group.matches(".ui-datepicker-group") ||
         group.matches("[class*='datepicker-group']")
           ? group
-          : group.closest(".ui-datepicker-group, [class*='datepicker-group']") ?? group;
+          : (group.closest(
+              ".ui-datepicker-group, [class*='datepicker-group']",
+            ) ?? group);
 
       if (visited.has(container)) {
         continue;
@@ -477,12 +486,16 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
       );
 
       for (const cell of dayCells) {
-        const classBlob = String((cell as HTMLElement).className || "").toLowerCase();
+        const classBlob = String(
+          (cell as HTMLElement).className || "",
+        ).toLowerCase();
         if (!/\bav-/.test(classBlob)) {
           continue;
         }
 
-        const dayText = ((cell.textContent ?? "").match(/\d{1,2}/)?.[0] ?? "").trim();
+        const dayText = (
+          (cell.textContent ?? "").match(/\d{1,2}/)?.[0] ?? ""
+        ).trim();
         const day = Number(dayText);
         if (!Number.isFinite(day) || day <= 0 || day > 31) {
           continue;
@@ -508,10 +521,16 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
       }
     }
 
-    const keyText = Array.from(document.querySelectorAll(".rcav-key, .bre-ui-datepicker-extras, .label"))
+    const keyText = Array.from(
+      document.querySelectorAll(".rcav-key, .bre-ui-datepicker-extras, .label"),
+    )
       .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
       .filter(Boolean)
-      .filter((row) => /night available|night unavailable|arrive only|depart only|check-in only|available|unavailable/i.test(row));
+      .filter((row) =>
+        /night available|night unavailable|arrive only|depart only|check-in only|available|unavailable/i.test(
+          row,
+        ),
+      );
 
     return {
       hasCalendarWidget: !!document.querySelector(
@@ -599,13 +618,17 @@ async function fetchDetail(
         title: document.title ?? "",
         h1: document.querySelector("h1")?.textContent ?? "",
         canonical:
-          document.querySelector("link[rel='canonical']")?.getAttribute("href") ??
-          "",
+          document
+            .querySelector("link[rel='canonical']")
+            ?.getAttribute("href") ?? "",
         metaDescription: getMeta("description") || getMeta("og:description"),
       };
     });
 
-    const descriptionText = (await extractDescriptionText(page)).slice(0, 15000);
+    const descriptionText = (await extractDescriptionText(page)).slice(
+      0,
+      15000,
+    );
 
     await clickTab(page, "Availability");
 
@@ -730,7 +753,10 @@ async function fetchDetail(
       });
 
     const externalListingId = extractExternalListingId(detailUrl);
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${externalListingId}.html`);
+    const htmlPath = resolve(
+      OUTPUT_DETAILS_HTML_DIR,
+      `${externalListingId}.html`,
+    );
     const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
 
@@ -738,21 +764,31 @@ async function fetchDetail(
       source: "pm_30aluxury" as const,
       external_listing_id: externalListingId,
       name: stripHtml(extracted.h1 || extracted.title).slice(0, 240),
-      description: stripHtml(descriptionText || extracted.metaDescription).slice(0, 15000),
+      description: stripHtml(
+        descriptionText || extracted.metaDescription,
+      ).slice(0, 15000),
       match_signals: {
         description_normalized: normalizeForMatch(
-          stripHtml(descriptionText || extracted.metaDescription).slice(0, 15000),
+          stripHtml(descriptionText || extracted.metaDescription).slice(
+            0,
+            15000,
+          ),
         ),
         description_sha256: hashSha256(
           normalizeForMatch(
-            stripHtml(descriptionText || extracted.metaDescription).slice(0, 15000),
+            stripHtml(descriptionText || extracted.metaDescription).slice(
+              0,
+              15000,
+            ),
           ),
         ),
         title_normalized: normalizeForMatch(
           stripHtml(extracted.h1 || extracted.title).slice(0, 240),
         ),
         title_sha256: hashSha256(
-          normalizeForMatch(stripHtml(extracted.h1 || extracted.title).slice(0, 240)),
+          normalizeForMatch(
+            stripHtml(extracted.h1 || extracted.title).slice(0, 240),
+          ),
         ),
         listing_composite_key: hashSha256(
           `${externalListingId}|${normalizeForMatch(stripHtml(extracted.h1 || extracted.title).slice(0, 240))}`,
@@ -791,7 +827,8 @@ async function fetchDetail(
         day_codes: normalizedDays.map((day) => day.status_code).join(""),
         days: normalizedDays,
         counts: {
-          available: normalizedDays.filter((day) => day.status_code === "A").length,
+          available: normalizedDays.filter((day) => day.status_code === "A")
+            .length,
           unavailable: normalizedDays.filter((day) => day.status_code === "U")
             .length,
           checkin_only: normalizedDays.filter((day) => day.status_code === "I")
@@ -820,7 +857,8 @@ async function fetchDetail(
       },
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "unknown detail pull error";
+    const message =
+      error instanceof Error ? error.message : "unknown detail pull error";
     console.warn(`[30aluxury] detail pull failed for ${detailUrl}: ${message}`);
     return null;
   } finally {
