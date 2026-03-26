@@ -172,6 +172,8 @@ async function loadDetailUrlsFromFile(
 }
 
 async function loadKnownDetailUrlsFromArtifacts(
+  reportsDir: string,
+  managerKey: string,
   outputRoot: string,
   outputDetailsJsonDir: string,
   validate: (value: string) => string | null,
@@ -179,6 +181,8 @@ async function loadKnownDetailUrlsFromArtifacts(
   const urls: string[] = [];
 
   const manifestPaths = [
+    resolve(reportsDir, `${managerKey}-details-manifest.json`),
+    resolve(reportsDir, `${managerKey}-details-manifest-subset.json`),
     resolve(outputRoot, "details", "index.json"),
     resolve(outputRoot, "details", "index-subset.json"),
   ];
@@ -407,6 +411,8 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     if (options.refreshKnown || options.detailUrlsFile) {
       const knownUrls = options.refreshKnown
         ? await loadKnownDetailUrlsFromArtifacts(
+            reportsDir,
+            adapter.managerKey,
             outputRoot,
             outputDetailsJsonDir,
             adapter.isValidDetailUrl,
@@ -571,9 +577,10 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         : `${adapter.managerKey}_listings.json`,
     );
     const detailsManifestPath = resolve(
-      outputRoot,
-      "details",
-      isSubsetMode ? "index-subset.json" : "index.json",
+      reportsDir,
+      isSubsetMode
+        ? `${adapter.managerKey}-details-manifest-subset.json`
+        : `${adapter.managerKey}-details-manifest.json`,
     );
 
     await writeFile(
