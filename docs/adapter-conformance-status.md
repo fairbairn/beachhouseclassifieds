@@ -12,7 +12,7 @@ Data source:
 Scope:
 
 - Adapter detail JSONs under `src/lib/data/external-sources/*/details/json`
-- Coverage fields audited: required core, property profile, normalized availability, expanded sections
+- Coverage fields audited: required core, property profile, normalized availability, expanded sections, and quality thresholds
 
 ## Field Legend
 
@@ -26,36 +26,59 @@ Scope:
 - `Media+`: files with `media_gallery.image_urls` containing at least one URL
 - `Image URLs`: aggregate count of `media_gallery.image_urls[]` across all files for the adapter
 - `Avg Img/List`: `Image URLs / Files` (values <= 1 indicate under-optimized media extraction)
+- `Ready`: strict quality gate status across all files for the adapter (`✅` pass, `❌` fail)
+- `Notes`: explicit shortfall summary from probe output (`required_failures` + non-blocking preferred notes)
+
+## Threshold Gates
+
+An adapter is `Ready` only if **all files** meet these required thresholds:
+
+- Description threshold: `description_expanded` length >= 600 characters
+- Amenities threshold: `amenities.all.length >= 8`
+- Media threshold: `media_gallery.image_urls.length >= 5`
+- Availability threshold (required): availability window span >= 365 days
+
+Preferred (non-blocking for `Ready`, tracked separately in probe output):
+
+- Availability preferred horizon: span >= 730 days
 
 ## Conformance Matrix
 
-| Adapter            | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Image URLs | Avg Img/List |
-| ------------------ | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ---------: | -----------: |
-| 30aescapes         |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |       6282 |        37.17 |
-| 30aluxury          |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |       5247 |        49.97 |
-| 360blue            |   620 |  620 |     620 |          620 |          620 |        620 |       620 |    620 |      30940 |        49.90 |
-| benchmark30a       |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |       8508 |        66.47 |
-| beachblue          |    16 |   16 |      16 |           16 |           16 |         16 |        16 |     16 |        712 |        44.50 |
-| coastproperties30a |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |       2063 |        68.77 |
-| exclusive30a       |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |       5629 |        53.10 |
-| fivestar30a        |    62 |   62 |      62 |           62 |           62 |         62 |        62 |     62 |       6488 |       104.65 |
-| localvr30a         |    42 |   42 |      42 |           42 |           42 |         42 |        42 |     42 |       1774 |        42.24 |
-| oceanreef30a       |   111 |  111 |     111 |          111 |          111 |        111 |       111 |    111 |       8250 |        74.32 |
-| oversee30a         |    67 |   67 |      67 |           67 |           67 |         67 |        67 |     67 |       3738 |        55.79 |
-| realjoy30a         |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |      16334 |       116.67 |
-| royaldestinations  |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |       6677 |        46.69 |
-| stayon30a          |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |      11150 |       142.95 |
-| **TOTAL**          |  1817 | 1817 |    1817 |         1817 |         1817 |       1817 |      1817 |   1817 |     113792 |        62.63 |
+| Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Image URLs | Avg Img/List | Ready | Notes |
+| ----------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ---------: | -----------: | :---: | ----- |
+| 30aescapes              |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |       6282 |        37.17 |  ✅   | preferred availability>=730d 0/169 |
+| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |       5247 |        49.97 |  ✅   | preferred availability>=730d 0/105 |
+| 360blue                 |   620 |  620 |     620 |          620 |          620 |        620 |       620 |    620 |      30940 |        49.90 |  ❌   | description>=600 618/620; location_quality 573/620; availability>=365d 594/620 |
+| benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |       8508 |        66.47 |  ✅   | preferred availability>=730d 125/128 |
+| beachblue               |    16 |   16 |      16 |           16 |           16 |         16 |        16 |     16 |        712 |        44.50 |  ✅   | preferred availability>=730d 0/16 |
+| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |       2063 |        68.77 |  ❌   | availability>=365d 0/30 |
+| exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |       5629 |        53.10 |  ✅   | none |
+| fivestar30a             |    62 |   62 |      62 |           62 |           62 |         62 |        62 |     62 |       6488 |       104.65 |  ❌   | description>=600 0/62; amenities>=8 58/62 |
+| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |      10762 |        51.74 |  ✅   | preferred availability>=730d 0/208 |
+| localvr30a              |    42 |   42 |      42 |           42 |           42 |         42 |        42 |     42 |       1774 |        42.24 |  ✅   | none |
+| oceanreef30a            |   111 |  111 |     111 |          111 |          111 |        111 |       111 |    111 |       8250 |        74.32 |  ❌   | amenities>=8 97/111; availability>=365d 0/111 |
+| oversee30a              |    67 |   67 |      67 |           67 |           67 |         67 |        67 |     67 |       3738 |        55.79 |  ✅   | preferred availability>=730d 0/67 |
+| realjoy30a              |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |      16334 |       116.67 |  ✅   | preferred availability>=730d 0/140 |
+| royaldestinations       |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |       6677 |        46.69 |  ❌   | amenities>=8 137/143; location_quality 0/143 |
+| sandersbeach30a         |    73 |   73 |      73 |           73 |           73 |         73 |        73 |     73 |       3633 |        49.77 |  ✅   | preferred availability>=730d 0/73 |
+| stayon30a               |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |      11150 |       142.95 |  ✅   | preferred availability>=730d 0/78 |
+| **TOTAL**               |  2098 | 2098 |    2098 |         2098 |         2098 |       2098 |      2098 |   2098 |     128187 |        61.10 |   —   | 11/16 Ready |
 
 ## Current Snapshot Summary
 
-- 14 adapters audited.
-- All 14 adapters are at full required-core parity for the current captured files.
-- `property_profile` and expanded sections (`description_expanded`, `amenities`, `location`, `media_gallery`) are now fully populated across the current adapter corpus.
+- 16 adapters audited.
+- All 16 adapters are at full required-core parity for the current captured files.
+- Threshold-ready adapters (`Ready = ✅`): `11 / 16`.
+- `30aescapes` status: `Ready = ✅`; non-blocking note is preferred availability horizon (`>=730d`) not yet met.
+- Main blockers across non-ready adapters:
+  - availability horizon under required 365-day span (`coastproperties30a`, `oceanreef30a`, subset of `360blue`)
+  - description threshold under 600 chars (`360blue`, `fivestar30a`)
+  - amenities depth under 8 items (`fivestar30a`, `oceanreef30a`, `royaldestinations`)
+  - location-quality gaps (`360blue`, `royaldestinations`)
 
 ## Follow-Up Refinement Backlog (Post Base-Adapter Completion)
 
-- No remaining adapter-level backlog for universal detail schema conformance.
+- Backlog now tracks threshold deficits until adapters earn `Ready = ✅`.
 - Continue running the probe script after parser changes to prevent regressions.
 
 ## Definition of Done for Conformance
@@ -66,7 +89,8 @@ Per adapter, refinement is complete when:
 2. `property_profile` is populated where source data exists.
 3. `normalized_availability.days` is present and coherent.
 4. Expanded sections are captured when source supports them.
-5. Probe script rerun confirms target coverage and doc matrix is updated.
+5. Threshold gates pass for 100% of current files (`description`, `amenities`, `media`, `availability >= 365d`).
+6. Probe script rerun confirms target coverage and doc matrix is updated.
 
 ## Maintenance Notes
 

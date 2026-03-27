@@ -100,6 +100,7 @@ const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 
 function stripHtml(value: string): string {
   return value
+    .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]*>/g, " ")
@@ -107,12 +108,124 @@ function stripHtml(value: string): string {
     .trim();
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&mdash;/gi, "-")
+    .replace(/&ndash;/gi, "-")
+    .replace(/&rsquo;/gi, "'")
+    .replace(/&lsquo;/gi, "'")
+    .replace(/&ldquo;/gi, '"')
+    .replace(/&rdquo;/gi, '"')
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_, digits: string) => {
+      const code = Number(digits);
+      if (!Number.isFinite(code) || code <= 0) {
+        return "";
+      }
+      return String.fromCodePoint(code);
+    })
+    .replace(/&#x([a-fA-F0-9]+);/g, (_, hex: string) => {
+      const code = Number.parseInt(hex, 16);
+      if (!Number.isFinite(code) || code <= 0) {
+        return "";
+      }
+      return String.fromCodePoint(code);
+    });
+}
+
 function extractFirst(regex: RegExp, value: string): string {
   const match = value.match(regex);
   if (!match?.[1]) {
     return "";
   }
-  return stripHtml(match[1]).trim();
+  return decodeHtmlEntities(stripHtml(match[1])).trim();
+}
+
+function stripHtmlFragment(value: string): string {
+  return decodeHtmlEntities(stripHtml(value));
+}
+
+function extractDescriptionFromPanel(html: string): string {
+  const panelMatch = html.match(
+    /<div[^>]+id=["']panel-description["'][^>]*>[\s\S]*?<div[^>]+class=["'][^"']*accordion-body[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<!--\s*end accordion-body\s*-->/i,
+  );
+  if (!panelMatch?.[1]) {
+    return "";
+  }
+
+  return stripHtmlFragment(panelMatch[1]).slice(0, 20000);
+}
+
+function addAmenityValue(
+  categories: Record<string, string[]>,
+  all: string[],
+  seen: Set<string>,
+  category: string,
+  value: string,
+): void {
+  const cleanedCategory = stripHtmlFragment(category).trim() || "Property Amenities";
+  const cleanedValue = stripHtmlFragment(value).trim();
+  if (!cleanedValue) {
+    return;
+  }
+
+  if (!categories[cleanedCategory]) {
+    categories[cleanedCategory] = [];
+  }
+  categories[cleanedCategory].push(cleanedValue);
+
+  const dedupeKey = normalizeForMatch(cleanedValue);
+  if (!dedupeKey || seen.has(dedupeKey)) {
+    return;
+  }
+  seen.add(dedupeKey);
+  all.push(cleanedValue);
+}
+
+function extractAmenitiesFromHtml(html: string): {
+  categories: Record<string, string[]>;
+  all: string[];
+} {
+  const categories: Record<string, string[]> = {};
+  const all: string[] = [];
+  const seen = new Set<string>();
+
+  const modalBody = html.match(
+    /<div[^>]+id=["']prop-amenities-modal["'][\s\S]*?<div[^>]+class=["'][^"']*modal-body[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/i,
+  )?.[1];
+
+  if (modalBody) {
+    const categoryRegex =
+      /<h5[^>]*class=["'][^"']*fw-bold[^"']*["'][^>]*>([\s\S]*?)<\/h5>\s*<ul[^>]*class=["'][^"']*bcs-amenities-list[^"']*["'][^>]*>([\s\S]*?)<\/ul>/gi;
+
+    for (const match of modalBody.matchAll(categoryRegex)) {
+      const category = match[1] ?? "Property Amenities";
+      const listHtml = match[2] ?? "";
+      for (const li of listHtml.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)) {
+        if (li[1]) {
+          addAmenityValue(categories, all, seen, category, li[1]);
+        }
+      }
+    }
+  }
+
+  const highlightsList = html.match(
+    /<div[^>]*class=["'][^"']*property-amenities-wrap[^"']*["'][\s\S]*?<ul[^>]*class=["'][^"']*bcs-amenities-list[^"']*["'][^>]*>([\s\S]*?)<\/ul>/i,
+  )?.[1];
+  if (highlightsList) {
+    for (const li of highlightsList.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)) {
+      if (li[1]) {
+        addAmenityValue(categories, all, seen, "Highlights", li[1]);
+      }
+    }
+  }
+
+  return { categories, all };
 }
 
 function normalizeForMatch(value: string): string {
@@ -573,23 +686,30 @@ async function fetchDetail(
     ).length;
     const other = normalizedDays.length - available - notAvailable;
 
-    const name = stripHtml(h1 || title).slice(0, 240);
+    const name = stripHtmlFragment(h1 || title).slice(0, 240);
     const schemaDescription =
       typeof vacationRentalSchema?.description === "string"
-        ? stripHtml(vacationRentalSchema.description)
+        ? stripHtmlFragment(vacationRentalSchema.description)
         : "";
-    const description = stripHtml(schemaDescription || metaDescription).slice(
-      0,
-      20000,
-    );
+    const panelDescription = extractDescriptionFromPanel(html);
+    const description =
+      [panelDescription, schemaDescription, metaDescription]
+        .map((value) => stripHtmlFragment(value))
+        .sort((a, b) => b.length - a.length)[0]
+        ?.slice(0, 20000) ?? "";
     const titleNormalized = normalizeForMatch(name);
     const descriptionNormalized = normalizeForMatch(description);
     const descriptionHash = hashSha256(descriptionNormalized);
     const titleHash = hashSha256(titleNormalized);
 
-    const amenitiesCategories: Record<string, string[]> = {};
-    const amenitiesAll: string[] = [];
-    const seenAmenity = new Set<string>();
+    const amenitiesFromHtml = extractAmenitiesFromHtml(html);
+    const amenitiesCategories: Record<string, string[]> = {
+      ...amenitiesFromHtml.categories,
+    };
+    const amenitiesAll: string[] = [...amenitiesFromHtml.all];
+    const seenAmenity = new Set<string>(
+      amenitiesAll.map((value) => normalizeForMatch(value)).filter(Boolean),
+    );
     const schemaAmenities = Array.isArray(vacationRentalSchema?.amenityFeature)
       ? (vacationRentalSchema?.amenityFeature as unknown[])
       : [];
@@ -603,22 +723,18 @@ async function fetchDetail(
         continue;
       }
 
-      const value = stripHtml(label).trim();
+      const value = stripHtmlFragment(label).trim();
       if (!value) {
         continue;
       }
 
-      if (!amenitiesCategories["Property Amenities"]) {
-        amenitiesCategories["Property Amenities"] = [];
-      }
-      amenitiesCategories["Property Amenities"].push(value);
-
-      const dedupeKey = normalizeForMatch(value);
-      if (!dedupeKey || seenAmenity.has(dedupeKey)) {
-        continue;
-      }
-      seenAmenity.add(dedupeKey);
-      amenitiesAll.push(value);
+      addAmenityValue(
+        amenitiesCategories,
+        amenitiesAll,
+        seenAmenity,
+        "Property Amenities",
+        value,
+      );
     }
 
     const imageUrls: string[] = [];
@@ -675,10 +791,24 @@ async function fetchDetail(
         : null;
 
     const address = String(schemaAddress?.streetAddress ?? "").trim();
-    const city = String(schemaAddress?.addressLocality ?? "").trim();
+    let city = String(schemaAddress?.addressLocality ?? "").trim();
     const state = String(schemaAddress?.addressRegion ?? "").trim();
-    const locationLabel = [city, state].filter(Boolean).join(", ");
-    const directionsDaddr = [address, city, state].filter(Boolean).join(", ");
+    const locationExcerpt = extractFirst(
+      /<p[^>]*class=["'][^"']*property-excerpt[^"']*["'][^>]*>([\s\S]*?)<\/p>/i,
+      html,
+    );
+    if (!city && locationExcerpt) {
+      city = locationExcerpt
+        .split("-")[0]
+        ?.trim()
+        .slice(0, 120);
+    }
+    const fallbackAddress = address || locationExcerpt;
+    const locationLabel =
+      [city, state].filter(Boolean).join(", ") || locationExcerpt;
+    const directionsDaddr = [fallbackAddress, city, state]
+      .filter(Boolean)
+      .join(", ");
     const directionsUrl = directionsDaddr
       ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
           directionsDaddr,
@@ -731,7 +861,7 @@ async function fetchDetail(
         all: amenitiesAll,
       },
       location: {
-        address,
+        address: fallbackAddress,
         location_label: locationLabel,
         directions_url: directionsUrl,
         directions_daddr: directionsDaddr,
