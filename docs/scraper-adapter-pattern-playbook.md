@@ -111,6 +111,12 @@ Use this document when starting a new manager probe to quickly answer:
 - Else parse embedded JS/JSON day-state payloads.
 - Always map provider states into `A/U/I/O/X` and preserve provider diagnostics in `availability_raw`.
 
+### Rates and Quote APIs
+
+- For Streamline-like adapters using `/wp-admin/admin-ajax.php?action=streamlinecore-api-request`, probe method names before building UI-only logic.
+- Common methods seen in current adapters include `GetPropertyAvailabilityRawData`, `GetPropertyRates` or `GetPropertyRatesRawData`, and (on some managers) `GetPreReservationPrice` for ad-hoc full-stay quote calculations.
+- Treat ad-hoc quote methods as optional enrichment: keep nightly/day rates in `normalized_rates` and store quote-response diagnostics in a provider-specific raw sidecar until a shared quote schema is introduced.
+
 ## Guardrails and Reliability Rules
 
 - Set hard caps on scroll steps, click cycles, and calendar month advances.

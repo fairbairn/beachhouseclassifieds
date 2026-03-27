@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { Browser } from "playwright";
 
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
@@ -112,8 +113,7 @@ type ScenicStaysDetailRecord = DetailRecordBase & {
   };
 };
 
-const DEFAULT_ANCHOR_URL =
-  "https://myscenicstays.com/30a-vacation-rentals";
+const DEFAULT_ANCHOR_URL = "https://myscenicstays.com/rentals?type=2&mapsearch=1";
 const OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
@@ -124,9 +124,10 @@ const OUTPUT_ROOT = resolve(
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 
-const MAX_CLICK_CYCLES = 24;
+const MAX_CLICK_CYCLES = 80;
 const CLICK_WAIT_MS = 1200;
 const GROWTH_POLL_ROUNDS = 10;
+const MAX_NO_GROWTH_CYCLES = 5;
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
@@ -592,6 +593,371 @@ function decodeAvailabilityDays(
   return days;
 }
 
+function extractStoredDatesAvailability(
+  html: string,
+): Array<{ date: string; code: string }> {
+  const tagMatch = html.match(/<div[^>]+id=["']pdpStoredDates["'][^>]*>/i);
+  if (!tagMatch?.[0]) {
+    return [];
+  }
+
+  const tag = tagMatch[0];
+  const readAttr = (name: string): string => {
+    const regex = new RegExp(`${name}=["']([\\s\\S]*?)["']`, "i");
+    return (tag.match(regex)?.[1] ?? "").trim();
+  };
+
+  const parseDateList = (value: string): string[] => {
+    return value
+      .split(",")
+      .map((entry) => normalizeDateLikeToIso(entry))
+      .filter(Boolean);
+  };
+
+  const unavailableDates = parseDateList(readAttr("data-unavailable-dates"));
+  const checkinDates = parseDateList(readAttr("data-checkin-dates"));
+  const checkoutDates = parseDateList(readAttr("data-checkout-dates"));
+
+  const rows: Array<{ date: string; code: string }> = [];
+  for (const date of unavailableDates) {
+    rows.push({ date, code: "N" });
+  }
+  for (const date of checkinDates) {
+    rows.push({ date, code: "Y" });
+  }
+  for (const date of checkoutDates) {
+    rows.push({ date, code: "Y" });
+  }
+
+  return rows;
+}
+
+function mergeAvailabilityDays(
+  ...groups: Array<Array<{ date: string; code: string }>>
+): Array<{ date: string; code: string }> {
+  const merged = new Map<string, string>();
+
+  for (const group of groups) {
+    for (const day of group) {
+      if (!day?.date) {
+        continue;
+      }
+
+      const normalizedCode = day.code === "Y" ? "Y" : day.code === "N" ? "N" : "";
+      if (!normalizedCode) {
+        continue;
+      }
+
+      const existing = merged.get(day.date);
+      if (!existing || normalizedCode === "Y") {
+        merged.set(day.date, normalizedCode);
+      }
+    }
+  }
+
+  return Array.from(merged.entries())
+    .map(([date, code]) => ({ date, code }))
+    .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function mergeRateDays(
+  ...groups: Array<
+    Array<{
+      date: string;
+      nightly_rate: number | null;
+      min_nights: number | null;
+      is_booked: boolean | null;
+      changeover_code: string;
+      season_name: string;
+    }>
+  >
+): Array<{
+  date: string;
+  nightly_rate: number | null;
+  min_nights: number | null;
+  is_booked: boolean | null;
+  changeover_code: string;
+  season_name: string;
+}> {
+  const merged = new Map<
+    string,
+    {
+      date: string;
+      nightly_rate: number | null;
+      min_nights: number | null;
+      is_booked: boolean | null;
+      changeover_code: string;
+      season_name: string;
+    }
+  >();
+
+  for (const group of groups) {
+    for (const day of group) {
+      if (!day?.date) {
+        continue;
+      }
+
+      const existing = merged.get(day.date);
+      if (!existing) {
+        merged.set(day.date, day);
+        continue;
+      }
+
+      const existingHasRate = typeof existing.nightly_rate === "number";
+      const nextHasRate = typeof day.nightly_rate === "number";
+      if (!existingHasRate && nextHasRate) {
+        merged.set(day.date, day);
+      }
+    }
+  }
+
+  return Array.from(merged.values()).sort((left, right) =>
+    left.date.localeCompare(right.date),
+  );
+}
+
+function extractDescriptionExpanded(html: string): string {
+  const fromModernSection = extractFirst(
+    /<div[^>]+class=["'][^"']*pdp-section\s+pdp-description[^"']*["'][^>]*>[\s\S]*?<div[^>]+class=["'][^"']*be-read-more-wrap[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+    html,
+  );
+  if (fromModernSection) {
+    return fromModernSection.slice(0, 20000);
+  }
+
+  const fromLegacySection = extractSectionBetween(
+    html,
+    'class="property_description"',
+    '</section><!--End description-->',
+  );
+  const legacy = stripHtml(fromLegacySection).replace(/^description\s+/i, "");
+  if (legacy) {
+    return legacy.slice(0, 20000);
+  }
+
+  return "";
+}
+
+async function collectInteractiveDetailSnapshot(
+  browser: Browser,
+  detailUrl: string,
+  maxCalendarAdvanceMonths: number,
+): Promise<{
+  html: string;
+  availabilityDays: Array<{ date: string; code: string }>;
+  rateDays: Array<{
+    date: string;
+    nightly_rate: number | null;
+    min_nights: number | null;
+    is_booked: boolean | null;
+    changeover_code: string;
+    season_name: string;
+  }>;
+}> {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto(detailUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 120000,
+    });
+    await page.waitForTimeout(1200);
+
+    const clickByText = async (needle: string): Promise<void> => {
+      await page.evaluate((targetText) => {
+        const target = targetText.toLowerCase();
+        const nodes = Array.from(
+          document.querySelectorAll(
+            "button, a, [role='button'], input[type='button'], input[type='submit']",
+          ),
+        );
+
+        for (const node of nodes) {
+          const element = node as HTMLElement;
+          if (element.offsetParent === null) {
+            continue;
+          }
+
+          if (
+            element.getAttribute("disabled") !== null ||
+            element.getAttribute("aria-disabled") === "true"
+          ) {
+            continue;
+          }
+
+          const text = (element.textContent ?? "").toLowerCase().trim();
+          const aria = (element.getAttribute("aria-label") ?? "")
+            .toLowerCase()
+            .trim();
+          const value = (element.getAttribute("value") ?? "")
+            .toLowerCase()
+            .trim();
+          const dataMore = (element.getAttribute("data-text-more") ?? "")
+            .toLowerCase()
+            .trim();
+          const combined = `${text} ${aria} ${value} ${dataMore}`;
+          if (combined.includes(target)) {
+            element.click();
+            return;
+          }
+        }
+      }, needle);
+
+      await page.waitForTimeout(180);
+    };
+
+    await clickByText("read more");
+    await clickByText("show more rates");
+    await clickByText("show all amenities");
+
+    const availabilityMap = new Map<string, string>();
+    const rateMap = new Map<
+      string,
+      {
+        date: string;
+        nightly_rate: number | null;
+        min_nights: number | null;
+        is_booked: boolean | null;
+        changeover_code: string;
+        season_name: string;
+      }
+    >();
+
+    const captureVisibleCalendars = async (): Promise<void> => {
+      const snapshot = await page.evaluate(() => {
+        const availability: Array<{ date: string; code: string }> = [];
+        const cells = document.querySelectorAll(
+          ".pdp-availability-calendar td[data-date], .choose-your-dates td[data-date], .booking-calendar td[data-date]",
+        );
+        for (const cell of Array.from(cells)) {
+          const element = cell as HTMLElement;
+          const rawDate = element.getAttribute("data-date") ?? "";
+          if (!rawDate) {
+            continue;
+          }
+
+          const classes = (element.className ?? "").toLowerCase();
+          let code = "";
+          if (
+            classes.includes("available") ||
+            classes.includes("check-in") ||
+            classes.includes("check-out")
+          ) {
+            code = "Y";
+          } else if (classes.includes("booked") || classes.includes("unavailable")) {
+            code = "N";
+          }
+
+          if (code) {
+            availability.push({ date: rawDate, code });
+          }
+        }
+
+        const rates: Array<{ date: string; nightlyRateRaw: string }> = [];
+        const rows = document.querySelectorAll(".pdp-rates-table tbody tr");
+        for (const row of Array.from(rows)) {
+          const cells = row.querySelectorAll("td");
+          if (cells.length < 3) {
+            continue;
+          }
+
+          const dateText = (cells[0]?.textContent ?? "").trim();
+          const rateText = (cells[2]?.textContent ?? "").trim();
+          if (!dateText || !rateText) {
+            continue;
+          }
+          rates.push({ date: dateText, nightlyRateRaw: rateText });
+        }
+
+        return { availability, rates };
+      });
+
+      for (const day of snapshot.availability) {
+        const date = normalizeDateLikeToIso(day.date);
+        const code = day.code === "Y" ? "Y" : day.code === "N" ? "N" : "";
+        if (!date || !code) {
+          continue;
+        }
+
+        const existing = availabilityMap.get(date);
+        if (!existing || code === "Y") {
+          availabilityMap.set(date, code);
+        }
+      }
+
+      for (const row of snapshot.rates) {
+        const date = normalizeDateLikeToIso(row.date);
+        if (!date) {
+          continue;
+        }
+
+        const rate = parseCurrencyLike(row.nightlyRateRaw);
+        const existing = rateMap.get(date);
+        if (!existing || (existing.nightly_rate === null && rate !== null)) {
+          rateMap.set(date, {
+            date,
+            nightly_rate: rate,
+            min_nights: null,
+            is_booked: null,
+            changeover_code: "",
+            season_name: "",
+          });
+        }
+      }
+    };
+
+    await captureVisibleCalendars();
+
+    const maxAdvances = Math.max(0, maxCalendarAdvanceMonths);
+    for (let month = 0; month < maxAdvances; month += 1) {
+      const advanced = await page.evaluate(() => {
+        const candidates = Array.from(
+          document.querySelectorAll(
+            ".pdp-availability-calendar .swiper-button-next-btn, .choose-your-dates .swiper-button-next-btn, .swiper-button-next-btn[aria-label*='Calendar'], .swiper-button-next-btn",
+          ),
+        );
+
+        for (const node of candidates) {
+          const element = node as HTMLElement;
+          if (element.offsetParent === null) {
+            continue;
+          }
+          if (
+            element.getAttribute("disabled") !== null ||
+            element.getAttribute("aria-disabled") === "true"
+          ) {
+            continue;
+          }
+
+          element.click();
+          return true;
+        }
+
+        return false;
+      });
+
+      if (!advanced) {
+        break;
+      }
+
+      await page.waitForTimeout(140);
+      await captureVisibleCalendars();
+    }
+
+    return {
+      html: await page.content(),
+      availabilityDays: Array.from(availabilityMap.entries())
+        .map(([date, code]) => ({ date, code }))
+        .sort((left, right) => left.date.localeCompare(right.date)),
+      rateDays: Array.from(rateMap.values()).sort((left, right) =>
+        left.date.localeCompare(right.date),
+      ),
+    };
+  } finally {
+    await page.close().catch(() => undefined);
+  }
+}
+
 async function discoverListings(
   page: Parameters<
     ScraperAdapter<ScenicStaysDetailRecord>["discoverListings"]
@@ -665,7 +1031,13 @@ async function discoverListings(
   await collectDetailUrls();
 
   const maxCycles = Math.min(maxScrollSteps, MAX_CLICK_CYCLES);
+  let noGrowthCycles = 0;
+
   for (let cycle = 0; cycle < maxCycles; cycle += 1) {
+    const beforeIdCount = idSet.size;
+    const beforeDetailCount = detailUrlSet.size;
+    const beforeScrollHeight = await page.evaluate(() => document.body.scrollHeight);
+
     const loadMoreVisible = await page.evaluate(() => {
       const nodes = Array.from(
         document.querySelectorAll(
@@ -702,67 +1074,88 @@ async function discoverListings(
       return false;
     });
 
-    if (!loadMoreVisible) {
-      break;
+    if (loadMoreVisible) {
+      await page.evaluate(() => {
+        const nodes = Array.from(
+          document.querySelectorAll(
+            "button, a, [role='button'], input[type='button'], input[type='submit']",
+          ),
+        );
+
+        for (const node of nodes) {
+          const element = node as HTMLElement;
+          if (element.offsetParent === null) {
+            continue;
+          }
+
+          if (
+            element.getAttribute("disabled") !== null ||
+            element.getAttribute("aria-disabled") === "true"
+          ) {
+            continue;
+          }
+
+          const text = (element.textContent ?? "").toLowerCase().trim();
+          const aria = (element.getAttribute("aria-label") ?? "")
+            .toLowerCase()
+            .trim();
+          const value = (element.getAttribute("value") ?? "")
+            .toLowerCase()
+            .trim();
+          const combined = `${text} ${aria} ${value}`;
+
+          if (combined.includes("load more")) {
+            element.click();
+            return;
+          }
+        }
+      });
     }
 
-    const beforeCount = idSet.size;
-
-    const clicked = await page.evaluate(() => {
-      const nodes = Array.from(
-        document.querySelectorAll(
-          "button, a, [role='button'], input[type='button'], input[type='submit']",
-        ),
-      );
-
-      for (const node of nodes) {
-        const element = node as HTMLElement;
-        if (element.offsetParent === null) {
-          continue;
-        }
-
-        if (
-          element.getAttribute("disabled") !== null ||
-          element.getAttribute("aria-disabled") === "true"
-        ) {
-          continue;
-        }
-
-        const text = (element.textContent ?? "").toLowerCase().trim();
-        const aria = (element.getAttribute("aria-label") ?? "")
-          .toLowerCase()
-          .trim();
-        const value = (element.getAttribute("value") ?? "")
-          .toLowerCase()
-          .trim();
-        const combined = `${text} ${aria} ${value}`;
-
-        if (combined.includes("load more")) {
-          element.click();
-          return true;
-        }
-      }
-
-      return false;
+    await page.evaluate(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "instant" });
     });
 
-    if (!clicked) {
-      break;
-    }
-
     await page.waitForTimeout(CLICK_WAIT_MS);
+    await page.evaluate(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "instant" });
+    });
+
+    await page.waitForTimeout(Math.max(700, scrollPauseMs));
     await collectDetailUrls();
 
+    let observedGrowth =
+      idSet.size > beforeIdCount || detailUrlSet.size > beforeDetailCount;
+
     for (let poll = 0; poll < GROWTH_POLL_ROUNDS; poll += 1) {
-      if (idSet.size > beforeCount) {
+      const grew =
+        idSet.size > beforeIdCount || detailUrlSet.size > beforeDetailCount;
+      if (grew) {
+        observedGrowth = true;
         break;
       }
       await page.waitForTimeout(350);
+      await collectDetailUrls();
+    }
+
+    const afterScrollHeight = await page.evaluate(() => document.body.scrollHeight);
+    if (afterScrollHeight > beforeScrollHeight) {
+      observedGrowth = true;
+    }
+
+    if (observedGrowth) {
+      noGrowthCycles = 0;
+    } else {
+      noGrowthCycles += 1;
+    }
+
+    if (noGrowthCycles >= MAX_NO_GROWTH_CYCLES) {
+      break;
     }
 
     if ((cycle + 1) % 3 === 0) {
       reportProgress(
-        `load-more cycle ${cycle + 1}/${maxCycles}; ids=${idSet.size}; links=${detailUrlSet.size}`,
+        `discovery cycle ${cycle + 1}/${maxCycles}; ids=${idSet.size}; links=${detailUrlSet.size}; no-growth=${noGrowthCycles}`,
       );
     }
   }
@@ -789,8 +1182,10 @@ async function discoverListings(
 }
 
 async function fetchDetail(
+  browser: Browser,
   detailUrl: string,
   availabilityHorizonDays: number,
+  maxCalendarAdvanceMonths: number,
 ): Promise<ScenicStaysDetailRecord | null> {
   const rentalIdFromUrl = extractRentalIdFromDetailUrl(detailUrl);
   const rentalSlugFromUrl = extractRentalSlugFromDetailUrl(detailUrl);
@@ -818,41 +1213,55 @@ async function fetchDetail(
 
     const html = await detailResponse.text();
 
-    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
+    const interactiveSnapshot = await collectInteractiveDetailSnapshot(
+      browser,
+      detailUrl,
+      maxCalendarAdvanceMonths,
+    ).catch(() => ({
+      html: "",
+      availabilityDays: [] as Array<{ date: string; code: string }>,
+      rateDays: [] as Array<{
+        date: string;
+        nightly_rate: number | null;
+        min_nights: number | null;
+        is_booked: boolean | null;
+        changeover_code: string;
+        season_name: string;
+      }>,
+    }));
+
+    const parsingHtml = interactiveSnapshot.html || html;
+
+    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, parsingHtml).slice(
       0,
       240,
     );
-    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html).slice(0, 240);
+    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, parsingHtml).slice(0, 240);
     const canonicalUrl =
       extractFirst(
         /<link[^>]+rel=["']canonical["'][^>]+href=["']([\s\S]*?)["'][^>]*>/i,
-        html,
+        parsingHtml,
       ) || detailUrl;
 
     const metaDescription =
       extractFirst(
         /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
-        html,
+        parsingHtml,
       ).slice(0, 2000) ||
       extractFirst(
         /<meta[^>]+content=["']([\s\S]*?)["'][^>]+name=["']description["'][^>]*>/i,
-        html,
+        parsingHtml,
       ).slice(0, 2000);
 
-    const jsonLdObjects = extractJsonLdObjects(html);
+    const jsonLdObjects = extractJsonLdObjects(parsingHtml);
     const lodgingJsonLd =
       jsonLdObjects.find((item) => {
         const itemType = String(item["@type"] ?? "").toLowerCase();
         return itemType.includes("lodging") || itemType.includes("accommodation");
       }) ?? jsonLdObjects[0] ?? null;
 
-    const descriptionSection = extractSectionBetween(
-      html,
-      'class="property_description"',
-      '</section><!--End description-->',
-    );
     const descriptionExpanded =
-      stripHtml(descriptionSection).replace(/^description\s+/i, "").slice(0, 20000) ||
+      extractDescriptionExpanded(parsingHtml) ||
       stripHtml(
         typeof lodgingJsonLd?.description === "string"
           ? lodgingJsonLd.description
@@ -860,11 +1269,23 @@ async function fetchDetail(
       ).slice(0, 20000);
 
     const amenitiesSection = extractSectionBetween(
-      html,
+      parsingHtml,
       'id="property-amenities"',
       "</section>",
     );
+
+    const modernAmenities = Array.from(
+      parsingHtml.matchAll(
+        /<span[^>]+class=["'][^"']*pdp-amenities-item-text[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi,
+      ),
+      (match) => stripHtml(match[1] ?? "").trim(),
+    ).filter(Boolean);
+
     const categoryMap: Record<string, string[]> = {};
+    if (modernAmenities.length > 0) {
+      categoryMap.General = Array.from(new Set(modernAmenities));
+    }
+
     let activeCategory = "General";
     const amenityBlocks = amenitiesSection.matchAll(
       /<div[^>]+class=["'][^"']*(amenity_group|amenity_item)[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
@@ -923,13 +1344,13 @@ async function fetchDetail(
       longitude: parseNumberLike(jsonLdGeo?.longitude as string | number | null),
     };
 
-    const widgetStreet = extractWidgetDataAttr(html, "data-straddress1");
-    const widgetCity = extractWidgetDataAttr(html, "data-strlocation");
+    const widgetStreet = extractWidgetDataAttr(parsingHtml, "data-straddress1");
+    const widgetCity = extractWidgetDataAttr(parsingHtml, "data-strlocation");
     const widgetLatitude = parseNumberLike(
-      extractWidgetDataAttr(html, "data-latitude"),
+      extractWidgetDataAttr(parsingHtml, "data-latitude"),
     );
     const widgetLongitude = parseNumberLike(
-      extractWidgetDataAttr(html, "data-longitude"),
+      extractWidgetDataAttr(parsingHtml, "data-longitude"),
     );
 
     if (!location.address && widgetStreet) {
@@ -963,11 +1384,11 @@ async function fetchDetail(
     const bedsResolved =
       beds ?? parseNumberLike(extractWidgetDataAttr(html, "data-dblbeds"));
     const sleepsResolved =
-      sleeps ?? parseNumberLike(extractWidgetDataAttr(html, "data-intoccu"));
+      sleeps ?? parseNumberLike(extractWidgetDataAttr(parsingHtml, "data-intoccu"));
 
-    const mediaUrls = collectMediaUrls(html, detailUrl, jsonLdObjects);
+    const mediaUrls = collectMediaUrls(parsingHtml, detailUrl, jsonLdObjects);
 
-    const widgetUnitId = extractWidgetUnitId(html);
+    const widgetUnitId = extractWidgetUnitId(parsingHtml);
     const rentalId =
       widgetUnitId ||
       rentalIdFromUrl ||
@@ -977,7 +1398,7 @@ async function fetchDetail(
     const numericUnitId = /^\d+$/.test(rentalId) ? Number(rentalId) : null;
 
     const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);
-    await writeFile(htmlPath, `${html}\n`, "utf8");
+    await writeFile(htmlPath, `${parsingHtml}\n`, "utf8");
 
     let rawBeginDate = "";
     let rawEndDate = "";
@@ -1025,10 +1446,20 @@ async function fetchDetail(
       rawBeginDate,
       rawAvailabilityCodes,
     );
-    const allAvailabilityDays =
-      allAvailabilityDaysFromApi.length > 0
-        ? allAvailabilityDaysFromApi
-        : parseAvailabilityDaysFromCalendarHtml(html);
+    const allAvailabilityDaysFromStored = mergeAvailabilityDays(
+      extractStoredDatesAvailability(html),
+      extractStoredDatesAvailability(parsingHtml),
+    );
+    const allAvailabilityDaysFromHtml = mergeAvailabilityDays(
+      parseAvailabilityDaysFromCalendarHtml(html),
+      parseAvailabilityDaysFromCalendarHtml(parsingHtml),
+    );
+    const allAvailabilityDays = mergeAvailabilityDays(
+      allAvailabilityDaysFromApi,
+      allAvailabilityDaysFromStored,
+      allAvailabilityDaysFromHtml,
+      interactiveSnapshot.availabilityDays,
+    );
 
     const now = new Date();
     const today = new Date(
@@ -1037,14 +1468,40 @@ async function fetchDetail(
     const horizonDate = new Date(today);
     horizonDate.setUTCDate(horizonDate.getUTCDate() + availabilityHorizonDays);
 
-    const filteredDays = allAvailabilityDays.filter((day) => {
+    const knownCodesByDate = new Map<string, string>();
+    for (const day of allAvailabilityDays) {
       const dayDate = new Date(`${day.date}T00:00:00.000Z`);
-      return dayDate >= today && dayDate <= horizonDate;
-    });
+      if (dayDate < today || dayDate > horizonDate) {
+        continue;
+      }
+      const code = day.code === "Y" ? "Y" : day.code === "N" ? "N" : "";
+      if (!code) {
+        continue;
+      }
 
-    const ratesStartIso = filteredDays[0]?.date ?? formatDateIso(today);
+      const existing = knownCodesByDate.get(day.date);
+      if (!existing || code === "Y") {
+        knownCodesByDate.set(day.date, code);
+      }
+    }
+
+    const completeWindowDays: Array<{ date: string; code: string }> = [];
+    for (
+      let cursor = new Date(today);
+      cursor <= horizonDate;
+      cursor.setUTCDate(cursor.getUTCDate() + 1)
+    ) {
+      const date = formatDateIso(cursor);
+      completeWindowDays.push({
+        date,
+        code: knownCodesByDate.get(date) ?? "U",
+      });
+    }
+
+    const ratesStartIso = completeWindowDays[0]?.date ?? formatDateIso(today);
     const ratesEndIso =
-      filteredDays[filteredDays.length - 1]?.date ?? formatDateIso(horizonDate);
+      completeWindowDays[completeWindowDays.length - 1]?.date ??
+      formatDateIso(horizonDate);
     const ratesStartDateUs = formatDateUsFromIso(ratesStartIso);
     const ratesEndDateUs = formatDateUsFromIso(ratesEndIso);
 
@@ -1132,8 +1589,16 @@ async function fetchDetail(
       .sort((left, right) => left.date.localeCompare(right.date));
 
     if (normalizedRateDays.length === 0) {
-      normalizedRateDays = parseRateDaysFromCalendarHtml(html);
+      normalizedRateDays = mergeRateDays(
+        parseRateDaysFromCalendarHtml(html),
+        parseRateDaysFromCalendarHtml(parsingHtml),
+      );
     }
+
+    normalizedRateDays = mergeRateDays(
+      normalizedRateDays,
+      interactiveSnapshot.rateDays,
+    );
 
     const nightlyRates = normalizedRateDays
       .map((day) => day.nightly_rate)
@@ -1146,7 +1611,7 @@ async function fetchDetail(
     const avgNightlyRate =
       daysWithRate > 0 ? Number((sumRates / daysWithRate).toFixed(2)) : null;
 
-    const normalizedDays = filteredDays.map((day) => {
+    const normalizedDays = completeWindowDays.map((day) => {
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         day.code === "Y"
           ? "bookable"
@@ -1227,13 +1692,14 @@ async function fetchDetail(
         source: "pm_scenicstays30a",
         external_listing_id: rentalId,
         captured_at: new Date().toISOString(),
-        window_start: filteredDays[0]?.date ?? "",
-        window_end: filteredDays[filteredDays.length - 1]?.date ?? "",
+        window_start: completeWindowDays[0]?.date ?? "",
+        window_end:
+          completeWindowDays[completeWindowDays.length - 1]?.date ?? "",
         code_legend: {
           Y: "available",
           N: "not_available",
         },
-        day_codes: filteredDays.map((day) => day.code).join(""),
+        day_codes: completeWindowDays.map((day) => day.code).join(""),
         days: normalizedDays,
         counts: {
           available,
@@ -1331,7 +1797,12 @@ export function createScenicStays30AAdapter(): ScraperAdapter<ScenicStaysDetailR
       );
     },
     async fetchDetail(context) {
-      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+      return fetchDetail(
+        context.browser,
+        context.detailUrl,
+        context.availabilityHorizonDays,
+        context.maxCalendarAdvanceMonths,
+      );
     },
   };
 }
