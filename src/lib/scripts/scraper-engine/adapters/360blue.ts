@@ -21,6 +21,33 @@ type DetailRecord360Blue = DetailRecordBase & {
   meta_description: string;
   json_ld_name: string;
   json_ld_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    area: string;
+    location: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+    city: string;
+    state: string;
+  };
   normalized_availability: {
     source: "pm_360blue";
     external_listing_id: string;
@@ -134,6 +161,92 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function dedupePreserveOrder(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function parseFirstNumber(value: string): number | null {
+  const match = value.match(/\d+(?:\.\d+)?/);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeGalleryUrl(rawUrl: string): string {
+  const cleaned = rawUrl.trim();
+  if (!cleaned) {
+    return "";
+  }
+
+  const embeddedHttpIndex = cleaned.indexOf("https://", "https://".length);
+  if (embeddedHttpIndex > 0) {
+    const embedded = cleaned.slice(embeddedHttpIndex);
+    try {
+      const embeddedParsed = new URL(embedded);
+      return `${embeddedParsed.origin}${embeddedParsed.pathname}`;
+    } catch {
+      // Fall through to regular parsing.
+    }
+  }
+
+  try {
+    const parsed = new URL(cleaned);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return "";
+  }
+}
+
+function parseAddressFromTitle(value: string): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text) {
+    return "";
+  }
+
+  const hyphenIndex = text.lastIndexOf(" - ");
+  if (hyphenIndex > -1) {
+    const afterDash = text.slice(hyphenIndex + 3).trim();
+    if (afterDash) {
+      return afterDash;
+    }
+  }
+
+  const trailingAddressMatch = text.match(/(\d+\s+[A-Za-z0-9 .'-]+)$/);
+  if (trailingAddressMatch?.[1]) {
+    return trailingAddressMatch[1].trim();
+  }
+
+  return "";
+}
+
+function parseCityState(label: string): { city: string; state: string } {
+  const compact = label.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return { city: "", state: "" };
+  }
+
+  const parts = compact
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const city = parts[0] ?? "";
+  const state = (parts[1] ?? "").split(/\s+/)[0] ?? "";
+  return { city, state };
 }
 
 function extractJsonLdBlocks(html: string): Array<{ parsed: unknown | null }> {
@@ -426,6 +539,56 @@ async function fetchDetail(
           .querySelector('meta[name="description"]')
           ?.getAttribute("content")
           ?.trim() ?? "";
+      const shortAddress =
+        document
+          .querySelector(".cmp-property-description__short-address")
+          ?.textContent?.trim() ?? "";
+      const bedroomsText =
+        document
+          .querySelector(".cmp-property-description__bedrooms")
+          ?.textContent?.trim() ?? "";
+      const bedsText =
+        document
+          .querySelector(".cmp-property-description__beds")
+          ?.textContent?.trim() ?? "";
+      const sleepsText =
+        document
+          .querySelector(".cmp-property-description__sleeps")
+          ?.textContent?.trim() ??
+        document
+          .querySelector(".nr-booking-widget-root")
+          ?.getAttribute("data-sleeps")
+          ?.trim() ??
+        "";
+      const fullBathsText =
+        document
+          .querySelector(".cmp-property-description__bathrooms-number")
+          ?.textContent?.trim() ?? "";
+      const halfBathsText =
+        document
+          .querySelector(".cmp-property-description__halfbathrooms-number")
+          ?.textContent?.trim() ?? "";
+      const amenitiesItems = Array.from(
+        document.querySelectorAll(".cmp-features-amenities__item"),
+      )
+        .map((node) => (node.textContent ?? "").replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      const galleryUrls = Array.from(
+        document.querySelectorAll(
+          "#hero-gallery img[src], .cmp-property-hero-gallery img[src], .cmp-property-hero img[src]",
+        ),
+      )
+        .map((img) => (img as HTMLImageElement).getAttribute("src") ?? "")
+        .map((src) => src.trim())
+        .filter(Boolean)
+        .map((src) => {
+          try {
+            return new URL(src, window.location.origin).toString();
+          } catch {
+            return "";
+          }
+        })
+        .filter(Boolean);
       const bodyText = document.body?.innerText ?? "";
       const html = document.documentElement.outerHTML;
       return {
@@ -435,6 +598,14 @@ async function fetchDetail(
         h1,
         canonical,
         metaDescription,
+        shortAddress,
+        bedroomsText,
+        bedsText,
+        sleepsText,
+        fullBathsText,
+        halfBathsText,
+        amenitiesItems,
+        galleryUrls,
         bodyText,
         html,
       };
@@ -450,6 +621,7 @@ async function fetchDetail(
       0,
       20000,
     );
+    const shortAddress = stripHtml(extracted.shortAddress).slice(0, 240);
     const canonicalUrl = extracted.canonical || detailUrl;
     const metaDescription = stripHtml(extracted.metaDescription).slice(0, 1200);
     const bodyText = extracted.bodyText.replace(/\s+/g, " ").trim();
@@ -679,8 +851,72 @@ async function fetchDetail(
         },
       };
 
-    const description =
+    const descriptionExpanded =
       propertyDescription || jsonLd.description || metaDescription || "";
+
+    const bedrooms = parseFirstNumber(extracted.bedroomsText);
+    const bedsFallback = parseFirstNumber(extracted.bedsText);
+    const fullBaths = parseFirstNumber(extracted.fullBathsText) ?? 0;
+    const halfBaths = parseFirstNumber(extracted.halfBathsText) ?? 0;
+    const totalBaths =
+      fullBaths > 0 || halfBaths > 0 ? fullBaths + halfBaths * 0.5 : null;
+    const sleeps = parseFirstNumber(extracted.sleepsText);
+    const parsedAddress = parseAddressFromTitle(h1 || propertyName || title);
+
+    const profileCityState = parseCityState(shortAddress);
+    const propertyProfile: DetailRecord360Blue["property_profile"] = {
+      unit_id: externalListingId,
+      area: shortAddress,
+      location: shortAddress,
+      beds: bedrooms ?? bedsFallback,
+      baths: totalBaths,
+      sleeps,
+      city: profileCityState.city,
+      state: profileCityState.state,
+    };
+
+    const amenityList = dedupePreserveOrder(
+      extracted.amenitiesItems.map((item) => stripHtml(item).slice(0, 200)),
+    );
+    const amenities: DetailRecord360Blue["amenities"] = {
+      categories: {
+        General: amenityList,
+      },
+      all: amenityList,
+    };
+
+    const htmlGalleryUrls = Array.from(
+      html.matchAll(/<img[^>]+src="([^"]+)"[^>]*>/gi),
+    )
+      .map((match) => match[1] ?? "")
+      .filter((value) =>
+        /img\.trackhs\.com|track-pm\.s3\.amazonaws\.com/i.test(value),
+      );
+    const mediaUrls = dedupePreserveOrder(
+      [...extracted.galleryUrls, ...htmlGalleryUrls]
+        .map((url) => normalizeGalleryUrl(url))
+        .filter(Boolean),
+    );
+    const mediaGallery: DetailRecord360Blue["media_gallery"] = {
+      image_count: mediaUrls.length,
+      image_urls: mediaUrls,
+    };
+
+    const directionsQuery = [parsedAddress, shortAddress]
+      .filter(Boolean)
+      .join(", ");
+    const location: DetailRecord360Blue["location"] = {
+      address: parsedAddress,
+      location_label: shortAddress,
+      directions_url: directionsQuery
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsQuery)}`
+        : "",
+      directions_daddr: directionsQuery,
+      latitude: null,
+      longitude: null,
+    };
+
+    const description = descriptionExpanded;
     const descriptionNormalized = normalizeForMatch(description);
     const name = h1 || jsonLd.name || title;
     const titleNormalized = normalizeForMatch(name);
@@ -704,6 +940,11 @@ async function fetchDetail(
       meta_description: metaDescription,
       json_ld_name: jsonLd.name,
       json_ld_description: jsonLd.description,
+      description_expanded: descriptionExpanded,
+      amenities,
+      location,
+      media_gallery: mediaGallery,
+      property_profile: propertyProfile,
       normalized_availability: normalizedAvailability,
       normalized_matching_profile: {
         source: "pm_360blue",

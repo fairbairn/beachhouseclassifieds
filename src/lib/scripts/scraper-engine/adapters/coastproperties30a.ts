@@ -9,6 +9,33 @@ type CoastDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    area: string;
+    location: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+    city: string;
+    state: string;
+  };
   normalized_matching_profile: {
     source: "pm_coastproperties30a";
     external_listing_id: string;
@@ -105,6 +132,19 @@ function normalizeForMatch(value: string): string {
 
 function hashSha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function parseNumberLike(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
 }
 
 function extractIdsFromPropertyListPayload(raw: string): string[] {
@@ -417,6 +457,161 @@ async function fetchDetail(
         html,
       ).slice(0, 2000);
 
+    const descriptionExpanded =
+      extractFirst(
+        /<div class="description block clearfix">[\s\S]*?<article>([\s\S]*?)<\/article>/i,
+        html,
+      ).slice(0, 20000) || stripHtml(metaDescription).slice(0, 20000);
+
+    const amenitiesCategories: Record<string, string[]> = {};
+    const amenitiesAll: string[] = [];
+    const seenAmenities = new Set<string>();
+    const amenitiesMatch = html.match(
+      /<div class="amenities block clearfix">([\s\S]*?)<\/div><!-- end block -->/i,
+    );
+    if (amenitiesMatch?.[1]) {
+      let currentCategory = "General";
+      for (const itemMatch of amenitiesMatch[1].matchAll(
+        /<li class="amenity_item"([^>]*)>([\s\S]*?)<\/li>/gi,
+      )) {
+        const attrs = (itemMatch[1] ?? "").toLowerCase();
+        const value = stripHtml(itemMatch[2] ?? "").trim();
+        if (!value) {
+          continue;
+        }
+
+        const isCategory = attrs.includes("font-weight:700");
+        if (isCategory) {
+          currentCategory = value;
+          if (!amenitiesCategories[currentCategory]) {
+            amenitiesCategories[currentCategory] = [];
+          }
+          continue;
+        }
+
+        if (!amenitiesCategories[currentCategory]) {
+          amenitiesCategories[currentCategory] = [];
+        }
+        amenitiesCategories[currentCategory].push(value);
+
+        const key = value.toLowerCase();
+        if (seenAmenities.has(key)) {
+          continue;
+        }
+        seenAmenities.add(key);
+        amenitiesAll.push(value);
+      }
+    }
+
+    const imageUrls = new Set<string>();
+    const galleryBlock = html.match(
+      /<div class="galleryGo">([\s\S]*?)<\/div>\s*<\/div><!--End gallerySlick-->/i,
+    )?.[1];
+    const gallerySource = galleryBlock || html;
+    for (const imgMatch of gallerySource.matchAll(
+      /<img[^>]+src=["']([^"']+)["'][^>]*>/gi,
+    )) {
+      const src = (imgMatch[1] ?? "").trim();
+      if (!src || src.startsWith("data:")) {
+        continue;
+      }
+      try {
+        imageUrls.add(new URL(src, detailUrl).toString());
+      } catch {
+        // Ignore malformed image URLs.
+      }
+    }
+    const ogImage = extractFirst(
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
+      html,
+    );
+    if (ogImage) {
+      try {
+        imageUrls.add(new URL(ogImage, detailUrl).toString());
+      } catch {
+        // Ignore malformed og:image URL.
+      }
+    }
+
+    let schemaAddress: Record<string, unknown> = {};
+    let schemaLatitude: number | null = null;
+    let schemaLongitude: number | null = null;
+    let schemaBedrooms: number | null = null;
+    let schemaBathrooms: number | null = null;
+    let schemaSleeps: number | null = null;
+    for (const schemaMatch of html.matchAll(
+      /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi,
+    )) {
+      const raw = (schemaMatch[1] ?? "").trim();
+      if (!raw) {
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        const schemaType = String(parsed["@type"] ?? "").toLowerCase();
+        if (!schemaType.includes("vacationrental")) {
+          continue;
+        }
+
+        const address = parsed.address;
+        if (address && typeof address === "object") {
+          schemaAddress = address as Record<string, unknown>;
+        }
+
+        const containsPlace =
+          parsed.containsPlace && typeof parsed.containsPlace === "object"
+            ? (parsed.containsPlace as Record<string, unknown>)
+            : null;
+
+        schemaLatitude = parseNumberLike(parsed.latitude);
+        schemaLongitude = parseNumberLike(parsed.longitude);
+        schemaBedrooms = containsPlace
+          ? parseNumberLike(containsPlace.numberOfBedrooms)
+          : null;
+        schemaBathrooms = containsPlace
+          ? parseNumberLike(containsPlace.numberOfBathroomsTotal)
+          : null;
+        const occupancy =
+          containsPlace?.occupancy &&
+          typeof containsPlace.occupancy === "object"
+            ? (containsPlace.occupancy as Record<string, unknown>)
+            : null;
+        schemaSleeps = occupancy ? parseNumberLike(occupancy.value) : null;
+        break;
+      } catch {
+        // Ignore invalid JSON-LD script blocks.
+      }
+    }
+
+    const mapCenterMatch = html.match(
+      /<map[^>]+center="\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*"/i,
+    );
+    const markerMatch = html.match(
+      /<marker[^>]+position="\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*"/i,
+    );
+    const latitude =
+      schemaLatitude ??
+      (mapCenterMatch ? Number(mapCenterMatch[1]) : null) ??
+      (markerMatch ? Number(markerMatch[1]) : null);
+    const longitude =
+      schemaLongitude ??
+      (mapCenterMatch ? Number(mapCenterMatch[2]) : null) ??
+      (markerMatch ? Number(markerMatch[2]) : null);
+
+    const streetAddress = String(schemaAddress.streetAddress ?? "").trim();
+    const city = String(schemaAddress.addressLocality ?? "").trim();
+    const region = String(schemaAddress.addressRegion ?? "").trim();
+    const postal = String(schemaAddress.postalCode ?? "").trim();
+    const fullAddress = [streetAddress, city, region, postal]
+      .filter((part) => part.length > 0)
+      .join(", ");
+    const directionsDaddr = fullAddress;
+    const directionsUrl = directionsDaddr
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          directionsDaddr,
+        )}`
+      : "";
+
     const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
@@ -503,10 +698,12 @@ async function fetchDetail(
     ).length;
     const other = normalizedDays.length - available - notAvailable;
 
-    const description = stripHtml(metaDescription).slice(0, 20000);
+    const description = descriptionExpanded;
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
+
+    const mediaImageUrls = Array.from(imageUrls);
 
     return {
       external_listing_id: rentalId,
@@ -516,6 +713,35 @@ async function fetchDetail(
       h1,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
+      description_expanded: descriptionExpanded,
+      amenities: {
+        categories: amenitiesCategories,
+        all: amenitiesAll,
+      },
+      location: {
+        address: fullAddress,
+        location_label: city || region,
+        directions_url: directionsUrl,
+        directions_daddr: directionsDaddr,
+        latitude:
+          latitude !== null && Number.isFinite(latitude) ? latitude : null,
+        longitude:
+          longitude !== null && Number.isFinite(longitude) ? longitude : null,
+      },
+      media_gallery: {
+        image_count: mediaImageUrls.length,
+        image_urls: mediaImageUrls,
+      },
+      property_profile: {
+        unit_id: rentalId,
+        area: region,
+        location: city || region,
+        beds: schemaBedrooms,
+        baths: schemaBathrooms,
+        sleeps: schemaSleeps,
+        city,
+        state: "",
+      },
       normalized_matching_profile: {
         source: "pm_coastproperties30a",
         external_listing_id: rentalId,

@@ -29,6 +29,23 @@ type FiveStarDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
   normalized_matching_profile: {
     source: "pm_fivestar30a";
     external_listing_id: string;
@@ -141,6 +158,108 @@ function extractFirst(regex: RegExp, value: string): string {
     return "";
   }
   return stripHtml(match[1]);
+}
+
+function parseNumberLike(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function absoluteHttpUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const normalized = new URL(trimmed, "https://www.fivestargulfrentals.com")
+      .toString()
+      .trim();
+    if (!/^https?:\/\//i.test(normalized)) {
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+function parseLatLng(value: string): {
+  latitude: number | null;
+  longitude: number | null;
+} {
+  const parts = value.split(",").map((part) => part.trim());
+  if (parts.length < 2) {
+    return { latitude: null, longitude: null };
+  }
+
+  return {
+    latitude: parseNumberLike(parts[0]),
+    longitude: parseNumberLike(parts[1]),
+  };
+}
+
+function parseJsonLdObjects(html: string): Record<string, unknown>[] {
+  const objects: Record<string, unknown>[] = [];
+  const scriptRegex =
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
+  for (const match of html.matchAll(scriptRegex)) {
+    const raw = match[1]?.trim();
+    if (!raw) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item && typeof item === "object") {
+            objects.push(item as Record<string, unknown>);
+          }
+        }
+        continue;
+      }
+
+      if (parsed && typeof parsed === "object") {
+        objects.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore malformed json-ld blobs.
+    }
+  }
+
+  return objects;
+}
+
+function pickVacationRentalSchema(
+  schemaObjects: Record<string, unknown>[],
+): Record<string, unknown> | null {
+  for (const item of schemaObjects) {
+    const type = item["@type"];
+    if (typeof type === "string" && type.toLowerCase() === "vacationrental") {
+      return item;
+    }
+    if (
+      Array.isArray(type) &&
+      type.some(
+        (entry) =>
+          typeof entry === "string" && entry.toLowerCase() === "vacationrental",
+      )
+    ) {
+      return item;
+    }
+  }
+
+  return null;
 }
 
 function normalizeDetailUrl(value: string): string | null {
@@ -591,6 +710,17 @@ async function fetchDetail(
     const propDetails =
       readJsonObjectAfterKey<Record<string, unknown>>(html, "propDetails") ??
       {};
+    const propImages = readJsonArrayAfterKey<Record<string, unknown>>(
+      html,
+      "propImages",
+    );
+    const amenityGroups = readJsonArrayAfterKey<Record<string, unknown>>(
+      html,
+      "amenities",
+    );
+    const schemaObjects = parseJsonLdObjects(html);
+    const vacationRentalSchema = pickVacationRentalSchema(schemaObjects);
+
     const bookings = readJsonArrayAfterKey<BookingRange>(
       html,
       "bookings",
@@ -712,6 +842,140 @@ async function fetchDetail(
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
 
+    const descriptionExpanded = description;
+
+    const amenitiesCategories: Record<string, string[]> = {};
+    const amenitiesAll: string[] = [];
+    const seenAmenity = new Set<string>();
+    const pushAmenity = (category: string, value: string) => {
+      const normalizedCategory = category.trim() || "General";
+      const normalizedValue = stripHtml(value).trim();
+      if (!normalizedValue) {
+        return;
+      }
+
+      if (!amenitiesCategories[normalizedCategory]) {
+        amenitiesCategories[normalizedCategory] = [];
+      }
+      amenitiesCategories[normalizedCategory].push(normalizedValue);
+
+      const dedupeKey = normalizeForMatch(normalizedValue);
+      if (!dedupeKey || seenAmenity.has(dedupeKey)) {
+        return;
+      }
+      seenAmenity.add(dedupeKey);
+      amenitiesAll.push(normalizedValue);
+    };
+
+    for (const group of amenityGroups) {
+      const category =
+        typeof group.groupName === "string" ? group.groupName : "General";
+      const values = Array.isArray(group.amenities)
+        ? (group.amenities as unknown[])
+        : [];
+
+      for (const value of values) {
+        if (!value || typeof value !== "object") {
+          continue;
+        }
+        const label = (value as { name?: unknown }).name;
+        if (typeof label === "string") {
+          pushAmenity(category, label);
+        }
+      }
+    }
+
+    const schemaAmenities = Array.isArray(vacationRentalSchema?.amenityFeature)
+      ? (vacationRentalSchema?.amenityFeature as unknown[])
+      : [];
+    for (const feature of schemaAmenities) {
+      if (!feature || typeof feature !== "object") {
+        continue;
+      }
+      const label = (feature as { name?: unknown }).name;
+      if (typeof label === "string") {
+        pushAmenity("Schema Amenities", label);
+      }
+    }
+
+    const imageUrls: string[] = [];
+    const seenImage = new Set<string>();
+    const pushImage = (urlValue: string) => {
+      const normalized = absoluteHttpUrl(urlValue);
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      if (seenImage.has(key)) {
+        return;
+      }
+      seenImage.add(key);
+      imageUrls.push(normalized);
+    };
+
+    for (const image of propImages) {
+      if (!image || typeof image !== "object") {
+        continue;
+      }
+
+      const imageSource = (image as { image_source?: unknown }).image_source;
+      if (typeof imageSource === "string") {
+        pushImage(imageSource.replace(/\\\//g, "/"));
+      }
+    }
+
+    const schemaImages = vacationRentalSchema?.image;
+    if (Array.isArray(schemaImages)) {
+      for (const entry of schemaImages) {
+        if (typeof entry === "string") {
+          pushImage(entry);
+        }
+      }
+    } else if (typeof schemaImages === "string") {
+      pushImage(schemaImages);
+    }
+
+    const schemaAddress =
+      vacationRentalSchema?.address &&
+      typeof vacationRentalSchema.address === "object"
+        ? (vacationRentalSchema.address as Record<string, unknown>)
+        : null;
+    const schemaGeo =
+      vacationRentalSchema?.geo && typeof vacationRentalSchema.geo === "object"
+        ? (vacationRentalSchema.geo as Record<string, unknown>)
+        : null;
+
+    const address =
+      [
+        String(propDetails.address ?? "").trim(),
+        String(propDetails.address2 ?? "").trim(),
+      ]
+        .filter(Boolean)
+        .join(" ") || String(schemaAddress?.streetAddress ?? "").trim();
+    const city =
+      String(propDetails.city ?? "").trim() ||
+      String(schemaAddress?.addressLocality ?? "").trim();
+    const state =
+      String(propDetails.state ?? "").trim() ||
+      String(schemaAddress?.addressRegion ?? "").trim();
+
+    const geocodeRaw = String(propDetails.geocode ?? "").trim();
+    const parsedGeocode = parseLatLng(geocodeRaw);
+    const latitude =
+      parsedGeocode.latitude ?? parseNumberLike(schemaGeo?.latitude ?? null);
+    const longitude =
+      parsedGeocode.longitude ?? parseNumberLike(schemaGeo?.longitude ?? null);
+
+    const locationLabel =
+      String(propDetails.location ?? "").trim() ||
+      [city, state].filter(Boolean).join(", ");
+    const directionsDaddr = [address, city, state].filter(Boolean).join(", ");
+    const directionsUrl = directionsDaddr
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+          directionsDaddr,
+        )}`
+      : "";
+
     return {
       external_listing_id: externalListingId,
       detail_url: normalizedDetailUrl,
@@ -721,6 +985,23 @@ async function fetchDetail(
       h1,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
+      description_expanded: descriptionExpanded,
+      amenities: {
+        categories: amenitiesCategories,
+        all: amenitiesAll,
+      },
+      location: {
+        address,
+        location_label: locationLabel,
+        directions_url: directionsUrl,
+        directions_daddr: directionsDaddr,
+        latitude,
+        longitude,
+      },
+      media_gallery: {
+        image_count: imageUrls.length,
+        image_urls: imageUrls,
+      },
       normalized_matching_profile: {
         source: "pm_fivestar30a",
         external_listing_id: externalListingId,

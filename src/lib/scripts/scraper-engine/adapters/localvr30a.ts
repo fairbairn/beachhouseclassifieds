@@ -11,6 +11,33 @@ type LocalVrDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    area: string;
+    location: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+    city: string;
+    state: string;
+  };
   normalized_matching_profile: {
     source: "pm_localvr30a";
     external_listing_id: string;
@@ -117,6 +144,92 @@ function extractFirst(regex: RegExp, value: string): string {
     return "";
   }
   return stripHtml(match[1]).trim();
+}
+
+function parseNumberLike(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function absoluteHttpUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const normalized = new URL(trimmed, "https://stay.golocalvr.com")
+      .toString()
+      .trim();
+    if (!/^https?:\/\//i.test(normalized)) {
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonLdObjects(html: string): Record<string, unknown>[] {
+  const objects: Record<string, unknown>[] = [];
+  const scriptRegex =
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
+  for (const match of html.matchAll(scriptRegex)) {
+    const raw = match[1]?.trim();
+    if (!raw) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item && typeof item === "object") {
+            objects.push(item as Record<string, unknown>);
+          }
+        }
+        continue;
+      }
+
+      if (parsed && typeof parsed === "object") {
+        objects.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore malformed json-ld blobs.
+    }
+  }
+
+  return objects;
+}
+
+function pickHotelSchema(
+  schemaObjects: Record<string, unknown>[],
+): Record<string, unknown> | null {
+  for (const item of schemaObjects) {
+    const type = item["@type"];
+    if (typeof type === "string" && type.toLowerCase() === "hotel") {
+      return item;
+    }
+    if (
+      Array.isArray(type) &&
+      type.some(
+        (entry) => typeof entry === "string" && entry.toLowerCase() === "hotel",
+      )
+    ) {
+      return item;
+    }
+  }
+
+  return null;
 }
 
 function normalizeDetailUrl(value: string): string | null {
@@ -617,17 +730,125 @@ async function fetchDetail(
     );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
+    const schemaObjects = parseJsonLdObjects(html);
+    const hotelSchema = pickHotelSchema(schemaObjects);
+
     const availability = extractAvailabilityFromHtml(
       html,
       availabilityHorizonDays,
     );
 
-    const description =
+    const descriptionExpanded =
       stripHtml(summaryText).slice(0, 20000) ||
+      stripHtml(String(hotelSchema?.description ?? "")).slice(0, 20000) ||
       stripHtml(metaDescription).slice(0, 20000);
+    const description = descriptionExpanded;
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
+
+    const amenitiesCategories: Record<string, string[]> = {};
+    const amenitiesAll: string[] = [];
+    const seenAmenity = new Set<string>();
+    const schemaAmenities = Array.isArray(hotelSchema?.amenityFeature)
+      ? (hotelSchema?.amenityFeature as unknown[])
+      : [];
+    for (const feature of schemaAmenities) {
+      if (!feature || typeof feature !== "object") {
+        continue;
+      }
+
+      const label = (feature as { name?: unknown }).name;
+      if (typeof label !== "string") {
+        continue;
+      }
+
+      const value = stripHtml(label).trim();
+      if (!value) {
+        continue;
+      }
+
+      if (!amenitiesCategories["Property Amenities"]) {
+        amenitiesCategories["Property Amenities"] = [];
+      }
+      amenitiesCategories["Property Amenities"].push(value);
+
+      const dedupeKey = normalizeForMatch(value);
+      if (!dedupeKey || seenAmenity.has(dedupeKey)) {
+        continue;
+      }
+      seenAmenity.add(dedupeKey);
+      amenitiesAll.push(value);
+    }
+
+    const imageUrls: string[] = [];
+    const seenImage = new Set<string>();
+    const pushImage = (value: string) => {
+      const normalized = absoluteHttpUrl(value);
+      if (!normalized) {
+        return;
+      }
+
+      const key = normalized.toLowerCase();
+      if (seenImage.has(key)) {
+        return;
+      }
+      seenImage.add(key);
+      imageUrls.push(normalized);
+    };
+
+    const schemaImages = hotelSchema?.image;
+    if (Array.isArray(schemaImages)) {
+      for (const entry of schemaImages) {
+        if (typeof entry === "string") {
+          pushImage(entry);
+        }
+      }
+    } else if (typeof schemaImages === "string") {
+      pushImage(schemaImages);
+    }
+
+    const largeImageHrefPattern =
+      /href=["'](https?:\/\/assets\.guesty\.com\/image\/upload\/[^"']+)["']/gi;
+    for (const match of html.matchAll(largeImageHrefPattern)) {
+      if (match[1]) {
+        pushImage(match[1]);
+      }
+    }
+
+    const schemaAddress =
+      hotelSchema?.address && typeof hotelSchema.address === "object"
+        ? (hotelSchema.address as Record<string, unknown>)
+        : null;
+    const schemaGeo =
+      hotelSchema?.geo && typeof hotelSchema.geo === "object"
+        ? (hotelSchema.geo as Record<string, unknown>)
+        : null;
+
+    const address = String(schemaAddress?.streetAddress ?? "").trim();
+    const city = String(schemaAddress?.addressLocality ?? "").trim();
+    const state = String(schemaAddress?.addressRegion ?? "").trim();
+    const locationLabel = [city, state].filter(Boolean).join(", ");
+    const directionsDaddr = [address, city, state].filter(Boolean).join(", ");
+    const directionsUrl = directionsDaddr
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+          directionsDaddr,
+        )}`
+      : "";
+    const latitude = parseNumberLike(schemaGeo?.latitude ?? null);
+    const longitude = parseNumberLike(schemaGeo?.longitude ?? null);
+
+    const beds = parseNumberLike(hotelSchema?.numberOfBedrooms ?? null);
+    const baths = parseNumberLike(hotelSchema?.numberOfBathroomsTotal ?? null);
+    const sleeps = parseNumberLike(
+      (
+        hotelSchema?.occupancy as
+          | {
+              value?: unknown;
+            }
+          | undefined
+      )?.value ?? null,
+    );
 
     const available = availability.days.filter(
       (day) => day.status_code === "A",
@@ -657,6 +878,33 @@ async function fetchDetail(
       h1,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
+      description_expanded: descriptionExpanded,
+      amenities: {
+        categories: amenitiesCategories,
+        all: amenitiesAll,
+      },
+      location: {
+        address,
+        location_label: locationLabel,
+        directions_url: directionsUrl,
+        directions_daddr: directionsDaddr,
+        latitude,
+        longitude,
+      },
+      media_gallery: {
+        image_count: imageUrls.length,
+        image_urls: imageUrls,
+      },
+      property_profile: {
+        unit_id: externalListingId,
+        area: "30A",
+        location: locationLabel,
+        beds,
+        baths,
+        sleeps,
+        city,
+        state,
+      },
       normalized_matching_profile: {
         source: "pm_localvr30a",
         external_listing_id: externalListingId,

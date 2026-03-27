@@ -43,6 +43,33 @@ type BenchmarkDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    area: string;
+    location: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+    city: string;
+    state: string;
+  };
   normalized_matching_profile: {
     source: "pm_benchmark30a";
     external_listing_id: string;
@@ -1028,6 +1055,203 @@ async function fetchDetail(
       };
     });
 
+    const expanded = await page.evaluate(() => {
+      const cleanText = (value: string | null | undefined): string =>
+        (value ?? "").replace(/\s+/g, " ").trim();
+
+      const parseNumber = (value: string): number | null => {
+        const match = value.match(/\d+(?:\.\d+)?/);
+        if (!match) {
+          return null;
+        }
+
+        const parsed = Number(match[0]);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+
+      const uniq = (values: string[]): string[] => {
+        const seen = new Set<string>();
+        const output: string[] = [];
+        for (const value of values) {
+          const normalized = cleanText(value);
+          if (!normalized || seen.has(normalized)) {
+            continue;
+          }
+          seen.add(normalized);
+          output.push(normalized);
+        }
+        return output;
+      };
+
+      const bedsText = cleanText(
+        document.querySelector(".rc-lodging-beds")?.textContent,
+      );
+      const bathsText = cleanText(
+        document.querySelector(".rc-lodging-baths")?.textContent,
+      );
+      const sleepsText = cleanText(
+        document.querySelector(".rc-lodging-occ")?.textContent,
+      );
+
+      const area = cleanText(
+        document.querySelector(".field-name-rc-core-term-area")?.textContent,
+      );
+      const typeLabel = cleanText(
+        document.querySelector(".field-name-rc-core-term-type")?.textContent,
+      );
+      const viewLabel = cleanText(
+        document.querySelector(".field-name-rc-core-term-view")?.textContent,
+      );
+
+      const directionsUrlRaw =
+        document
+          .querySelector("a.vrweb-driving-directions")
+          ?.getAttribute("href") ?? "";
+      let directionsUrl = cleanText(directionsUrlRaw);
+      let directionsDaddr = "";
+
+      if (directionsUrl) {
+        try {
+          const parsedDirections = new URL(directionsUrl, window.location.href);
+          directionsUrl = parsedDirections.toString();
+          directionsDaddr = cleanText(
+            parsedDirections.searchParams.get("daddr") ?? "",
+          );
+        } catch {
+          // Keep raw value if URL parsing fails.
+        }
+      }
+
+      const featuredAmenities = uniq(
+        Array.from(
+          document.querySelectorAll(
+            ".group-vr-amenities-wrapper .item-list li",
+          ),
+        ).map((node) => cleanText(node.textContent)),
+      );
+
+      const categorizedAmenities: Record<string, string[]> = {};
+      const amenityLists = Array.from(
+        document.querySelectorAll(
+          ".group-vr-property-amenities .item-list, .group-vr-amenities-wrapper .item-list",
+        ),
+      );
+
+      for (const list of amenityLists) {
+        const heading =
+          cleanText(list.querySelector("h3")?.textContent) || "General";
+        const items = uniq(
+          Array.from(list.querySelectorAll("li")).map((li) =>
+            cleanText(li.textContent),
+          ),
+        );
+        if (items.length === 0) {
+          continue;
+        }
+
+        const existing = categorizedAmenities[heading] ?? [];
+        categorizedAmenities[heading] = uniq([...existing, ...items]);
+      }
+
+      if (featuredAmenities.length > 0) {
+        const existing = categorizedAmenities.Featured ?? [];
+        categorizedAmenities.Featured = uniq([
+          ...existing,
+          ...featuredAmenities,
+        ]);
+      }
+
+      const allAmenities = uniq(
+        Object.values(categorizedAmenities).flatMap((items) => items),
+      );
+
+      const toImageKey = (urlValue: string): string => {
+        try {
+          const parsed = new URL(urlValue, window.location.href);
+          return `${parsed.origin}${parsed.pathname}`;
+        } catch {
+          return cleanText(urlValue).split(/[?#]/)[0] ?? "";
+        }
+      };
+
+      const isLikelyPropertyImage = (urlValue: string): boolean => {
+        const lower = urlValue.toLowerCase();
+        if (!lower.startsWith("http")) {
+          return false;
+        }
+
+        if (
+          lower.includes("lazy-placeholder") ||
+          lower.includes("bt_optimize/images") ||
+          lower.startsWith("data:image")
+        ) {
+          return false;
+        }
+
+        return true;
+      };
+
+      const imageUrlMap = new Map<string, string>();
+      const collectImageCandidates = (selector: string): string[] =>
+        Array.from(document.querySelectorAll(selector)).flatMap((node) => [
+          cleanText(node.getAttribute("data-src")),
+          cleanText(node.getAttribute("data-lazy-src")),
+          cleanText(node.getAttribute("data-original")),
+          cleanText(node.getAttribute("src")),
+        ]);
+
+      const candidateImages = [
+        ...collectImageCandidates(".bt-masonry-reveal-modal img"),
+        ...collectImageCandidates(".group-vr-listing-images img"),
+        cleanText(
+          document
+            .querySelector("meta[property='og:image']")
+            ?.getAttribute("content"),
+        ),
+      ];
+
+      for (const candidate of candidateImages) {
+        if (!candidate || !isLikelyPropertyImage(candidate)) {
+          continue;
+        }
+
+        const key = toImageKey(candidate);
+        if (!key || imageUrlMap.has(key)) {
+          continue;
+        }
+
+        imageUrlMap.set(key, candidate);
+      }
+
+      const imageUrls = Array.from(imageUrlMap.values());
+
+      const locationLabel = [area, typeLabel, viewLabel]
+        .filter(Boolean)
+        .join(" | ");
+      const address = directionsDaddr;
+
+      return {
+        beds: parseNumber(bedsText),
+        baths: parseNumber(bathsText),
+        sleeps: parseNumber(sleepsText),
+        area,
+        typeLabel,
+        viewLabel,
+        address,
+        locationLabel,
+        directionsUrl,
+        directionsDaddr,
+        amenities: {
+          categories: categorizedAmenities,
+          all: allAmenities,
+        },
+        mediaGallery: {
+          image_count: imageUrls.length,
+          image_urls: imageUrls,
+        },
+      };
+    });
+
     const descriptionText = (await extractDescriptionText(page)).slice(
       0,
       15000,
@@ -1195,6 +1419,27 @@ async function fetchDetail(
     const extractionMs = Date.now() - beforeLoad - pageLoadMs;
     const totalMs = Date.now() - startedAt;
 
+    const descriptionExpanded = cleanDescription;
+    const propertyProfile: BenchmarkDetailRecord["property_profile"] = {
+      unit_id: externalListingId,
+      area: expanded.area,
+      location: expanded.address || expanded.locationLabel,
+      beds: expanded.beds,
+      baths: expanded.baths,
+      sleeps: expanded.sleeps,
+      city: "",
+      state: "",
+    };
+
+    const location: BenchmarkDetailRecord["location"] = {
+      address: expanded.address,
+      location_label: expanded.locationLabel,
+      directions_url: expanded.directionsUrl,
+      directions_daddr: expanded.directionsDaddr,
+      latitude: null,
+      longitude: null,
+    };
+
     return {
       external_listing_id: externalListingId,
       detail_url: detailUrl,
@@ -1203,6 +1448,11 @@ async function fetchDetail(
       h1: stripHtml(extracted.h1).slice(0, 240),
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
+      description_expanded: descriptionExpanded,
+      amenities: expanded.amenities,
+      location,
+      media_gallery: expanded.mediaGallery,
+      property_profile: propertyProfile,
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_benchmark30a",

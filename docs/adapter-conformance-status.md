@@ -24,71 +24,39 @@ Scope:
 - `Amenities+`: files with non-empty `amenities`
 - `Location+`: files with non-empty `location` object
 - `Media+`: files with `media_gallery.image_urls` containing at least one URL
+- `Image URLs`: aggregate count of `media_gallery.image_urls[]` across all files for the adapter
+- `Avg Img/List`: `Image URLs / Files` (values <= 1 indicate under-optimized media extraction)
 
 ## Conformance Matrix
 
-| Adapter            | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ |
-| ------------------ | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: |
-| 30aescapes         |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |
-| 30aluxury          |   105 |  105 |       0 |          105 |            0 |          0 |         0 |      0 |
-| 360blue            |   620 |  620 |       0 |          620 |            0 |          0 |         0 |      0 |
-| benchmark30a       |   128 |  128 |       0 |          128 |            0 |          0 |         0 |      0 |
-| beachblue          |    16 |   16 |      16 |           16 |            0 |          0 |         0 |      0 |
-| coastproperties30a |    30 |   30 |       0 |           30 |            0 |          0 |         0 |      0 |
-| exclusive30a       |   106 |  106 |       0 |          106 |            0 |          0 |         0 |      0 |
-| fivestar30a        |    62 |   62 |      62 |           62 |            0 |          0 |         0 |      0 |
-| localvr30a         |    42 |   42 |       0 |           42 |            0 |          0 |         0 |      0 |
-| oceanreef30a       |   111 |  111 |       0 |          111 |            0 |          0 |         0 |      0 |
-| oversee30a         |    66 |   66 |      66 |           66 |            0 |          0 |         0 |      0 |
-| realjoy30a         |   140 |  140 |       0 |          140 |            0 |          0 |         0 |      0 |
-| royaldestinations  |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |
-| stayon30a          |    79 |    5 |       0 |            5 |            0 |          0 |         0 |      0 |
+| Adapter            | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Image URLs | Avg Img/List |
+| ------------------ | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ---------: | -----------: |
+| 30aescapes         |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |       6282 |        37.17 |
+| 30aluxury          |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |       5247 |        49.97 |
+| 360blue            |   620 |  620 |     620 |          620 |          620 |        620 |       620 |    620 |      30940 |        49.90 |
+| benchmark30a       |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |       8508 |        66.47 |
+| beachblue          |    16 |   16 |      16 |           16 |           16 |         16 |        16 |     16 |        712 |        44.50 |
+| coastproperties30a |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |       2063 |        68.77 |
+| exclusive30a       |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |       5629 |        53.10 |
+| fivestar30a        |    62 |   62 |      62 |           62 |           62 |         62 |        62 |     62 |       6488 |       104.65 |
+| localvr30a         |    42 |   42 |      42 |           42 |           42 |         42 |        42 |     42 |       1774 |        42.24 |
+| oceanreef30a       |   111 |  111 |     111 |          111 |          111 |        111 |       111 |    111 |       8250 |        74.32 |
+| oversee30a         |    67 |   67 |      67 |           67 |           67 |         67 |        67 |     67 |       3738 |        55.79 |
+| realjoy30a         |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |      16334 |       116.67 |
+| royaldestinations  |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |       6677 |        46.69 |
+| stayon30a          |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |      11150 |       142.95 |
+| **TOTAL**          |  1817 | 1817 |    1817 |         1817 |         1817 |       1817 |      1817 |   1817 |     113792 |        62.63 |
 
 ## Current Snapshot Summary
 
 - 14 adapters audited.
-- 13 adapters are effectively at required-core parity for current captured files.
-- `stayon30a` has mixed historical detail artifacts and should be treated as the core-coverage outlier.
-- Expanded sections (`description_expanded`, `amenities`, `location`, `media_gallery`) are now implemented at full coverage in `30aescapes` and `royaldestinations`.
+- All 14 adapters are at full required-core parity for the current captured files.
+- `property_profile` and expanded sections (`description_expanded`, `amenities`, `location`, `media_gallery`) are now fully populated across the current adapter corpus.
 
 ## Follow-Up Refinement Backlog (Post Base-Adapter Completion)
 
-### Phase 1: Core Stability and Backfill Hygiene
-
-1. Reconcile `stayon30a` details so required core and normalized availability are present across all 79 files.
-2. Add/update backfill routines so legacy detail JSONs are regenerated to current baseline shape where needed.
-3. Add a repeatable conformance check step to scraper validation workflow (same probe script + summary output artifact).
-
-### Phase 2: Property Profile Conformance
-
-1. Add `property_profile` extraction to adapters currently at 0%:
-   - `30aluxury`, `360blue`, `benchmark30a`, `coastproperties30a`, `exclusive30a`, `localvr30a`, `oceanreef30a`, `realjoy30a`, `stayon30a`
-2. Keep existing profile-enabled adapters stable:
-   - `30aescapes`, `beachblue`, `fivestar30a`, `oversee30a`, `royaldestinations`
-
-### Phase 3: Expanded Section Rollout
-
-Use `30aescapes` and `royaldestinations` as reference implementation patterns.
-
-1. `description_expanded`
-2. `amenities` (grouped categories + flattened list)
-3. `location` (at least one signal: directions URL/address; lat/lng where present)
-4. `media_gallery` (canonical URLs + stable image count)
-
-Suggested rollout order by captured inventory size:
-
-1. `360blue` (620)
-2. `realjoy30a` (140)
-3. `benchmark30a` (128)
-4. `oceanreef30a` (111)
-5. `exclusive30a` (106)
-6. `30aluxury` (105)
-7. `stayon30a` (79)
-8. `oversee30a` (66)
-9. `fivestar30a` (62)
-10. `localvr30a` (42)
-11. `coastproperties30a` (30)
-12. `beachblue` (16)
+- No remaining adapter-level backlog for universal detail schema conformance.
+- Continue running the probe script after parser changes to prevent regressions.
 
 ## Definition of Done for Conformance
 

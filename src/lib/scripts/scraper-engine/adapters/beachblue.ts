@@ -30,6 +30,23 @@ type BeachBlueDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
   normalized_matching_profile: {
     source: "pm_beachblue";
     external_listing_id: string;
@@ -327,6 +344,13 @@ function toParsedRules(rules: MinDayRule[]): ParsedRule[] {
   );
 }
 
+function splitAmenityItems(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
 async function installEvaluateNameShim(page: Page): Promise<void> {
   const shim = "window.__name = window.__name || ((target) => target);";
   await page.addInitScript(shim);
@@ -460,6 +484,90 @@ async function fetchDetail(
     const propDetails =
       readJsonObjectAfterKey<Record<string, unknown>>(html, "propDetails") ??
       {};
+
+    const amenitySectionMatch = html.match(
+      /<section[^>]+id=["']amenities["'][^>]*>([\s\S]*?)<\/section>/i,
+    );
+    const amenitiesCategories: Record<string, string[]> = {};
+    const amenitiesAll: string[] = [];
+    const seenAmenities = new Set<string>();
+    if (amenitySectionMatch?.[1]) {
+      const pairRegex =
+        /<div class=["']amencat["']>([\s\S]*?)<\/div>\s*<div class=["']amendesc["']>([\s\S]*?)<\/div>/gi;
+      for (const match of amenitySectionMatch[1].matchAll(pairRegex)) {
+        const category = stripHtml(match[1] ?? "").trim();
+        const rawItems = stripHtml(match[2] ?? "");
+        if (!category || !rawItems) {
+          continue;
+        }
+
+        const items = splitAmenityItems(rawItems);
+        if (items.length === 0) {
+          continue;
+        }
+
+        amenitiesCategories[category] = items;
+        for (const item of items) {
+          const key = item.toLowerCase();
+          if (seenAmenities.has(key)) {
+            continue;
+          }
+          seenAmenities.add(key);
+          amenitiesAll.push(item);
+        }
+      }
+    }
+
+    const galleryUrls = new Set<string>();
+    for (const anchorMatch of html.matchAll(/<a\b[^>]*>/gi)) {
+      const anchorTag = anchorMatch[0] ?? "";
+      if (!/\bdata-fancybox\s*=\s*["']rtgallery["']/i.test(anchorTag)) {
+        continue;
+      }
+
+      const hrefMatch = anchorTag.match(/\bhref\s*=\s*["']([^"']+)["']/i);
+      const value = (hrefMatch?.[1] ?? "").trim();
+      if (!value || value.startsWith("javascript:")) {
+        continue;
+      }
+
+      try {
+        const resolved = new URL(value, detailUrl).toString();
+        galleryUrls.add(resolved);
+      } catch {
+        // Ignore malformed gallery URLs.
+      }
+    }
+
+    const ogImage = extractFirst(
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
+      html,
+    );
+    if (ogImage) {
+      try {
+        galleryUrls.add(new URL(ogImage, detailUrl).toString());
+      } catch {
+        // Ignore malformed og:image URL.
+      }
+    }
+
+    const geocode = String(propDetails.geocode ?? "").trim();
+    const geocodeMatch = geocode.match(
+      /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/,
+    );
+    const markerMatch = html.match(
+      /L\.marker\(\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/i,
+    );
+    const latitude = geocodeMatch
+      ? Number(geocodeMatch[1])
+      : markerMatch
+        ? Number(markerMatch[1])
+        : null;
+    const longitude = geocodeMatch
+      ? Number(geocodeMatch[2])
+      : markerMatch
+        ? Number(markerMatch[2])
+        : null;
     const bookings = readJsonArrayAfterKey<BookingRange>(
       html,
       "bookings",
@@ -581,6 +689,22 @@ async function fetchDetail(
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
 
+    const addressParts = [
+      String(propDetails.address ?? "").trim(),
+      String(propDetails.city ?? "").trim(),
+      String(propDetails.state ?? "").trim(),
+      String(propDetails.zip ?? "").trim(),
+    ].filter((part) => part.length > 0);
+    const fullAddress = addressParts.join(", ");
+    const directionsDaddr = fullAddress;
+    const directionsUrl = directionsDaddr
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          directionsDaddr,
+        )}`
+      : "";
+
+    const mediaImageUrls = Array.from(galleryUrls);
+
     return {
       external_listing_id: externalListingId,
       detail_url: detailUrl,
@@ -590,6 +714,25 @@ async function fetchDetail(
       h1,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
+      description_expanded: description,
+      amenities: {
+        categories: amenitiesCategories,
+        all: amenitiesAll,
+      },
+      location: {
+        address: fullAddress,
+        location_label: String(propDetails.location ?? propDetails.area ?? ""),
+        directions_url: directionsUrl,
+        directions_daddr: directionsDaddr,
+        latitude:
+          latitude !== null && Number.isFinite(latitude) ? latitude : null,
+        longitude:
+          longitude !== null && Number.isFinite(longitude) ? longitude : null,
+      },
+      media_gallery: {
+        image_count: mediaImageUrls.length,
+        image_urls: mediaImageUrls,
+      },
       normalized_matching_profile: {
         source: "pm_beachblue",
         external_listing_id: externalListingId,

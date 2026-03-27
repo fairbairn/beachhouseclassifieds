@@ -11,6 +11,33 @@ type OceanReefDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    area: string;
+    location: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+    city: string;
+    state: string;
+  };
   normalized_matching_profile: {
     source: "pm_oceanreef30a";
     external_listing_id: string;
@@ -105,6 +132,178 @@ function extractFirst(regex: RegExp, value: string): string {
     return "";
   }
   return stripHtml(match[1]).trim();
+}
+
+function parseNumberLike(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(/,/g, "");
+    if (!normalized) {
+      return null;
+    }
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function absoluteHttpUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const normalized = new URL(trimmed, "https://www.oceanreefresorts.com")
+      .toString()
+      .trim();
+    if (!/^https?:\/\//i.test(normalized)) {
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonLdObjects(html: string): Record<string, unknown>[] {
+  const objects: Record<string, unknown>[] = [];
+  const scriptRegex =
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
+  for (const match of html.matchAll(scriptRegex)) {
+    const raw = match[1]?.trim();
+    if (!raw) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item && typeof item === "object") {
+            objects.push(item as Record<string, unknown>);
+          }
+        }
+        continue;
+      }
+
+      if (parsed && typeof parsed === "object") {
+        objects.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore malformed json-ld blobs.
+    }
+  }
+
+  return objects;
+}
+
+function pickProductSchema(
+  schemaObjects: Record<string, unknown>[],
+): Record<string, unknown> | null {
+  for (const item of schemaObjects) {
+    const type = item["@type"];
+    if (typeof type === "string" && type.toLowerCase() === "product") {
+      return item;
+    }
+    if (
+      Array.isArray(type) &&
+      type.some(
+        (entry) =>
+          typeof entry === "string" && entry.toLowerCase() === "product",
+      )
+    ) {
+      return item;
+    }
+  }
+
+  return null;
+}
+
+function splitSrcsetCandidates(value: string): string[] {
+  return value
+    .split(",")
+    .map((segment) => segment.trim())
+    .map((segment) => segment.split(/\s+/)[0] || "")
+    .filter(Boolean);
+}
+
+function collectMediaUrls(html: string): string[] {
+  const urls: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (candidate: string) => {
+    const normalized = absoluteHttpUrl(candidate);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    urls.push(normalized);
+  };
+
+  for (const match of html.matchAll(/data-srcset=["']([^"']+)["']/gi)) {
+    const srcset = match[1]?.trim() || "";
+    for (const candidate of splitSrcsetCandidates(srcset)) {
+      push(candidate);
+    }
+  }
+
+  for (const match of html.matchAll(/srcset=["']([^"']+)["']/gi)) {
+    const srcset = match[1]?.trim() || "";
+    for (const candidate of splitSrcsetCandidates(srcset)) {
+      push(candidate);
+    }
+  }
+
+  for (const match of html.matchAll(/data-thumb=["']([^"']+)["']/gi)) {
+    push(match[1] || "");
+  }
+
+  for (const match of html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) {
+    push(match[1] || "");
+  }
+
+  return urls;
+}
+
+function extractAmenities(html: string): string[] {
+  const values: string[] = [];
+  const seen = new Set<string>();
+  const amenityRegex =
+    /<span[^>]+class=["'][^"']*pdp-amenities-item-text[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi;
+
+  for (const match of html.matchAll(amenityRegex)) {
+    const text = stripHtml(match[1] || "").trim();
+    if (!text || seen.has(text)) {
+      continue;
+    }
+    seen.add(text);
+    values.push(text);
+  }
+
+  return values;
+}
+
+function extractBathersCount(html: string): number | null {
+  const bathroomLabelIndex = html.search(/<title>\s*Bathroom\s*<\/title>/i);
+  if (bathroomLabelIndex >= 0) {
+    const tail = html.slice(bathroomLabelIndex, bathroomLabelIndex + 500);
+    const fromDetails = tail.match(
+      /property-details-text[^>]*>\s*([0-9]+(?:\.[0-9]+)?)\s*Bath/i,
+    )?.[1];
+    const parsed = parseNumberLike(fromDetails ?? null);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  const fallback = html.match(/\b([0-9]+(?:\.[0-9]+)?)\s*Baths?\b/i)?.[1];
+  return parseNumberLike(fallback ?? null);
 }
 
 function formatDateIso(value: Date): string {
@@ -511,6 +710,52 @@ async function fetchDetail(
         html,
       ).slice(0, 2000);
 
+    const schemaObjects = parseJsonLdObjects(html);
+    const productSchema = pickProductSchema(schemaObjects);
+    const schemaDescription =
+      typeof productSchema?.description === "string"
+        ? stripHtml(productSchema.description)
+        : "";
+
+    const descriptionExpandedRaw =
+      extractFirst(
+        /<div[^>]+id=["']pdpDescription["'][^>]*>[\s\S]*?<div[^>]+class=["'][^"']*pdp-section-body[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
+        html,
+      ) || schemaDescription;
+    const descriptionExpanded = stripHtml(descriptionExpandedRaw).slice(
+      0,
+      50000,
+    );
+
+    const amenitiesAll = extractAmenities(html);
+
+    const widgetMatch =
+      html.match(
+        /<div[^>]+class=["'][^"']*be-property-widget[^"']*["'][^>]*>/i,
+      )?.[0] || "";
+    const locationAddress =
+      widgetMatch.match(/data-straddress1=["']([^"']*)["']/i)?.[1]?.trim() ||
+      "";
+    const locationLabel =
+      widgetMatch.match(/data-strlocation=["']([^"']*)["']/i)?.[1]?.trim() ||
+      "";
+    const latitude = parseNumberLike(
+      widgetMatch.match(/data-latitude=["']([^"']*)["']/i)?.[1] ?? null,
+    );
+    const longitude = parseNumberLike(
+      widgetMatch.match(/data-longitude=["']([^"']*)["']/i)?.[1] ?? null,
+    );
+
+    const beds = parseNumberLike(
+      widgetMatch.match(/data-dblbeds=["']([^"']*)["']/i)?.[1] ?? null,
+    );
+    const sleeps = parseNumberLike(
+      widgetMatch.match(/data-intoccu=["']([^"']*)["']/i)?.[1] ?? null,
+    );
+    const baths = extractBathersCount(html);
+
+    const mediaUrls = collectMediaUrls(html);
+
     const externalListingId = extractExternalListingId(
       html,
       normalizedDetailUrl,
@@ -557,6 +802,40 @@ async function fetchDetail(
       h1,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
+      description_expanded: descriptionExpanded,
+      amenities: {
+        categories: {
+          General: amenitiesAll,
+        },
+        all: amenitiesAll,
+      },
+      location: {
+        address: locationAddress,
+        location_label: locationLabel,
+        directions_url:
+          absoluteHttpUrl(
+            `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+              locationAddress || locationLabel,
+            )}`,
+          ) || "",
+        directions_daddr: locationAddress || locationLabel,
+        latitude,
+        longitude,
+      },
+      media_gallery: {
+        image_count: mediaUrls.length,
+        image_urls: mediaUrls,
+      },
+      property_profile: {
+        unit_id: externalListingId,
+        area: locationLabel,
+        location: locationLabel,
+        beds,
+        baths,
+        sleeps,
+        city: "",
+        state: "",
+      },
       normalized_matching_profile: {
         source: "pm_oceanreef30a",
         external_listing_id: externalListingId,

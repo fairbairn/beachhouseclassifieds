@@ -14,6 +14,33 @@ type ExclusiveDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    area: string;
+    location: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+    city: string;
+    state: string;
+  };
   normalized_matching_profile: {
     source: "pm_exclusive30a";
     external_listing_id: string;
@@ -99,6 +126,93 @@ function normalizeForMatch(value: string): string {
 
 function hashSha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function parseNumberLike(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function absoluteHttpUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const normalized = new URL(trimmed, "https://www.exclusive30a.com")
+      .toString()
+      .trim();
+    if (!/^https?:\/\//i.test(normalized)) {
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonLdObjects(html: string): Record<string, unknown>[] {
+  const objects: Record<string, unknown>[] = [];
+  const scriptRegex =
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
+  for (const match of html.matchAll(scriptRegex)) {
+    const raw = match[1]?.trim();
+    if (!raw) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item && typeof item === "object") {
+            objects.push(item as Record<string, unknown>);
+          }
+        }
+        continue;
+      }
+
+      if (parsed && typeof parsed === "object") {
+        objects.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore malformed json-ld blobs.
+    }
+  }
+
+  return objects;
+}
+
+function pickVacationRentalSchema(
+  schemaObjects: Record<string, unknown>[],
+): Record<string, unknown> | null {
+  for (const item of schemaObjects) {
+    const type = item["@type"];
+    if (typeof type === "string" && type.toLowerCase() === "vacationrental") {
+      return item;
+    }
+    if (
+      Array.isArray(type) &&
+      type.some(
+        (entry) =>
+          typeof entry === "string" && entry.toLowerCase() === "vacationrental",
+      )
+    ) {
+      return item;
+    }
+  }
+
+  return null;
 }
 
 function normalizeDetailUrl(value: string): string | null {
@@ -402,6 +516,9 @@ async function fetchDetail(
     const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${listingId}.html`);
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
+    const schemaObjects = parseJsonLdObjects(html);
+    const vacationRentalSchema = pickVacationRentalSchema(schemaObjects);
+
     const bookedDays = parseBookedDaysFromHtml(html);
     const bookedByDate = new Map<string, ExclusiveBookedDay>();
     for (const entry of bookedDays) {
@@ -457,11 +574,148 @@ async function fetchDetail(
     const other = normalizedDays.length - available - notAvailable;
 
     const name = stripHtml(h1 || title).slice(0, 240);
-    const description = stripHtml(metaDescription).slice(0, 20000);
+    const schemaDescription =
+      typeof vacationRentalSchema?.description === "string"
+        ? stripHtml(vacationRentalSchema.description)
+        : "";
+    const description = stripHtml(schemaDescription || metaDescription).slice(
+      0,
+      20000,
+    );
     const titleNormalized = normalizeForMatch(name);
     const descriptionNormalized = normalizeForMatch(description);
     const descriptionHash = hashSha256(descriptionNormalized);
     const titleHash = hashSha256(titleNormalized);
+
+    const amenitiesCategories: Record<string, string[]> = {};
+    const amenitiesAll: string[] = [];
+    const seenAmenity = new Set<string>();
+    const schemaAmenities = Array.isArray(vacationRentalSchema?.amenityFeature)
+      ? (vacationRentalSchema?.amenityFeature as unknown[])
+      : [];
+    for (const feature of schemaAmenities) {
+      if (!feature || typeof feature !== "object") {
+        continue;
+      }
+
+      const label = (feature as { name?: unknown }).name;
+      if (typeof label !== "string") {
+        continue;
+      }
+
+      const value = stripHtml(label).trim();
+      if (!value) {
+        continue;
+      }
+
+      if (!amenitiesCategories["Property Amenities"]) {
+        amenitiesCategories["Property Amenities"] = [];
+      }
+      amenitiesCategories["Property Amenities"].push(value);
+
+      const dedupeKey = normalizeForMatch(value);
+      if (!dedupeKey || seenAmenity.has(dedupeKey)) {
+        continue;
+      }
+      seenAmenity.add(dedupeKey);
+      amenitiesAll.push(value);
+    }
+
+    const imageUrls: string[] = [];
+    const seenImage = new Set<string>();
+    const pushImage = (value: string) => {
+      const normalized = absoluteHttpUrl(value);
+      if (!normalized) {
+        return;
+      }
+
+      const key = normalized.toLowerCase();
+      if (seenImage.has(key)) {
+        return;
+      }
+      seenImage.add(key);
+      imageUrls.push(normalized);
+    };
+
+    const galleryHrefRegex =
+      /data-fancybox=["']property-gallery["'][^>]+href=["']([^"']+)["']/gi;
+    for (const match of html.matchAll(galleryHrefRegex)) {
+      if (match[1]) {
+        pushImage(match[1]);
+      }
+    }
+
+    const schemaImages = vacationRentalSchema?.image;
+    if (Array.isArray(schemaImages)) {
+      for (const entry of schemaImages) {
+        if (typeof entry === "string") {
+          pushImage(entry);
+        }
+      }
+    } else if (typeof schemaImages === "string") {
+      pushImage(schemaImages);
+    }
+
+    const ogImage = extractFirst(
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+      html,
+    );
+    if (ogImage) {
+      pushImage(ogImage);
+    }
+
+    const schemaAddress =
+      vacationRentalSchema?.address &&
+      typeof vacationRentalSchema.address === "object"
+        ? (vacationRentalSchema.address as Record<string, unknown>)
+        : null;
+    const schemaGeo =
+      vacationRentalSchema?.geo && typeof vacationRentalSchema.geo === "object"
+        ? (vacationRentalSchema.geo as Record<string, unknown>)
+        : null;
+
+    const address = String(schemaAddress?.streetAddress ?? "").trim();
+    const city = String(schemaAddress?.addressLocality ?? "").trim();
+    const state = String(schemaAddress?.addressRegion ?? "").trim();
+    const locationLabel = [city, state].filter(Boolean).join(", ");
+    const directionsDaddr = [address, city, state].filter(Boolean).join(", ");
+    const directionsUrl = directionsDaddr
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+          directionsDaddr,
+        )}`
+      : "";
+    const latitude = parseNumberLike(schemaGeo?.latitude ?? null);
+    const longitude = parseNumberLike(schemaGeo?.longitude ?? null);
+
+    const bedsFromSchema = parseNumberLike(
+      vacationRentalSchema?.numberOfBedrooms ??
+        (
+          vacationRentalSchema?.containsPlace as
+            | { numberOfBedrooms?: unknown }
+            | undefined
+        )?.numberOfBedrooms ??
+        null,
+    );
+    const bathsFromSchema = parseNumberLike(
+      vacationRentalSchema?.numberOfBathroomsTotal ??
+        (
+          vacationRentalSchema?.containsPlace as
+            | { numberOfBathroomsTotal?: unknown }
+            | undefined
+        )?.numberOfBathroomsTotal ??
+        null,
+    );
+    const sleepsFromSchema = parseNumberLike(
+      (
+        vacationRentalSchema?.containsPlace as
+          | {
+              occupancy?: {
+                value?: unknown;
+              };
+            }
+          | undefined
+      )?.occupancy?.value ?? null,
+    );
 
     return {
       external_listing_id: listingId,
@@ -471,6 +725,33 @@ async function fetchDetail(
       h1,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
+      description_expanded: description,
+      amenities: {
+        categories: amenitiesCategories,
+        all: amenitiesAll,
+      },
+      location: {
+        address,
+        location_label: locationLabel,
+        directions_url: directionsUrl,
+        directions_daddr: directionsDaddr,
+        latitude,
+        longitude,
+      },
+      media_gallery: {
+        image_count: imageUrls.length,
+        image_urls: imageUrls,
+      },
+      property_profile: {
+        unit_id: listingId,
+        area: "30A",
+        location: locationLabel,
+        beds: bedsFromSchema,
+        baths: bathsFromSchema,
+        sleeps: sleepsFromSchema,
+        city,
+        state,
+      },
       normalized_matching_profile: {
         source: "pm_exclusive30a",
         external_listing_id: listingId,

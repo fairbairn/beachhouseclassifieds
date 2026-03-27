@@ -11,6 +11,35 @@ type RealJoyDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    property_code: string;
+    unit_slug: string;
+    unit_type: string;
+    city: string;
+    state: string;
+    zip: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+  };
   normalized_matching_profile: {
     source: "pm_realjoy30a";
     external_listing_id: string;
@@ -160,6 +189,68 @@ function extractExternalListingId(html: string, detailUrl: string): string {
 
   const parts = new URL(normalized).pathname.split("/").filter(Boolean);
   return parts[1] || "unknown";
+}
+
+function parseNumberLike(
+  value: string | number | null | undefined,
+): number | null {
+  const numeric = Number(String(value ?? "").trim());
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return numeric;
+}
+
+function splitSrcsetCandidates(value: string): string[] {
+  return value
+    .split(",")
+    .map((part) => part.trim().split(/\s+/)[0] || "")
+    .filter(Boolean);
+}
+
+function toAbsoluteHttpUrl(value: string, baseUrl: string): string | null {
+  const raw = value.trim();
+  if (!raw) {
+    return null;
+  }
+  try {
+    return new URL(raw, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+function collectRealJoyMediaUrls(
+  candidates: string[],
+  baseUrl: string,
+): string[] {
+  const urls = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const parts = candidate.includes(",")
+      ? splitSrcsetCandidates(candidate)
+      : [candidate];
+
+    for (const part of parts) {
+      const absolute = toAbsoluteHttpUrl(part, baseUrl);
+      if (!absolute) {
+        continue;
+      }
+
+      if (
+        absolute.includes("track-pm.s3.amazonaws.com/realjoy/image") ||
+        absolute.includes("img.trackhs.com")
+      ) {
+        urls.add(absolute);
+      }
+    }
+  }
+
+  return Array.from(urls);
 }
 
 function parseMonthHeader(
@@ -518,30 +609,171 @@ async function fetchDetail(
       normalizedDetailUrl,
     );
 
-    const descriptionFromDom = await page.evaluate(() => {
-      const selectors = [
-        ".property-accordion-wrap",
-        ".be-property-description",
-        ".property-description",
-        ".panel-description",
-        ".accordion-item",
-      ];
+    const extractedFromDom = await page.evaluate(() => {
+      const widget = document.querySelector(
+        ".be-property-widget",
+      ) as HTMLElement | null;
 
-      const textChunks: string[] = [];
-      for (const selector of selectors) {
-        const node = document.querySelector(selector);
-        if (!node) {
-          continue;
-        }
-        const text = (node.textContent || "").replace(/\s+/g, " ").trim();
-        if (text.length > 40) {
-          textChunks.push(text);
+      const amenitiesGroups = Array.from(
+        document.querySelectorAll(".pdp-amenities-list-group"),
+      ).map((group) => {
+        const heading = (
+          group.querySelector(".pdp-amenities-list-heading")?.textContent || ""
+        )
+          .replace(/\s+/g, " ")
+          .trim();
+        const items = Array.from(
+          group.querySelectorAll(".pdp-amenities-item-text"),
+        )
+          .map((node) => (node.textContent || "").replace(/\s+/g, " ").trim())
+          .filter(Boolean);
+
+        return { heading, items };
+      });
+
+      const labelValues = {
+        bedrooms: "",
+        bathrooms: "",
+        guests: "",
+      };
+
+      for (const label of Array.from(
+        document.querySelectorAll(".be-property-widget-info-label"),
+      )) {
+        const title = (label.querySelector("svg title")?.textContent || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+        const count = (
+          label.querySelector(".be-property-widget-info-label-count")
+            ?.textContent || ""
+        )
+          .replace(/\s+/g, " ")
+          .trim();
+
+        if (title.includes("bedroom")) {
+          labelValues.bedrooms = count;
+        } else if (title.includes("bathroom")) {
+          labelValues.bathrooms = count;
+        } else if (title.includes("guest")) {
+          labelValues.guests = count;
         }
       }
 
-      return textChunks.join(" ").replace(/\s+/g, " ").trim().slice(0, 20000);
+      const descriptionText = (
+        document.querySelector("#pdpDescription .pdp-section-body")
+          ?.textContent || ""
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const addressText = (
+        document.querySelector(
+          ".pdp-property-info-list-item-address .pdp-property-info-list-item-text",
+        )?.textContent || ""
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const locationName = (
+        document.querySelector(".pdp-location-name")?.textContent || ""
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const propertyType = (
+        document.querySelector(".pdp-type-name")?.textContent || ""
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const mediaCandidates: string[] = [];
+      const ogImage = document.querySelector(
+        'meta[property="og:image"]',
+      ) as HTMLMetaElement | null;
+      if (ogImage?.content) {
+        mediaCandidates.push(ogImage.content);
+      }
+      if (widget?.dataset.photo) {
+        mediaCandidates.push(widget.dataset.photo);
+      }
+
+      for (const element of Array.from(
+        document.querySelectorAll("[data-srcset]"),
+      )) {
+        const value =
+          (element as HTMLElement).getAttribute("data-srcset") || "";
+        if (value) {
+          mediaCandidates.push(value);
+        }
+      }
+
+      for (const element of Array.from(
+        document.querySelectorAll("[data-thumb]"),
+      )) {
+        const value = (element as HTMLElement).getAttribute("data-thumb") || "";
+        if (value) {
+          mediaCandidates.push(value);
+        }
+      }
+
+      for (const image of Array.from(document.querySelectorAll("img"))) {
+        const src = image.getAttribute("src") || "";
+        const srcset = image.getAttribute("srcset") || "";
+        if (src) {
+          mediaCandidates.push(src);
+        }
+        if (srcset) {
+          mediaCandidates.push(srcset);
+        }
+      }
+
+      return {
+        descriptionText,
+        amenitiesGroups,
+        mediaCandidates,
+        widgetData: {
+          unitcode: widget?.dataset.unitcode || "",
+          id: widget?.dataset.id || "",
+          shortname: widget?.dataset.unitshortname || "",
+          straddress1: widget?.dataset.straddress1 || "",
+          strlocation: widget?.dataset.strlocation || "",
+          latitude: widget?.dataset.latitude || "",
+          longitude: widget?.dataset.longitude || "",
+          dblbeds: widget?.dataset.dblbeds || "",
+          intoccu: widget?.dataset.intoccu || "",
+        },
+        propertyInfo: {
+          address: addressText,
+          locationName,
+          propertyType,
+        },
+        labelValues,
+      };
     });
 
+    const amenitiesCategories: Record<string, string[]> = {};
+    const amenitiesAll = new Set<string>();
+    for (const group of extractedFromDom.amenitiesGroups) {
+      const heading = stripHtml(group.heading || "");
+      const uniqueItems = Array.from(
+        new Set(
+          (group.items || []).map((item) => stripHtml(item)).filter(Boolean),
+        ),
+      );
+      if (!heading || uniqueItems.length === 0) {
+        continue;
+      }
+      amenitiesCategories[heading] = uniqueItems;
+      for (const item of uniqueItems) {
+        amenitiesAll.add(item);
+      }
+    }
+
+    const mediaUrls = collectRealJoyMediaUrls(
+      extractedFromDom.mediaCandidates,
+      normalizedDetailUrl,
+    );
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
@@ -685,12 +917,37 @@ async function fetchDetail(
       ),
     };
 
-    const description =
-      stripHtml(descriptionFromDom).slice(0, 20000) ||
+    const descriptionExpanded =
+      stripHtml(extractedFromDom.descriptionText).slice(0, 20000) ||
       stripHtml(metaDescription).slice(0, 20000);
+    const description = descriptionExpanded;
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
+
+    const widget = extractedFromDom.widgetData;
+    const locationInfo = extractedFromDom.propertyInfo;
+    const address =
+      widget.straddress1 || locationInfo.address || locationInfo.locationName;
+    const locationLabel =
+      widget.strlocation ||
+      locationInfo.locationName ||
+      locationInfo.propertyType;
+    const directionsAddress = [address, locationLabel]
+      .map((part) => String(part || "").trim())
+      .filter(Boolean)
+      .join(", ");
+
+    const detailSlug = (() => {
+      try {
+        return (
+          new URL(normalizedDetailUrl).pathname.split("/").filter(Boolean)[1] ||
+          ""
+        );
+      } catch {
+        return "";
+      }
+    })();
 
     const available = calendar.days.filter(
       (day) => day.status_code === "A",
@@ -719,6 +976,41 @@ async function fetchDetail(
       h1,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
+      description_expanded: descriptionExpanded,
+      amenities: {
+        categories: amenitiesCategories,
+        all: Array.from(amenitiesAll),
+      },
+      location: {
+        address,
+        location_label: locationLabel,
+        directions_url: directionsAddress
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsAddress)}`
+          : "",
+        directions_daddr: directionsAddress,
+        latitude: parseNumberLike(widget.latitude),
+        longitude: parseNumberLike(widget.longitude),
+      },
+      media_gallery: {
+        image_count: mediaUrls.length,
+        image_urls: mediaUrls,
+      },
+      property_profile: {
+        unit_id: widget.unitcode || externalListingId,
+        property_code: widget.unitcode || externalListingId,
+        unit_slug: detailSlug || widget.id,
+        unit_type: locationInfo.propertyType,
+        city: widget.strlocation || locationInfo.locationName,
+        state: "FL",
+        zip: "",
+        beds:
+          parseNumberLike(widget.dblbeds) ??
+          parseNumberLike(extractedFromDom.labelValues.bedrooms),
+        baths: parseNumberLike(extractedFromDom.labelValues.bathrooms),
+        sleeps:
+          parseNumberLike(widget.intoccu) ??
+          parseNumberLike(extractedFromDom.labelValues.guests),
+      },
       normalized_matching_profile: {
         source: "pm_realjoy30a",
         external_listing_id: externalListingId,

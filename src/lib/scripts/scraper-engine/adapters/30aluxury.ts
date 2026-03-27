@@ -12,6 +12,33 @@ type LuxuryDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    area: string;
+    location: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+    city: string;
+    state: string;
+  };
   normalized_matching_profile: {
     source: "pm_30aluxury";
     external_listing_id: string;
@@ -140,6 +167,110 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function dedupePreserveOrder(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function parseFirstNumber(value: string): number | null {
+  const match = value.match(/\d+(?:\.\d+)?/);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseCityStateFromAddress(address: string): {
+  city: string;
+  state: string;
+} {
+  const compact = address.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return { city: "", state: "" };
+  }
+
+  const stateZipMatch = compact.match(/\b([A-Z]{2})\s+\d{5}(?:-\d{4})?\b/);
+  const state = stateZipMatch?.[1] ?? "";
+  const parts = compact
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  let city = "";
+  if (parts.length >= 2) {
+    const candidate = parts[parts.length - 2] ?? "";
+    city = /\d/.test(candidate) ? "" : candidate;
+  }
+
+  return { city, state };
+}
+
+function normalizeGalleryUrl(rawUrl: string): string {
+  const cleaned = rawUrl.trim();
+  if (!cleaned) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(cleaned);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return "";
+  }
+}
+
+function extractFieldLocationFromHtml(html: string): {
+  street: string;
+  latitude: number | null;
+  longitude: number | null;
+} {
+  const fieldLocationChunkMatch = html.match(
+    /["']field_location["']\s*:\s*\{[\s\S]*?\}\s*,\s*["']field_teaser_image["']/i,
+  );
+  const fieldLocationChunk = fieldLocationChunkMatch
+    ? fieldLocationChunkMatch[0]
+    : html;
+
+  const streetMatch = fieldLocationChunk.match(
+    /["']street["']\s*:\s*["']([^"']*)["']/i,
+  );
+  const latitudeMatch = fieldLocationChunk.match(
+    /["']latitude["']\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
+  );
+  const longitudeMatch = fieldLocationChunk.match(
+    /["']longitude["']\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
+  );
+
+  const street = streetMatch?.[1]
+    ? streetMatch[1]
+        .replace(/\\\//g, "/")
+        .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+          String.fromCharCode(Number.parseInt(hex, 16)),
+        )
+        .replace(/\\"/g, '"')
+        .trim()
+    : "";
+
+  const latitude = latitudeMatch ? Number(latitudeMatch[1]) : NaN;
+  const longitude = longitudeMatch ? Number(longitudeMatch[1]) : NaN;
+
+  return {
+    street,
+    latitude: Number.isFinite(latitude) ? latitude : null,
+    longitude: Number.isFinite(longitude) ? longitude : null,
+  };
 }
 
 function extractExternalListingId(detailUrl: string): string {
@@ -622,6 +753,107 @@ async function fetchDetail(
             .querySelector("link[rel='canonical']")
             ?.getAttribute("href") ?? "",
         metaDescription: getMeta("description") || getMeta("og:description"),
+        sleepsText:
+          document.querySelector(".rc-lodging-occ")?.textContent?.trim() ?? "",
+        bedroomsText:
+          document.querySelector(".rc-lodging-beds")?.textContent?.trim() ?? "",
+        bathroomsText:
+          document.querySelector(".rc-lodging-baths")?.textContent?.trim() ??
+          "",
+        neighborhoodText:
+          document
+            .querySelector(".rc-core-cat-evrn_client_1 li")
+            ?.textContent?.trim() ??
+          document
+            .querySelector(".rc-core-cat-evrn_client_1")
+            ?.textContent?.trim() ??
+          "",
+        unitId:
+          document
+            .querySelector('[name="entity_id"][content], [data-entity-id]')
+            ?.getAttribute("content")
+            ?.trim() ??
+          document
+            .querySelector("[data-item-id], [data-id]")
+            ?.getAttribute("data-item-id")
+            ?.trim() ??
+          "",
+        amenitiesCategories: (() => {
+          const categories: Record<string, string[]> = {};
+          const fields = Array.from(
+            document.querySelectorAll(
+              '#amenities .field, section#amenities .field, [id="amenities"] .field',
+            ),
+          );
+          for (const field of fields) {
+            const heading =
+              field.querySelector("h2.field-label")?.textContent ??
+              field.querySelector("h3")?.textContent ??
+              "";
+            const category = heading
+              .replace(/:\s*$/, "")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (!category) {
+              continue;
+            }
+
+            const items = Array.from(field.querySelectorAll("li"))
+              .map((li) => (li.textContent ?? "").replace(/\s+/g, " ").trim())
+              .filter(Boolean);
+            if (items.length > 0) {
+              categories[category] = items;
+            }
+          }
+          return categories;
+        })(),
+        galleryUrls: (() => {
+          const urls: string[] = [];
+          const mediaRoot =
+            document.querySelector("#Media") ??
+            document.querySelector('[id="media"]');
+          if (!mediaRoot) {
+            return urls;
+          }
+
+          const attrValues = Array.from(
+            mediaRoot.querySelectorAll(
+              "a[href], img[src], img[data-src], img[data-rsTmb], [data-rsBigImg], [data-image]",
+            ),
+          );
+
+          for (const node of attrValues) {
+            const attrs = [
+              node.getAttribute("href"),
+              node.getAttribute("src"),
+              node.getAttribute("data-src"),
+              node.getAttribute("data-rsTmb"),
+              node.getAttribute("data-rsBigImg"),
+              node.getAttribute("data-image"),
+            ];
+            for (const raw of attrs) {
+              if (!raw) {
+                continue;
+              }
+              try {
+                const absolute = new URL(
+                  raw,
+                  window.location.origin,
+                ).toString();
+                if (
+                  /\.(jpe?g|png|webp|gif)(\?|$)/i.test(absolute) ||
+                  absolute.includes("/evrn/") ||
+                  absolute.includes("/images.")
+                ) {
+                  urls.push(absolute);
+                }
+              } catch {
+                // Skip invalid URL fragments.
+              }
+            }
+          }
+          return urls;
+        })(),
       };
     });
 
@@ -629,6 +861,7 @@ async function fetchDetail(
       0,
       15000,
     );
+    const descriptionExpanded = stripHtml(descriptionText).slice(0, 30000);
 
     await clickTab(page, "Availability");
 
@@ -760,6 +993,74 @@ async function fetchDetail(
     const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
 
+    const locationPayload = extractFieldLocationFromHtml(html);
+
+    const beds = parseFirstNumber(extracted.bedroomsText);
+    const baths = parseFirstNumber(extracted.bathroomsText);
+    const sleeps = parseFirstNumber(extracted.sleepsText);
+    const neighborhood = stripHtml(extracted.neighborhoodText).slice(0, 240);
+
+    const propertyProfile: LuxuryDetailRecord["property_profile"] = {
+      unit_id: stripHtml(extracted.unitId || externalListingId).slice(0, 140),
+      area: neighborhood,
+      location: neighborhood,
+      beds,
+      baths,
+      sleeps,
+      city: parseCityStateFromAddress(locationPayload.street).city,
+      state: parseCityStateFromAddress(locationPayload.street).state,
+    };
+
+    const amenitiesCategories: Record<string, string[]> = {};
+    for (const [category, items] of Object.entries(
+      extracted.amenitiesCategories,
+    )) {
+      const cleanCategory = stripHtml(category).slice(0, 120);
+      const cleanItems = dedupePreserveOrder(
+        items.map((item) => stripHtml(item).slice(0, 200)),
+      );
+      if (!cleanCategory || cleanItems.length === 0) {
+        continue;
+      }
+      amenitiesCategories[cleanCategory] = cleanItems;
+    }
+
+    const amenitiesAll = dedupePreserveOrder(
+      Object.values(amenitiesCategories).flat(),
+    );
+    const amenities: LuxuryDetailRecord["amenities"] = {
+      categories: amenitiesCategories,
+      all: amenitiesAll,
+    };
+
+    const mediaUrls = dedupePreserveOrder(
+      extracted.galleryUrls
+        .map((url) => normalizeGalleryUrl(url))
+        .filter(Boolean),
+    );
+    const mediaGallery: LuxuryDetailRecord["media_gallery"] = {
+      image_count: mediaUrls.length,
+      image_urls: mediaUrls,
+    };
+
+    const streetAddress = stripHtml(locationPayload.street).slice(0, 240);
+    const directionsQuery =
+      streetAddress ||
+      (locationPayload.latitude !== null && locationPayload.longitude !== null
+        ? `${locationPayload.latitude},${locationPayload.longitude}`
+        : "");
+
+    const location: LuxuryDetailRecord["location"] = {
+      address: streetAddress,
+      location_label: neighborhood,
+      directions_url: directionsQuery
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsQuery)}`
+        : "",
+      directions_daddr: directionsQuery,
+      latitude: locationPayload.latitude,
+      longitude: locationPayload.longitude,
+    };
+
     const normalizedMatchingProfile = {
       source: "pm_30aluxury" as const,
       external_listing_id: externalListingId,
@@ -807,6 +1108,11 @@ async function fetchDetail(
       h1: stripHtml(extracted.h1).slice(0, 240),
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
+      description_expanded: descriptionExpanded,
+      amenities,
+      location,
+      media_gallery: mediaGallery,
+      property_profile: propertyProfile,
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_30aluxury",

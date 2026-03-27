@@ -43,6 +43,23 @@ type OverseeDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
   normalized_matching_profile: {
     source: "pm_oversee30a";
     external_listing_id: string;
@@ -212,6 +229,189 @@ function extractUnitDataAttributes(html: string): Record<string, string> {
   }
 
   return attrs;
+}
+
+function parseNumberLike(value: string | undefined): number | null {
+  const numeric = Number(String(value ?? "").trim());
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return numeric;
+}
+
+function absoluteHttpUrl(value: string, baseUrl: string): string | null {
+  const raw = value.trim();
+  if (!raw) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+
+  if (raw.startsWith("//")) {
+    return `https:${raw}`;
+  }
+
+  try {
+    return new URL(raw, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractSectionBetween(
+  html: string,
+  startId: string,
+  nextIds: string[],
+): string {
+  const startRegex = new RegExp(`<div\\s+id=["']${startId}["'][^>]*>`, "i");
+  const startMatch = html.match(startRegex);
+  if (!startMatch || typeof startMatch.index !== "number") {
+    return "";
+  }
+
+  const sectionStart = startMatch.index + startMatch[0].length;
+  let sectionEnd = html.length;
+  const afterStart = html.slice(sectionStart);
+
+  for (const nextId of nextIds) {
+    const nextRegex = new RegExp(`<div\\s+id=["']${nextId}["'][^>]*>`, "i");
+    const nextMatch = afterStart.match(nextRegex);
+    if (nextMatch && typeof nextMatch.index === "number") {
+      sectionEnd = Math.min(sectionEnd, sectionStart + nextMatch.index);
+    }
+  }
+
+  return html.slice(sectionStart, sectionEnd);
+}
+
+function extractDescriptionExpanded(html: string, fallback: string): string {
+  const descriptionSection = extractSectionBetween(html, "description", [
+    "unit-info",
+    "houserules",
+    "amenities",
+  ]);
+
+  if (!descriptionSection) {
+    return fallback;
+  }
+
+  const chunks: string[] = [];
+
+  const iconRegex =
+    /<div[^>]+class=["'][^"']*icon_info[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
+  let iconMatch: RegExpExecArray | null = iconRegex.exec(descriptionSection);
+  while (iconMatch) {
+    const text = stripHtml(iconMatch[1] ?? "");
+    if (text) {
+      chunks.push(text);
+    }
+    iconMatch = iconRegex.exec(descriptionSection);
+  }
+
+  const paragraphRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+  let paragraphMatch: RegExpExecArray | null =
+    paragraphRegex.exec(descriptionSection);
+  while (paragraphMatch) {
+    const text = stripHtml(paragraphMatch[1] ?? "");
+    if (text) {
+      chunks.push(text);
+    }
+    paragraphMatch = paragraphRegex.exec(descriptionSection);
+  }
+
+  if (chunks.length === 0) {
+    return fallback;
+  }
+
+  return chunks.join("\n\n").slice(0, 20000);
+}
+
+function extractAmenities(html: string): {
+  categories: Record<string, string[]>;
+  all: string[];
+} {
+  const amenitiesSection = extractSectionBetween(html, "amenities", [
+    "bedandbaths",
+    "location",
+    "community",
+  ]);
+
+  if (!amenitiesSection) {
+    return { categories: {}, all: [] };
+  }
+
+  const categories: Record<string, string[]> = {};
+  const all = new Set<string>();
+
+  const groupRegex =
+    /<div[^>]+class=["'][^"']*vrp-amen-group[^"']*["'][^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/gi;
+  let groupMatch: RegExpExecArray | null = groupRegex.exec(amenitiesSection);
+  while (groupMatch) {
+    const categoryName = stripHtml(groupMatch[1] ?? "") || "General";
+    const listHtml = groupMatch[2] ?? "";
+
+    const items: string[] = [];
+    const itemRegex =
+      /<li[^>]*class=["'][^"']*vrp-amen-name[^"']*["'][^>]*>[\s\S]*?<span[^>]*>([^<]+)/gi;
+    let itemMatch: RegExpExecArray | null = itemRegex.exec(listHtml);
+    while (itemMatch) {
+      const item = stripHtml(itemMatch[1] ?? "");
+      if (item) {
+        items.push(item);
+        all.add(item);
+      }
+      itemMatch = itemRegex.exec(listHtml);
+    }
+
+    if (items.length > 0) {
+      categories[categoryName] = Array.from(new Set(items));
+    }
+
+    groupMatch = groupRegex.exec(amenitiesSection);
+  }
+
+  return {
+    categories,
+    all: Array.from(all),
+  };
+}
+
+function collectMediaUrls(html: string, baseUrl: string): string[] {
+  const urls = new Set<string>();
+
+  const addUrl = (value: string | null | undefined) => {
+    if (!value) {
+      return;
+    }
+
+    const normalized = absoluteHttpUrl(value, baseUrl);
+    if (!normalized) {
+      return;
+    }
+
+    if (
+      normalized.includes("track-pm.s3.amazonaws.com/oversee/image") ||
+      normalized.includes("img.trackhs.com")
+    ) {
+      urls.add(normalized);
+    }
+  };
+
+  const ogImage = html.match(
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+  );
+  addUrl(ogImage?.[1] ?? "");
+
+  const srcRegex = /(?:data-src|src)=["']([^"']+)["']/gi;
+  let srcMatch: RegExpExecArray | null = srcRegex.exec(html);
+  while (srcMatch) {
+    addUrl(srcMatch[1] ?? "");
+    srcMatch = srcRegex.exec(html);
+  }
+
+  return Array.from(urls);
 }
 
 function parseMdyyyyToIso(value: string): string | null {
@@ -564,6 +764,27 @@ async function fetchDetail(
         /<div[^>]+class=["'][^"']*second-part-desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
         html,
       ) || metaDescription;
+    const descriptionExpanded = extractDescriptionExpanded(
+      html,
+      descriptionSource,
+    );
+    const amenities = extractAmenities(html);
+    const imageUrls = collectMediaUrls(html, normalizedDetailUrl);
+
+    const addressParts = [
+      unitData["unit-address1"],
+      unitData["unit-address2"],
+      unitData["unit-city"],
+      unitData["unit-state"],
+      unitData["unit-zip"],
+    ]
+      .map((part) => String(part ?? "").trim())
+      .filter(Boolean);
+    const fullAddress = addressParts.join(", ");
+    const locationLabel = [unitData["unit-city"], unitData["unit-state"]]
+      .map((part) => String(part ?? "").trim())
+      .filter(Boolean)
+      .join(", ");
 
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
@@ -713,7 +934,9 @@ async function fetchDetail(
     };
 
     const name = stripHtml(unitData["unit-name"] || h1 || title).slice(0, 240);
-    const description = stripHtml(descriptionSource).slice(0, 20000);
+    const description = stripHtml(
+      descriptionExpanded || descriptionSource,
+    ).slice(0, 20000);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
 
@@ -726,6 +949,22 @@ async function fetchDetail(
       h1,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
+      description_expanded: descriptionExpanded,
+      amenities,
+      location: {
+        address: fullAddress,
+        location_label: locationLabel,
+        directions_url: fullAddress
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
+          : "",
+        directions_daddr: fullAddress,
+        latitude: parseNumberLike(unitData["unit-latitude"]),
+        longitude: parseNumberLike(unitData["unit-longitude"]),
+      },
+      media_gallery: {
+        image_count: imageUrls.length,
+        image_urls: imageUrls,
+      },
       normalized_matching_profile: {
         source: "pm_oversee30a",
         external_listing_id: externalListingId,

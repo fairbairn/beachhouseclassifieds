@@ -9,6 +9,34 @@ type StayDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    city: string;
+    state: string;
+    postal_code: string;
+    country: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    property_code: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+    city: string;
+    state: string;
+    zip: string;
+  };
   normalized_matching_profile: {
     source: "pm_stayon30a";
     external_listing_id: string;
@@ -105,6 +133,134 @@ function normalizeForMatch(value: string): string {
 
 function hashSha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function parseNumberLike(
+  value: string | number | null | undefined,
+): number | null {
+  const numeric = Number(String(value ?? "").trim());
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return numeric;
+}
+
+function toAbsoluteHttpUrl(value: string, baseUrl: string): string | null {
+  const raw = value.trim();
+  if (!raw) {
+    return null;
+  }
+  try {
+    return new URL(raw, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractSectionBetween(
+  html: string,
+  startMarker: string,
+  endMarker: string,
+): string {
+  const start = html.indexOf(startMarker);
+  if (start < 0) {
+    return "";
+  }
+  const end = html.indexOf(endMarker, start + startMarker.length);
+  if (end < 0) {
+    return "";
+  }
+  return html.slice(start, end);
+}
+
+function extractJsonLdObjects(html: string): Array<Record<string, unknown>> {
+  const scripts = html.match(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi,
+  );
+  if (!scripts?.length) {
+    return [];
+  }
+
+  const objects: Array<Record<string, unknown>> = [];
+  for (const script of scripts) {
+    const jsonText = script
+      .replace(/<script[^>]*>/i, "")
+      .replace(/<\/script>\s*$/i, "")
+      .trim();
+
+    if (!jsonText) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(jsonText) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item && typeof item === "object") {
+            objects.push(item as Record<string, unknown>);
+          }
+        }
+      } else if (parsed && typeof parsed === "object") {
+        objects.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore malformed JSON-LD blocks.
+    }
+  }
+
+  return objects;
+}
+
+function collectMediaUrls(
+  html: string,
+  baseUrl: string,
+  jsonLdObjects: Array<Record<string, unknown>>,
+): string[] {
+  const urls = new Set<string>();
+
+  for (const object of jsonLdObjects) {
+    const image = object.image;
+    if (typeof image === "string") {
+      const absolute = toAbsoluteHttpUrl(image, baseUrl);
+      if (absolute) {
+        urls.add(absolute);
+      }
+    }
+    if (Array.isArray(image)) {
+      for (const entry of image) {
+        if (typeof entry !== "string") {
+          continue;
+        }
+        const absolute = toAbsoluteHttpUrl(entry, baseUrl);
+        if (absolute) {
+          urls.add(absolute);
+        }
+      }
+    }
+  }
+
+  const attrMatches = html.matchAll(
+    /(?:data-lazy|data-src|src|content)=["']([^"']+)["']/gi,
+  );
+  for (const match of attrMatches) {
+    const raw = (match[1] ?? "").trim();
+    if (!raw) {
+      continue;
+    }
+    const absolute = toAbsoluteHttpUrl(raw, baseUrl);
+    if (!absolute) {
+      continue;
+    }
+    if (
+      absolute.includes("gallery.streamlinevrs.com") ||
+      absolute.includes("streamlinevrs.com") ||
+      absolute.includes("stayon30a.com/wp-content")
+    ) {
+      urls.add(absolute);
+    }
+  }
+
+  return Array.from(urls);
 }
 
 function extractIdsFromPropertyListPayload(raw: string): string[] {
@@ -415,6 +571,107 @@ async function fetchDetail(
         html,
       ).slice(0, 2000);
 
+    const jsonLdObjects = extractJsonLdObjects(html);
+    const lodgingJsonLd =
+      jsonLdObjects.find((item) => {
+        const itemType = String(item["@type"] ?? "").toLowerCase();
+        return itemType.includes("lodging") || itemType.includes("accommodation");
+      }) ?? jsonLdObjects[0] ?? null;
+
+    const descriptionSection = extractSectionBetween(
+      html,
+      'class="property_description"',
+      '</section><!--End description-->',
+    );
+    const descriptionExpanded =
+      stripHtml(descriptionSection).replace(/^description\s+/i, "").slice(0, 20000) ||
+      stripHtml(
+        typeof lodgingJsonLd?.description === "string"
+          ? lodgingJsonLd.description
+          : metaDescription,
+      ).slice(0, 20000);
+
+    const amenitiesSection = extractSectionBetween(
+      html,
+      'id="property-amenities"',
+      "</section>",
+    );
+    const categoryMap: Record<string, string[]> = {};
+    let activeCategory = "General";
+    const amenityBlocks = amenitiesSection.matchAll(
+      /<div[^>]+class=["'][^"']*(amenity_group|amenity_item)[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
+    );
+    for (const block of amenityBlocks) {
+      const kind = (block[1] ?? "").trim();
+      const rawText = stripHtml(block[2] ?? "").trim();
+      if (!rawText) {
+        continue;
+      }
+      if (kind === "amenity_group") {
+        activeCategory = rawText;
+        if (!categoryMap[activeCategory]) {
+          categoryMap[activeCategory] = [];
+        }
+        continue;
+      }
+      if (!categoryMap[activeCategory]) {
+        categoryMap[activeCategory] = [];
+      }
+      if (!categoryMap[activeCategory].includes(rawText)) {
+        categoryMap[activeCategory].push(rawText);
+      }
+    }
+
+    const amenitiesAll = Object.values(categoryMap)
+      .flat()
+      .filter(Boolean);
+
+    const jsonLdAddress =
+      lodgingJsonLd && typeof lodgingJsonLd.address === "object"
+        ? (lodgingJsonLd.address as Record<string, unknown>)
+        : null;
+    const jsonLdGeo =
+      lodgingJsonLd && typeof lodgingJsonLd.geo === "object"
+        ? (lodgingJsonLd.geo as Record<string, unknown>)
+        : null;
+
+    const location = {
+      address: stripHtml(
+        [
+          jsonLdAddress?.streetAddress,
+          jsonLdAddress?.addressLocality,
+          jsonLdAddress?.addressRegion,
+          jsonLdAddress?.postalCode,
+        ]
+          .map((part) => String(part ?? "").trim())
+          .filter(Boolean)
+          .join(", "),
+      ).slice(0, 500),
+      city: String(jsonLdAddress?.addressLocality ?? "").trim(),
+      state: String(jsonLdAddress?.addressRegion ?? "").trim(),
+      postal_code: String(jsonLdAddress?.postalCode ?? "").trim(),
+      country: String(jsonLdAddress?.addressCountry ?? "").trim(),
+      latitude: parseNumberLike(jsonLdGeo?.latitude as string | number | null),
+      longitude: parseNumberLike(jsonLdGeo?.longitude as string | number | null),
+    };
+
+    const beds = parseNumberLike(
+      (lodgingJsonLd?.numberOfBedrooms as string | number | null) ?? null,
+    );
+    const baths = parseNumberLike(
+      (lodgingJsonLd?.numberOfBathroomsTotal as string | number | null) ??
+        (lodgingJsonLd?.numberOfBathrooms as string | number | null) ??
+        null,
+    );
+    const sleeps = parseNumberLike(
+      (lodgingJsonLd?.maximumAttendeeCapacity as string | number | null) ??
+        ((lodgingJsonLd?.occupancy as Record<string, unknown> | null)?.
+          maxValue as string | number | null) ??
+        null,
+    );
+
+    const mediaUrls = collectMediaUrls(html, detailUrl, jsonLdObjects);
+
     const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
@@ -501,7 +758,7 @@ async function fetchDetail(
     ).length;
     const other = normalizedDays.length - available - notAvailable;
 
-    const description = stripHtml(metaDescription).slice(0, 20000);
+    const description = descriptionExpanded || stripHtml(metaDescription).slice(0, 20000);
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
@@ -514,6 +771,26 @@ async function fetchDetail(
       h1,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
+      description_expanded: descriptionExpanded,
+      amenities: {
+        categories: categoryMap,
+        all: amenitiesAll,
+      },
+      location,
+      media_gallery: {
+        image_count: mediaUrls.length,
+        image_urls: mediaUrls,
+      },
+      property_profile: {
+        unit_id: rentalId,
+        property_code: rentalId,
+        beds,
+        baths,
+        sleeps,
+        city: location.city,
+        state: location.state,
+        zip: location.postal_code,
+      },
       normalized_matching_profile: {
         source: "pm_stayon30a",
         external_listing_id: rentalId,
