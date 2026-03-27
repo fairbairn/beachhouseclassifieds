@@ -29,7 +29,7 @@ Scope:
 
 | Adapter            | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ |
 | ------------------ | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: |
-| 30aescapes         |   169 |  169 |       0 |          169 |            0 |          0 |         0 |      0 |
+| 30aescapes         |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |
 | 30aluxury          |   105 |  105 |       0 |          105 |            0 |          0 |         0 |      0 |
 | 360blue            |   620 |  620 |       0 |          620 |            0 |          0 |         0 |      0 |
 | benchmark30a       |   128 |  128 |       0 |          128 |            0 |          0 |         0 |      0 |
@@ -41,7 +41,7 @@ Scope:
 | oceanreef30a       |   111 |  111 |       0 |          111 |            0 |          0 |         0 |      0 |
 | oversee30a         |    66 |   66 |      66 |           66 |            0 |          0 |         0 |      0 |
 | realjoy30a         |   140 |  140 |       0 |          140 |            0 |          0 |         0 |      0 |
-| royaldestinations  |     9 |    9 |       9 |            9 |            1 |          1 |         1 |      1 |
+| royaldestinations  |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |
 | stayon30a          |    79 |    5 |       0 |            5 |            0 |          0 |         0 |      0 |
 
 ## Current Snapshot Summary
@@ -49,7 +49,7 @@ Scope:
 - 14 adapters audited.
 - 13 adapters are effectively at required-core parity for current captured files.
 - `stayon30a` has mixed historical detail artifacts and should be treated as the core-coverage outlier.
-- Expanded sections (`description_expanded`, `amenities`, `location`, `media_gallery`) are currently implemented in `royaldestinations` only.
+- Expanded sections (`description_expanded`, `amenities`, `location`, `media_gallery`) are now implemented at full coverage in `30aescapes` and `royaldestinations`.
 
 ## Follow-Up Refinement Backlog (Post Base-Adapter Completion)
 
@@ -62,13 +62,13 @@ Scope:
 ### Phase 2: Property Profile Conformance
 
 1. Add `property_profile` extraction to adapters currently at 0%:
-   - `30aescapes`, `30aluxury`, `360blue`, `benchmark30a`, `coastproperties30a`, `exclusive30a`, `localvr30a`, `oceanreef30a`, `realjoy30a`, `stayon30a`
+   - `30aluxury`, `360blue`, `benchmark30a`, `coastproperties30a`, `exclusive30a`, `localvr30a`, `oceanreef30a`, `realjoy30a`, `stayon30a`
 2. Keep existing profile-enabled adapters stable:
-   - `beachblue`, `fivestar30a`, `oversee30a`, `royaldestinations`
+   - `30aescapes`, `beachblue`, `fivestar30a`, `oversee30a`, `royaldestinations`
 
 ### Phase 3: Expanded Section Rollout
 
-Use `royaldestinations` as the reference implementation pattern.
+Use `30aescapes` and `royaldestinations` as reference implementation patterns.
 
 1. `description_expanded`
 2. `amenities` (grouped categories + flattened list)
@@ -78,18 +78,17 @@ Use `royaldestinations` as the reference implementation pattern.
 Suggested rollout order by captured inventory size:
 
 1. `360blue` (620)
-2. `30aescapes` (169)
-3. `realjoy30a` (140)
-4. `benchmark30a` (128)
-5. `oceanreef30a` (111)
-6. `exclusive30a` (106)
-7. `30aluxury` (105)
-8. `stayon30a` (79)
-9. `oversee30a` (66)
-10. `fivestar30a` (62)
-11. `localvr30a` (42)
-12. `coastproperties30a` (30)
-13. `beachblue` (16)
+2. `realjoy30a` (140)
+3. `benchmark30a` (128)
+4. `oceanreef30a` (111)
+5. `exclusive30a` (106)
+6. `30aluxury` (105)
+7. `stayon30a` (79)
+8. `oversee30a` (66)
+9. `fivestar30a` (62)
+10. `localvr30a` (42)
+11. `coastproperties30a` (30)
+12. `beachblue` (16)
 
 ## Definition of Done for Conformance
 

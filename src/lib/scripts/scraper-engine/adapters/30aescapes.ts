@@ -12,6 +12,33 @@ type EscapeDetailRecord = DetailRecordBase & {
   h1: string;
   canonical_url: string;
   meta_description: string;
+  description_expanded: string;
+  amenities: {
+    categories: Record<string, string[]>;
+    all: string[];
+  };
+  location: {
+    address: string;
+    location_label: string;
+    directions_url: string;
+    directions_daddr: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  media_gallery: {
+    image_count: number;
+    image_urls: string[];
+  };
+  property_profile: {
+    unit_id: string;
+    area: string;
+    location: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+    city: string;
+    state: string;
+  };
   normalized_matching_profile: {
     source: "pm_30aescapes";
     external_listing_id: string;
@@ -51,6 +78,8 @@ type EscapeDetailRecord = DetailRecordBase & {
       date: string;
       status_code: EscapeDayCode;
       is_available: boolean;
+      is_available_for_checkin: boolean;
+      is_available_for_checkout: boolean;
       booking_day_state: "bookable" | "blocked" | "unknown";
       min_nights_required: number | null;
     }>;
@@ -128,6 +157,97 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function dedupePreserveOrder(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function parseFirstNumber(value: string): number | null {
+  const match = value.match(/\d+(?:\.\d+)?/);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseCityStateFromAddress(address: string): {
+  city: string;
+  state: string;
+} {
+  const compact = address.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return { city: "", state: "" };
+  }
+
+  const stateZipMatch = compact.match(/\b([A-Z]{2})\s+\d{5}(?:-\d{4})?\b/);
+  const state = stateZipMatch?.[1] ?? "";
+
+  const parts = compact
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  let city = "";
+  if (parts.length >= 2) {
+    const candidate = parts[parts.length - 2] ?? "";
+    city = /\d/.test(candidate) ? "" : candidate;
+  }
+
+  return { city, state };
+}
+
+function extractLatLngFromHtml(
+  html: string,
+): { lat: number; lng: number } | null {
+  const match = html.match(
+    /google\.maps\.LatLng\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/i,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  return { lat, lng };
+}
+
+function normalizeGalleryUrl(rawUrl: string): string {
+  const cleaned = rawUrl.trim();
+  if (!cleaned) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(cleaned);
+    if (
+      parsed.hostname === "img.trackhs.com" &&
+      parsed.pathname.startsWith("/")
+    ) {
+      const candidate = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+      if (candidate.startsWith("http://") || candidate.startsWith("https://")) {
+        return candidate;
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
 }
 
 function extractExternalListingId(detailUrl: string): string {
@@ -457,10 +577,16 @@ export function buildEscapesAvailabilityFromHtml(params: {
             ? "blocked"
             : "unknown";
 
+      const isAvailableForCheckin = code === "A" || code === "I";
+      const isAvailableForCheckout = code === "A" || code === "O";
+      const isAvailable = isAvailableForCheckin || isAvailableForCheckout;
+
       return {
         date,
         status_code: code,
-        is_available: code === "A" || code === "O",
+        is_available: isAvailable,
+        is_available_for_checkin: isAvailableForCheckin,
+        is_available_for_checkout: isAvailableForCheckout,
         booking_day_state: bookingDayState,
         min_nights_required: resolveMinNightsForDate(date, minNightRules),
       };
@@ -1099,6 +1225,96 @@ async function fetchDetail(
       }
 
       const bodyText = document.body?.innerText ?? "";
+      const descriptionExpanded =
+        document
+          .querySelector("#description #descBlock")
+          ?.textContent?.trim() ??
+        document.querySelector("#descBlock")?.textContent?.trim() ??
+        "";
+
+      const infoPairs: Record<string, string> = {};
+      const infoNodes = Array.from(
+        document.querySelectorAll(".property-info .property-info-item"),
+      );
+      for (const node of infoNodes) {
+        const strong = node.querySelector("strong");
+        if (!strong) {
+          continue;
+        }
+        const label = (strong.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .replace(/:\s*$/, "")
+          .trim()
+          .toLowerCase();
+        const clone = node.cloneNode(true) as HTMLElement;
+        const strongInClone = clone.querySelector("strong");
+        if (strongInClone) {
+          strongInClone.remove();
+        }
+        const value = (clone.textContent ?? "").replace(/\s+/g, " ").trim();
+        if (label && value) {
+          infoPairs[label] = value;
+        }
+      }
+
+      const iconText =
+        document.querySelector(".property-info.property-info-icons")
+          ?.textContent ?? "";
+
+      const propertyDetailsNode = document.querySelector("#propertyDetails");
+      const unitId =
+        propertyDetailsNode?.getAttribute("data-unitcode")?.trim() ??
+        document
+          .querySelector('input[name="unitcode"]')
+          ?.getAttribute("value")
+          ?.trim() ??
+        document
+          .querySelector('input[name="unitshortname"]')
+          ?.getAttribute("value")
+          ?.trim() ??
+        "";
+
+      const amenitiesCategories: Record<string, string[]> = {};
+      const amenitiesRoot = document.querySelector(
+        "#amenities .info-wrap-body",
+      );
+      if (amenitiesRoot) {
+        const blocks = Array.from(amenitiesRoot.querySelectorAll("p > b"));
+        for (const block of blocks) {
+          const category = (block.textContent ?? "")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (!category) {
+            continue;
+          }
+          const parent = block.parentElement;
+          const nextList = parent?.nextElementSibling;
+          if (!nextList || nextList.tagName.toLowerCase() !== "ul") {
+            continue;
+          }
+          const items = Array.from(nextList.querySelectorAll("li"))
+            .map((li) => (li.textContent ?? "").replace(/\s+/g, " ").trim())
+            .filter(Boolean);
+          if (items.length > 0) {
+            amenitiesCategories[category] = items;
+          }
+        }
+      }
+
+      const galleryUrls = Array.from(
+        document.querySelectorAll('#hiddenGallery a[rel="pdpGallery"][href]'),
+      )
+        .map((anchor) => (anchor as HTMLAnchorElement).href)
+        .filter(Boolean);
+
+      const directionsAddress =
+        infoPairs.address ??
+        document
+          .querySelector(".property-info-item strong")
+          ?.parentElement?.textContent?.replace(/\s+/g, " ")
+          .trim() ??
+        "";
+
       const html = document.documentElement.outerHTML;
       return {
         title: document.title ?? "",
@@ -1106,7 +1322,14 @@ async function fetchDetail(
         canonical,
         metaDescription,
         description: descriptions.sort((a, b) => b.length - a.length)[0] ?? "",
+        descriptionExpanded,
         bodyText,
+        infoPairs,
+        iconText,
+        unitId,
+        amenitiesCategories,
+        galleryUrls,
+        directionsAddress,
         html,
       };
     });
@@ -1126,6 +1349,9 @@ async function fetchDetail(
     const description = stripHtml(
       extracted.description || extracted.metaDescription,
     ).slice(0, 20000);
+    const descriptionExpanded = stripHtml(
+      extracted.descriptionExpanded || extracted.description,
+    ).slice(0, 30000);
 
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
@@ -1150,6 +1376,79 @@ async function fetchDetail(
         },
       };
 
+    const iconTextCompact = extracted.iconText.replace(/\s+/g, " ");
+    const beds = parseFirstNumber(
+      iconTextCompact.match(/(\d+(?:\.\d+)?)\s*Bedrooms?/i)?.[0] ?? "",
+    );
+    const baths = parseFirstNumber(
+      iconTextCompact.match(/Full\s+Baths?\s*:\s*(\d+(?:\.\d+)?)/i)?.[0] ?? "",
+    );
+    const sleeps = parseFirstNumber(
+      iconTextCompact.match(/Sleeps\s*(\d+(?:\.\d+)?)/i)?.[0] ?? "",
+    );
+
+    const address = stripHtml(extracted.infoPairs.address ?? "").slice(0, 240);
+    const locationLabel = stripHtml(extracted.infoPairs.location ?? "").slice(
+      0,
+      240,
+    );
+    const area = locationLabel;
+    const cityState = parseCityStateFromAddress(address);
+
+    const propertyProfile: EscapeDetailRecord["property_profile"] = {
+      unit_id: stripHtml(extracted.unitId || externalListingId).slice(0, 120),
+      area,
+      location: locationLabel,
+      beds,
+      baths,
+      sleeps,
+      city: cityState.city,
+      state: cityState.state,
+    };
+
+    const amenitiesCategories: Record<string, string[]> = {};
+    for (const [category, items] of Object.entries(
+      extracted.amenitiesCategories,
+    )) {
+      const cleanCategory = stripHtml(category).slice(0, 120);
+      const cleanItems = dedupePreserveOrder(
+        items.map((item) => stripHtml(item).slice(0, 200)),
+      );
+      if (!cleanCategory || cleanItems.length === 0) {
+        continue;
+      }
+      amenitiesCategories[cleanCategory] = cleanItems;
+    }
+    const amenitiesAll = dedupePreserveOrder(
+      Object.values(amenitiesCategories).flat(),
+    );
+    const amenities: EscapeDetailRecord["amenities"] = {
+      categories: amenitiesCategories,
+      all: amenitiesAll,
+    };
+
+    const mediaUrls = dedupePreserveOrder(
+      extracted.galleryUrls
+        .map((url) => normalizeGalleryUrl(url))
+        .filter(Boolean),
+    );
+    const mediaGallery: EscapeDetailRecord["media_gallery"] = {
+      image_count: mediaUrls.length,
+      image_urls: mediaUrls,
+    };
+
+    const latLng = extractLatLngFromHtml(extracted.html);
+    const location: EscapeDetailRecord["location"] = {
+      address,
+      location_label: locationLabel,
+      directions_url: address
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+        : "",
+      directions_daddr: address,
+      latitude: latLng?.lat ?? null,
+      longitude: latLng?.lng ?? null,
+    };
+
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
@@ -1167,6 +1466,11 @@ async function fetchDetail(
       h1: stripHtml(extracted.h1).slice(0, 240),
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
+      description_expanded: descriptionExpanded,
+      amenities,
+      location,
+      media_gallery: mediaGallery,
+      property_profile: propertyProfile,
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: normalizedAvailability,
       html_path: htmlPath,
