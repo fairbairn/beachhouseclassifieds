@@ -1,0 +1,804 @@
+import { createHash } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+
+type OverseeDayCode = "A" | "U" | "I" | "O" | "X";
+
+type MinNightRule = {
+  start: string;
+  end: string;
+  minLOS: number;
+};
+
+type ParsedMinNightRule = {
+  start_date: string;
+  end_date: string;
+  min_nights: number;
+};
+
+type BookingWindowDay = {
+  allow?: {
+    arrival?: boolean;
+    departure?: boolean;
+  };
+  stay?: {
+    min?: number;
+  };
+};
+
+type OverseeBookedDatesResponse = {
+  bookedDates?: unknown;
+  noCheckin?: unknown;
+  minLOS?: unknown;
+  minNights?: unknown;
+  bookingWindow?: {
+    RR?: Record<string, BookingWindowDay>;
+  };
+};
+
+type OverseeDetailRecord = DetailRecordBase & {
+  title: string;
+  h1: string;
+  canonical_url: string;
+  meta_description: string;
+  normalized_matching_profile: {
+    source: "pm_oversee30a";
+    external_listing_id: string;
+    name: string;
+    description: string;
+    match_signals: {
+      description_normalized: string;
+      description_sha256: string;
+      title_normalized: string;
+      title_sha256: string;
+      listing_composite_key: string;
+    };
+  };
+  normalized_availability: {
+    source: "pm_oversee30a";
+    external_listing_id: string;
+    captured_at: string;
+    has_calendar_widget: boolean;
+    min_night_rules: ParsedMinNightRule[];
+    window_start: string;
+    window_end: string;
+    code_legend: {
+      A: "available";
+      U: "unavailable";
+      I: "checkout_only";
+      O: "checkin_only";
+      X: "other";
+    };
+    day_codes: string;
+    days: Array<{
+      date: string;
+      status_code: OverseeDayCode;
+      is_available: boolean;
+      is_available_for_checkin: boolean;
+      is_available_for_checkout: boolean;
+      booking_day_state: "bookable" | "blocked" | "unknown";
+      min_nights_required: number | null;
+    }>;
+    counts: {
+      available: number;
+      unavailable: number;
+      checkin_only: number;
+      checkout_only: number;
+      other: number;
+      booking_available: number;
+      booking_unavailable: number;
+      booking_unknown: number;
+    };
+  };
+  availability_raw: {
+    booked_dates: string[];
+    no_checkin_dates: string[];
+    min_los: number | null;
+    min_night_rules: ParsedMinNightRule[];
+    booking_window_days: number;
+  };
+  property_profile: {
+    unit_id: string;
+    property_code: string;
+    unit_slug: string;
+    unit_type: string;
+    city: string;
+    state: string;
+    zip: string;
+    beds: number | null;
+    baths: number | null;
+    sleeps: number | null;
+  };
+};
+
+const DEFAULT_ANCHOR_URL =
+  "https://oversee.us/vrp/search/results/?search%5Bbedrooms%5D=3&search%5Bshow%5D=15";
+const OUTPUT_ROOT = resolve(
+  process.cwd(),
+  "src",
+  "lib",
+  "data",
+  "external-sources",
+  "oversee30a",
+);
+const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+
+function normalizeLink(url: string): string {
+  return url.split("#")[0]?.replace(/\/+$/, "") ?? url;
+}
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractFirst(regex: RegExp, value: string): string {
+  const match = value.match(regex);
+  if (!match?.[1]) {
+    return "";
+  }
+  return stripHtml(match[1]);
+}
+
+function normalizeForMatch(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&amp;/g, " and ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hashSha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function normalizeDetailUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value.trim());
+    if (!parsed.hostname.endsWith("oversee.us")) {
+      return null;
+    }
+
+    const path = parsed.pathname.replace(/\/+$/, "");
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length < 3 || parts[0] !== "vrp" || parts[1] !== "unit" || !parts[2]) {
+      return null;
+    }
+
+    return normalizeLink(`${parsed.origin}/vrp/unit/${parts[2]}`);
+  } catch {
+    return null;
+  }
+}
+
+function decodeHtmlAttributeValue(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .trim();
+}
+
+function extractUnitDataAttributes(html: string): Record<string, string> {
+  const containerMatch = html.match(/<[^>]+id=["']unit-data["'][^>]*>/i);
+  if (!containerMatch) {
+    return {};
+  }
+
+  const attrs: Record<string, string> = {};
+  const attrRegex = /data-([a-z0-9-]+)=["']([\s\S]*?)["']/gi;
+  let match: RegExpExecArray | null = attrRegex.exec(containerMatch[0]);
+  while (match) {
+    const key = match[1]?.toLowerCase() ?? "";
+    const value = decodeHtmlAttributeValue(match[2] ?? "");
+    if (key) {
+      attrs[key] = value;
+    }
+    match = attrRegex.exec(containerMatch[0]);
+  }
+
+  return attrs;
+}
+
+function parseMdyyyyToIso(value: string): string | null {
+  const cleaned = value.trim();
+  const match = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (!match) {
+    return null;
+  }
+
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  if (!month || !day || !year) {
+    return null;
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function formatIsoDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function formatMdyyyyFromIso(isoDate: string): string {
+  const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return "";
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!year || !month || !day) {
+    return "";
+  }
+  return `${month}-${day}-${year}`;
+}
+
+function parseIsoDate(value: string): Date | null {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseMinNightRules(value: unknown): ParsedMinNightRule[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const parsed: ParsedMinNightRule[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const start = String((item as MinNightRule).start ?? "").trim();
+    const end = String((item as MinNightRule).end ?? "").trim();
+    const minLOS = Number((item as MinNightRule).minLOS ?? 0);
+
+    const startDate = parseIsoDate(start);
+    const endDate = parseIsoDate(end);
+    if (!startDate || !endDate || minLOS <= 0 || !Number.isFinite(minLOS)) {
+      continue;
+    }
+
+    parsed.push({
+      start_date: formatIsoDate(startDate),
+      end_date: formatIsoDate(endDate),
+      min_nights: Math.floor(minLOS),
+    });
+  }
+
+  return parsed.sort((left, right) =>
+    left.start_date.localeCompare(right.start_date),
+  );
+}
+
+function resolveMinNightsForDate(
+  isoDate: string,
+  rules: ParsedMinNightRule[],
+  bookingWindowDay: BookingWindowDay | null,
+): number | null {
+  const windowMin = Number(bookingWindowDay?.stay?.min ?? 0);
+  if (Number.isFinite(windowMin) && windowMin > 0) {
+    return Math.floor(windowMin);
+  }
+
+  let result: number | null = null;
+  for (const rule of rules) {
+    if (isoDate < rule.start_date || isoDate > rule.end_date) {
+      continue;
+    }
+    result = result === null ? rule.min_nights : Math.max(result, rule.min_nights);
+  }
+
+  return result;
+}
+
+function inferMaxPageFromHtml(html: string): number {
+  let maxPage = 1;
+
+  const pageHrefRegex = /[?&]page=(\d+)/gi;
+  let pageMatch: RegExpExecArray | null = pageHrefRegex.exec(html);
+  while (pageMatch) {
+    const pageNumber = Number(pageMatch[1]);
+    if (Number.isInteger(pageNumber) && pageNumber > maxPage) {
+      maxPage = pageNumber;
+    }
+    pageMatch = pageHrefRegex.exec(html);
+  }
+
+  const totalPageVar = html.match(/totalPages\s*=\s*(\d+)/i);
+  const totalFromVar = Number(totalPageVar?.[1] ?? "");
+  if (Number.isInteger(totalFromVar) && totalFromVar > maxPage) {
+    maxPage = totalFromVar;
+  }
+
+  return maxPage;
+}
+
+function extractUnitLinksFromHtml(html: string): string[] {
+  const links = new Set<string>();
+  const regex = /https:\/\/oversee\.us\/vrp\/unit\/[^"'\s<]+/gi;
+
+  let match: RegExpExecArray | null = regex.exec(html);
+  while (match) {
+    const normalized = normalizeDetailUrl(match[0] ?? "");
+    if (normalized) {
+      links.add(normalized);
+    }
+    match = regex.exec(html);
+  }
+
+  return Array.from(links);
+}
+
+function extractSlugFromDetailUrl(detailUrl: string): string {
+  try {
+    const parsed = new URL(detailUrl);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    return parts[2] ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function toSearchAjaxUrl(anchorUrl: string, pageNumber: number): string {
+  const source = new URL(anchorUrl);
+  const endpoint = new URL("https://oversee.us/");
+  endpoint.searchParams.set("vrpjax", "1");
+  endpoint.searchParams.set("act", "search");
+
+  for (const [key, value] of source.searchParams.entries()) {
+    endpoint.searchParams.append(key, value);
+  }
+
+  endpoint.searchParams.set("page", String(pageNumber));
+  return endpoint.toString();
+}
+
+async function discoverListings(
+  page: Parameters<
+    ScraperAdapter<OverseeDetailRecord>["discoverListings"]
+  >[0]["page"],
+  anchorUrl: string,
+  maxScrollSteps: number,
+  scrollPauseMs: number,
+  reportProgress: (message: string) => void,
+): Promise<ScrapedLink[]> {
+  const sourceUrl = anchorUrl.includes("oversee.us") ? anchorUrl : DEFAULT_ANCHOR_URL;
+
+  await page.goto(sourceUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: 120000,
+  });
+  await page.waitForTimeout(Math.max(900, scrollPauseMs));
+
+  const discovered = new Set<string>();
+  const sourceByLink = new Map<string, string>();
+
+  const firstHtml = await page.content();
+  for (const link of extractUnitLinksFromHtml(firstHtml)) {
+    discovered.add(link);
+    sourceByLink.set(link, sourceUrl);
+  }
+
+  const inferredMaxPage = inferMaxPageFromHtml(firstHtml);
+  const configuredMaxPagesRaw = Number(
+    process.env.OVERSEE30A_MAX_SEARCH_PAGES ?? "",
+  );
+  const configuredMaxPages =
+    Number.isFinite(configuredMaxPagesRaw) && configuredMaxPagesRaw > 0
+      ? Math.floor(configuredMaxPagesRaw)
+      : Math.max(120, Math.max(1, maxScrollSteps) * 20);
+  const hardCeiling = Math.min(500, configuredMaxPages);
+  const finalPage =
+    inferredMaxPage > 1
+      ? Math.min(Math.max(1, inferredMaxPage), hardCeiling)
+      : hardCeiling;
+
+  if (inferredMaxPage > 1) {
+    reportProgress(`pagination detected; inferred pages=${inferredMaxPage}`);
+  }
+  if (finalPage === hardCeiling && inferredMaxPage > hardCeiling) {
+    reportProgress(
+      `pagination capped at ${hardCeiling}; set OVERSEE30A_MAX_SEARCH_PAGES to raise`,
+    );
+  }
+
+  let stalePages = 0;
+
+  for (let pageNumber = 2; pageNumber <= finalPage; pageNumber += 1) {
+    const endpoint = toSearchAjaxUrl(sourceUrl, pageNumber);
+
+    let html = "";
+    try {
+      const response = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          "user-agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          referer: sourceUrl,
+        },
+      });
+
+      if (!response.ok) {
+        break;
+      }
+
+      html = await response.text();
+    } catch {
+      break;
+    }
+
+    const beforeSize = discovered.size;
+    const links = extractUnitLinksFromHtml(html);
+    for (const link of links) {
+      discovered.add(link);
+      sourceByLink.set(link, endpoint);
+    }
+
+    if (links.length === 0 || discovered.size === beforeSize) {
+      stalePages += 1;
+    } else {
+      stalePages = 0;
+    }
+
+    if (pageNumber % 5 === 0 || pageNumber === finalPage) {
+      reportProgress(`search page ${pageNumber}/${finalPage}; links=${discovered.size}`);
+    }
+
+    if (stalePages >= 2) {
+      break;
+    }
+  }
+
+  return Array.from(discovered)
+    .sort((left, right) => left.localeCompare(right))
+    .map((link) => ({
+      link,
+      source_url: sourceByLink.get(link) ?? sourceUrl,
+      anchor_text: "view-unit",
+    }));
+}
+
+async function fetchDetail(
+  detailUrl: string,
+  availabilityHorizonDays: number,
+): Promise<OverseeDetailRecord | null> {
+  const normalizedDetailUrl = normalizeDetailUrl(detailUrl);
+  if (!normalizedDetailUrl) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(normalizedDetailUrl, {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        referer: DEFAULT_ANCHOR_URL,
+      },
+    });
+
+    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+    if (response.status !== 200 || !contentType.includes("text/html")) {
+      return null;
+    }
+
+    const html = await response.text();
+    const unitData = extractUnitDataAttributes(html);
+
+    const unitSlug = unitData["unit-slug"] || extractSlugFromDetailUrl(normalizedDetailUrl);
+    const externalListingId =
+      unitData["unit-id"] ||
+      unitData["unit-property-code"] ||
+      unitSlug ||
+      normalizedDetailUrl;
+
+    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(0, 240);
+    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html).slice(0, 240);
+    const canonicalUrl =
+      extractFirst(
+        /<link[^>]+rel=["']canonical["'][^>]+href=["']([\s\S]*?)["'][^>]*>/i,
+        html,
+      ) || normalizedDetailUrl;
+    const metaDescription =
+      extractFirst(
+        /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
+        html,
+      ).slice(0, 2000) ||
+      extractFirst(
+        /<meta[^>]+content=["']([\s\S]*?)["'][^>]+name=["']description["'][^>]*>/i,
+        html,
+      ).slice(0, 2000);
+
+    const descriptionSource =
+      extractFirst(/<div[^>]+class=["'][^"']*second-part-desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i, html) ||
+      metaDescription;
+
+    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${externalListingId}.html`);
+    await writeFile(htmlPath, `${html}\n`, "utf8");
+
+    let bookedDates: string[] = [];
+    let noCheckinDates: string[] = [];
+    let minLOS: number | null = null;
+    let minNightRules: ParsedMinNightRule[] = [];
+    let bookingWindowByDate: Record<string, BookingWindowDay> = {};
+
+    if (unitSlug) {
+      const availabilityUrl = `https://oversee.us/?vrpjax=1&act=getUnitBookedDates&par=${encodeURIComponent(unitSlug)}`;
+      try {
+        const availabilityResponse = await fetch(availabilityUrl, {
+          method: "GET",
+          headers: {
+            "user-agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+            accept: "application/json,text/plain,*/*",
+            referer: normalizedDetailUrl,
+          },
+        });
+
+        if (availabilityResponse.ok) {
+          const availabilityJson =
+            (await availabilityResponse.json()) as OverseeBookedDatesResponse;
+
+          const rawBooked = Array.isArray(availabilityJson.bookedDates)
+            ? availabilityJson.bookedDates
+            : [];
+          bookedDates = rawBooked
+            .map((value) => String(value ?? "").trim())
+            .filter(Boolean)
+            .map((value) => parseMdyyyyToIso(value))
+            .filter((value): value is string => Boolean(value));
+
+          const rawNoCheckin = Array.isArray(availabilityJson.noCheckin)
+            ? availabilityJson.noCheckin
+            : [];
+          noCheckinDates = rawNoCheckin
+            .map((value) => String(value ?? "").trim())
+            .filter(Boolean)
+            .map((value) => parseMdyyyyToIso(value))
+            .filter((value): value is string => Boolean(value));
+
+          const los = Number(availabilityJson.minLOS ?? 0);
+          if (Number.isFinite(los) && los > 0) {
+            minLOS = Math.floor(los);
+          }
+
+          minNightRules = parseMinNightRules(availabilityJson.minNights);
+
+          const rawWindow = availabilityJson.bookingWindow?.RR;
+          if (rawWindow && typeof rawWindow === "object") {
+            bookingWindowByDate = rawWindow;
+          }
+        }
+      } catch {
+        // Keep detail record with empty availability when endpoint parsing fails.
+      }
+    }
+
+    const bookedSet = new Set(bookedDates);
+    const noCheckinSet = new Set(noCheckinDates);
+
+    const now = new Date();
+    const startDate = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    startDate.setUTCDate(startDate.getUTCDate() + 1);
+
+    const endDate = new Date(startDate);
+    endDate.setUTCDate(endDate.getUTCDate() + Math.max(1, availabilityHorizonDays));
+
+    const normalizedDays: OverseeDetailRecord["normalized_availability"]["days"] = [];
+    const cursor = new Date(startDate);
+    while (cursor <= endDate) {
+      const isoDate = formatIsoDate(cursor);
+      const mdyyyy = formatMdyyyyFromIso(isoDate);
+      const bookingWindowDay = bookingWindowByDate[mdyyyy] ?? null;
+
+      const isBooked = bookedSet.has(isoDate);
+      const allowArrival = bookingWindowDay?.allow?.arrival;
+      const allowDeparture = bookingWindowDay?.allow?.departure;
+
+      let statusCode: OverseeDayCode = "A";
+      if (isBooked) {
+        statusCode = "U";
+      } else if (allowArrival === false && allowDeparture === false) {
+        statusCode = "U";
+      } else if (allowArrival === false && allowDeparture !== false) {
+        statusCode = "I";
+      } else if (allowArrival !== false && allowDeparture === false) {
+        statusCode = "O";
+      } else if (noCheckinSet.has(isoDate)) {
+        statusCode = "I";
+      }
+
+      const minNightsRequired =
+        resolveMinNightsForDate(isoDate, minNightRules, bookingWindowDay) ?? minLOS;
+
+      const bookingDayState: "bookable" | "blocked" | "unknown" =
+        statusCode === "A"
+          ? "bookable"
+          : statusCode === "U"
+            ? "blocked"
+            : "unknown";
+
+      normalizedDays.push({
+        date: isoDate,
+        status_code: statusCode,
+        is_available: statusCode === "A",
+        is_available_for_checkin: statusCode === "A" || statusCode === "O",
+        is_available_for_checkout: statusCode === "A" || statusCode === "I",
+        booking_day_state: bookingDayState,
+        min_nights_required: minNightsRequired,
+      });
+
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    const counts = {
+      available: normalizedDays.filter((day) => day.status_code === "A").length,
+      unavailable: normalizedDays.filter((day) => day.status_code === "U").length,
+      checkin_only: normalizedDays.filter((day) => day.status_code === "I").length,
+      checkout_only: normalizedDays.filter((day) => day.status_code === "O").length,
+      other: normalizedDays.filter((day) => day.status_code === "X").length,
+      booking_available: normalizedDays.filter(
+        (day) => day.booking_day_state === "bookable",
+      ).length,
+      booking_unavailable: normalizedDays.filter(
+        (day) => day.booking_day_state === "blocked",
+      ).length,
+      booking_unknown: normalizedDays.filter(
+        (day) => day.booking_day_state === "unknown",
+      ).length,
+    };
+
+    const name = stripHtml(unitData["unit-name"] || h1 || title).slice(0, 240);
+    const description = stripHtml(descriptionSource).slice(0, 20000);
+    const descriptionNormalized = normalizeForMatch(description);
+    const titleNormalized = normalizeForMatch(name);
+
+    return {
+      external_listing_id: externalListingId,
+      detail_url: normalizedDetailUrl,
+      fetched_at: new Date().toISOString(),
+      html_path: htmlPath,
+      title,
+      h1,
+      canonical_url: canonicalUrl,
+      meta_description: metaDescription,
+      normalized_matching_profile: {
+        source: "pm_oversee30a",
+        external_listing_id: externalListingId,
+        name,
+        description,
+        match_signals: {
+          description_normalized: descriptionNormalized,
+          description_sha256: hashSha256(descriptionNormalized),
+          title_normalized: titleNormalized,
+          title_sha256: hashSha256(titleNormalized),
+          listing_composite_key: [
+            "pm_oversee30a",
+            externalListingId,
+            hashSha256(descriptionNormalized),
+            hashSha256(titleNormalized),
+          ].join("::"),
+        },
+      },
+      normalized_availability: {
+        source: "pm_oversee30a",
+        external_listing_id: externalListingId,
+        captured_at: new Date().toISOString(),
+        has_calendar_widget:
+          html.includes("Add dates for Prices") ||
+          html.includes("check-availability-arrival-date") ||
+          Object.keys(bookingWindowByDate).length > 0,
+        min_night_rules: minNightRules,
+        window_start: normalizedDays[0]?.date ?? "",
+        window_end: normalizedDays[normalizedDays.length - 1]?.date ?? "",
+        code_legend: {
+          A: "available",
+          U: "unavailable",
+          I: "checkout_only",
+          O: "checkin_only",
+          X: "other",
+        },
+        day_codes: normalizedDays.map((day) => day.status_code).join(""),
+        days: normalizedDays,
+        counts,
+      },
+      availability_raw: {
+        booked_dates: bookedDates,
+        no_checkin_dates: noCheckinDates,
+        min_los: minLOS,
+        min_night_rules: minNightRules,
+        booking_window_days: Object.keys(bookingWindowByDate).length,
+      },
+      property_profile: {
+        unit_id: unitData["unit-id"] || externalListingId,
+        property_code: unitData["unit-property-code"] || "",
+        unit_slug: unitSlug,
+        unit_type: unitData["unit-type"] || "",
+        city: unitData["unit-city"] || "",
+        state: unitData["unit-state"] || "",
+        zip: unitData["unit-zip"] || "",
+        beds: Number.isFinite(Number(unitData["unit-beds"]))
+          ? Number(unitData["unit-beds"])
+          : null,
+        baths: Number.isFinite(Number(unitData["unit-baths"]))
+          ? Number(unitData["unit-baths"])
+          : null,
+        sleeps: Number.isFinite(Number(unitData["unit-sleeps"]))
+          ? Number(unitData["unit-sleeps"])
+          : null,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function createOversee30AAdapter(): ScraperAdapter<OverseeDetailRecord> {
+  return {
+    managerKey: "oversee30a",
+    scriptLabel: "oversee30a",
+    defaultAnchorUrl: DEFAULT_ANCHOR_URL,
+    detailFetchDelayMs: Math.max(
+      0,
+      Number(process.env.OVERSEE30A_DETAIL_FETCH_DELAY_MS ?? "300") || 300,
+    ),
+    detailFetchConcurrency: Math.max(
+      1,
+      Number(process.env.OVERSEE30A_FETCH_CONCURRENCY ?? "5") || 5,
+    ),
+    availabilityHorizonDays: Math.max(
+      1,
+      Number(process.env.OVERSEE30A_AVAILABILITY_HORIZON_DAYS ?? "486") || 486,
+    ),
+    maxCalendarAdvanceMonths: 18,
+    isValidDetailUrl(value: string): string | null {
+      return normalizeDetailUrl(value);
+    },
+    async discoverListings(context) {
+      return discoverListings(
+        context.page,
+        context.anchorUrl,
+        context.maxScrollSteps,
+        context.scrollPauseMs,
+        context.reportProgress,
+      );
+    },
+    async fetchDetail(context) {
+      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+    },
+  };
+}

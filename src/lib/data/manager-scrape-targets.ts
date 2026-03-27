@@ -8,11 +8,18 @@ export type ManagerScrapeTarget = {
 
 export const MANAGER_SCRAPE_TARGETS: ManagerScrapeTarget[] = [
   {
+    manager_name: "Stay on 30A",
+    website_url: "https://stayon30a.com",
+    strategy: "playwright-scroll",
     anchor_urls: [
       "https://stayon30a.com/search-results/?min_beds=3&sort_by=rotation&plus_oc=1",
     ],
     notes:
       "Search results load in pages of 24; click Load More until exhausted (4 pages, 79 listings at min_beds=3).",
+  },
+  {
+    manager_name: "360 Blue",
+    website_url: "https://www.360blue.com",
     strategy: "playwright-scroll",
     anchor_urls: ["https://www.360blue.com/travel-collections/30A"],
     notes: "Collection pages lazy-load listing cards while scrolling.",
@@ -31,10 +38,10 @@ export const MANAGER_SCRAPE_TARGETS: ManagerScrapeTarget[] = [
     website_url: "https://www.oceanreefresorts.com",
     strategy: "playwright-scroll",
     anchor_urls: [
-      "https://www.oceanreefresorts.com/vacation-rentals/?customSearchPageID=425&flexTab=0&flexDates=0&checkin=&checkout=&sortBy=Random&type=4&location=3",
+      "https://www.oceanreefresorts.com/vacation-rentals?type=4&location=3",
     ],
     notes:
-      "Filtered search pages can require scroll and pagination interactions.",
+      "30A homes filter uses type=4 and location=3; results are lazy-loaded and may require repeated scrolling.",
   },
   {
     manager_name: "Oversee",
