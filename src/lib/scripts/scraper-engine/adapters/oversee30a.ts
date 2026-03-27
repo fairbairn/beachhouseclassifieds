@@ -168,7 +168,12 @@ function normalizeDetailUrl(value: string): string | null {
 
     const path = parsed.pathname.replace(/\/+$/, "");
     const parts = path.split("/").filter(Boolean);
-    if (parts.length < 3 || parts[0] !== "vrp" || parts[1] !== "unit" || !parts[2]) {
+    if (
+      parts.length < 3 ||
+      parts[0] !== "vrp" ||
+      parts[1] !== "unit" ||
+      !parts[2]
+    ) {
       return null;
     }
 
@@ -314,7 +319,8 @@ function resolveMinNightsForDate(
     if (isoDate < rule.start_date || isoDate > rule.end_date) {
       continue;
     }
-    result = result === null ? rule.min_nights : Math.max(result, rule.min_nights);
+    result =
+      result === null ? rule.min_nights : Math.max(result, rule.min_nights);
   }
 
   return result;
@@ -391,7 +397,9 @@ async function discoverListings(
   scrollPauseMs: number,
   reportProgress: (message: string) => void,
 ): Promise<ScrapedLink[]> {
-  const sourceUrl = anchorUrl.includes("oversee.us") ? anchorUrl : DEFAULT_ANCHOR_URL;
+  const sourceUrl = anchorUrl.includes("oversee.us")
+    ? anchorUrl
+    : DEFAULT_ANCHOR_URL;
 
   await page.goto(sourceUrl, {
     waitUntil: "domcontentloaded",
@@ -443,7 +451,8 @@ async function discoverListings(
         headers: {
           "user-agent":
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           referer: sourceUrl,
         },
       });
@@ -471,7 +480,9 @@ async function discoverListings(
     }
 
     if (pageNumber % 5 === 0 || pageNumber === finalPage) {
-      reportProgress(`search page ${pageNumber}/${finalPage}; links=${discovered.size}`);
+      reportProgress(
+        `search page ${pageNumber}/${finalPage}; links=${discovered.size}`,
+      );
     }
 
     if (stalePages >= 2) {
@@ -504,12 +515,15 @@ async function fetchDetail(
       headers: {
         "user-agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         referer: DEFAULT_ANCHOR_URL,
       },
     });
 
-    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+    const contentType = (
+      response.headers.get("content-type") ?? ""
+    ).toLowerCase();
     if (response.status !== 200 || !contentType.includes("text/html")) {
       return null;
     }
@@ -517,14 +531,18 @@ async function fetchDetail(
     const html = await response.text();
     const unitData = extractUnitDataAttributes(html);
 
-    const unitSlug = unitData["unit-slug"] || extractSlugFromDetailUrl(normalizedDetailUrl);
+    const unitSlug =
+      unitData["unit-slug"] || extractSlugFromDetailUrl(normalizedDetailUrl);
     const externalListingId =
       unitData["unit-id"] ||
       unitData["unit-property-code"] ||
       unitSlug ||
       normalizedDetailUrl;
 
-    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(0, 240);
+    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
+      0,
+      240,
+    );
     const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html).slice(0, 240);
     const canonicalUrl =
       extractFirst(
@@ -542,10 +560,15 @@ async function fetchDetail(
       ).slice(0, 2000);
 
     const descriptionSource =
-      extractFirst(/<div[^>]+class=["'][^"']*second-part-desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i, html) ||
-      metaDescription;
+      extractFirst(
+        /<div[^>]+class=["'][^"']*second-part-desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+        html,
+      ) || metaDescription;
 
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${externalListingId}.html`);
+    const htmlPath = resolve(
+      OUTPUT_DETAILS_HTML_DIR,
+      `${externalListingId}.html`,
+    );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
     let bookedDates: string[] = [];
@@ -616,9 +639,12 @@ async function fetchDetail(
     startDate.setUTCDate(startDate.getUTCDate() + 1);
 
     const endDate = new Date(startDate);
-    endDate.setUTCDate(endDate.getUTCDate() + Math.max(1, availabilityHorizonDays));
+    endDate.setUTCDate(
+      endDate.getUTCDate() + Math.max(1, availabilityHorizonDays),
+    );
 
-    const normalizedDays: OverseeDetailRecord["normalized_availability"]["days"] = [];
+    const normalizedDays: OverseeDetailRecord["normalized_availability"]["days"] =
+      [];
     const cursor = new Date(startDate);
     while (cursor <= endDate) {
       const isoDate = formatIsoDate(cursor);
@@ -643,7 +669,8 @@ async function fetchDetail(
       }
 
       const minNightsRequired =
-        resolveMinNightsForDate(isoDate, minNightRules, bookingWindowDay) ?? minLOS;
+        resolveMinNightsForDate(isoDate, minNightRules, bookingWindowDay) ??
+        minLOS;
 
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         statusCode === "A"
@@ -667,9 +694,12 @@ async function fetchDetail(
 
     const counts = {
       available: normalizedDays.filter((day) => day.status_code === "A").length,
-      unavailable: normalizedDays.filter((day) => day.status_code === "U").length,
-      checkin_only: normalizedDays.filter((day) => day.status_code === "I").length,
-      checkout_only: normalizedDays.filter((day) => day.status_code === "O").length,
+      unavailable: normalizedDays.filter((day) => day.status_code === "U")
+        .length,
+      checkin_only: normalizedDays.filter((day) => day.status_code === "I")
+        .length,
+      checkout_only: normalizedDays.filter((day) => day.status_code === "O")
+        .length,
       other: normalizedDays.filter((day) => day.status_code === "X").length,
       booking_available: normalizedDays.filter(
         (day) => day.booking_day_state === "bookable",

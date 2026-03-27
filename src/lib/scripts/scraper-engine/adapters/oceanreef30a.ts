@@ -160,12 +160,16 @@ function normalizeDetailUrl(value: string): string | null {
 }
 
 async function collectListingLinks(
-  page: Parameters<ScraperAdapter<OceanReefDetailRecord>["discoverListings"]>[0]["page"],
+  page: Parameters<
+    ScraperAdapter<OceanReefDetailRecord>["discoverListings"]
+  >[0]["page"],
 ): Promise<{ links: string[]; expectedCount: number }> {
   return page.evaluate(() => {
     const discovered = new Set<string>();
     const anchors = Array.from(
-      document.querySelectorAll(".srp-results a[href], a.be-property-widget-img-link[href], a[href]"),
+      document.querySelectorAll(
+        ".srp-results a[href], a.be-property-widget-img-link[href], a[href]",
+      ),
     );
 
     for (const anchor of anchors) {
@@ -208,7 +212,9 @@ async function collectListingLinks(
 }
 
 async function discoverListings(
-  page: Parameters<ScraperAdapter<OceanReefDetailRecord>["discoverListings"]>[0]["page"],
+  page: Parameters<
+    ScraperAdapter<OceanReefDetailRecord>["discoverListings"]
+  >[0]["page"],
   anchorUrl: string,
   maxScrollSteps: number,
   scrollPauseMs: number,
@@ -476,7 +482,9 @@ async function fetchDetail(
       headers,
     });
 
-    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    const contentType = (
+      response.headers.get("content-type") || ""
+    ).toLowerCase();
     if (response.status !== 200 || !contentType.includes("text/html")) {
       return null;
     }
@@ -503,11 +511,20 @@ async function fetchDetail(
         html,
       ).slice(0, 2000);
 
-    const externalListingId = extractExternalListingId(html, normalizedDetailUrl);
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${externalListingId}.html`);
+    const externalListingId = extractExternalListingId(
+      html,
+      normalizedDetailUrl,
+    );
+    const htmlPath = resolve(
+      OUTPUT_DETAILS_HTML_DIR,
+      `${externalListingId}.html`,
+    );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
-    const availability = extractAvailabilityFromHtml(html, availabilityHorizonDays);
+    const availability = extractAvailabilityFromHtml(
+      html,
+      availabilityHorizonDays,
+    );
     const description = stripHtml(metaDescription).slice(0, 20000);
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
@@ -525,7 +542,12 @@ async function fetchDetail(
     const checkoutOnly = availability.days.filter(
       (day) => day.status_code === "O",
     ).length;
-    const other = availability.days.length - available - unavailable - checkinOnly - checkoutOnly;
+    const other =
+      availability.days.length -
+      available -
+      unavailable -
+      checkinOnly -
+      checkoutOnly;
 
     return {
       external_listing_id: externalListingId,
@@ -612,11 +634,13 @@ export function createOceanReef30AAdapter(): ScraperAdapter<OceanReefDetailRecor
     ),
     availabilityHorizonDays: Math.max(
       1,
-      Number(process.env.OCEANREEF30A_AVAILABILITY_HORIZON_DAYS ?? "730") || 730,
+      Number(process.env.OCEANREEF30A_AVAILABILITY_HORIZON_DAYS ?? "730") ||
+        730,
     ),
     maxCalendarAdvanceMonths: Math.max(
       1,
-      Number(process.env.OCEANREEF30A_MAX_CALENDAR_ADVANCE_MONTHS ?? "24") || 24,
+      Number(process.env.OCEANREEF30A_MAX_CALENDAR_ADVANCE_MONTHS ?? "24") ||
+        24,
     ),
     isValidDetailUrl(value: string): string | null {
       return normalizeDetailUrl(value);

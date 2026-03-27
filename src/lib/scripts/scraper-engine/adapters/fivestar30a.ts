@@ -161,7 +161,9 @@ function normalizeDetailUrl(value: string): string | null {
       return null;
     }
 
-    return normalizeLink(`${parsed.origin}/vacation-rentals/rental/${parts[2]}`);
+    return normalizeLink(
+      `${parsed.origin}/vacation-rentals/rental/${parts[2]}`,
+    );
   } catch {
     return null;
   }
@@ -432,7 +434,9 @@ function toAnchorSet(anchorUrl: string): string[] {
     seeds.unshift(anchorUrl);
   }
 
-  return Array.from(new Set(seeds.map((value) => value.trim()).filter(Boolean)));
+  return Array.from(
+    new Set(seeds.map((value) => value.trim()).filter(Boolean)),
+  );
 }
 
 async function discoverListings(
@@ -481,7 +485,11 @@ async function discoverListings(
       );
     }
 
-    for (let pageNumber = 2; pageNumber <= pageTraversalLimit; pageNumber += 1) {
+    for (
+      let pageNumber = 2;
+      pageNumber <= pageTraversalLimit;
+      pageNumber += 1
+    ) {
       const pageUrl = new URL(sourceUrl);
       pageUrl.searchParams.set("page", String(pageNumber));
 
@@ -549,7 +557,10 @@ async function fetchDetail(
     }
 
     const html = await response.text();
-    const externalListingId = extractExternalListingId(normalizedDetailUrl, html);
+    const externalListingId = extractExternalListingId(
+      normalizedDetailUrl,
+      html,
+    );
 
     const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
       0,
@@ -571,7 +582,10 @@ async function fetchDetail(
         html,
       ).slice(0, 2000);
 
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${externalListingId}.html`);
+    const htmlPath = resolve(
+      OUTPUT_DETAILS_HTML_DIR,
+      `${externalListingId}.html`,
+    );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
     const propDetails =
