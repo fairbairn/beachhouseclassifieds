@@ -36,6 +36,7 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
   let anchorUrl = defaultAnchorUrl;
   let maxListings: number | null = null;
   let startIndex = 0;
+  let discoverOnly = false;
   let detailUrl: string | null = null;
   let detailUrlsFile: string | null = null;
   let refreshKnown = false;
@@ -76,6 +77,11 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
     if (arg === "--detail-url" && value) {
       detailUrl = value;
       index += 1;
+      continue;
+    }
+
+    if (arg === "--discover-only") {
+      discoverOnly = true;
       continue;
     }
 
@@ -139,6 +145,7 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
     anchorUrl,
     maxListings,
     startIndex,
+    discoverOnly,
     detailUrl,
     detailUrlsFile,
     refreshKnown,
@@ -324,7 +331,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
 
   progress.phase("starting scraper engine run");
   progress.info(
-    `mode=${options.detailUrl ? "direct-detail" : options.refreshKnown || options.detailUrlsFile ? "refresh-known" : "full"}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}`,
+    `mode=${options.detailUrl ? "direct-detail" : options.refreshKnown || options.detailUrlsFile ? "refresh-known" : options.discoverOnly ? "discover-only" : "full"}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}`,
   );
 
   const root = process.cwd();
@@ -535,20 +542,29 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         : rows.slice(startIndex, startIndex + options.maxListings);
     const isSubsetMode = options.maxListings !== null || options.startIndex > 0;
 
-    progress.phase(
-      `pulling detail pages from selected subset (count=${subsetRows.length}, concurrency=${detailFetchConcurrency})`,
-    );
-
     const selectedUrls = subsetRows.map((row) => row.link);
-    const { detailRecords, failedDetailUrls } = await pullDetails(
-      browser,
-      selectedUrls,
-      adapter,
-      outputDetailsJsonDir,
-      progress,
-      detailFetchConcurrency,
-      detailFetchDelayMs,
-    );
+    let detailRecords: TDetail[] = [];
+    let failedDetailUrls: string[] = [];
+
+    if (!options.discoverOnly) {
+      progress.phase(
+        `pulling detail pages from selected subset (count=${subsetRows.length}, concurrency=${detailFetchConcurrency})`,
+      );
+
+      const pulled = await pullDetails(
+        browser,
+        selectedUrls,
+        adapter,
+        outputDetailsJsonDir,
+        progress,
+        detailFetchConcurrency,
+        detailFetchDelayMs,
+      );
+      detailRecords = pulled.detailRecords;
+      failedDetailUrls = pulled.failedDetailUrls;
+    } else {
+      progress.phase("discover-only mode: skipping detail page pulls");
+    }
 
     const payload = {
       generated_at: new Date().toISOString(),
@@ -600,9 +616,15 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     );
 
     progress.success(
-      `collection+detail scrape complete (discovered=${totalDiscovered}, selected=${subsetRows.length}, details=${detailRecords.length})`,
+      options.discoverOnly
+        ? `discovery complete (discovered=${totalDiscovered}, selected=${subsetRows.length})`
+        : `collection+detail scrape complete (discovered=${totalDiscovered}, selected=${subsetRows.length}, details=${detailRecords.length})`,
     );
-    console.log(`${adapter.scriptLabel} scrape complete.`);
+    console.log(
+      options.discoverOnly
+        ? `${adapter.scriptLabel} discovery complete.`
+        : `${adapter.scriptLabel} scrape complete.`,
+    );
     console.log(`- source_url: ${parsedAnchor.toString()}`);
     console.log(`- total_links_discovered: ${totalDiscovered}`);
     console.log(`- links_selected: ${subsetRows.length}`);

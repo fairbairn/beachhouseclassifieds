@@ -118,6 +118,14 @@ export const MANAGER_SCRAPE_TARGETS: ManagerScrapeTarget[] = [
       "Filtered LocalVR list view for 30A-area cities; may require lazy-load scrolling.",
   },
   {
+    manager_name: "Royal Destinations",
+    website_url: "https://www.royaldestinations.com",
+    strategy: "playwright-scroll",
+    anchor_urls: ["https://www.royaldestinations.com/vacation-rentals"],
+    notes:
+      "Rezfusion/Bluetent listing index with 30a-vacation-rentals detail pages and availability encoded in embedded booking payloads.",
+  },
+  {
     manager_name: "Coast Property Management",
     website_url: "https://www.coast-properties.com",
     strategy: "playwright-scroll",

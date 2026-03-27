@@ -10,6 +10,7 @@ export type RunOptions = {
   anchorUrl: string;
   maxListings: number | null;
   startIndex: number;
+  discoverOnly: boolean;
   detailUrl: string | null;
   detailUrlsFile: string | null;
   refreshKnown: boolean;

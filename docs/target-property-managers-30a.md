@@ -5,29 +5,29 @@ This page stores the working target list for future scraper coverage planning.
 ## Notes
 
 - Source: user-provided ranking and estimates.
-- Last updated: 2026-03-26.
+- Last updated: 2026-03-27.
 - RealJoy expectation: 140 properties (current expected target).
+- Royal Destinations expectation: 143 properties (current expected target).
 
 ## Top 10 Coverage Snapshot (Deduced From Current Repo)
 
 This is a best-effort deduction based on manager names and domains visible in existing scraper adapters/scripts.
 
-| #   | Company                 | Website                  | Coverage status (repo deduction) | Evidence                                | Notes                                             |
-| --- | ----------------------- | ------------------------ | -------------------------------- | --------------------------------------- | ------------------------------------------------- |
-| 1   | 360 Blue                | 360blue.com              | Covered                          | Dedicated adapter/script exists         | `360blue` adapter present                         |
-| 2   | Benchmark Management    | benchmark30a.com         | Covered                          | Dedicated adapter/script exists         | `benchmark30a` adapter present                    |
-| 3   | RealJoy Vacations       | realjoy.com              | Covered                          | Dedicated adapter/script exists         | `realjoy30a` adapter present                      |
-| 4   | Oversee                 | oversee.us               | Covered                          | Dedicated adapter/script exists         | `oversee30a` adapter present                      |
-| 5   | LocalVR                 | golocalvr.com            | Partially covered                | Script exists (generic playwright flow) | No dedicated `localvr` adapter in adapters folder |
-| 6   | Royal Destinations      | royaldestinations.com    | Not covered yet                  | No direct adapter/script found          | Candidate to add                                  |
-| 7   | Homeowner's Collection  | homeownerscollection.com | Not covered yet                  | No direct adapter/script found          | Candidate to add                                  |
-| 8   | Sanders Beach Rentals   | sandersbeachrentals.com  | Not covered yet                  | No direct adapter/script found          | Candidate to add                                  |
-| 9   | Scenic Stays            | scenicstays.com          | Not covered yet                  | No direct adapter/script found          | Candidate to add                                  |
-| 10  | Holiday Isle Properties | holidayisle.net          | Not covered yet                  | No direct adapter/script found          | Candidate to add                                  |
+| #   | Company                 | Website                  | Coverage status (repo deduction) | Evidence                        | Notes                               |
+| --- | ----------------------- | ------------------------ | -------------------------------- | ------------------------------- | ----------------------------------- |
+| 1   | 360 Blue                | 360blue.com              | Covered                          | Dedicated adapter/script exists | `360blue` adapter present           |
+| 2   | Benchmark Management    | benchmark30a.com         | Covered                          | Dedicated adapter/script exists | `benchmark30a` adapter present      |
+| 3   | RealJoy Vacations       | realjoy.com              | Covered                          | Dedicated adapter/script exists | `realjoy30a` adapter present        |
+| 4   | Oversee                 | oversee.us               | Covered                          | Dedicated adapter/script exists | `oversee30a` adapter present        |
+| 5   | LocalVR                 | golocalvr.com            | Covered                          | Dedicated adapter/script exists | `localvr30a` adapter present        |
+| 6   | Royal Destinations      | royaldestinations.com    | Covered                          | Dedicated adapter/script exists | `royaldestinations` adapter present |
+| 7   | Homeowner's Collection  | homeownerscollection.com | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
+| 8   | Sanders Beach Rentals   | sandersbeachrentals.com  | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
+| 9   | Scenic Stays            | scenicstays.com          | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
+| 10  | Holiday Isle Properties | holidayisle.net          | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
 
 ## Priority Gap (Top 10 Still Needing Coverage)
 
-- Royal Destinations
 - Homeowner's Collection
 - Sanders Beach Rentals
 - Scenic Stays
