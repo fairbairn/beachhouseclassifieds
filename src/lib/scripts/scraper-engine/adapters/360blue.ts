@@ -225,6 +225,24 @@ function parseAddressFromTitle(value: string): string {
     }
   }
 
+  const deQuoted = text
+    .replace(/"[^"]*"/g, " ")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const streetMatch = Array.from(
+    deQuoted.matchAll(
+      /\b\d{1,6}\s+[A-Za-z0-9.'#&/-]+(?:\s+[A-Za-z0-9.'#&/-]+){0,10}\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Highway|Hwy|Drive|Dr|Lane|Ln|Court|Ct|Way|Place|Pl|Circle|Cir|Trail|Trl|Loop|Parkway|Pkwy)\b(?:\s+[A-Za-z0-9.'#&/-]+){0,8}/gi,
+    ),
+  )
+    .map((match) => (match[0] ?? "").trim())
+    .filter(Boolean)
+    .at(-1);
+  if (streetMatch) {
+    return streetMatch;
+  }
+
   const trailingAddressMatch = text.match(/(\d+\s+[A-Za-z0-9 .'-]+)$/);
   if (trailingAddressMatch?.[1]) {
     return trailingAddressMatch[1].trim();

@@ -37,6 +37,8 @@ type RoyalDestinationsDetailRecord = DetailRecordBase & {
     all: string[];
   };
   location: {
+    address: string;
+    location_label: string;
     directions_url: string;
     directions_daddr: string;
     latitude: number | null;
@@ -358,6 +360,8 @@ function parseAvailabilityDaysFromHtml(html: string): Array<{
 }
 
 function parseLocationMetadataFromHtml(html: string): {
+  address: string;
+  location_label: string;
   directions_url: string;
   directions_daddr: string;
   latitude: number | null;
@@ -408,6 +412,8 @@ function parseLocationMetadataFromHtml(html: string): {
   }
 
   return {
+    address: directionsDaddr,
+    location_label: "",
     directions_url: directionsUrl,
     directions_daddr: directionsDaddr,
     latitude,
@@ -1185,6 +1191,9 @@ async function fetchDetail(
     );
     const { city: cityFromDirections, state: stateFromDirections } =
       parseCityStateFromDirections(html);
+    const locationLabel = [cityFromDirections, stateFromDirections]
+      .filter(Boolean)
+      .join(", ");
     const bookings = readJsonArrayAfterKey<BookingRange>(
       html,
       "bookings",
@@ -1358,6 +1367,8 @@ async function fetchDetail(
       description_expanded: expandedDescription,
       amenities,
       location: {
+        address: locationMetadata.address,
+        location_label: locationLabel,
         directions_url: locationMetadata.directions_url,
         directions_daddr: locationMetadata.directions_daddr,
         latitude: locationMetadata.latitude,

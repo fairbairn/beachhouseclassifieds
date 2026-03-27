@@ -82,6 +82,33 @@ type CoastDetailRecord = DetailRecordBase & {
     end_date: string;
     day_codes: string;
   };
+  normalized_rates: {
+    source: "pm_coastproperties30a";
+    external_listing_id: string;
+    captured_at: string;
+    currency: string;
+    window_start: string;
+    window_end: string;
+    days: Array<{
+      date: string;
+      nightly_rate: number | null;
+      min_nights: number | null;
+      is_booked: boolean | null;
+      changeover_code: string;
+      season_name: string;
+    }>;
+    stats: {
+      days_with_rate: number;
+      min_nightly_rate: number | null;
+      max_nightly_rate: number | null;
+      avg_nightly_rate: number | null;
+    };
+  };
+  rates_raw: {
+    request_start_date: string;
+    request_end_date: string;
+    rows: Array<Record<string, unknown>>;
+  };
 };
 
 const DEFAULT_ANCHOR_URL =
@@ -206,6 +233,49 @@ function formatDateIso(date: Date): string {
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatDateUsFromIso(isoDate: string): string {
+  const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return "";
+  }
+  return `${match[2]}/${match[3]}/${match[1]}`;
+}
+
+function normalizeDateLikeToIso(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const parsedUs = parseUsDateToUtc(trimmed);
+  if (parsedUs) {
+    return formatDateIso(parsedUs);
+  }
+
+  return "";
+}
+
+function parseCurrencyLike(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[^0-9.-]/g, "").trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
 }
 
 function parseUsDateToUtc(value: string): Date | null {
@@ -672,6 +742,106 @@ async function fetchDetail(
       return dayDate >= today && dayDate <= horizonDate;
     });
 
+    const ratesStartIso = filteredDays[0]?.date ?? formatDateIso(today);
+    const ratesEndIso =
+      filteredDays[filteredDays.length - 1]?.date ?? formatDateIso(horizonDate);
+    const ratesStartDateUs = formatDateUsFromIso(ratesStartIso);
+    const ratesEndDateUs = formatDateUsFromIso(ratesEndIso);
+
+    let ratesRowsRaw: Array<Record<string, unknown>> = [];
+    if (ratesStartDateUs && ratesEndDateUs) {
+      const ratesApiUrl = `${origin}/wp-admin/admin-ajax.php?${new URLSearchParams(
+        {
+          action: "streamlinecore-api-request",
+          params: JSON.stringify({
+            methodName: "GetPropertyRates",
+            params: {
+              unit_id: Number(rentalId),
+              startdate: ratesStartDateUs,
+              enddate: ratesEndDateUs,
+            },
+          }),
+        },
+      ).toString()}`;
+
+      const ratesResponse = await fetch(ratesApiUrl, {
+        method: "GET",
+        headers,
+      });
+
+      if (ratesResponse.status === 200) {
+        const rawRates = await ratesResponse.text();
+        try {
+          const parsed = JSON.parse(rawRates) as {
+            data?: unknown;
+          };
+
+          const data = parsed.data;
+          if (Array.isArray(data)) {
+            ratesRowsRaw = data.filter(
+              (row): row is Record<string, unknown> =>
+                row !== null && typeof row === "object",
+            );
+          } else if (data && typeof data === "object") {
+            ratesRowsRaw = Object.values(data).filter(
+              (row): row is Record<string, unknown> =>
+                row !== null && typeof row === "object",
+            );
+          }
+        } catch {
+          // Ignore malformed rates payload.
+        }
+      }
+    }
+
+    const normalizedRateDays = ratesRowsRaw
+      .map((row) => {
+        const date = normalizeDateLikeToIso(row.date);
+        if (!date) {
+          return null;
+        }
+
+        const nightlyRate = parseCurrencyLike(row.rate);
+        const minNights = parseNumberLike(row.minStay);
+        const bookedRaw = row.booked;
+        const isBooked =
+          typeof bookedRaw === "number"
+            ? bookedRaw === 1
+            : typeof bookedRaw === "string"
+              ? bookedRaw.trim() === "1"
+              : null;
+        const changeoverCode = String(row.changeOver ?? "").trim();
+        const seasonName = String(row.season ?? "")
+          .trim()
+          .slice(0, 160);
+
+        return {
+          date,
+          nightly_rate: nightlyRate,
+          min_nights: minNights,
+          is_booked: isBooked,
+          changeover_code: changeoverCode,
+          season_name: seasonName,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null)
+      .sort((left, right) => left.date.localeCompare(right.date));
+
+    const rateValues = normalizedRateDays
+      .map((row) => row.nightly_rate)
+      .filter((value): value is number => Number.isFinite(value));
+    const minRate = rateValues.length > 0 ? Math.min(...rateValues) : null;
+    const maxRate = rateValues.length > 0 ? Math.max(...rateValues) : null;
+    const avgRate =
+      rateValues.length > 0
+        ? Number(
+            (
+              rateValues.reduce((sum, value) => sum + value, 0) /
+              rateValues.length
+            ).toFixed(2),
+          )
+        : null;
+
     const normalizedDays = filteredDays.map((day) => {
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         day.code === "Y"
@@ -791,6 +961,27 @@ async function fetchDetail(
         begin_date: rawBeginDate,
         end_date: rawEndDate,
         day_codes: rawAvailabilityCodes,
+      },
+      normalized_rates: {
+        source: "pm_coastproperties30a",
+        external_listing_id: rentalId,
+        captured_at: new Date().toISOString(),
+        currency: "USD",
+        window_start: normalizedRateDays[0]?.date ?? "",
+        window_end:
+          normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
+        days: normalizedRateDays,
+        stats: {
+          days_with_rate: rateValues.length,
+          min_nightly_rate: minRate,
+          max_nightly_rate: maxRate,
+          avg_nightly_rate: avgRate,
+        },
+      },
+      rates_raw: {
+        request_start_date: ratesStartDateUs,
+        request_end_date: ratesEndDateUs,
+        rows: ratesRowsRaw,
       },
       html_path: htmlPath,
     };

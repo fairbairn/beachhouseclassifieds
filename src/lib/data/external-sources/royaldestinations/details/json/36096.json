@@ -1,7 +1,7 @@
 {
   "external_listing_id": "36096",
   "detail_url": "https://www.royaldestinations.com/30a-vacation-rentals/forever-grateful?rcav%5Bbegin%5D=11%2F21%2F2026&rcav%5Bend%5D=11%2F28%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=314&rcav%5BIDs%5D%5B8%5D%5B0%5D=1376-36096&eid=314",
-  "fetched_at": "2026-03-27T13:40:11.966Z",
+  "fetched_at": "2026-03-27T18:19:34.220Z",
   "html_path": "/Users/scott/Projects/BeachHouseClassifieds/src/lib/data/external-sources/royaldestinations/details/html/36096.html",
   "title": "Forever Grateful | 8BR Rental on 30A | Royal Destinations",
   "h1": "Forever Grateful",
@@ -96,6 +96,8 @@
     ]
   },
   "location": {
+    "address": "4525 West County Highway 30A Santa Rosa Beach FL",
+    "location_label": "Santa Rosa Beach, FL",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=4525+West+County+Highway+30A Santa+Rosa+Beach FL&saddr=Current Location",
     "directions_daddr": "4525 West County Highway 30A Santa Rosa Beach FL",
     "latitude": null,
@@ -180,7 +182,7 @@
   "normalized_availability": {
     "source": "pm_royaldestinations",
     "external_listing_id": "36096",
-    "captured_at": "2026-03-27T13:40:11.966Z",
+    "captured_at": "2026-03-27T18:19:34.220Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [],
@@ -193,7 +195,7 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAOUUUUUUIAAAAAAAAOUUUIAAAAAAAOUUUUUUUUIAOUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAAAAAAAAOUUUUUIAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "AAAAAAAOUUUUUUIAAAAAAAAOUUUIAAAAAAAOUUUUUUUUIAOUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAAAAAAAAOUUUUUIAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-03-28",
@@ -2114,47 +2116,47 @@
       },
       {
         "date": "2026-10-27",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "booking_day_state": "unknown",
         "min_nights_required": null
       },
       {
         "date": "2026-10-28",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": null
       },
       {
         "date": "2026-10-29",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": null
       },
       {
         "date": "2026-10-30",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": null
       },
       {
         "date": "2026-10-31",
-        "status_code": "A",
-        "is_available": true,
+        "status_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
         "min_nights_required": null
       },
       {
@@ -4067,14 +4069,14 @@
       }
     ],
     "counts": {
-      "available": 298,
-      "unavailable": 110,
-      "checkin_only": 11,
-      "checkout_only": 11,
+      "available": 293,
+      "unavailable": 113,
+      "checkin_only": 12,
+      "checkout_only": 12,
       "other": 0,
-      "booking_available": 298,
-      "booking_unavailable": 110,
-      "booking_unknown": 22
+      "booking_available": 293,
+      "booking_unavailable": 113,
+      "booking_unknown": 24
     }
   },
   "availability_raw": {

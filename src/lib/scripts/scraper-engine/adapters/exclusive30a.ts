@@ -168,7 +168,8 @@ function addAmenityValue(
   category: string,
   value: string,
 ): void {
-  const cleanedCategory = stripHtmlFragment(category).trim() || "Property Amenities";
+  const cleanedCategory =
+    stripHtmlFragment(category).trim() || "Property Amenities";
   const cleanedValue = stripHtmlFragment(value).trim();
   if (!cleanedValue) {
     return;
@@ -798,10 +799,7 @@ async function fetchDetail(
       html,
     );
     if (!city && locationExcerpt) {
-      city = locationExcerpt
-        .split("-")[0]
-        ?.trim()
-        .slice(0, 120);
+      city = locationExcerpt.split("-")[0]?.trim().slice(0, 120);
     }
     const fallbackAddress = address || locationExcerpt;
     const locationLabel =

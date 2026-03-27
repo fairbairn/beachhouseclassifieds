@@ -24,14 +24,13 @@ This is a best-effort deduction based on manager names and domains visible in ex
 | 7   | Homeowner's Collection  | homeownerscollection.com | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
 | 8   | Sanders Beach Rentals   | sandersbeachrentals.com  | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
 | 9   | Scenic Stays            | scenicstays.com          | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
-| 10  | Holiday Isle Properties | holidayisle.net          | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
+| 10  | Holiday Isle Properties | holidayisle.net          | Not applicable                   | Outside 30A focus area          | Excluded from target coverage       |
 
 ## Priority Gap (Top 10 Still Needing Coverage)
 
 - Homeowner's Collection
 - Sanders Beach Rentals
 - Scenic Stays
-- Holiday Isle Properties
 
 ## Full Target List
 
@@ -46,7 +45,7 @@ This is a best-effort deduction based on manager names and domains visible in ex
 | 7   | Homeowner's Collection           | 200+                    | homeownerscollection.com      |
 | 8   | Sanders Beach Rentals            | 150-250                 | sandersbeachrentals.com       |
 | 9   | Scenic Stays                     | 150-250                 | scenicstays.com               |
-| 10  | Holiday Isle Properties          | 150-300                 | holidayisle.net               |
+| 10  | Holiday Isle Properties (N/A)    | Not applicable          | holidayisle.net               |
 | 11  | Newman-Dailey Resort Properties  | 150-250                 | ndrp.com                      |
 | 12  | Stay on 30A                      | 100-200                 | stayon30a.com                 |
 | 13  | 30A Luxury Vacations             | 100-200                 | 30aluxuryvacations.com        |

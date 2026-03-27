@@ -17,6 +17,14 @@ type MinDayRule = {
   minimum: number;
 };
 
+type RateRule = {
+  startDate: string;
+  endDate: string;
+  dailyRate: number;
+  weeklyRate: number;
+  monthlyRate: number;
+};
+
 type ParsedRule = {
   start_date: string;
   end_date: string;
@@ -99,6 +107,31 @@ type FiveStarDetailRecord = DetailRecordBase & {
   availability_raw: {
     booking_ranges: BookingRange[];
     min_day_rules: MinDayRule[];
+  };
+  normalized_rates: {
+    source: "pm_fivestar30a";
+    external_listing_id: string;
+    captured_at: string;
+    currency: string;
+    window_start: string;
+    window_end: string;
+    days: Array<{
+      date: string;
+      nightly_rate: number | null;
+      min_nights: number | null;
+      is_booked: boolean | null;
+      changeover_code: string;
+      season_name: string;
+    }>;
+    stats: {
+      days_with_rate: number;
+      min_nightly_rate: number | null;
+      max_nightly_rate: number | null;
+      avg_nightly_rate: number | null;
+    };
+  };
+  rates_raw: {
+    rows: RateRule[];
   };
   property_profile: {
     unit_id: string;
@@ -332,9 +365,11 @@ function formatIsoDate(value: Date): string {
 function readJsonObjectAfterKey<T extends object>(
   html: string,
   key: string,
+  fromIndex = 0,
 ): T | null {
+  const source = fromIndex > 0 ? html.slice(fromIndex) : html;
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const keyMatch = new RegExp(`${escapedKey}\\s*:\\s*\\{`, "m").exec(html);
+  const keyMatch = new RegExp(`${escapedKey}\\s*:\\s*\\{`, "m").exec(source);
   if (!keyMatch?.index && keyMatch?.index !== 0) {
     return null;
   }
@@ -344,8 +379,8 @@ function readJsonObjectAfterKey<T extends object>(
   let inString = false;
   let escaped = false;
 
-  for (let i = start; i < html.length; i += 1) {
-    const ch = html[i] as string;
+  for (let i = start; i < source.length; i += 1) {
+    const ch = source[i] as string;
 
     if (escaped) {
       escaped = false;
@@ -374,7 +409,7 @@ function readJsonObjectAfterKey<T extends object>(
     if (ch === "}") {
       depth -= 1;
       if (depth === 0) {
-        const raw = html.slice(start, i + 1);
+        const raw = source.slice(start, i + 1);
         try {
           return JSON.parse(raw) as T;
         } catch {
@@ -387,9 +422,14 @@ function readJsonObjectAfterKey<T extends object>(
   return null;
 }
 
-function readJsonArrayAfterKey<T>(html: string, key: string): T[] {
+function readJsonArrayAfterKey<T>(
+  html: string,
+  key: string,
+  fromIndex = 0,
+): T[] {
+  const source = fromIndex > 0 ? html.slice(fromIndex) : html;
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const keyMatch = new RegExp(`${escapedKey}\\s*:\\s*\\[`, "m").exec(html);
+  const keyMatch = new RegExp(`${escapedKey}\\s*:\\s*\\[`, "m").exec(source);
   if (!keyMatch?.index && keyMatch?.index !== 0) {
     return [];
   }
@@ -399,8 +439,8 @@ function readJsonArrayAfterKey<T>(html: string, key: string): T[] {
   let inString = false;
   let escaped = false;
 
-  for (let i = start; i < html.length; i += 1) {
-    const ch = html[i] as string;
+  for (let i = start; i < source.length; i += 1) {
+    const ch = source[i] as string;
 
     if (escaped) {
       escaped = false;
@@ -429,7 +469,7 @@ function readJsonArrayAfterKey<T>(html: string, key: string): T[] {
     if (ch === "]") {
       depth -= 1;
       if (depth === 0) {
-        const raw = html.slice(start, i + 1);
+        const raw = source.slice(start, i + 1);
         try {
           const parsed = JSON.parse(raw) as unknown;
           return Array.isArray(parsed) ? (parsed as T[]) : [];
@@ -441,6 +481,20 @@ function readJsonArrayAfterKey<T>(html: string, key: string): T[] {
   }
 
   return [];
+}
+
+function findVueDataReturnIndex(html: string): number {
+  const scriptAnchor = html.indexOf("const propDetailsApp = Vue.createApp");
+  if (scriptAnchor < 0) {
+    return 0;
+  }
+
+  const dataAnchor = html.indexOf("return {", scriptAnchor);
+  if (dataAnchor < 0) {
+    return scriptAnchor;
+  }
+
+  return dataAnchor;
 }
 
 function resolveMinNightsForDate(
@@ -481,6 +535,21 @@ function toParsedRules(rules: MinDayRule[]): ParsedRule[] {
   return parsed.sort((left, right) =>
     left.start_date.localeCompare(right.start_date),
   );
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function parsePageNumber(raw: string): number | null {
@@ -707,16 +776,27 @@ async function fetchDetail(
     );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
+    const vueDataStart = findVueDataReturnIndex(html);
     const propDetails =
-      readJsonObjectAfterKey<Record<string, unknown>>(html, "propDetails") ??
-      {};
+      readJsonObjectAfterKey<Record<string, unknown>>(
+        html,
+        "propDetails",
+        vueDataStart,
+      ) ?? {};
     const propImages = readJsonArrayAfterKey<Record<string, unknown>>(
       html,
       "propImages",
+      vueDataStart,
     );
     const amenityGroups = readJsonArrayAfterKey<Record<string, unknown>>(
       html,
       "amenities",
+      vueDataStart,
+    );
+    const roomCards = readJsonArrayAfterKey<Record<string, unknown>>(
+      html,
+      "roomCards",
+      vueDataStart,
     );
     const schemaObjects = parseJsonLdObjects(html);
     const vacationRentalSchema = pickVacationRentalSchema(schemaObjects);
@@ -735,6 +815,12 @@ async function fetchDetail(
         typeof row?.startDate === "string" &&
         typeof row?.endDate === "string" &&
         typeof row?.minimum === "number",
+    );
+    const rateRules = readJsonArrayAfterKey<RateRule>(html, "rates").filter(
+      (row) =>
+        typeof row?.startDate === "string" &&
+        typeof row?.endDate === "string" &&
+        toFiniteNumber(row?.dailyRate) !== null,
     );
 
     const parsedRules = toParsedRules(minDayRules);
@@ -833,6 +919,65 @@ async function fetchDetail(
       ).length,
     };
 
+    const availabilityByDate = new Map(
+      normalizedDays.map((day) => [day.date, day.status_code]),
+    );
+
+    const normalizedRateDays: FiveStarDetailRecord["normalized_rates"]["days"] =
+      [];
+    for (const rateRule of rateRules) {
+      const start = parseSlashDate(rateRule.startDate);
+      const end = parseSlashDate(rateRule.endDate);
+      if (!start || !end || end < start) {
+        continue;
+      }
+
+      const dailyRate = toFiniteNumber(rateRule.dailyRate);
+      const minNights =
+        toFiniteNumber(rateRule.weeklyRate) && Number(rateRule.weeklyRate) > 0
+          ? 7
+          : toFiniteNumber(rateRule.monthlyRate) &&
+              Number(rateRule.monthlyRate) > 0
+            ? 28
+            : null;
+
+      const cursorRate = new Date(start);
+      while (cursorRate <= end) {
+        const isoDate = formatIsoDate(cursorRate);
+        const statusCode = availabilityByDate.get(isoDate) ?? "X";
+        normalizedRateDays.push({
+          date: isoDate,
+          nightly_rate: dailyRate,
+          min_nights: minNights,
+          is_booked: statusCode === "U",
+          changeover_code: statusCode,
+          season_name: "default",
+        });
+        cursorRate.setUTCDate(cursorRate.getUTCDate() + 1);
+      }
+    }
+
+    normalizedRateDays.sort((left, right) =>
+      left.date.localeCompare(right.date),
+    );
+
+    const rateValues = normalizedRateDays
+      .map((day) => day.nightly_rate)
+      .filter(
+        (value): value is number =>
+          typeof value === "number" && Number.isFinite(value),
+      );
+    const minRate = rateValues.length > 0 ? Math.min(...rateValues) : null;
+    const maxRate = rateValues.length > 0 ? Math.max(...rateValues) : null;
+    const avgRate =
+      rateValues.length > 0
+        ? Math.round(
+            (rateValues.reduce((sum, value) => sum + value, 0) /
+              rateValues.length) *
+              100,
+          ) / 100
+        : null;
+
     const description = stripHtml(
       String(propDetails.description ?? metaDescription ?? ""),
     ).slice(0, 20000);
@@ -895,6 +1040,38 @@ async function fetchDetail(
       const label = (feature as { name?: unknown }).name;
       if (typeof label === "string") {
         pushAmenity("Schema Amenities", label);
+      }
+    }
+
+    for (const room of roomCards) {
+      if (!room || typeof room !== "object") {
+        continue;
+      }
+
+      const roomName = (room as { room_name?: unknown }).room_name;
+      if (typeof roomName === "string" && roomName.trim()) {
+        pushAmenity("Room Features", roomName);
+      }
+
+      const roomAmenitiesRaw = (room as { room_group_amens?: unknown })
+        .room_group_amens;
+      if (typeof roomAmenitiesRaw !== "string" || !roomAmenitiesRaw.trim()) {
+        continue;
+      }
+
+      try {
+        const parsedRoomAmenities = JSON.parse(roomAmenitiesRaw) as unknown;
+        if (!Array.isArray(parsedRoomAmenities)) {
+          continue;
+        }
+
+        for (const entry of parsedRoomAmenities) {
+          if (typeof entry === "string") {
+            pushAmenity("Room Features", entry);
+          }
+        }
+      } catch {
+        // Ignore malformed room amenity payloads.
       }
     }
 
@@ -1048,6 +1225,25 @@ async function fetchDetail(
       availability_raw: {
         booking_ranges: bookings,
         min_day_rules: minDayRules,
+      },
+      normalized_rates: {
+        source: "pm_fivestar30a",
+        external_listing_id: externalListingId,
+        captured_at: new Date().toISOString(),
+        currency: "USD",
+        window_start: normalizedRateDays[0]?.date ?? "",
+        window_end:
+          normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
+        days: normalizedRateDays,
+        stats: {
+          days_with_rate: rateValues.length,
+          min_nightly_rate: minRate,
+          max_nightly_rate: maxRate,
+          avg_nightly_rate: avgRate,
+        },
+      },
+      rates_raw: {
+        rows: rateRules,
       },
       property_profile: {
         unit_id: String(propDetails.unit_id ?? externalListingId),

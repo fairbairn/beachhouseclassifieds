@@ -24,10 +24,11 @@ Scope:
 - `Amenities+`: files with non-empty `amenities`
 - `Location+`: files with non-empty `location` object
 - `Media+`: files with `media_gallery.image_urls` containing at least one URL
+- `Rates`: files with non-empty `normalized_rates.days` (non-blocking, forward-compat signal)
 - `Image URLs`: aggregate count of `media_gallery.image_urls[]` across all files for the adapter
 - `Avg Img/List`: `Image URLs / Files` (values <= 1 indicate under-optimized media extraction)
 - `Ready`: strict quality gate status across all files for the adapter (`✅` pass, `❌` fail)
-- `Notes`: explicit shortfall summary from probe output (`required_failures` + non-blocking preferred notes)
+- `Notes`: explicit required failure causes for non-ready adapters; `none` for ready adapters
 
 ## Threshold Gates
 
@@ -44,37 +45,39 @@ Preferred (non-blocking for `Ready`, tracked separately in probe output):
 
 ## Conformance Matrix
 
-| Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Image URLs | Avg Img/List | Ready | Notes |
-| ----------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ---------: | -----------: | :---: | ----- |
-| 30aescapes              |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |       6282 |        37.17 |  ✅   | preferred availability>=730d 0/169 |
-| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |       5247 |        49.97 |  ✅   | preferred availability>=730d 0/105 |
-| 360blue                 |   620 |  620 |     620 |          620 |          620 |        620 |       620 |    620 |      30940 |        49.90 |  ❌   | description>=600 618/620; location_quality 573/620; availability>=365d 594/620 |
-| benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |       8508 |        66.47 |  ✅   | preferred availability>=730d 125/128 |
-| beachblue               |    16 |   16 |      16 |           16 |           16 |         16 |        16 |     16 |        712 |        44.50 |  ✅   | preferred availability>=730d 0/16 |
-| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |       2063 |        68.77 |  ❌   | availability>=365d 0/30 |
-| exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |       5629 |        53.10 |  ✅   | none |
-| fivestar30a             |    62 |   62 |      62 |           62 |           62 |         62 |        62 |     62 |       6488 |       104.65 |  ❌   | description>=600 0/62; amenities>=8 58/62 |
-| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |      10762 |        51.74 |  ✅   | preferred availability>=730d 0/208 |
-| localvr30a              |    42 |   42 |      42 |           42 |           42 |         42 |        42 |     42 |       1774 |        42.24 |  ✅   | none |
-| oceanreef30a            |   111 |  111 |     111 |          111 |          111 |        111 |       111 |    111 |       8250 |        74.32 |  ❌   | amenities>=8 97/111; availability>=365d 0/111 |
-| oversee30a              |    67 |   67 |      67 |           67 |           67 |         67 |        67 |     67 |       3738 |        55.79 |  ✅   | preferred availability>=730d 0/67 |
-| realjoy30a              |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |      16334 |       116.67 |  ✅   | preferred availability>=730d 0/140 |
-| royaldestinations       |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |       6677 |        46.69 |  ❌   | amenities>=8 137/143; location_quality 0/143 |
-| sandersbeach30a         |    73 |   73 |      73 |           73 |           73 |         73 |        73 |     73 |       3633 |        49.77 |  ✅   | preferred availability>=730d 0/73 |
-| stayon30a               |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |      11150 |       142.95 |  ✅   | preferred availability>=730d 0/78 |
-| **TOTAL**               |  2098 | 2098 |    2098 |         2098 |         2098 |       2098 |      2098 |   2098 |     128187 |        61.10 |   —   | 11/16 Ready |
+| Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Rates | Image URLs | Avg Img/List | Ready | Notes                                                                                                                    |
+| ----------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ----: | ---------: | -----------: | :---: | ------------------------------------------------------------------------------------------------------------------------ |
+| 30aescapes              |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |     0 |       6282 |        37.17 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     0 |       5247 |        49.97 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| 360blue                 |   620 |  620 |     620 |          620 |          620 |        620 |       620 |    620 |     0 |      30940 |        49.90 |  ❌   | <span style="white-space: nowrap;">description>=600 618/620; location_quality 573/620; availability>=365d 594/620</span> |
+| benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |     0 |       8508 |        66.47 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| beachblue               |    16 |   16 |      16 |           16 |           16 |         16 |        16 |     16 |     0 |        712 |        44.50 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |    30 |       2063 |        68.77 |  ❌   | <span style="white-space: nowrap;">availability>=365d 0/30</span>                                                        |
+| exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |       5629 |        53.10 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| fivestar30a             |    62 |   62 |      62 |           62 |           62 |         62 |        62 |     62 |    62 |       6488 |       104.65 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |     0 |      10762 |        51.74 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| localvr30a              |    42 |   42 |      42 |           42 |           42 |         42 |        42 |     42 |     0 |       1774 |        42.24 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| oceanreef30a            |   111 |  111 |     111 |          111 |          111 |        111 |       111 |    111 |     0 |       8250 |        74.32 |  ❌   | <span style="white-space: nowrap;">amenities>=8 97/111; availability>=365d 0/111</span>                                  |
+| oversee30a              |    67 |   67 |      67 |           67 |           67 |         67 |        67 |     67 |     0 |       3738 |        55.79 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| realjoy30a              |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |     0 |      16334 |       116.67 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| royaldestinations       |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |     0 |       6677 |        46.69 |  ❌   | <span style="white-space: nowrap;">amenities>=8 137/143</span>                                                           |
+| sandersbeach30a         |    73 |   73 |      73 |           73 |           73 |         73 |        73 |     73 |     0 |       3633 |        49.77 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| scenicstays30a          |     1 |    1 |       1 |            1 |            1 |          1 |         1 |      1 |     1 |         55 |        55.00 |  ❌   | <span style="white-space: nowrap;">description>=600 0/1; amenities>=8 0/1; availability>=365d 0/1</span>                 |
+| stayon30a               |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |     0 |      11150 |       142.95 |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
+| **TOTAL**               |  2099 | 2099 |    2099 |         2099 |         2099 |       2099 |      2099 |   2099 |    93 |     128242 |        61.09 |   —   | <span style="white-space: nowrap;">12/17 Ready</span>                                                                    |
 
 ## Current Snapshot Summary
 
-- 16 adapters audited.
-- All 16 adapters are at full required-core parity for the current captured files.
-- Threshold-ready adapters (`Ready = ✅`): `11 / 16`.
-- `30aescapes` status: `Ready = ✅`; non-blocking note is preferred availability horizon (`>=730d`) not yet met.
+- 17 adapters audited.
+- All 17 adapters are at full required-core parity for the current captured files.
+- Threshold-ready adapters (`Ready = ✅`): `12 / 17`.
+- Rates coverage signal: `93 / 2099` files currently include `normalized_rates.days` (from `coastproperties30a`, `fivestar30a`, and `scenicstays30a`).
+- Preferred horizon (`>=730d`) remains non-blocking and is tracked in probe metrics, not failure notes.
 - Main blockers across non-ready adapters:
   - availability horizon under required 365-day span (`coastproperties30a`, `oceanreef30a`, subset of `360blue`)
-  - description threshold under 600 chars (`360blue`, `fivestar30a`)
-  - amenities depth under 8 items (`fivestar30a`, `oceanreef30a`, `royaldestinations`)
-  - location-quality gaps (`360blue`, `royaldestinations`)
+  - description threshold under 600 chars (`360blue`, `scenicstays30a`)
+  - amenities depth under 8 items (`oceanreef30a`, `royaldestinations`, `scenicstays30a`)
+  - location-quality gaps (`360blue`)
 
 ## Follow-Up Refinement Backlog (Post Base-Adapter Completion)
 
