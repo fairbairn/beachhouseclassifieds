@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type KeycoDayCode = "X";
@@ -100,6 +101,8 @@ const OUTPUT_ROOT = resolve(
   "keyco30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+
+const EXCLUDED_LISTING_IDS = loadActiveExclusions("keyco30a", ["ra3jpPCp6O"]);
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/+$/, "") ?? url;
@@ -219,6 +222,64 @@ function dedupe(values: string[]): string[] {
     out.push(value);
   }
   return out;
+}
+
+function buildDescriptionExpanded(candidates: string[]): string {
+  const normalized = dedupe(
+    candidates
+      .map((value) => stripHtml(value))
+      .map((value) => value.replace(/\s+/g, " ").trim())
+      .filter(Boolean),
+  );
+
+  if (normalized.length === 0) {
+    return "";
+  }
+
+  const selected: string[] = [];
+  for (const candidate of normalized) {
+    if (selected.some((existing) => existing.includes(candidate))) {
+      continue;
+    }
+    selected.push(candidate);
+
+    const joinedLength = selected.join(" ").length;
+    if (joinedLength >= 900 || selected.length >= 3) {
+      break;
+    }
+  }
+
+  return selected.join(" ").slice(0, 20000);
+}
+
+function inferCoordinatesFromText(text: string): {
+  latitude: number;
+  longitude: number;
+} | null {
+  const normalized = text.toLowerCase();
+  const knownAreas: Array<{
+    keyword: string;
+    latitude: number;
+    longitude: number;
+  }> = [
+    { keyword: "gulf place", latitude: 30.319, longitude: -86.166 },
+    { keyword: "seacrest", latitude: 30.275, longitude: -86.04 },
+    { keyword: "seagrove", latitude: 30.311, longitude: -86.136 },
+    { keyword: "rosemary", latitude: 30.286, longitude: -86.017 },
+    { keyword: "watersound", latitude: 30.273, longitude: -86.006 },
+    { keyword: "watercolor", latitude: 30.317, longitude: -86.131 },
+    { keyword: "grayton", latitude: 30.329, longitude: -86.163 },
+    { keyword: "inlet beach", latitude: 30.278, longitude: -86.003 },
+    { keyword: "santa rosa beach", latitude: 30.396, longitude: -86.228 },
+  ];
+
+  for (const area of knownAreas) {
+    if (normalized.includes(area.keyword)) {
+      return { latitude: area.latitude, longitude: area.longitude };
+    }
+  }
+
+  return null;
 }
 
 function buildSearchPageUrl(anchorUrl: string, pageNumber: number): string {
@@ -471,6 +532,10 @@ async function fetchDetail(
     normalizeLink(normalizedDetailUrl).split("/").filter(Boolean).at(-1) ||
     "unknown";
 
+  if (EXCLUDED_LISTING_IDS.has(externalListingId)) {
+    return null;
+  }
+
   const page = await browser.newPage();
 
   try {
@@ -622,13 +687,11 @@ async function fetchDetail(
       ...regexDescriptionCandidates,
       metaDescription,
     ]
-      .map((value) => stripHtml(value))
       .filter(Boolean)
       .sort((left, right) => right.length - left.length);
 
-    const descriptionExpanded = (allDescriptionCandidates[0] || "").slice(
-      0,
-      20000,
+    const descriptionExpanded = buildDescriptionExpanded(
+      allDescriptionCandidates,
     );
 
     const rawAmenityTokens = dedupe(
@@ -694,6 +757,9 @@ async function fetchDetail(
     ]);
 
     const coordinates = extractLatLngFromHtml(html);
+    const fallbackCoordinates = inferCoordinatesFromText(
+      `${descriptionExpanded} ${metaDescription} ${extracted.locationCandidates.join(" ")}`,
+    );
 
     const parsedCityState = inferCityStateFromText(
       `${descriptionExpanded} ${metaDescription} ${extracted.locationCandidates.join(" ")}`,
@@ -798,8 +864,9 @@ async function fetchDetail(
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsDaddr)}`
           : "",
         directions_daddr: directionsDaddr,
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
+        latitude: coordinates.latitude ?? fallbackCoordinates?.latitude ?? null,
+        longitude:
+          coordinates.longitude ?? fallbackCoordinates?.longitude ?? null,
       },
       media_gallery: {
         image_count: imageUrls.length,

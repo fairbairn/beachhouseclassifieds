@@ -158,7 +158,9 @@
     "analyze:performance:interactive": "tsx src/core/scripts/analyze-project-performance.ts --interactive",
     "help": "tsx src/scripts/help.ts",
     "run:postgres:container:start": "tsx src/core/tooling/db/ops/run-local-postgres-container.ts postgres",
-    "run:postgres:container:stop": "tsx src/core/tooling/db/ops/run-local-postgres-container.ts stop"
+    "run:postgres:container:stop": "tsx src/core/tooling/db/ops/run-local-postgres-container.ts stop",
+    "conformance:exclusions:lifecycle:adapter": "node .tmp/scripts/run-exclusion-lifecycle-for-adapter.mjs",
+    "conformance:exclusions:lifecycle:all": "node .tmp/scripts/run-exclusion-lifecycle-all.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.0",

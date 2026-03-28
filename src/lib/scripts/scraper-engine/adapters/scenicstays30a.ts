@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser } from "playwright";
 
+import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type ScenicStaysDetailRecord = DetailRecordBase & {
@@ -124,6 +125,11 @@ const OUTPUT_ROOT = resolve(
   "scenicstays30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+
+const EXCLUDED_LISTING_IDS = loadActiveExclusions("scenicstays30a", [
+  "81",
+  "407",
+]);
 
 const MAX_CLICK_CYCLES = 80;
 const CLICK_WAIT_MS = 1200;
@@ -1414,6 +1420,11 @@ async function fetchDetail(
       rentalSlugFromUrl ||
       normalizeLink(detailUrl).split("/").filter(Boolean).at(-1) ||
       "unknown";
+
+    if (EXCLUDED_LISTING_IDS.has(rentalId)) {
+      return null;
+    }
+
     const numericUnitId = /^\d+$/.test(rentalId) ? Number(rentalId) : null;
 
     const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);

@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
+import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
@@ -126,6 +127,14 @@ const OUTPUT_ROOT = resolve(
   "funvacay30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+
+const EXCLUDED_LISTING_IDS = loadActiveExclusions("funvacay30a", [
+  "gulf-getaway",
+  "little-bleu",
+  "sea-la-vie",
+  "spf-30a",
+  "tides-blue",
+]);
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
@@ -1314,11 +1323,16 @@ async function discoverListings(
     reportProgress(`discovery final captured=${discovery.rows.length}`);
   }
 
-  return discovery.rows.map((row) => ({
-    link: normalizeDetailUrl(row.href),
-    source_url: anchorUrl,
-    anchor_text: row.text,
-  }));
+  return discovery.rows
+    .filter((row) => {
+      const normalized = normalizeDetailUrl(row.href);
+      return !EXCLUDED_LISTING_IDS.has(extractExternalListingId(normalized));
+    })
+    .map((row) => ({
+      link: normalizeDetailUrl(row.href),
+      source_url: anchorUrl,
+      anchor_text: row.text,
+    }));
 }
 
 async function extractAvailabilitySnapshot(page: Page): Promise<{
@@ -1836,7 +1850,7 @@ async function fetchDetail(
 
           const attrValues = Array.from(
             mediaRoot.querySelectorAll(
-              "a[href], a[data-srcset], a[data-thumb], a.fancygallery[href], img[src], img[srcset], img[data-src], img[data-rstmb], [data-rsbigimg], [data-image], .image-canvas[style*='background-image']",
+              "a[href], a[data-srcset], a[data-thumb], a.fancygallery[href], img[src], img[srcset], img[data-src], img[data-lazy-src], img[data-rstmb], [data-rsbigimg], [data-image], .image-canvas[style*='background-image']",
             ),
           );
 
@@ -1846,6 +1860,7 @@ async function fetchDetail(
               node.getAttribute("src"),
               node.getAttribute("srcset"),
               node.getAttribute("data-src"),
+              node.getAttribute("data-lazy-src"),
               node.getAttribute("data-rstmb"),
               node.getAttribute("data-rsbigimg"),
               node.getAttribute("data-srcset"),
@@ -1924,6 +1939,10 @@ async function fetchDetail(
     const horizonIso = horizon.toISOString().slice(0, 10);
 
     const externalListingId = extractExternalListingId(detailUrl);
+    if (EXCLUDED_LISTING_IDS.has(externalListingId)) {
+      return null;
+    }
+
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,

@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
+import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type BookingDayState = "bookable" | "blocked" | "unknown";
@@ -121,7 +122,7 @@ const OUTPUT_ROOT = resolve(
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 
-const EXCLUDED_LISTING_IDS = new Set<string>([
+const EXCLUDED_LISTING_IDS = loadActiveExclusions("360blue", [
   "blue-mountain-beach-gulf-point-hideaway-34-gulf-point-road-3034",
   "seagrove-2-palms-41-east-grove-avenue-3021",
   "blue-mountain-beach-blue-phoenix-16-sandcastle-court-64",
@@ -573,6 +574,11 @@ async function fetchDetail(
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
 ): Promise<DetailRecord360Blue | null> {
+  const externalListingId = extractExternalListingId(detailUrl);
+  if (EXCLUDED_LISTING_IDS.has(externalListingId)) {
+    return null;
+  }
+
   const page = await browser.newPage();
   const fetchStartedAt = Date.now();
 

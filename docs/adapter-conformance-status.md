@@ -68,10 +68,10 @@ Preferred (non-blocking for Ready, tracked separately in probe output):
 | dunevr30a               |    85 |    85 |    85 |    85 |    85 |    85 |    85 |    85 |    85 |       4031 |       47.42 |         ✅ |         ✅ |         ✅ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | exclusive30a            |   106 |   106 |   106 |   106 |   106 |   106 |   106 |   106 |     0 |       5629 |       53.10 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | fivestar30a             |    62 |    62 |    62 |    62 |    62 |    62 |    62 |    62 |    62 |       6488 |      104.65 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
-| funvacay30a             |    45 |    45 |    45 |    45 |    45 |    45 |    45 |    45 |     0 |        250 |        5.56 |         ❌ |         ❌ |         ✅ |     ❌ | <span style="white-space: nowrap;">media>=5 40/45</span> |
+| funvacay30a             |    40 |    40 |    40 |    40 |    40 |    40 |    40 |    40 |     0 |        240 |        6.00 |         ❌ |         ❌ |         ✅ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | grayt30a                |    35 |    35 |    35 |    35 |    35 |    35 |    35 |    35 |     0 |       4495 |      128.43 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | homeownerscollection30a |   208 |   208 |   208 |   208 |   208 |   208 |   208 |   208 |     0 |      10762 |       51.74 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
-| keyco30a                |   381 |   381 |   381 |   381 |   381 |   381 |   381 |   381 |     0 |      27391 |       71.89 |         ❌ |         ❌ |         ❌ |     ❌ | <span style="white-space: nowrap;">description>=600 311/381, geo_latlng 379/381</span> |
+| keyco30a                |   380 |   380 |   380 |   380 |   380 |   380 |   380 |   380 |     0 |      27322 |       71.90 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | localvr30a              |    42 |    42 |    42 |    42 |    42 |    42 |    42 |    42 |     0 |       1774 |       42.24 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | luxe30a                 |    12 |    12 |    12 |    12 |    12 |    12 |    12 |    12 |     0 |        781 |       65.08 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | oceanreef30a            |   111 |   111 |   111 |   111 |   111 |   111 |   111 |   111 |     0 |       8250 |       74.32 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
@@ -81,22 +81,22 @@ Preferred (non-blocking for Ready, tracked separately in probe output):
 | royaldestinations       |   143 |   143 |   143 |   143 |   143 |   143 |   143 |   143 |     0 |       6677 |       46.69 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | sandersbeach30a         |    73 |    73 |    73 |    73 |    73 |    73 |    73 |    73 |     0 |       3633 |       49.77 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | sandpiper30a            |   106 |   106 |   106 |   106 |   106 |   106 |   106 |   106 |     0 |       5436 |       51.28 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
-| scenicstays30a          |    46 |    46 |    46 |    46 |    44 |    46 |    46 |    46 |    46 |       2570 |       55.87 |         ✅ |         ✅ |         ❌ |     ❌ | <span style="white-space: nowrap;">description>=600 44/46</span> |
+| scenicstays30a          |    44 |    44 |    44 |    44 |    44 |    44 |    44 |    44 |    44 |       2490 |       56.59 |         ✅ |         ✅ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | stayat30a               |    37 |    37 |    37 |    37 |    37 |    37 |    37 |    37 |     0 |       2418 |       65.35 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | stayon30a               |    78 |    78 |    78 |    78 |    78 |    78 |    78 |    78 |     0 |      11150 |      142.95 |         ✅ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
-| **TOTAL**               |  3000 |  3000 |  3000 |  3000 |  2998 |  3000 |  3000 |  3000 |   240 |     183757 |       61.25 |         — |         — |         — |     — | <span style="white-space: nowrap;">24/27 Ready</span> |
+| **TOTAL**               |  2992 |  2992 |  2992 |  2992 |  2992 |  2992 |  2992 |  2992 |   238 |     183598 |       61.36 |         — |         — |         — |     — | <span style="white-space: nowrap;">27/27 Ready</span> |
 
 ## Current Snapshot Summary
 
 - 27 adapters audited.
 - All 27 adapters are at full required-core parity for the current captured files.
-- Threshold-ready adapters (Ready = ✅): 24 / 27.
-- Rates coverage signal: 240 / 3000 files currently include normalized_rates.days.
+- Threshold-ready adapters (Ready = ✅): 27 / 27.
+- Rates coverage signal: 238 / 2992 files currently include normalized_rates.days.
 - API capability signal:
   - Availability API present: 6 / 27 adapters.
   - Rates API present: 4 / 27 adapters.
   - Pre-reservation API present: 3 / 27 adapters.
-- Geo location minimum (required): 26 / 27 adapters currently have 100% numeric lat/lng coverage.
+- Geo location minimum (required): 27 / 27 adapters currently have 100% numeric lat/lng coverage.
 - Preferred horizon (>=730d) remains non-blocking and is tracked in probe metrics, not failure notes.
 
 ## Follow-Up Refinement Backlog (Post Base-Adapter Completion)
