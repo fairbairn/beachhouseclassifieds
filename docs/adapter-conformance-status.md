@@ -2,7 +2,7 @@
 
 This document tracks where each base adapter currently stands against the universal detail schema contract.
 
-Audit date: 2026-03-27
+Audit date: 2026-03-28
 
 Data source:
 
@@ -52,6 +52,7 @@ Preferred (non-blocking for Ready, tracked separately in probe output):
 
 | Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Rates | Image URLs | Avg Img/List | API Avail | API Rates | API Quote | Ready | Notes                                                                                                                    |
 | ----------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ----: | ---------: | -----------: | :-------: | :-------: | :-------: | :---: | ------------------------------------------------------------------------------------------------------------------------ |
+| 30abeach                |    17 |   17 |      17 |           17 |           17 |         17 |        17 |     17 |    17 |       1652 |        97.18 |    ✅     |    ✅     |    ✅     |  ❌   | <span style="white-space: nowrap;">amenities>=8 15/17</span>                                                             |
 | 30aescapes              |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |     0 |       6282 |        37.17 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
 | 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     0 |       5247 |        49.97 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
 | 30avacay                |   116 |  116 |     116 |          116 |          116 |        116 |       116 |    116 |     0 |       5377 |        46.35 |    ✅     |    ❌     |    ✅     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
@@ -75,18 +76,18 @@ Preferred (non-blocking for Ready, tracked separately in probe output):
 | scenicstays30a          |    46 |   46 |      46 |           46 |           44 |         46 |        46 |     46 |    46 |       2570 |        55.87 |    ✅     |    ✅     |    ❌     |  ❌   | <span style="white-space: nowrap;">description>=600 44/46</span>                                                         |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |     0 |       2418 |        65.35 |    ✅     |    ❌     |    ✅     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
 | stayon30a               |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |     0 |      11150 |       142.95 |    ✅     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                           |
-| **TOTAL**               |  2545 | 2545 |    2545 |         2545 |         2543 |       2545 |      2545 |   2545 |   229 |     150812 |        59.26 |     —     |     —     |     —     |   —   | <span style="white-space: nowrap;">16/22 Ready</span>                                                                    |
+| **TOTAL**               |  2562 | 2562 |    2562 |         2562 |         2560 |       2562 |      2562 |   2562 |   246 |     152464 |        59.51 |     —     |     —     |     —     |   —   | <span style="white-space: nowrap;">16/23 Ready</span>                                                                    |
 
 ## Current Snapshot Summary
 
-- 22 adapters audited.
-- All 22 adapters are at full required-core parity for the current captured files.
-- Threshold-ready adapters (Ready = ✅): 16 / 22.
-- Rates coverage signal: 229 / 2545 files currently include normalized_rates.days.
+- 23 adapters audited.
+- All 23 adapters are at full required-core parity for the current captured files.
+- Threshold-ready adapters (Ready = ✅): 16 / 23.
+- Rates coverage signal: 246 / 2562 files currently include normalized_rates.days.
 - API capability signal:
-  - Availability API present: 7 / 22 adapters.
-  - Rates API present: 3 / 22 adapters.
-  - Pre-reservation API present: 4 / 22 adapters.
+  - Availability API present: 8 / 23 adapters.
+  - Rates API present: 4 / 23 adapters.
+  - Pre-reservation API present: 5 / 23 adapters.
 - Preferred horizon (>=730d) remains non-blocking and is tracked in probe metrics, not failure notes.
 
 ## Follow-Up Refinement Backlog (Post Base-Adapter Completion)

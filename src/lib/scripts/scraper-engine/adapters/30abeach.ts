@@ -3,6 +3,10 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Page } from "playwright";
 
+import {
+  createDiscoveryLogger,
+  resolveAdapterRuntime,
+} from "../adapter-foundation";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type ThirtyABeachListingRow = {
@@ -161,6 +165,19 @@ function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
 }
 
+function isDetailPath(pathname: string): boolean {
+  const normalizedPath = pathname.toLowerCase();
+  if (
+    normalizedPath.startsWith("/rentals/") ||
+    normalizedPath.startsWith("/vacation-rental/") ||
+    normalizedPath.startsWith("/rental/")
+  ) {
+    return true;
+  }
+
+  return /^\/\d+\/?$/.test(pathname);
+}
+
 function toValidDetailUrl(value: string): string | null {
   try {
     const parsed = new URL(value.trim());
@@ -168,12 +185,7 @@ function toValidDetailUrl(value: string): string | null {
       return null;
     }
 
-    const normalizedPath = parsed.pathname.toLowerCase();
-    if (
-      !normalizedPath.startsWith("/rentals/") &&
-      !normalizedPath.startsWith("/vacation-rental/") &&
-      !normalizedPath.startsWith("/rental/")
-    ) {
+    if (!isDetailPath(parsed.pathname)) {
       return null;
     }
 
@@ -423,26 +435,193 @@ function extractAmenityCategoriesFromHtml(
     html,
   );
 
-  const homeHighlightsAnchor = descriptionChunk.match(
-    /Home\s*Highlights\s*:\s*([\s\S]*)/i,
+  const highlightsAnchor = descriptionChunk.match(
+    /(Home|Property)\s*Highlights\s*:\s*([\s\S]*)/i,
   );
-  const homeHighlightsChunk = homeHighlightsAnchor?.[1] ?? "";
+  const highlightsChunk = highlightsAnchor?.[2] ?? highlightsAnchor?.[1] ?? "";
 
-  const homeHighlights = homeHighlightsChunk
+  const highlightedAmenities = highlightsChunk
     .split(/\n+/)
     .map((line) => line.replace(/^[-*•]\s*/, "").trim())
     .filter((line) => line.length > 0)
     .filter((line) => !/^reservation\/booking policy/i.test(line))
+    .filter((line) => !/^(home|property)\s*highlights\s*:?$/i.test(line))
     .slice(0, 120);
 
-  if (homeHighlights.length > 0) {
-    categoryValues.HomeHighlights = dedupePreserveOrder(homeHighlights);
+  if (highlightedAmenities.length > 0) {
+    categoryValues.PropertyHighlights =
+      dedupePreserveOrder(highlightedAmenities);
+  }
+
+  if (Object.values(categoryValues).flat().length < 8) {
+    const descriptionLines = descriptionChunk
+      .split(/\n+/)
+      .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+      .filter((line) => line.length > 0)
+      .filter((line) => line.length <= 140)
+      .filter((line) => !/^\d+\s+[A-Za-z]/.test(line))
+      .filter((line) => !/^\d+\s*$/.test(line))
+      .filter((line) => !/^first floor:?$/i.test(line))
+      .filter((line) => !/^second floor:?$/i.test(line))
+      .filter((line) => !/^third floor:?$/i.test(line))
+      .filter((line) => !/^sleeps\s+\d+/i.test(line))
+      .filter((line) => !/^no\s+smoking$/i.test(line))
+      .filter((line) => !/^no\s+pets$/i.test(line))
+      .slice(0, 80);
+
+    if (descriptionLines.length > 0) {
+      categoryValues.DescriptionHighlights =
+        dedupePreserveOrder(descriptionLines);
+    }
   }
 
   return categoryValues;
 }
 
-function extractImageUrlsFromListingRow(row: ThirtyABeachListingRow | null): string[] {
+function extractJsonLdAddress(html: string): {
+  address: string;
+  city: string;
+  state: string;
+} {
+  const scripts = Array.from(
+    html.matchAll(
+      /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+    ),
+  )
+    .map((match) => match[1] ?? "")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  for (const rawScript of scripts) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawScript);
+    } catch {
+      continue;
+    }
+
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+    for (const item of items) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+
+      const addressObj = (item as { address?: unknown }).address;
+      if (!addressObj || typeof addressObj !== "object") {
+        continue;
+      }
+
+      const streetAddress = stripHtml(
+        String((addressObj as { streetAddress?: unknown }).streetAddress ?? ""),
+      ).trim();
+      const city = stripHtml(
+        String(
+          (addressObj as { addressLocality?: unknown }).addressLocality ?? "",
+        ),
+      ).trim();
+      const state = stripHtml(
+        String((addressObj as { addressRegion?: unknown }).addressRegion ?? ""),
+      ).trim();
+      const postalCode = stripHtml(
+        String((addressObj as { postalCode?: unknown }).postalCode ?? ""),
+      ).trim();
+
+      const fullAddress = [
+        streetAddress,
+        [city, state].filter((part) => part.length > 0).join(", "),
+        postalCode,
+      ]
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+        .join(" ");
+
+      if (fullAddress || city || state) {
+        return {
+          address: fullAddress,
+          city,
+          state,
+        };
+      }
+    }
+  }
+
+  return {
+    address: "",
+    city: "",
+    state: "",
+  };
+}
+
+function extractRoomDetailsStats(html: string): {
+  beds: number | null;
+  baths: number | null;
+  sleeps: number | null;
+} {
+  const parseFirstInt = (value: string): number | null => {
+    const match = value.match(/(\d+)/);
+    if (!match?.[1]) {
+      return null;
+    }
+    const parsed = Number(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const fromDetailsList = (
+    label: "Sleeps" | "Bedrooms" | "Bathrooms",
+  ): number | null => {
+    const regex = new RegExp(
+      `${label}:\\s*<span[^>]*>\\s*<strong>([\\s\\S]*?)<\\/strong>`,
+      "i",
+    );
+    const match = html.match(regex);
+    if (!match?.[1]) {
+      return null;
+    }
+    return parseFirstInt(stripHtml(match[1]));
+  };
+
+  const fromGuestsBadge = (): number | null => {
+    const match = html.match(/<li>\s*(\d+)\s*Guests\s*<\/li>/i);
+    if (!match?.[1]) {
+      return null;
+    }
+    const parsed = Number(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const fromDescriptionPattern = (pattern: RegExp): number | null => {
+    const descriptionBlock = extractFirst(
+      /<div[^>]+class=["'][^"']*property_description[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      html,
+    );
+    const match = descriptionBlock.match(pattern);
+    if (!match?.[1]) {
+      return null;
+    }
+    const parsed = Number(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const sleeps =
+    fromDetailsList("Sleeps") ??
+    fromGuestsBadge() ??
+    fromDescriptionPattern(/sleeps\s*(\d+)/i);
+  const beds =
+    fromDetailsList("Bedrooms") ?? fromDescriptionPattern(/(\d+)\s*bedroom/i);
+  const baths =
+    fromDetailsList("Bathrooms") ??
+    fromDescriptionPattern(/(\d+(?:\.\d+)?)\s*bath/i);
+
+  return {
+    beds,
+    baths,
+    sleeps,
+  };
+}
+
+function extractImageUrlsFromListingRow(
+  row: ThirtyABeachListingRow | null,
+): string[] {
   if (!row) {
     return [];
   }
@@ -479,7 +658,9 @@ async function callStreamlineApi<T = unknown>(
   }
 }
 
-function mapListingRow(raw: Record<string, unknown>): ThirtyABeachListingRow | null {
+function mapListingRow(
+  raw: Record<string, unknown>,
+): ThirtyABeachListingRow | null {
   const idValue = raw.id;
   const idText =
     typeof idValue === "number" || typeof idValue === "string"
@@ -554,7 +735,9 @@ function mapListingRow(raw: Record<string, unknown>): ThirtyABeachListingRow | n
   };
 }
 
-async function loadListingRows(origin: string): Promise<ThirtyABeachListingRow[]> {
+async function loadListingRows(
+  origin: string,
+): Promise<ThirtyABeachListingRow[]> {
   const cacheKey = origin.toLowerCase();
   let pending = listingCache.get(cacheKey);
   if (!pending) {
@@ -616,7 +799,9 @@ async function loadListingRows(origin: string): Promise<ThirtyABeachListingRow[]
   return pending;
 }
 
-function buildSeoMap(rows: ThirtyABeachListingRow[]): Map<string, ThirtyABeachListingRow> {
+function buildSeoMap(
+  rows: ThirtyABeachListingRow[],
+): Map<string, ThirtyABeachListingRow> {
   const out = new Map<string, ThirtyABeachListingRow>();
   for (const row of rows) {
     const key = normalizeSeoLookupKey(row.seoPageName);
@@ -627,9 +812,8 @@ function buildSeoMap(rows: ThirtyABeachListingRow[]): Map<string, ThirtyABeachLi
   return out;
 }
 
-async function discoverListings(
+async function discoverListingsFromApi(
   anchorUrl: string,
-  reportProgress: (message: string) => void,
 ): Promise<ScrapedLink[]> {
   const parsed = new URL(anchorUrl);
   const origin = parsed.origin;
@@ -659,7 +843,54 @@ async function discoverListings(
     })
     .filter((item): item is ScrapedLink => item !== null);
 
-  reportProgress(`discovered ${links.length} links from Streamline API`);
+  return links;
+}
+
+async function collectCurrentUnitListLinks(
+  page: Page,
+  sourceUrl: string,
+): Promise<ScrapedLink[]> {
+  const rawRows = await page.evaluate(() => {
+    const unitListRoot =
+      document.querySelector(".unitList.listings_wrapper_box.row") ??
+      document.querySelector(".unit-list.listings_wrapper_box.row") ??
+      document.querySelector(".unit-list") ??
+      document.querySelector('[class*="unit-list"]') ??
+      document.querySelector(
+        '[class*="unitList"][class*="listings_wrapper_box"][class*="row"]',
+      ) ??
+      document.querySelector('[id*="unit-list"]') ??
+      document.body;
+
+    const anchors = Array.from(unitListRoot.querySelectorAll("a[href]"));
+    return anchors.map((anchor) => ({
+      href: (anchor as HTMLAnchorElement).href,
+      text: (anchor.textContent ?? "").trim(),
+    }));
+  });
+
+  const links: ScrapedLink[] = [];
+  const seen = new Set<string>();
+
+  for (const row of rawRows) {
+    const href = typeof row.href === "string" ? row.href : "";
+    if (!href) {
+      continue;
+    }
+
+    const valid = toValidDetailUrl(href);
+    if (!valid || seen.has(valid)) {
+      continue;
+    }
+
+    seen.add(valid);
+    links.push({
+      link: valid,
+      source_url: normalizeLink(sourceUrl),
+      anchor_text: typeof row.text === "string" ? row.text : "",
+    });
+  }
+
   return links;
 }
 
@@ -669,10 +900,22 @@ async function scrollAndCollectListingLinks(
   maxScrollSteps: number,
   scrollPauseMs: number,
   networkIdleWaitMs: number,
-  reportProgress: (message: string) => void,
+  logger: ReturnType<typeof createDiscoveryLogger>,
 ): Promise<ScrapedLink[]> {
   let previousSignature = "";
   let stagnantSteps = 0;
+  const collected = new Map<string, ScrapedLink>();
+
+  const collectStepLinks = async (): Promise<void> => {
+    const links = await collectCurrentUnitListLinks(page, sourceUrl);
+    for (const link of links) {
+      if (!collected.has(link.link)) {
+        collected.set(link.link, link);
+      }
+    }
+  };
+
+  await collectStepLinks();
 
   for (let step = 0; step < maxScrollSteps; step += 1) {
     const loadMoreClicked = await page.evaluate(() => {
@@ -737,6 +980,16 @@ async function scrollAndCollectListingLinks(
     if (signature === previousSignature && !loadMoreClicked) {
       stagnantSteps += 1;
       if (stagnantSteps >= 3) {
+        const discovered = Number(signature.split(":")[1] ?? 0) || 0;
+        logger.earlyStop({
+          reason: "stagnant-signature",
+          discovered,
+          step: step + 1,
+          maxSteps: maxScrollSteps,
+          extras: {
+            source: "dom",
+          },
+        });
         break;
       }
     } else {
@@ -749,55 +1002,25 @@ async function scrollAndCollectListingLinks(
     });
     await page.waitForTimeout(scrollPauseMs);
 
-    if ((step + 1) % 10 === 0) {
-      reportProgress(`scroll steps completed: ${step + 1}`);
-    }
-  }
+    await collectStepLinks();
 
-  await page.waitForTimeout(networkIdleWaitMs);
-
-  const rawRows = await page.evaluate(() => {
-    const unitListRoot =
-      document.querySelector(".unitList.listings_wrapper_box.row") ??
-      document.querySelector(".unit-list.listings_wrapper_box.row") ??
-      document.querySelector(".unit-list") ??
-      document.querySelector('[class*="unit-list"]') ??
-      document.querySelector(
-        '[class*="unitList"][class*="listings_wrapper_box"][class*="row"]',
-      ) ??
-      document.querySelector('[id*="unit-list"]') ??
-      document.body;
-
-    const anchors = Array.from(unitListRoot.querySelectorAll("a[href]"));
-    return anchors.map((anchor) => ({
-      href: (anchor as HTMLAnchorElement).href,
-      text: (anchor.textContent ?? "").trim(),
-    }));
-  });
-
-  const links: ScrapedLink[] = [];
-  const seen = new Set<string>();
-
-  for (const row of rawRows) {
-    const href = typeof row.href === "string" ? row.href : "";
-    if (!href) {
-      continue;
-    }
-
-    const valid = toValidDetailUrl(href);
-    if (!valid || seen.has(valid)) {
-      continue;
-    }
-
-    seen.add(valid);
-    links.push({
-      link: valid,
-      source_url: normalizeLink(sourceUrl),
-      anchor_text: typeof row.text === "string" ? row.text : "",
+    const discovered = Number(signature.split(":")[1] ?? 0) || 0;
+    logger.progress({
+      stage: "scroll",
+      discovered: Math.max(discovered, collected.size),
+      step: step + 1,
+      maxSteps: maxScrollSteps,
+      noGrowthRounds: stagnantSteps,
+      extras: {
+        source: "dom",
+        load_more_clicked: loadMoreClicked,
+      },
     });
   }
 
-  return links;
+  await page.waitForTimeout(networkIdleWaitMs);
+  await collectStepLinks();
+  return Array.from(collected.values());
 }
 
 async function discoverListingsFromPage(
@@ -806,7 +1029,7 @@ async function discoverListingsFromPage(
   maxScrollSteps: number,
   scrollPauseMs: number,
   networkIdleWaitMs: number,
-  reportProgress: (message: string) => void,
+  logger: ReturnType<typeof createDiscoveryLogger>,
 ): Promise<ScrapedLink[]> {
   await page.goto(anchorUrl, {
     waitUntil: "domcontentloaded",
@@ -819,11 +1042,18 @@ async function discoverListingsFromPage(
     maxScrollSteps,
     scrollPauseMs,
     networkIdleWaitMs,
-    reportProgress,
+    logger,
   );
 
   if (fromAnchor.length > 0) {
-    reportProgress(`discovered ${fromAnchor.length} links from page DOM`);
+    logger.progress({
+      stage: "dom-anchor",
+      discovered: fromAnchor.length,
+      extras: {
+        source: "dom",
+        anchor_url: normalizeLink(anchorUrl),
+      },
+    });
     return fromAnchor;
   }
 
@@ -861,13 +1091,18 @@ async function discoverListingsFromPage(
         maxScrollSteps,
         scrollPauseMs,
         networkIdleWaitMs,
-        reportProgress,
+        logger,
       );
 
       if (links.length > 0) {
-        reportProgress(
-          `discovered ${links.length} links from fallback page ${normalizeLink(candidateUrl)}`,
-        );
+        logger.progress({
+          stage: "dom-fallback",
+          discovered: links.length,
+          extras: {
+            source: "dom",
+            fallback_url: normalizeLink(candidateUrl),
+          },
+        });
         return links;
       }
     } catch {
@@ -882,31 +1117,10 @@ function mergeScrapedLinks(
   pageLinks: ScrapedLink[],
   apiLinks: ScrapedLink[],
 ): ScrapedLink[] {
-  if (apiLinks.length > 0) {
-    // Streamline API is the authoritative inventory when available.
-    const authoritative: ScrapedLink[] = [];
-    const seen = new Set<string>();
-    for (const link of apiLinks) {
-      const normalized = toValidDetailUrl(link.link);
-      if (!normalized || seen.has(normalized)) {
-        continue;
-      }
-      seen.add(normalized);
-      authoritative.push({
-        link: normalized,
-        source_url: normalizeLink(link.source_url),
-        anchor_text: link.anchor_text,
-      });
-    }
-
-    return authoritative.sort((left, right) =>
-      left.link.localeCompare(right.link),
-    );
-  }
-
   const merged: ScrapedLink[] = [];
   const seen = new Set<string>();
 
+  // Keep Playwright-discovered unit-list links first, then add API-only extras.
   for (const link of [...pageLinks, ...apiLinks]) {
     const normalized = toValidDetailUrl(link.link);
     if (!normalized || seen.has(normalized)) {
@@ -1119,6 +1333,7 @@ async function fetchDetail(
     const amenitiesAll = dedupePreserveOrder(
       Object.values(amenitiesCategories).flat(),
     );
+    const roomDetailsStats = extractRoomDetailsStats(html);
 
     const latitudeFromHtml = parseNumberLike(
       html.match(/["']latitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i)?.[1],
@@ -1129,19 +1344,8 @@ async function fetchDetail(
     const latitude = listingRow?.latitude ?? latitudeFromHtml ?? null;
     const longitude = listingRow?.longitude ?? longitudeFromHtml ?? null;
 
-    const firstAddressLine =
-      descriptionExpanded
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => /\d/.test(line)) ?? "";
-    const cityStateZipLine =
-      descriptionExpanded
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => /,\s*[A-Z]{2}\s+\d{5}/.test(line)) ?? "";
-    const fullAddress = [firstAddressLine, cityStateZipLine]
-      .filter((value) => value.length > 0)
-      .join(", ");
+    const jsonLdAddress = extractJsonLdAddress(html);
+    const fullAddress = jsonLdAddress.address;
     const directionsDaddr = fullAddress;
     const directionsUrl = directionsDaddr
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsDaddr)}`
@@ -1182,8 +1386,34 @@ async function fetchDetail(
       return dayDate >= today && dayDate <= horizonDate;
     });
 
+    const availabilityDays = [...filteredDays];
+    if (availabilityDays.length > 0) {
+      const lastKnown = new Date(
+        `${availabilityDays[availabilityDays.length - 1]?.date}T00:00:00.000Z`,
+      );
+      const cursor = new Date(lastKnown);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+
+      while (cursor <= horizonDate) {
+        availabilityDays.push({
+          date: formatDateIso(cursor),
+          code: "X",
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    } else {
+      const cursor = new Date(today);
+      while (cursor <= horizonDate) {
+        availabilityDays.push({
+          date: formatDateIso(cursor),
+          code: "X",
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
+
     const availabilityByDate = new Map<string, ThirtyABeachDayCode>();
-    for (const day of filteredDays) {
+    for (const day of availabilityDays) {
       availabilityByDate.set(day.date, day.code);
     }
 
@@ -1221,7 +1451,7 @@ async function fetchDetail(
           )
         : null;
 
-    const normalizedDays = filteredDays.map((day) => {
+    const normalizedDays = availabilityDays.map((day) => {
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         day.code === "Y"
           ? "bookable"
@@ -1282,7 +1512,10 @@ async function fetchDetail(
       },
       location: {
         address: fullAddress,
-        location_label: [listingRow?.city ?? "", listingRow?.state ?? ""]
+        location_label: [
+          listingRow?.city ?? jsonLdAddress.city,
+          listingRow?.state ?? jsonLdAddress.state,
+        ]
           .filter((part) => part.length > 0)
           .join(", "),
         directions_url: directionsUrl,
@@ -1302,9 +1535,9 @@ async function fetchDetail(
         location: [listingRow?.city ?? "", listingRow?.state ?? ""]
           .filter((part) => part.length > 0)
           .join(", "),
-        beds: listingRow?.bedrooms ?? null,
-        baths: listingRow?.bathrooms ?? null,
-        sleeps: listingRow?.sleeps ?? null,
+        beds: listingRow?.bedrooms ?? roomDetailsStats.beds ?? null,
+        baths: listingRow?.bathrooms ?? roomDetailsStats.baths ?? null,
+        sleeps: listingRow?.sleeps ?? roomDetailsStats.sleeps ?? null,
         city: listingRow?.city ?? "",
         state: listingRow?.state ?? "",
       },
@@ -1330,14 +1563,14 @@ async function fetchDetail(
         source: "pm_30abeach",
         external_listing_id: rentalId,
         captured_at: new Date().toISOString(),
-        window_start: filteredDays[0]?.date ?? "",
-        window_end: filteredDays[filteredDays.length - 1]?.date ?? "",
+        window_start: availabilityDays[0]?.date ?? "",
+        window_end: availabilityDays[availabilityDays.length - 1]?.date ?? "",
         code_legend: {
           Y: "available",
           N: "not_available",
           X: "other",
         },
-        day_codes: filteredDays.map((day) => day.code).join(""),
+        day_codes: availabilityDays.map((day) => day.code).join(""),
         days: normalizedDays,
         counts: {
           available,
@@ -1399,23 +1632,30 @@ async function fetchDetail(
 }
 
 export function create30ABeachAdapter(): ScraperAdapter<ThirtyABeachDetailRecord> {
+  const runtime = resolveAdapterRuntime({
+    managerKey: "30abeach",
+    defaults: {
+      detailFetchDelayMs: 250,
+      detailFetchConcurrency: 6,
+      availabilityHorizonDays: 730,
+      maxCalendarAdvanceMonths: 24,
+    },
+    aliases: {
+      DETAIL_FETCH_DELAY_MS: ["THIRTYABEACH_DETAIL_FETCH_DELAY_MS"],
+      DETAIL_FETCH_CONCURRENCY: ["THIRTYABEACH_FETCH_CONCURRENCY"],
+      AVAILABILITY_HORIZON_DAYS: ["THIRTYABEACH_AVAILABILITY_HORIZON_DAYS"],
+      MAX_CALENDAR_ADVANCE_MONTHS: ["THIRTYABEACH_CALENDAR_MAX_MONTHS"],
+    },
+  });
+
   return {
     managerKey: "30abeach",
     scriptLabel: "30abeach",
     defaultAnchorUrl: DEFAULT_ANCHOR_URL,
-    detailFetchDelayMs: Math.max(
-      0,
-      Number(process.env.THIRTYABEACH_DETAIL_FETCH_DELAY_MS ?? "250") || 250,
-    ),
-    detailFetchConcurrency: Math.max(
-      1,
-      Number(process.env.THIRTYABEACH_FETCH_CONCURRENCY ?? "6") || 6,
-    ),
-    availabilityHorizonDays: Math.max(
-      1,
-      Number(process.env.THIRTYABEACH_AVAILABILITY_HORIZON_DAYS ?? "730") || 730,
-    ),
-    maxCalendarAdvanceMonths: 24,
+    detailFetchDelayMs: runtime.detailFetchDelayMs,
+    detailFetchConcurrency: runtime.detailFetchConcurrency,
+    availabilityHorizonDays: runtime.availabilityHorizonDays,
+    maxCalendarAdvanceMonths: runtime.maxCalendarAdvanceMonths,
     isValidDetailUrl(value: string): string | null {
       try {
         const parsed = new URL(value.trim());
@@ -1423,12 +1663,7 @@ export function create30ABeachAdapter(): ScraperAdapter<ThirtyABeachDetailRecord
           return null;
         }
 
-        const normalizedPath = parsed.pathname.toLowerCase();
-        if (
-          !normalizedPath.startsWith("/rentals/") &&
-          !normalizedPath.startsWith("/vacation-rental/") &&
-          !normalizedPath.startsWith("/rental/")
-        ) {
+        if (!isDetailPath(parsed.pathname)) {
           return null;
         }
 
@@ -1439,23 +1674,32 @@ export function create30ABeachAdapter(): ScraperAdapter<ThirtyABeachDetailRecord
       }
     },
     async discoverListings(context) {
+      const logger = createDiscoveryLogger(context.reportProgress);
       const pageLinks = await discoverListingsFromPage(
         context.page,
         context.anchorUrl,
         context.maxScrollSteps,
         context.scrollPauseMs,
         context.networkIdleWaitMs,
-        context.reportProgress,
+        logger,
       );
-      const apiLinks = await discoverListings(
-        context.anchorUrl,
-        context.reportProgress,
-      );
+      const apiLinks = await discoverListingsFromApi(context.anchorUrl);
+
+      logger.expected({
+        source: "api",
+        expected: apiLinks.length,
+        initialDiscovered: pageLinks.length,
+      });
 
       const merged = mergeScrapedLinks(pageLinks, apiLinks);
-      context.reportProgress(
-        `discovery summary: page=${pageLinks.length}, api=${apiLinks.length}, merged=${merged.length}`,
-      );
+      logger.summary({
+        selected: merged.length,
+        expected: apiLinks.length > 0 ? apiLinks.length : null,
+        bySource: {
+          dom: pageLinks.length,
+          api: apiLinks.length,
+        },
+      });
       return merged;
     },
     async fetchDetail(context) {
