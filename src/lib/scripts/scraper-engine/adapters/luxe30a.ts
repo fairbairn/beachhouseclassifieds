@@ -483,6 +483,66 @@ async function fetchDetail(
   }
 
   const page = await browser.newPage();
+  const externalListingId = extractPropertyId(normalizedDetailUrl);
+  let listingApiData: Record<string, unknown> | null = null;
+  let calendarApiData: Array<Record<string, unknown>> | null = null;
+
+  page.on("response", (response) => {
+    void (async () => {
+      try {
+        if (!response.ok()) {
+          return;
+        }
+
+        const responseUrl = response.url();
+        const listingBasePath = `/listings/${externalListingId}`;
+        if (!responseUrl.includes(listingBasePath)) {
+          return;
+        }
+
+        const contentType = (
+          response.headers()["content-type"] || ""
+        ).toLowerCase();
+        if (!contentType.includes("json")) {
+          return;
+        }
+
+        const payload = await response.json();
+
+        if (responseUrl.includes(`${listingBasePath}/calendar`)) {
+          if (Array.isArray(payload)) {
+            calendarApiData = payload
+              .filter(
+                (entry): entry is Record<string, unknown> =>
+                  typeof entry === "object" && entry !== null,
+              )
+              .slice(0, Math.max(availabilityHorizonDays + 7, 30));
+          }
+          return;
+        }
+
+        const isCanonicalListingEndpoint =
+          responseUrl.includes(`${listingBasePath}?`) ||
+          responseUrl.endsWith(listingBasePath);
+
+        if (
+          isCanonicalListingEndpoint &&
+          typeof payload === "object" &&
+          payload !== null
+        ) {
+          const parsedPayload = payload as Record<string, unknown>;
+          if (
+            listingApiData === null ||
+            parsedPayload.accommodates !== undefined
+          ) {
+            listingApiData = parsedPayload;
+          }
+        }
+      } catch {
+        // Ignore response parsing errors.
+      }
+    })();
+  });
 
   try {
     await page.goto(normalizedDetailUrl, {
@@ -492,61 +552,7 @@ async function fetchDetail(
     await page.waitForTimeout(1400);
 
     await expandDetailSections(page);
-
-    const externalListingId = extractPropertyId(normalizedDetailUrl);
-
-    const apiPayload = await page.evaluate(
-      async ({
-        listingId,
-        horizonDays,
-      }: {
-        listingId: string;
-        horizonDays: number;
-      }) => {
-        const now = new Date();
-        const from = new Date(now);
-        from.setUTCDate(from.getUTCDate() - 1);
-
-        const to = new Date(now);
-        to.setUTCDate(to.getUTCDate() + Math.max(1, horizonDays));
-
-        const fromIso = from.toISOString().slice(0, 10);
-        const toIso = to.toISOString().slice(0, 10);
-
-        const listingUrl = `https://app.guesty.com/api/pm-websites-backend/listings/${listingId}?fields=_id+title+nickname+type+roomType+propertyType+accommodates+amenities+bathrooms+bedrooms+beds+bedType+timezone+defaultCheckInTime+defaultCheckOutTime+address+picture+pictures+prices+publicDescription+terms+taxes+reviews+tags+parentId++`;
-        const calendarUrl = `https://app.guesty.com/api/pm-websites-backend/listings/${listingId}/calendar?from=${fromIso}&to=${toIso}`;
-
-        const [listing, calendar] = await Promise.all([
-          fetch(listingUrl, {
-            credentials: "include",
-            headers: {
-              accept: "application/json, text/plain, */*",
-            },
-          })
-            .then((response) => (response.ok ? response.json() : null))
-            .catch(() => null),
-          fetch(calendarUrl, {
-            credentials: "include",
-            headers: {
-              accept: "application/json, text/plain, */*",
-            },
-          })
-            .then((response) => (response.ok ? response.json() : null))
-            .catch(() => null),
-        ]);
-
-        return {
-          fromIso,
-          toIso,
-          listing,
-          calendar,
-        };
-      },
-      {
-        listingId: externalListingId,
-        horizonDays: availabilityHorizonDays,
-      },
-    );
+    await page.waitForTimeout(800);
 
     const extracted = await page.evaluate((horizonDays: number) => {
       const title = document.title || "";
@@ -837,17 +843,8 @@ async function fetchDetail(
     );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
-    const listingFromApi =
-      apiPayload && typeof apiPayload === "object" && "listing" in apiPayload
-        ? ((apiPayload as { listing?: Record<string, unknown> }).listing ??
-          null)
-        : null;
-
-    const calendarFromApi =
-      apiPayload && typeof apiPayload === "object" && "calendar" in apiPayload
-        ? ((apiPayload as { calendar?: Array<Record<string, unknown>> })
-            .calendar ?? null)
-        : null;
+    const listingFromApi = listingApiData;
+    const calendarFromApi = calendarApiData;
 
     const titleFromApi =
       listingFromApi && typeof listingFromApi.title === "string"

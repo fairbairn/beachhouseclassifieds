@@ -1227,8 +1227,6 @@ async function fetchDetail(
     requestedHorizonDate.setUTCDate(
       requestedHorizonDate.getUTCDate() + Math.max(1, availabilityHorizonDays),
     );
-    const requestedHorizonIso = formatIsoDate(requestedHorizonDate);
-
     const bookingStart = new Set<string>();
     const bookingEnd = new Set<string>();
     const bookedOnly = new Set<string>();

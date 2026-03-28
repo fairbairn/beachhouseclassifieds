@@ -575,16 +575,22 @@ async function fetchDetail(
     const lodgingJsonLd =
       jsonLdObjects.find((item) => {
         const itemType = String(item["@type"] ?? "").toLowerCase();
-        return itemType.includes("lodging") || itemType.includes("accommodation");
-      }) ?? jsonLdObjects[0] ?? null;
+        return (
+          itemType.includes("lodging") || itemType.includes("accommodation")
+        );
+      }) ??
+      jsonLdObjects[0] ??
+      null;
 
     const descriptionSection = extractSectionBetween(
       html,
       'class="property_description"',
-      '</section><!--End description-->',
+      "</section><!--End description-->",
     );
     const descriptionExpanded =
-      stripHtml(descriptionSection).replace(/^description\s+/i, "").slice(0, 20000) ||
+      stripHtml(descriptionSection)
+        .replace(/^description\s+/i, "")
+        .slice(0, 20000) ||
       stripHtml(
         typeof lodgingJsonLd?.description === "string"
           ? lodgingJsonLd.description
@@ -622,9 +628,7 @@ async function fetchDetail(
       }
     }
 
-    const amenitiesAll = Object.values(categoryMap)
-      .flat()
-      .filter(Boolean);
+    const amenitiesAll = Object.values(categoryMap).flat().filter(Boolean);
 
     const jsonLdAddress =
       lodgingJsonLd && typeof lodgingJsonLd.address === "object"
@@ -652,7 +656,9 @@ async function fetchDetail(
       postal_code: String(jsonLdAddress?.postalCode ?? "").trim(),
       country: String(jsonLdAddress?.addressCountry ?? "").trim(),
       latitude: parseNumberLike(jsonLdGeo?.latitude as string | number | null),
-      longitude: parseNumberLike(jsonLdGeo?.longitude as string | number | null),
+      longitude: parseNumberLike(
+        jsonLdGeo?.longitude as string | number | null,
+      ),
     };
 
     const beds = parseNumberLike(
@@ -665,8 +671,8 @@ async function fetchDetail(
     );
     const sleeps = parseNumberLike(
       (lodgingJsonLd?.maximumAttendeeCapacity as string | number | null) ??
-        ((lodgingJsonLd?.occupancy as Record<string, unknown> | null)?.
-          maxValue as string | number | null) ??
+        ((lodgingJsonLd?.occupancy as Record<string, unknown> | null)
+          ?.maxValue as string | number | null) ??
         null,
     );
 
@@ -758,7 +764,8 @@ async function fetchDetail(
     ).length;
     const other = normalizedDays.length - available - notAvailable;
 
-    const description = descriptionExpanded || stripHtml(metaDescription).slice(0, 20000);
+    const description =
+      descriptionExpanded || stripHtml(metaDescription).slice(0, 20000);
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);

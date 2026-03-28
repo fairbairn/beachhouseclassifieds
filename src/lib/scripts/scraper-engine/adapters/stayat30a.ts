@@ -113,7 +113,8 @@ type StayAt30ADetailRecord = DetailRecordBase & {
   };
 };
 
-const DEFAULT_ANCHOR_URL = "https://www.stayat30avacationrentals.com/30a-vacation-rentals/";
+const DEFAULT_ANCHOR_URL =
+  "https://www.stayat30avacationrentals.com/30a-vacation-rentals/";
 const EXPECTED_LISTING_COUNT = 37;
 const DETAIL_PATH_PREFIXES = ["/vacation-rentals/"];
 const OUTPUT_ROOT = resolve(
@@ -191,7 +192,7 @@ function normalizeListingName(value: string): string {
     .replace(/\b\d+\s*Guests?\b/gi, " ")
     .replace(/\bBeds?\b/gi, " ")
     .replace(/\bBaths?\b/gi, " ")
-    .replace(/\s*[|\-]\s*/g, " ")
+    .replace(/\s*[|-]\s*/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -777,7 +778,7 @@ function extractJsArrayLiteralByKey(html: string, key: string): string | null {
 
 function parseSlashDateToIso(value: string): string {
   const raw = value.trim();
-  const match = raw.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+  const match = raw.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
   if (!match) {
     return "";
   }
@@ -818,7 +819,11 @@ function addUtcDays(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function extractCalendarOffsetDays(html: string, key: string, fallback: number): number {
+function extractCalendarOffsetDays(
+  html: string,
+  key: string,
+  fallback: number,
+): number {
   const pattern = new RegExp(
     `${key}\\s*:\\s*new Date\\([\\s\\S]{0,140}?getDate\\(\\)\\s*\\+\\s*(\\d+)`,
     "i",
@@ -947,10 +952,9 @@ function extractAvailabilityFromRightWidgetHtml(
 
   let cursor = todayIso;
   while (cursor <= horizonIso) {
-    const inPreloadedWindow = cursor >= preloadStartIso && cursor <= preloadEndIso;
-    const code = inPreloadedWindow
-      ? (statusByDate.get(cursor) ?? "A")
-      : "X";
+    const inPreloadedWindow =
+      cursor >= preloadStartIso && cursor <= preloadEndIso;
+    const code = inPreloadedWindow ? (statusByDate.get(cursor) ?? "A") : "X";
     items.push({
       date: cursor,
       code,
@@ -1666,7 +1670,7 @@ async function fetchDetail(
           Array.from(document.querySelectorAll("script"))
             .map((script) => script.textContent ?? "")
             .join("\n")
-            .match(/\bunitId\s*:\s*['\"]([^'\"]+)['\"]/i)?.[1]
+            .match(/\bunitId\s*:\s*['"]([^'"]+)['"]/i)?.[1]
             ?.trim() ??
           "",
         amenitiesCategories: (() => {
@@ -1821,7 +1825,7 @@ async function fetchDetail(
               }
               try {
                 const backgroundMatch = raw.match(
-                  /background-image:\s*url\((['\"]?)([^)'\"]+)\1\)/i,
+                  /background-image:\s*url\((['"]?)([^)'"]+)\1\)/i,
                 );
                 const candidate =
                   backgroundMatch?.[2] ??

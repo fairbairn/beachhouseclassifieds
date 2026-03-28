@@ -192,7 +192,7 @@ function normalizeListingName(value: string): string {
     .replace(/\b\d+\s*Guests?\b/gi, " ")
     .replace(/\bBeds?\b/gi, " ")
     .replace(/\bBaths?\b/gi, " ")
-    .replace(/\s*[|\-]\s*/g, " ")
+    .replace(/\s*[|-]\s*/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -778,7 +778,7 @@ function extractJsArrayLiteralByKey(html: string, key: string): string | null {
 
 function parseSlashDateToIso(value: string): string {
   const raw = value.trim();
-  const match = raw.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+  const match = raw.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
   if (!match) {
     return "";
   }
@@ -1670,7 +1670,7 @@ async function fetchDetail(
           Array.from(document.querySelectorAll("script"))
             .map((script) => script.textContent ?? "")
             .join("\n")
-            .match(/\bunitId\s*:\s*['\"]([^'\"]+)['\"]/i)?.[1]
+            .match(/\bunitId\s*:\s*['"]([^'"]+)['"]/i)?.[1]
             ?.trim() ??
           "",
         amenitiesCategories: (() => {
@@ -1825,7 +1825,7 @@ async function fetchDetail(
               }
               try {
                 const backgroundMatch = raw.match(
-                  /background-image:\s*url\((['\"]?)([^)'\"]+)\1\)/i,
+                  /background-image:\s*url\((['"]?)([^)'"]+)\1\)/i,
                 );
                 const candidate =
                   backgroundMatch?.[2] ??

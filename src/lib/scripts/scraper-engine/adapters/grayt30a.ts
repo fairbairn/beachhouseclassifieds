@@ -182,7 +182,7 @@ function normalizeListingName(value: string): string {
     .replace(/\b\d+\s*Guests?\b/gi, " ")
     .replace(/\bBeds?\b/gi, " ")
     .replace(/\bBaths?\b/gi, " ")
-    .replace(/\s*[|\-]\s*/g, " ")
+    .replace(/\s*[|-]\s*/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 

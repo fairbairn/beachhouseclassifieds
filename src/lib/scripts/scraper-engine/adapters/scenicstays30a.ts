@@ -113,7 +113,8 @@ type ScenicStaysDetailRecord = DetailRecordBase & {
   };
 };
 
-const DEFAULT_ANCHOR_URL = "https://myscenicstays.com/rentals?type=2&mapsearch=1";
+const DEFAULT_ANCHOR_URL =
+  "https://myscenicstays.com/rentals?type=2&mapsearch=1";
 const OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
@@ -466,7 +467,9 @@ function parseRateDaysFromCalendarHtml(html: string): Array<{
       continue;
     }
 
-    const rateMatch = body.match(/class=["'][^"']*property-rate[^"']*["'][^>]*>([\s\S]*?)<\/span>/i);
+    const rateMatch = body.match(
+      /class=["'][^"']*property-rate[^"']*["'][^>]*>([\s\S]*?)<\/span>/i,
+    );
     const nightlyRate = parseCurrencyLike(stripHtml(rateMatch?.[1] ?? ""));
     if (nightlyRate === null) {
       continue;
@@ -643,7 +646,8 @@ function mergeAvailabilityDays(
         continue;
       }
 
-      const normalizedCode = day.code === "Y" ? "Y" : day.code === "N" ? "N" : "";
+      const normalizedCode =
+        day.code === "Y" ? "Y" : day.code === "N" ? "N" : "";
       if (!normalizedCode) {
         continue;
       }
@@ -728,7 +732,7 @@ function extractDescriptionExpanded(html: string): string {
   const fromLegacySection = extractSectionBetween(
     html,
     'class="property_description"',
-    '</section><!--End description-->',
+    "</section><!--End description-->",
   );
   const legacy = stripHtml(fromLegacySection).replace(/^description\s+/i, "");
   if (legacy) {
@@ -844,7 +848,10 @@ async function collectInteractiveDetailSnapshot(
             classes.includes("check-out")
           ) {
             code = "Y";
-          } else if (classes.includes("booked") || classes.includes("unavailable")) {
+          } else if (
+            classes.includes("booked") ||
+            classes.includes("unavailable")
+          ) {
             code = "N";
           }
 
@@ -1036,7 +1043,9 @@ async function discoverListings(
   for (let cycle = 0; cycle < maxCycles; cycle += 1) {
     const beforeIdCount = idSet.size;
     const beforeDetailCount = detailUrlSet.size;
-    const beforeScrollHeight = await page.evaluate(() => document.body.scrollHeight);
+    const beforeScrollHeight = await page.evaluate(
+      () => document.body.scrollHeight,
+    );
 
     const loadMoreVisible = await page.evaluate(() => {
       const nodes = Array.from(
@@ -1138,7 +1147,9 @@ async function discoverListings(
       await collectDetailUrls();
     }
 
-    const afterScrollHeight = await page.evaluate(() => document.body.scrollHeight);
+    const afterScrollHeight = await page.evaluate(
+      () => document.body.scrollHeight,
+    );
     if (afterScrollHeight > beforeScrollHeight) {
       observedGrowth = true;
     }
@@ -1232,11 +1243,14 @@ async function fetchDetail(
 
     const parsingHtml = interactiveSnapshot.html || html;
 
-    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, parsingHtml).slice(
+    const title = extractFirst(
+      /<title[^>]*>([\s\S]*?)<\/title>/i,
+      parsingHtml,
+    ).slice(0, 240);
+    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, parsingHtml).slice(
       0,
       240,
     );
-    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, parsingHtml).slice(0, 240);
     const canonicalUrl =
       extractFirst(
         /<link[^>]+rel=["']canonical["'][^>]+href=["']([\s\S]*?)["'][^>]*>/i,
@@ -1257,8 +1271,12 @@ async function fetchDetail(
     const lodgingJsonLd =
       jsonLdObjects.find((item) => {
         const itemType = String(item["@type"] ?? "").toLowerCase();
-        return itemType.includes("lodging") || itemType.includes("accommodation");
-      }) ?? jsonLdObjects[0] ?? null;
+        return (
+          itemType.includes("lodging") || itemType.includes("accommodation")
+        );
+      }) ??
+      jsonLdObjects[0] ??
+      null;
 
     const descriptionExpanded =
       extractDescriptionExpanded(parsingHtml) ||
@@ -1311,9 +1329,7 @@ async function fetchDetail(
       }
     }
 
-    const amenitiesAll = Object.values(categoryMap)
-      .flat()
-      .filter(Boolean);
+    const amenitiesAll = Object.values(categoryMap).flat().filter(Boolean);
 
     const jsonLdAddress =
       lodgingJsonLd && typeof lodgingJsonLd.address === "object"
@@ -1341,7 +1357,9 @@ async function fetchDetail(
       postal_code: String(jsonLdAddress?.postalCode ?? "").trim(),
       country: String(jsonLdAddress?.addressCountry ?? "").trim(),
       latitude: parseNumberLike(jsonLdGeo?.latitude as string | number | null),
-      longitude: parseNumberLike(jsonLdGeo?.longitude as string | number | null),
+      longitude: parseNumberLike(
+        jsonLdGeo?.longitude as string | number | null,
+      ),
     };
 
     const widgetStreet = extractWidgetDataAttr(parsingHtml, "data-straddress1");
@@ -1376,15 +1394,16 @@ async function fetchDetail(
     );
     const sleeps = parseNumberLike(
       (lodgingJsonLd?.maximumAttendeeCapacity as string | number | null) ??
-        ((lodgingJsonLd?.occupancy as Record<string, unknown> | null)?.
-          maxValue as string | number | null) ??
+        ((lodgingJsonLd?.occupancy as Record<string, unknown> | null)
+          ?.maxValue as string | number | null) ??
         null,
     );
 
     const bedsResolved =
       beds ?? parseNumberLike(extractWidgetDataAttr(html, "data-dblbeds"));
     const sleepsResolved =
-      sleeps ?? parseNumberLike(extractWidgetDataAttr(parsingHtml, "data-intoccu"));
+      sleeps ??
+      parseNumberLike(extractWidgetDataAttr(parsingHtml, "data-intoccu"));
 
     const mediaUrls = collectMediaUrls(parsingHtml, detailUrl, jsonLdObjects);
 
@@ -1637,7 +1656,8 @@ async function fetchDetail(
     ).length;
     const other = normalizedDays.length - available - notAvailable;
 
-    const description = descriptionExpanded || stripHtml(metaDescription).slice(0, 20000);
+    const description =
+      descriptionExpanded || stripHtml(metaDescription).slice(0, 20000);
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
@@ -1755,8 +1775,7 @@ export function createScenicStays30AAdapter(): ScraperAdapter<ScenicStaysDetailR
     defaultAnchorUrl: DEFAULT_ANCHOR_URL,
     detailFetchDelayMs: Math.max(
       0,
-      Number(process.env.SCENICSTAYS30A_DETAIL_FETCH_DELAY_MS ?? "250") ||
-        250,
+      Number(process.env.SCENICSTAYS30A_DETAIL_FETCH_DELAY_MS ?? "250") || 250,
     ),
     detailFetchConcurrency: Math.max(
       1,
@@ -1776,7 +1795,9 @@ export function createScenicStays30AAdapter(): ScraperAdapter<ScenicStaysDetailR
         }
 
         const hasNumericId = !!extractRentalIdFromDetailUrl(parsed.toString());
-        const hasRentalSlug = !!extractRentalSlugFromDetailUrl(parsed.toString());
+        const hasRentalSlug = !!extractRentalSlugFromDetailUrl(
+          parsed.toString(),
+        );
         if (!hasNumericId && !hasRentalSlug) {
           return null;
         }
