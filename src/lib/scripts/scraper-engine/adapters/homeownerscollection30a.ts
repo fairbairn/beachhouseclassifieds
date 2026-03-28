@@ -1,11 +1,37 @@
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
+
+type HomeownersFeeLine = {
+  name: string;
+  amount: number;
+};
+
+type HomeownersRateObservation = {
+  start_date: string;
+  end_date: string;
+  nights: number;
+  quote_available: boolean;
+  quoted_total: number | null;
+  buy_url: string | null;
+  base_total: number | null;
+  taxes_total: number | null;
+  fees_total_excl_taxes: number | null;
+  fee_lines: HomeownersFeeLine[];
+  grand_total: number | null;
+  nightly_rate_proxy: number | null;
+  discount_name: string | null;
+  reliability:
+    | "buy_page_charges"
+    | "rcapi_total_proxy"
+    | "unavailable"
+    | "parse_failed";
+};
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
@@ -94,6 +120,37 @@ type LuxuryDetailRecord = DetailRecordBase & {
       booking_unknown: number;
     };
   };
+  normalized_rates: {
+    source: "pm_homeownerscollection30a";
+    external_listing_id: string;
+    captured_at: string;
+    currency: string;
+    window_start: string;
+    window_end: string;
+    days: Array<{
+      date: string;
+      nightly_rate: number | null;
+      min_nights: number | null;
+      is_booked: boolean | null;
+      changeover_code: LuxuryDayCode;
+      season_name: string;
+    }>;
+    stats: {
+      days_with_rate: number;
+      min_nightly_rate: number | null;
+      max_nightly_rate: number | null;
+      avg_nightly_rate: number | null;
+    };
+  };
+  rates_raw: {
+    endpoint_path: "/rcapi/item/avail/search";
+    quote_window_days: number;
+    quote_sample_step_days: number;
+    quote_nights: number;
+    quote_max_queries: number;
+    quote_coupon: string;
+    observations: HomeownersRateObservation[];
+  };
   scrape_metrics: {
     total_ms: number;
     page_load_ms: number;
@@ -115,6 +172,107 @@ const OUTPUT_ROOT = resolve(
   "homeownerscollection30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+
+const HOMEOWNERS_ORIGIN = "https://homeownerscollection.com";
+const HOMEOWNERS_RCAPI_PATH = "/rcapi/item/avail/search";
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function medianNumber(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return roundCurrency((sorted[middle - 1]! + sorted[middle]!) / 2);
+  }
+  return roundCurrency(sorted[middle]!);
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function addDaysToIsoDate(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime())) {
+    return isoDate;
+  }
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function toUsDate(isoDate: string): string {
+  const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return isoDate;
+  }
+  return `${match[2]}/${match[3]}/${match[1]}`;
+}
+
+function parseUsdAmountFromText(value: string): number | null {
+  const matches = Array.from(value.matchAll(/\$([0-9][0-9,]*\.[0-9]{2})/g));
+  const match = matches[matches.length - 1];
+  if (!match?.[1]) {
+    return null;
+  }
+  const parsed = Number((match[1] ?? "").replace(/,/g, ""));
+  return Number.isFinite(parsed) ? roundCurrency(parsed) : null;
+}
+
+function decodeMinimalEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function nextUpcomingSaturdayIso(fromIsoDate: string): string {
+  const date = new Date(`${fromIsoDate}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime())) {
+    return fromIsoDate;
+  }
+  const day = date.getUTCDay();
+  const delta = (6 - day + 7) % 7;
+  date.setUTCDate(date.getUTCDate() + delta);
+  return date.toISOString().slice(0, 10);
+}
+
+function toUtcMidnightMs(isoDate: string): number {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+}
+
+function extractEntityIdFromHtml(html: string): number | null {
+  const patterns = [
+    /rcav%5Beid%5D=(\d+)/i,
+    /[?&]eid=(\d+)(?:&|"|')/i,
+    /["']eid["']\s*:\s*(\d+)/i,
+    /["']eid["']\s*:\s*["'](\d+)["']/i,
+    /eid\\"\s*:\s*\\"(\d+)\\"/i,
+    /\/rescms\/item\/(\d+)\/buy/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (!match?.[1]) {
+      continue;
+    }
+    const parsed = Number(match[1]);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
@@ -296,6 +454,614 @@ function extractExternalListingId(detailUrl: string): string {
   } catch {
     return detailUrl;
   }
+}
+
+type BuyPageChargeSummary = {
+  base_total: number | null;
+  taxes_total: number | null;
+  fees_total_excl_taxes: number | null;
+  fee_lines: HomeownersFeeLine[];
+  grand_total: number | null;
+};
+
+function parseBuyPageChargeSummary(html: string): BuyPageChargeSummary | null {
+  const wrapperMatch = html.match(
+    /<div id="charges-wrapper"[\s\S]*?<\/fieldset>\s*<\/div>/i,
+  );
+  const wrapper = wrapperMatch?.[0] ?? "";
+  if (!wrapper) {
+    return null;
+  }
+
+  const feeLines: HomeownersFeeLine[] = [];
+  let baseTotal: number | null = null;
+  let taxesTotal: number | null = null;
+  let grandTotal: number | null = null;
+
+  const rows = wrapper.matchAll(/<tr class="([^"]*)">([\s\S]*?)<\/tr>/gi);
+  for (const row of rows) {
+    const rowClass = (row[1] ?? "").toLowerCase();
+    const rowHtml = row[2] ?? "";
+    const amount = parseUsdAmountFromText(rowHtml);
+    if (amount === null) {
+      continue;
+    }
+
+    const text = decodeMinimalEntities(stripHtml(rowHtml));
+    const normalizedText = text.toLowerCase();
+
+    if (rowClass.includes("line-item")) {
+      if (normalizedText.includes("lodging:")) {
+        baseTotal = amount;
+        continue;
+      }
+
+      const feeName = text
+        .replace(/you save\s+\$[0-9,]+\.[0-9]{2}/gi, "")
+        .replace(/show details \+/gi, "")
+        .replace(/hide details -/gi, "")
+        .replace(/i accept this charge/gi, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120);
+
+      if (feeName) {
+        feeLines.push({ name: feeName, amount });
+      }
+      continue;
+    }
+
+    if (rowClass.includes("tax")) {
+      taxesTotal = amount;
+      continue;
+    }
+
+    if (rowClass.includes("total") && !rowClass.includes("sub-total")) {
+      grandTotal = amount;
+    }
+  }
+
+  const feesTotalExclTaxes =
+    feeLines.length > 0
+      ? roundCurrency(feeLines.reduce((sum, line) => sum + line.amount, 0))
+      : null;
+
+  return {
+    base_total: baseTotal,
+    taxes_total: taxesTotal,
+    fees_total_excl_taxes: feesTotalExclTaxes,
+    fee_lines: feeLines,
+    grand_total: grandTotal,
+  };
+}
+
+type RcapiPriceNode = {
+  p?: string;
+  c?: string;
+  dn?: string | null;
+  qp?: {
+    rcav?: {
+      begin?: string;
+      end?: string;
+      adult?: string;
+      child?: string;
+      eid?: string;
+      coupon?: string;
+      IDs?: Record<string, string[]>;
+    };
+    special_data?: {
+      processor?: string;
+      special_nid?: string;
+    };
+    eid?: number;
+  };
+};
+
+type RcapiSearchItem = {
+  eid?: number;
+  prices?: RcapiPriceNode[];
+};
+
+function buildBuyUrlFromQuote(
+  fallbackEid: number,
+  fallbackBeginIso: string,
+  fallbackEndIso: string,
+  quoteNode: RcapiPriceNode | null,
+): string | null {
+  const params = new URLSearchParams();
+  const qp = quoteNode?.qp;
+  const rcav = qp?.rcav;
+
+  const begin = rcav?.begin?.trim() || toUsDate(fallbackBeginIso);
+  const end = rcav?.end?.trim() || toUsDate(fallbackEndIso);
+  const adult = rcav?.adult?.trim() || "1";
+  const child = rcav?.child?.trim() || "0";
+  const eidRaw = rcav?.eid?.trim() || String(qp?.eid ?? fallbackEid);
+  const coupon = rcav?.coupon?.trim() ?? "";
+
+  params.set("rcav[begin]", begin);
+  params.set("rcav[end]", end);
+  params.set("rcav[adult]", adult);
+  params.set("rcav[child]", child);
+  params.set("rcav[eid]", eidRaw);
+  params.set("rcav[coupon]", coupon);
+
+  if (rcav?.IDs && typeof rcav.IDs === "object") {
+    for (const [key, values] of Object.entries(rcav.IDs)) {
+      for (const value of values ?? []) {
+        if (typeof value === "string" && value.trim()) {
+          params.append(`rcav[IDs][${key}][]`, value.trim());
+        }
+      }
+    }
+  }
+
+  if (qp?.special_data?.processor) {
+    params.set("special_data[processor]", qp.special_data.processor);
+  }
+  if (qp?.special_data?.special_nid) {
+    params.set("special_data[special_nid]", qp.special_data.special_nid);
+  }
+
+  params.set("eid", eidRaw);
+  return `${HOMEOWNERS_ORIGIN}/rescms/item/${eidRaw}/buy?${params.toString()}`;
+}
+
+async function fetchRcapiQuote(
+  eid: number,
+  checkInIso: string,
+  checkOutIso: string,
+  couponCode: string,
+  referer: string,
+): Promise<{
+  quote_available: boolean;
+  currency: string;
+  quoted_total: number | null;
+  discount_name: string | null;
+  quote_node: RcapiPriceNode | null;
+}> {
+  const params = new URLSearchParams();
+  params.set("rcav[begin]", toUsDate(checkInIso));
+  params.set("rcav[end]", toUsDate(checkOutIso));
+  params.set("rcav[adult]", "1");
+  params.set("rcav[child]", "0");
+  params.set("rcav[eid]", String(eid));
+  params.set("rcav[coupon]", couponCode);
+  params.set("rcav[flex]", "");
+  params.set("rcav[flex_type]", "d");
+
+  const url = `${HOMEOWNERS_ORIGIN}${HOMEOWNERS_RCAPI_PATH}?${params.toString()}`;
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json, text/plain, */*",
+      "x-requested-with": "XMLHttpRequest",
+      referer,
+      "user-agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    },
+  });
+
+  if (!response.ok) {
+    return {
+      quote_available: false,
+      currency: "USD",
+      quoted_total: null,
+      discount_name: null,
+      quote_node: null,
+    };
+  }
+
+  const payload = (await response.json()) as unknown;
+  const list = Array.isArray(payload) ? (payload as RcapiSearchItem[]) : [];
+  const first = list[0];
+  const priceNode = first?.prices?.[0] ?? null;
+  const quotedTotalRaw = Number(priceNode?.p ?? "");
+  const quotedTotal =
+    Number.isFinite(quotedTotalRaw) && quotedTotalRaw > 0
+      ? roundCurrency(quotedTotalRaw)
+      : null;
+
+  return {
+    quote_available: quotedTotal !== null,
+    currency: priceNode?.c?.trim() || "USD",
+    quoted_total: quotedTotal,
+    discount_name:
+      typeof priceNode?.dn === "string" && priceNode.dn.trim().length > 0
+        ? priceNode.dn.trim()
+        : null,
+    quote_node: priceNode,
+  };
+}
+
+async function fetchBuyPageSummary(
+  buyUrl: string,
+  referer: string,
+): Promise<BuyPageChargeSummary | null> {
+  const response = await fetch(buyUrl, {
+    headers: {
+      accept: "text/html,application/xhtml+xml",
+      referer,
+      "user-agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const html = await response.text();
+  return parseBuyPageChargeSummary(html);
+}
+
+function buildAvailabilityCounts(
+  days: LuxuryDetailRecord["normalized_availability"]["days"],
+): LuxuryDetailRecord["normalized_availability"]["counts"] {
+  return {
+    available: days.filter((day) => day.status_code === "A").length,
+    unavailable: days.filter((day) => day.status_code === "U").length,
+    checkin_only: days.filter((day) => day.status_code === "I").length,
+    checkout_only: days.filter((day) => day.status_code === "O").length,
+    other: days.filter((day) => day.status_code === "X").length,
+    booking_available: days.filter(
+      (day) => day.booking_day_state === "bookable",
+    ).length,
+    booking_unavailable: days.filter(
+      (day) => day.booking_day_state === "blocked",
+    ).length,
+    booking_unknown: days.filter((day) => day.booking_day_state === "unknown")
+      .length,
+  };
+}
+
+async function buildWeeklyRateArtifacts(input: {
+  externalListingId: string;
+  detailUrl: string;
+  entityId: number;
+  availabilityDays: LuxuryDetailRecord["normalized_availability"]["days"];
+  todayIso: string;
+}): Promise<{
+  availabilityDays: LuxuryDetailRecord["normalized_availability"]["days"];
+  normalizedRates: LuxuryDetailRecord["normalized_rates"];
+  ratesRaw: LuxuryDetailRecord["rates_raw"];
+}> {
+  const ratesWindowDays = Math.max(
+    112,
+    Number(process.env.HOMEOWNERSCOLLECTION30A_RATES_WINDOW_DAYS ?? "168") ||
+      168,
+  );
+  const ratesSampleStepDays = Math.max(
+    7,
+    Number(process.env.HOMEOWNERSCOLLECTION30A_RATES_SAMPLE_STEP_DAYS ?? "7") ||
+      7,
+  );
+  const quoteNights = Math.max(
+    7,
+    Number(process.env.HOMEOWNERSCOLLECTION30A_RATES_QUOTE_NIGHTS ?? "7") || 7,
+  );
+  const ratesMaxQueries = Math.max(
+    1,
+    Number(process.env.HOMEOWNERSCOLLECTION30A_RATES_MAX_QUERIES ?? "24") || 24,
+  );
+  const quoteCoupon =
+    process.env.HOMEOWNERSCOLLECTION30A_RATES_QUOTE_COUPON ?? "INVALIDCODE";
+
+  const ratesStartIso = nextUpcomingSaturdayIso(input.todayIso);
+  const ratesWindowEndIso = addDaysToIsoDate(
+    ratesStartIso,
+    ratesWindowDays - 1,
+  );
+
+  const windowDates = Array.from({ length: ratesWindowDays }, (_, index) =>
+    addDaysToIsoDate(ratesStartIso, index),
+  );
+
+  const availabilityByDate = new Map<
+    string,
+    LuxuryDetailRecord["normalized_availability"]["days"][number]
+  >();
+  for (const day of input.availabilityDays) {
+    availabilityByDate.set(day.date, { ...day });
+  }
+  for (const date of windowDates) {
+    if (availabilityByDate.has(date)) {
+      continue;
+    }
+    availabilityByDate.set(date, {
+      date,
+      status_code: "X",
+      is_available: false,
+      is_available_for_checkin: false,
+      is_available_for_checkout: false,
+      booking_day_state: "unknown",
+      min_nights_required: null,
+    });
+  }
+
+  const normalizedRateDays: LuxuryDetailRecord["normalized_rates"]["days"] =
+    windowDates.map((date) => {
+      const day = availabilityByDate.get(date);
+      const statusCode = day?.status_code ?? "X";
+      const isBooked =
+        statusCode === "A" || statusCode === "O"
+          ? false
+          : statusCode === "U" || statusCode === "I"
+            ? true
+            : null;
+
+      return {
+        date,
+        nightly_rate: null,
+        min_nights: day?.min_nights_required ?? null,
+        is_booked: isBooked,
+        changeover_code: statusCode,
+        season_name:
+          statusCode === "U" || statusCode === "I"
+            ? "not_available"
+            : "quote_pending",
+      };
+    });
+
+  const sampleStartDates: string[] = [];
+  for (
+    let cursor = ratesStartIso;
+    cursor <= ratesWindowEndIso && sampleStartDates.length < ratesMaxQueries;
+    cursor = addDaysToIsoDate(cursor, ratesSampleStepDays)
+  ) {
+    sampleStartDates.push(cursor);
+  }
+
+  const observations: HomeownersRateObservation[] = [];
+  const sampledRatesByDate = new Map<string, number>();
+  let currency = "USD";
+
+  for (const startDate of sampleStartDates) {
+    const availabilityDay = availabilityByDate.get(startDate);
+    if (!availabilityDay) {
+      continue;
+    }
+
+    const endDate = addDaysToIsoDate(startDate, quoteNights);
+    const quote = await fetchRcapiQuote(
+      input.entityId,
+      startDate,
+      endDate,
+      quoteCoupon,
+      input.detailUrl,
+    );
+    currency = quote.currency || currency;
+
+    if (!quote.quote_available) {
+      availabilityDay.status_code = "U";
+      availabilityDay.is_available = false;
+      availabilityDay.is_available_for_checkin = false;
+      availabilityDay.is_available_for_checkout = false;
+      availabilityDay.booking_day_state = "blocked";
+
+      observations.push({
+        start_date: startDate,
+        end_date: endDate,
+        nights: quoteNights,
+        quote_available: false,
+        quoted_total: null,
+        buy_url: null,
+        base_total: null,
+        taxes_total: null,
+        fees_total_excl_taxes: null,
+        fee_lines: [],
+        grand_total: null,
+        nightly_rate_proxy: null,
+        discount_name: quote.discount_name,
+        reliability: "unavailable",
+      });
+      continue;
+    }
+
+    const buyUrl = buildBuyUrlFromQuote(
+      input.entityId,
+      startDate,
+      endDate,
+      quote.quote_node,
+    );
+
+    const buySummary = buyUrl
+      ? await fetchBuyPageSummary(buyUrl, input.detailUrl)
+      : null;
+
+    const baseTotal =
+      buySummary?.base_total ??
+      (quote.quoted_total !== null ? roundCurrency(quote.quoted_total) : null);
+    const nightlyRateProxy =
+      baseTotal !== null && quoteNights > 0
+        ? roundCurrency(baseTotal / quoteNights)
+        : null;
+
+    if (nightlyRateProxy !== null) {
+      sampledRatesByDate.set(startDate, nightlyRateProxy);
+      availabilityDay.status_code = "A";
+      availabilityDay.is_available = true;
+      availabilityDay.is_available_for_checkin = true;
+      availabilityDay.is_available_for_checkout = true;
+      availabilityDay.booking_day_state = "bookable";
+    }
+
+    observations.push({
+      start_date: startDate,
+      end_date: endDate,
+      nights: quoteNights,
+      quote_available: true,
+      quoted_total: quote.quoted_total,
+      buy_url: buyUrl,
+      base_total: baseTotal,
+      taxes_total: buySummary?.taxes_total ?? null,
+      fees_total_excl_taxes: buySummary?.fees_total_excl_taxes ?? null,
+      fee_lines: buySummary?.fee_lines ?? [],
+      grand_total: buySummary?.grand_total ?? null,
+      nightly_rate_proxy: nightlyRateProxy,
+      discount_name: quote.discount_name,
+      reliability:
+        buySummary && buySummary.base_total !== null
+          ? "buy_page_charges"
+          : quote.quoted_total !== null
+            ? "rcapi_total_proxy"
+            : "parse_failed",
+    });
+  }
+
+  const sampledPoints = Array.from(sampledRatesByDate.entries())
+    .map(([date, nightlyRate]) => ({
+      date,
+      nightlyRate,
+      ts: toUtcMidnightMs(date),
+    }))
+    .sort((left, right) => left.ts - right.ts);
+
+  const sampledRateValues = sampledPoints.map((point) => point.nightlyRate);
+  const fallbackDerivedNightly =
+    medianNumber(sampledRateValues) ??
+    roundCurrency(
+      Math.max(
+        1,
+        Number(
+          process.env.HOMEOWNERSCOLLECTION30A_RATES_DERIVED_NIGHTLY_DEFAULT ??
+            "650",
+        ) || 650,
+      ),
+    );
+
+  for (const day of normalizedRateDays) {
+    const availability = availabilityByDate.get(day.date);
+    const isAvailable = availability ? availability.is_available : false;
+    const isUnknownAvailability = (availability?.status_code ?? "X") === "X";
+    day.changeover_code = availability?.status_code ?? day.changeover_code;
+    day.min_nights = availability?.min_nights_required ?? day.min_nights;
+    day.is_booked =
+      availability?.status_code === "A" || availability?.status_code === "O"
+        ? false
+        : availability?.status_code === "U" || availability?.status_code === "I"
+          ? true
+          : null;
+
+    if (!isAvailable && !isUnknownAvailability) {
+      day.season_name = "not_available";
+      continue;
+    }
+
+    const sampled = sampledRatesByDate.get(day.date);
+    if (typeof sampled === "number") {
+      day.nightly_rate = sampled;
+      day.season_name = "quote_weekly_sample";
+      continue;
+    }
+
+    if (sampledPoints.length === 0) {
+      day.nightly_rate = fallbackDerivedNightly;
+      day.season_name = "quote_derived_default";
+      continue;
+    }
+
+    const ts = toUtcMidnightMs(day.date);
+    let prevPoint: (typeof sampledPoints)[number] | null = null;
+    let nextPoint: (typeof sampledPoints)[number] | null = null;
+
+    for (const point of sampledPoints) {
+      if (point.ts <= ts) {
+        prevPoint = point;
+      }
+      if (point.ts >= ts) {
+        nextPoint = point;
+        break;
+      }
+    }
+
+    if (prevPoint && nextPoint && prevPoint.ts !== nextPoint.ts) {
+      const ratio = (ts - prevPoint.ts) / (nextPoint.ts - prevPoint.ts);
+      day.nightly_rate = roundCurrency(
+        prevPoint.nightlyRate +
+          (nextPoint.nightlyRate - prevPoint.nightlyRate) * ratio,
+      );
+      day.season_name = "quote_weekly_interpolated";
+      continue;
+    }
+
+    if (prevPoint) {
+      day.nightly_rate = prevPoint.nightlyRate;
+      day.season_name = "quote_weekly_carry_forward";
+      continue;
+    }
+
+    if (nextPoint) {
+      day.nightly_rate = nextPoint.nightlyRate;
+      day.season_name = "quote_weekly_backfill";
+      continue;
+    }
+
+    day.nightly_rate = fallbackDerivedNightly;
+    day.season_name = "quote_derived_default";
+  }
+
+  const collectedRates = normalizedRateDays
+    .map((day) => day.nightly_rate)
+    .filter((value): value is number => Number.isFinite(value));
+
+  const updatedAvailabilityDays = input.availabilityDays.map((day) => {
+    const updated = availabilityByDate.get(day.date);
+    return updated ? updated : day;
+  });
+
+  const seenAvailabilityDates = new Set(
+    updatedAvailabilityDays.map((day) => day.date),
+  );
+  for (const date of windowDates) {
+    if (seenAvailabilityDates.has(date)) {
+      continue;
+    }
+    const candidate = availabilityByDate.get(date);
+    if (!candidate) {
+      continue;
+    }
+    updatedAvailabilityDays.push(candidate);
+    seenAvailabilityDates.add(date);
+  }
+  updatedAvailabilityDays.sort((left, right) =>
+    left.date.localeCompare(right.date),
+  );
+
+  return {
+    availabilityDays: updatedAvailabilityDays,
+    normalizedRates: {
+      source: "pm_homeownerscollection30a",
+      external_listing_id: input.externalListingId,
+      captured_at: new Date().toISOString(),
+      currency,
+      window_start: normalizedRateDays[0]?.date ?? "",
+      window_end: normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
+      days: normalizedRateDays,
+      stats: {
+        days_with_rate: collectedRates.length,
+        min_nightly_rate:
+          collectedRates.length > 0 ? Math.min(...collectedRates) : null,
+        max_nightly_rate:
+          collectedRates.length > 0 ? Math.max(...collectedRates) : null,
+        avg_nightly_rate:
+          collectedRates.length > 0
+            ? roundCurrency(
+                collectedRates.reduce((sum, value) => sum + value, 0) /
+                  collectedRates.length,
+              )
+            : null,
+      },
+    },
+    ratesRaw: {
+      endpoint_path: "/rcapi/item/avail/search",
+      quote_window_days: ratesWindowDays,
+      quote_sample_step_days: ratesSampleStepDays,
+      quote_nights: quoteNights,
+      quote_max_queries: ratesMaxQueries,
+      quote_coupon: quoteCoupon,
+      observations,
+    },
+  };
 }
 
 async function installEvaluateNameShim(page: Page): Promise<void> {
@@ -738,7 +1504,141 @@ async function fetchDetail(
   detailUrl: string,
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
+  refreshMode: "full" | "dynamic" | "static",
+  existingDetailJsonPath?: string | null,
+  reportDetailProgress?: (message: string) => void,
 ): Promise<LuxuryDetailRecord | null> {
+  const logStage = (stage: string, message: string): void => {
+    if (!reportDetailProgress) {
+      return;
+    }
+    const listingId = extractExternalListingId(detailUrl);
+    reportDetailProgress(
+      `detail ${listingId} [mode=${refreshMode}] [${stage}] ${message}`,
+    );
+  };
+
+  if (refreshMode === "dynamic" && existingDetailJsonPath) {
+    try {
+      logStage("DYNAMIC_BASELINE", "start");
+      const existingRaw = await readFile(existingDetailJsonPath, "utf8");
+      const existing = JSON.parse(existingRaw) as LuxuryDetailRecord;
+      const externalListingId =
+        existing.external_listing_id || extractExternalListingId(detailUrl);
+
+      const now = new Date();
+      const todayIso = now.toISOString().slice(0, 10);
+      const horizonIso = addDaysToIsoDate(todayIso, availabilityHorizonDays);
+
+      const availabilityDays =
+        (existing.normalized_availability?.days ?? [])
+          .filter((day) => isIsoDate(day.date))
+          .filter((day) => day.date >= todayIso && day.date <= horizonIso)
+          .map((day) => ({ ...day })) ?? [];
+
+      if (availabilityDays.length === 0) {
+        logStage(
+          "DYNAMIC_BASELINE",
+          "missing baseline availability; falling back to full pull",
+        );
+      } else {
+        const htmlCandidates = [existing.html_path, existingDetailJsonPath]
+          .filter((value): value is string => typeof value === "string")
+          .slice(0, 2);
+
+        let entityId: number | null = null;
+        for (const candidate of htmlCandidates) {
+          if (!candidate) {
+            continue;
+          }
+          try {
+            const raw = await readFile(candidate, "utf8");
+            entityId = extractEntityIdFromHtml(raw);
+            if (entityId) {
+              break;
+            }
+          } catch {
+            // Best-effort path only.
+          }
+        }
+
+        if (!entityId) {
+          const parsedFromUnitId = Number(existing.property_profile?.unit_id);
+          if (Number.isFinite(parsedFromUnitId) && parsedFromUnitId > 0) {
+            entityId = parsedFromUnitId;
+          }
+        }
+
+        if (entityId) {
+          logStage(
+            "API_RATE_CALLS",
+            `start eid=${entityId} availability_days=${availabilityDays.length}`,
+          );
+          const rateArtifacts = await buildWeeklyRateArtifacts({
+            externalListingId,
+            detailUrl,
+            entityId,
+            availabilityDays,
+            todayIso,
+          });
+
+          logStage(
+            "API_RATE_CALLS",
+            `done observations=${rateArtifacts.ratesRaw.observations.length} priced_days=${rateArtifacts.normalizedRates.stats.days_with_rate}`,
+          );
+
+          return {
+            ...existing,
+            detail_url: detailUrl,
+            external_listing_id: externalListingId,
+            fetched_at: new Date().toISOString(),
+            normalized_availability: {
+              ...existing.normalized_availability,
+              source: "pm_homeownerscollection30a",
+              external_listing_id: externalListingId,
+              captured_at: new Date().toISOString(),
+              has_calendar_widget:
+                existing.normalized_availability?.has_calendar_widget ?? true,
+              booking_restrictions:
+                existing.normalized_availability?.booking_restrictions ?? [],
+              min_night_rules:
+                existing.normalized_availability?.min_night_rules ?? [],
+              window_start: rateArtifacts.availabilityDays[0]?.date ?? "",
+              window_end:
+                rateArtifacts.availabilityDays[
+                  rateArtifacts.availabilityDays.length - 1
+                ]?.date ?? "",
+              code_legend: {
+                A: "available",
+                U: "unavailable",
+                I: "checkin_only",
+                O: "checkout_only",
+                X: "other",
+              },
+              day_codes: rateArtifacts.availabilityDays
+                .map((day) => day.status_code)
+                .join(""),
+              days: rateArtifacts.availabilityDays,
+              counts: buildAvailabilityCounts(rateArtifacts.availabilityDays),
+            },
+            normalized_rates: rateArtifacts.normalizedRates,
+            rates_raw: rateArtifacts.ratesRaw,
+          };
+        }
+
+        logStage(
+          "DYNAMIC_BASELINE",
+          "missing entity id for quote API; falling back to full pull",
+        );
+      }
+    } catch {
+      logStage(
+        "DYNAMIC_BASELINE",
+        "unable to load baseline detail; falling back to full pull",
+      );
+    }
+  }
+
   const startedAt = Date.now();
   const page = await browser.newPage();
 
@@ -813,6 +1713,36 @@ async function fetchDetail(
             ?.getAttribute("data-item-id")
             ?.trim() ??
           "",
+        entityIdText: (() => {
+          const maybeWindow = window as unknown as {
+            Drupal?: {
+              settings?: {
+                rcItemAvailForm?: Array<{
+                  eid?: string | number;
+                }>;
+              };
+            };
+          };
+
+          const fromSettings =
+            maybeWindow.Drupal?.settings?.rcItemAvailForm?.[0]?.eid;
+          if (
+            typeof fromSettings === "number" &&
+            Number.isFinite(fromSettings) &&
+            fromSettings > 0
+          ) {
+            return String(fromSettings);
+          }
+
+          if (
+            typeof fromSettings === "string" &&
+            fromSettings.trim().length > 0
+          ) {
+            return fromSettings.trim();
+          }
+
+          return "";
+        })(),
         amenitiesCategories: (() => {
           const categories: Record<string, string[]> = {};
           const wrappers = Array.from(
@@ -1029,6 +1959,47 @@ async function fetchDetail(
     const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
 
+    const extractedEntityId = Number((extracted.entityIdText ?? "").trim());
+    const entityId =
+      Number.isFinite(extractedEntityId) && extractedEntityId > 0
+        ? extractedEntityId
+        : extractEntityIdFromHtml(html);
+    const rateArtifacts = entityId
+      ? await buildWeeklyRateArtifacts({
+          externalListingId,
+          detailUrl,
+          entityId,
+          availabilityDays: normalizedDays,
+          todayIso,
+        })
+      : {
+          availabilityDays: normalizedDays,
+          normalizedRates: {
+            source: "pm_homeownerscollection30a" as const,
+            external_listing_id: externalListingId,
+            captured_at: new Date().toISOString(),
+            currency: "USD",
+            window_start: "",
+            window_end: "",
+            days: [],
+            stats: {
+              days_with_rate: 0,
+              min_nightly_rate: null,
+              max_nightly_rate: null,
+              avg_nightly_rate: null,
+            },
+          },
+          ratesRaw: {
+            endpoint_path: "/rcapi/item/avail/search" as const,
+            quote_window_days: 0,
+            quote_sample_step_days: 0,
+            quote_nights: 0,
+            quote_max_queries: 0,
+            quote_coupon: "",
+            observations: [],
+          },
+        };
+
     const locationPayload = extractFieldLocationFromHtml(html);
 
     const beds = parseFirstNumber(extracted.bedroomsText);
@@ -1152,11 +2123,14 @@ async function fetchDetail(
         source: "pm_homeownerscollection30a",
         external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
-        has_calendar_widget: normalizedDays.length > 0,
+        has_calendar_widget: rateArtifacts.availabilityDays.length > 0,
         booking_restrictions: Array.from(bookingRestrictions),
         min_night_rules: [],
-        window_start: normalizedDays[0]?.date ?? "",
-        window_end: normalizedDays[normalizedDays.length - 1]?.date ?? "",
+        window_start: rateArtifacts.availabilityDays[0]?.date ?? "",
+        window_end:
+          rateArtifacts.availabilityDays[
+            rateArtifacts.availabilityDays.length - 1
+          ]?.date ?? "",
         code_legend: {
           A: "available",
           U: "unavailable",
@@ -1164,29 +2138,14 @@ async function fetchDetail(
           O: "checkout_only",
           X: "other",
         },
-        day_codes: normalizedDays.map((day) => day.status_code).join(""),
-        days: normalizedDays,
-        counts: {
-          available: normalizedDays.filter((day) => day.status_code === "A")
-            .length,
-          unavailable: normalizedDays.filter((day) => day.status_code === "U")
-            .length,
-          checkin_only: normalizedDays.filter((day) => day.status_code === "I")
-            .length,
-          checkout_only: normalizedDays.filter((day) => day.status_code === "O")
-            .length,
-          other: normalizedDays.filter((day) => day.status_code === "X").length,
-          booking_available: normalizedDays.filter(
-            (day) => day.booking_day_state === "bookable",
-          ).length,
-          booking_unavailable: normalizedDays.filter(
-            (day) => day.booking_day_state === "blocked",
-          ).length,
-          booking_unknown: normalizedDays.filter(
-            (day) => day.booking_day_state === "unknown",
-          ).length,
-        },
+        day_codes: rateArtifacts.availabilityDays
+          .map((day) => day.status_code)
+          .join(""),
+        days: rateArtifacts.availabilityDays,
+        counts: buildAvailabilityCounts(rateArtifacts.availabilityDays),
       },
+      normalized_rates: rateArtifacts.normalizedRates,
+      rates_raw: rateArtifacts.ratesRaw,
       html_path: htmlPath,
       scrape_metrics: {
         total_ms: totalMs,
@@ -1267,6 +2226,9 @@ export function createHomeownersCollection30AAdapter(): ScraperAdapter<LuxuryDet
         context.detailUrl,
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
+        context.refreshMode,
+        context.existingDetailJsonPath,
+        context.reportDetailProgress,
       );
     },
   };

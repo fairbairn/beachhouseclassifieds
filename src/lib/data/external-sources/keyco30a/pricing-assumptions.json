@@ -1,54 +1,208 @@
 {
   "adapter_key": "keyco30a",
-  "updated_at": "2026-03-28T19:20:04.757Z",
+  "updated_at": "2026-03-28T21:21:13.669Z",
   "currency": "USD",
   "assumptions": {
-    "sample_count": 1,
-    "avg_fee_pct_of_base": 0.175,
-    "avg_tax_pct_of_base": 0.13,
-    "avg_non_base_pct_of_total": 0.233716,
-    "avg_all_in_multiplier": 1.305,
+    "sample_count": 4,
+    "avg_fee_pct_of_base": 0.358367,
+    "avg_tax_pct_of_base": 0.162578,
+    "avg_non_base_pct_of_total": 0.321334,
+    "avg_all_in_multiplier": 1.520945,
     "fee_lines": [
+      {
+        "name": "Admin Fee",
+        "sample_count": 2,
+        "avg_amount": 512.33,
+        "avg_pct_of_base": 0.075
+      },
+      {
+        "name": "Amenity Rate",
+        "sample_count": 2,
+        "avg_amount": 727.5,
+        "avg_pct_of_base": 0.123326
+      },
+      {
+        "name": "Channel Processing Fee",
+        "sample_count": 2,
+        "avg_amount": 170.78,
+        "avg_pct_of_base": 0.025
+      },
+      {
+        "name": "Departure Clean",
+        "sample_count": 2,
+        "avg_amount": 625,
+        "avg_pct_of_base": 0.106923
+      },
+      {
+        "name": "Property Damage Protection",
+        "sample_count": 2,
+        "avg_amount": 249,
+        "avg_pct_of_base": 0.040539
+      },
       {
         "name": "Cleaning Fee",
         "sample_count": 1,
-        "avg_amount": 350,
-        "avg_pct_of_base": 0.109375
+        "avg_amount": 1050,
+        "avg_pct_of_base": 0.412395
       },
       {
-        "name": "Service Fee",
+        "name": "Reservation Fee-HA",
         "sample_count": 1,
-        "avg_amount": 210,
-        "avg_pct_of_base": 0.065625
+        "avg_amount": 91.66,
+        "avg_pct_of_base": 0.036
+      },
+      {
+        "name": "Fee",
+        "sample_count": 1,
+        "avg_amount": 494,
+        "avg_pct_of_base": 0.194022
+      },
+      {
+        "name": "Seaside A&E Fee (Optional)",
+        "sample_count": 1,
+        "avg_amount": 53.25,
+        "avg_pct_of_base": 0.023697
+      },
+      {
+        "name": "Seaside Parking-Wristbands",
+        "sample_count": 1,
+        "avg_amount": 232,
+        "avg_pct_of_base": 0.025778
       }
     ]
   },
   "samples": [
     {
-      "captured_at": "2026-03-28T18:00:00.000Z",
-      "source_listing_id": "kakJQH2sH0",
+      "captured_at": "2026-03-28T21:21:11.386Z",
+      "source_listing_id": "01PA1tg0yW",
       "currency": "USD",
-      "check_in_date": "2026-04-19",
-      "check_out_date": "2026-04-25",
-      "nights": 6,
-      "base_total": 3200,
-      "taxes_total": 416,
+      "check_in_date": "2026-04-12",
+      "check_out_date": "2026-04-15",
+      "nights": 3,
+      "base_total": 2546.1,
+      "taxes_total": 501.82,
       "fee_lines": [
         {
           "name": "Cleaning Fee",
-          "amount": 350
+          "amount": 1050
         },
         {
-          "name": "Service Fee",
-          "amount": 210
+          "name": "Reservation Fee-HA",
+          "amount": 91.66
+        },
+        {
+          "name": "Fee",
+          "amount": 494
         }
       ],
-      "fees_total_excl_taxes": 560,
-      "grand_total": 4176,
-      "fee_pct_of_base": 0.175,
-      "tax_pct_of_base": 0.13,
-      "non_base_pct_of_total": 0.233716,
-      "all_in_multiplier": 1.305
+      "fees_total_excl_taxes": 1635.66,
+      "grand_total": 4683.58,
+      "fee_pct_of_base": 0.642418,
+      "tax_pct_of_base": 0.197094,
+      "non_base_pct_of_total": 0.456377,
+      "all_in_multiplier": 1.839511
+    },
+    {
+      "captured_at": "2026-03-28T21:21:11.960Z",
+      "source_listing_id": "0DoiihehVc",
+      "currency": "USD",
+      "check_in_date": "2026-04-12",
+      "check_out_date": "2026-04-15",
+      "nights": 3,
+      "base_total": 4662,
+      "taxes_total": 830.9,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 349.65
+        },
+        {
+          "name": "Amenity Rate",
+          "amount": 822
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 116.55
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 725
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 249
+        }
+      ],
+      "fees_total_excl_taxes": 2262.2,
+      "grand_total": 7755.1,
+      "fee_pct_of_base": 0.485242,
+      "tax_pct_of_base": 0.178228,
+      "non_base_pct_of_total": 0.398847,
+      "all_in_multiplier": 1.663471
+    },
+    {
+      "captured_at": "2026-03-28T21:21:12.393Z",
+      "source_listing_id": "0iWttTkL1R",
+      "currency": "USD",
+      "check_in_date": "2026-03-29",
+      "check_out_date": "2026-03-31",
+      "nights": 2,
+      "base_total": 2247.15,
+      "taxes_total": 272.21,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional)",
+          "amount": 53.25
+        }
+      ],
+      "fees_total_excl_taxes": 53.25,
+      "grand_total": 2572.61,
+      "fee_pct_of_base": 0.023697,
+      "tax_pct_of_base": 0.121136,
+      "non_base_pct_of_total": 0.12651,
+      "all_in_multiplier": 1.144832
+    },
+    {
+      "captured_at": "2026-03-28T21:21:13.092Z",
+      "source_listing_id": "0vlR4E0T0g",
+      "currency": "USD",
+      "check_in_date": "2026-04-12",
+      "check_out_date": "2026-04-15",
+      "nights": 3,
+      "base_total": 9000,
+      "taxes_total": 1384.68,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 675
+        },
+        {
+          "name": "Amenity Rate",
+          "amount": 633
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 225
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 525
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 249
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "fees_total_excl_taxes": 2539,
+      "grand_total": 12923.68,
+      "fee_pct_of_base": 0.282111,
+      "tax_pct_of_base": 0.153853,
+      "non_base_pct_of_total": 0.303604,
+      "all_in_multiplier": 1.435964
     }
   ]
 }

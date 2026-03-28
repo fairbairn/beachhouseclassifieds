@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Page } from "playwright";
 
 import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -15,6 +14,17 @@ type KeycoAvailabilityCalendarDay = {
 };
 
 type KeycoPricingContextResponse = {
+  pricing?: {
+    isAvailable?: boolean;
+    totalBaseRate?: number | null;
+    taxes?: number | null;
+    pricingFees?: Array<{
+      amount?: number | null;
+      description?: string | null;
+    }> | null;
+    averageBaseRateDescription?: string | null;
+    errorMessage?: string | null;
+  } | null;
   isAvailable?: boolean;
   totalBaseRate?: number | null;
   averageBaseRateDescription?: string | null;
@@ -28,6 +38,13 @@ type KeycoRateObservation = {
   status: number;
   is_available: boolean;
   total_base_rate: number | null;
+  taxes_total: number | null;
+  fees_total_excl_taxes: number | null;
+  fee_lines: Array<{
+    name: string;
+    amount: number;
+  }>;
+  grand_total: number | null;
   nightly_rate_proxy: number | null;
   average_base_rate_description: string | null;
   error_message: string | null;
@@ -140,6 +157,8 @@ type KeycoDetailRecord = DetailRecordBase & {
   rates_raw: {
     endpoint_path: string;
     quote_window_days: number;
+    quote_sample_step_days: number;
+    quote_max_queries: number;
     observations: KeycoRateObservation[];
   };
 };
@@ -255,6 +274,19 @@ function addDaysToIsoDate(isoDate: string, days: number): string {
   return formatDateIso(date);
 }
 
+function toUtcMidnightMs(isoDate: string): number {
+  return Date.parse(`${isoDate}T00:00:00Z`);
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function isSundayIsoDate(isoDate: string): boolean {
+  const day = new Date(`${isoDate}T00:00:00Z`).getUTCDay();
+  return day === 0;
+}
+
 function inferCityStateFromText(value: string): {
   city: string;
   state: string;
@@ -361,7 +393,6 @@ function parseAvailabilityCalendarFromHtml(
 }
 
 async function fetchPricingContext(
-  page: Page,
   listingId: string,
   startDate: string,
   endDate: string,
@@ -369,47 +400,43 @@ async function fetchPricingContext(
   status: number;
   body: KeycoPricingContextResponse | null;
 }> {
-  return page.evaluate(
-    async ({ id, start, end }) => {
-      const params = new URLSearchParams({
-        startDate: start,
-        endDate: end,
-        adultCount: "1",
-        childCount: "0",
-        infantCount: "0",
-        petCount: "0",
-      });
-      const response = await fetch(
-        `/api/listing/${id}/pricing-context?${params.toString()}`,
-        {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            accept: "application/json, text/plain, */*",
-          },
-        },
-      );
+  const params = new URLSearchParams({
+    startDate,
+    endDate,
+    adultCount: "1",
+    childCount: "0",
+    infantCount: "0",
+    petCount: "0",
+  });
 
-      const text = await response.text();
-      if (!text) {
-        return { status: response.status, body: null };
-      }
-
-      try {
-        return {
-          status: response.status,
-          body: JSON.parse(text) as KeycoPricingContextResponse,
-        };
-      } catch {
-        return { status: response.status, body: null };
-      }
-    },
-    {
-      id: listingId,
-      start: startDate,
-      end: endDate,
-    },
+  const endpoint = new URL(
+    `/api/listing/${listingId}/pricing-context`,
+    "https://key.co",
   );
+  endpoint.search = params.toString();
+
+  const response = await fetch(endpoint.toString(), {
+    method: "GET",
+    headers: {
+      accept: "application/json, text/plain, */*",
+      "user-agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    },
+  });
+
+  const text = await response.text();
+  if (!text) {
+    return { status: response.status, body: null };
+  }
+
+  try {
+    return {
+      status: response.status,
+      body: JSON.parse(text) as KeycoPricingContextResponse,
+    };
+  } catch {
+    return { status: response.status, body: null };
+  }
 }
 
 function buildDescriptionExpanded(candidates: string[]): string {
@@ -710,6 +737,9 @@ async function fetchDetail(
   >[0]["browser"],
   detailUrl: string,
   availabilityHorizonDays: number,
+  refreshMode: "full" | "dynamic" | "static",
+  existingDetailJsonPath?: string | null,
+  reportDetailProgress?: (message: string) => void,
 ): Promise<KeycoDetailRecord | null> {
   const normalizedDetailUrl = normalizeDetailUrl(detailUrl);
   if (!normalizedDetailUrl) {
@@ -724,6 +754,448 @@ async function fetchDetail(
     return null;
   }
 
+  const logStage = (stage: string, message: string): void => {
+    if (!reportDetailProgress) {
+      return;
+    }
+    reportDetailProgress(
+      `detail ${externalListingId} [mode=${refreshMode}] [${stage}] ${message}`,
+    );
+  };
+
+  if (refreshMode === "dynamic" && existingDetailJsonPath) {
+    try {
+      logStage("PAGE_HTML_PULL", "skipped (dynamic mode)");
+      logStage("PAGE_SCRAPE", "skipped (dynamic mode)");
+      logStage(
+        "API_AVAIL_REFRESH",
+        "start (pricing-context window availability)",
+      );
+
+      const existingRaw = await readFile(existingDetailJsonPath, "utf8");
+      const existing = JSON.parse(existingRaw) as KeycoDetailRecord;
+
+      const now = new Date();
+      const todayUtc = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+      );
+      const horizonUtc = new Date(todayUtc);
+      horizonUtc.setUTCDate(
+        todayUtc.getUTCDate() + Math.max(availabilityHorizonDays, 365),
+      );
+
+      const baselineAvailabilityByDate = new Map(
+        (existing.normalized_availability?.days ?? []).map(
+          (day) => [day.date, day] as const,
+        ),
+      );
+
+      const availabilityDays: KeycoDetailRecord["normalized_availability"]["days"] =
+        [];
+      for (
+        const cursor = new Date(todayUtc);
+        cursor <= horizonUtc;
+        cursor.setUTCDate(cursor.getUTCDate() + 1)
+      ) {
+        const isoDate = formatDateIso(cursor);
+        const baseline = baselineAvailabilityByDate.get(isoDate);
+        const statusCode: KeycoDayCode =
+          baseline?.status_code === "A" ||
+          baseline?.status_code === "U" ||
+          baseline?.status_code === "M"
+            ? baseline.status_code
+            : "X";
+
+        availabilityDays.push({
+          date: isoDate,
+          status_code: statusCode,
+          is_available: statusCode === "A",
+          is_available_for_checkin: statusCode === "A",
+          is_available_for_checkout: statusCode === "A",
+          booking_day_state:
+            statusCode === "A"
+              ? "bookable"
+              : statusCode === "U"
+                ? "blocked"
+                : "unknown",
+          min_nights_required: baseline?.min_nights_required ?? null,
+        });
+      }
+
+      const ratesWindowDays = Math.max(
+        168,
+        Number(process.env.KEYCO30A_RATES_WINDOW_DAYS ?? "168") || 168,
+      );
+      const ratesSampleStepDays = Math.max(
+        7,
+        Number(process.env.KEYCO30A_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
+      );
+      const targetQuoteNights = Math.max(
+        1,
+        Number(process.env.KEYCO30A_RATES_QUOTE_NIGHTS ?? "6") || 6,
+      );
+      const ratesMaxQueries = Math.max(
+        1,
+        Number(process.env.KEYCO30A_RATES_MAX_QUERIES ?? "24") || 24,
+      );
+      const ratesTargetQueries = Math.max(
+        1,
+        Math.ceil(ratesWindowDays / ratesSampleStepDays),
+      );
+      const effectiveRatesMaxQueries = Math.min(
+        ratesMaxQueries,
+        ratesTargetQueries,
+      );
+      const ratesWindowEndIso = formatDateIso(
+        new Date(
+          Date.UTC(
+            todayUtc.getUTCFullYear(),
+            todayUtc.getUTCMonth(),
+            todayUtc.getUTCDate() + ratesWindowDays - 1,
+          ),
+        ),
+      );
+
+      const availabilityByDate = new Map(
+        availabilityDays.map((day) => [day.date, day] as const),
+      );
+
+      const normalizedRateDays: KeycoDetailRecord["normalized_rates"]["days"] =
+        availabilityDays
+          .filter((day) => day.date <= ratesWindowEndIso)
+          .map((day) => ({
+            date: day.date,
+            nightly_rate: null,
+            min_nights: day.min_nights_required ?? null,
+            is_booked: day.is_available ? false : true,
+            changeover_code: day.status_code,
+            season_name: day.is_available ? "quote_pending" : "not_available",
+          }));
+
+      const rateObservations: KeycoRateObservation[] = [];
+      const sampleDays: Array<(typeof normalizedRateDays)[number]> = [];
+      for (
+        let cursor = 0;
+        cursor < normalizedRateDays.length &&
+        sampleDays.length < effectiveRatesMaxQueries;
+        cursor += ratesSampleStepDays
+      ) {
+        let picked: (typeof normalizedRateDays)[number] | null = null;
+        const endExclusive = Math.min(
+          normalizedRateDays.length,
+          cursor + ratesSampleStepDays,
+        );
+
+        for (let idx = cursor; idx < endExclusive; idx += 1) {
+          const candidate = normalizedRateDays[idx];
+          if (!candidate) {
+            continue;
+          }
+          const day = availabilityByDate.get(candidate.date);
+          if (!day) {
+            continue;
+          }
+          if (isSundayIsoDate(candidate.date)) {
+            picked = candidate;
+            break;
+          }
+          if (!picked) {
+            picked = candidate;
+          }
+        }
+
+        if (!picked) {
+          continue;
+        }
+
+        if (sampleDays.at(-1)?.date === picked.date) {
+          continue;
+        }
+
+        sampleDays.push(picked);
+      }
+
+      const sampledRatesByDate = new Map<string, number>();
+      logStage(
+        "API_RATE_CALLS",
+        `start sample_windows=${sampleDays.length} max_queries=${effectiveRatesMaxQueries}`,
+      );
+      for (const sampleDay of sampleDays) {
+        const day = availabilityByDate.get(sampleDay.date);
+        if (!day) {
+          continue;
+        }
+
+        const nights = Math.max(
+          targetQuoteNights,
+          day.min_nights_required ?? 0,
+        );
+        const endDate = addDaysToIsoDate(day.date, nights);
+        const pricing = await fetchPricingContext(
+          externalListingId,
+          day.date,
+          endDate,
+        );
+        const body = pricing.body;
+        const pricingNode =
+          body?.pricing && typeof body.pricing === "object"
+            ? body.pricing
+            : body;
+        const totalBaseRate = Number(pricingNode?.totalBaseRate);
+        const hasRate = Number.isFinite(totalBaseRate) && totalBaseRate > 0;
+        const isAvailable =
+          typeof pricingNode?.isAvailable === "boolean"
+            ? pricingNode.isAvailable
+            : typeof body?.isAvailable === "boolean"
+              ? body.isAvailable
+              : hasRate;
+
+        day.status_code = isAvailable ? "A" : "U";
+        day.is_available = isAvailable;
+        day.is_available_for_checkin = isAvailable;
+        day.is_available_for_checkout = isAvailable;
+        day.booking_day_state = isAvailable ? "bookable" : "blocked";
+        sampleDay.changeover_code = day.status_code;
+        sampleDay.is_booked = !isAvailable;
+
+        const taxesTotalRaw = Number(pricingNode?.taxes);
+        const taxesTotal =
+          Number.isFinite(taxesTotalRaw) && taxesTotalRaw >= 0
+            ? taxesTotalRaw
+            : null;
+        const feeLines = Array.isArray(pricingNode?.pricingFees)
+          ? pricingNode.pricingFees
+              .map((line) => {
+                const name = String(line?.description ?? "").trim();
+                const amount = Number(line?.amount);
+                if (!name || !Number.isFinite(amount) || amount < 0) {
+                  return null;
+                }
+                return { name, amount: roundCurrency(amount) };
+              })
+              .filter(
+                (
+                  line,
+                ): line is {
+                  name: string;
+                  amount: number;
+                } => Boolean(line),
+              )
+          : [];
+        const feesTotalExclTaxes =
+          feeLines.length > 0
+            ? roundCurrency(
+                feeLines.reduce((sum, feeLine) => sum + feeLine.amount, 0),
+              )
+            : null;
+        const grandTotal =
+          hasRate && taxesTotal !== null && feesTotalExclTaxes !== null
+            ? roundCurrency(totalBaseRate + taxesTotal + feesTotalExclTaxes)
+            : null;
+
+        const nightlyRateProxy = hasRate
+          ? roundCurrency(totalBaseRate / nights)
+          : null;
+
+        if (nightlyRateProxy !== null && isAvailable) {
+          sampledRatesByDate.set(day.date, nightlyRateProxy);
+          sampleDay.nightly_rate = nightlyRateProxy;
+          sampleDay.season_name = "quote_weekly_sample";
+        } else {
+          sampleDay.season_name = isAvailable
+            ? "quote_unavailable"
+            : "not_available";
+        }
+
+        rateObservations.push({
+          start_date: day.date,
+          end_date: endDate,
+          nights,
+          status: pricing.status,
+          is_available: isAvailable,
+          total_base_rate: hasRate ? totalBaseRate : null,
+          taxes_total: taxesTotal,
+          fees_total_excl_taxes: feesTotalExclTaxes,
+          fee_lines: feeLines,
+          grand_total: grandTotal,
+          nightly_rate_proxy: nightlyRateProxy,
+          average_base_rate_description:
+            typeof pricingNode?.averageBaseRateDescription === "string"
+              ? pricingNode.averageBaseRateDescription
+              : null,
+          error_message:
+            typeof pricingNode?.errorMessage === "string"
+              ? pricingNode.errorMessage
+              : null,
+          reliability:
+            nightlyRateProxy !== null ? "window_average_proxy" : "unpriced",
+        });
+      }
+      logStage(
+        "API_RATE_CALLS",
+        `done calls=${rateObservations.length} sampled_rates=${sampledRatesByDate.size}`,
+      );
+
+      const sampledPoints = Array.from(sampledRatesByDate.entries())
+        .map(([date, nightlyRate]) => ({
+          date,
+          nightlyRate,
+          ts: toUtcMidnightMs(date),
+        }))
+        .sort((left, right) => left.ts - right.ts);
+
+      for (const rateDay of normalizedRateDays) {
+        const day = availabilityByDate.get(rateDay.date);
+        if (!day || !day.is_available || rateDay.nightly_rate !== null) {
+          continue;
+        }
+
+        if (sampledPoints.length === 0) {
+          rateDay.season_name = "quote_unavailable";
+          continue;
+        }
+
+        const ts = toUtcMidnightMs(rateDay.date);
+        let prevPoint: (typeof sampledPoints)[number] | null = null;
+        let nextPoint: (typeof sampledPoints)[number] | null = null;
+
+        for (const point of sampledPoints) {
+          if (point.ts <= ts) {
+            prevPoint = point;
+          }
+          if (point.ts >= ts) {
+            nextPoint = point;
+            break;
+          }
+        }
+
+        if (prevPoint && nextPoint && prevPoint.ts !== nextPoint.ts) {
+          const ratio = (ts - prevPoint.ts) / (nextPoint.ts - prevPoint.ts);
+          rateDay.nightly_rate = roundCurrency(
+            prevPoint.nightlyRate +
+              (nextPoint.nightlyRate - prevPoint.nightlyRate) * ratio,
+          );
+          rateDay.season_name = "quote_weekly_interpolated";
+          continue;
+        }
+
+        if (prevPoint) {
+          rateDay.nightly_rate = prevPoint.nightlyRate;
+          rateDay.season_name = "quote_weekly_carry_forward";
+          continue;
+        }
+
+        if (nextPoint) {
+          rateDay.nightly_rate = nextPoint.nightlyRate;
+          rateDay.season_name = "quote_weekly_backfill";
+        }
+      }
+
+      const collectedRates = normalizedRateDays
+        .map((day) => day.nightly_rate)
+        .filter((value): value is number => Number.isFinite(value));
+      const minRate = collectedRates.length
+        ? Math.min(...collectedRates)
+        : null;
+      const maxRate = collectedRates.length
+        ? Math.max(...collectedRates)
+        : null;
+      const avgRate = collectedRates.length
+        ? Math.round(
+            (collectedRates.reduce((sum, value) => sum + value, 0) /
+              collectedRates.length) *
+              100,
+          ) / 100
+        : null;
+
+      const dayCodes = availabilityDays.map((day) => day.status_code).join("");
+      const counts = {
+        available: availabilityDays.filter((day) => day.status_code === "A")
+          .length,
+        unavailable: availabilityDays.filter((day) => day.status_code === "U")
+          .length,
+        checkin_only: 0,
+        checkout_only: 0,
+        other: availabilityDays.filter(
+          (day) => day.status_code === "M" || day.status_code === "X",
+        ).length,
+        booking_available: availabilityDays.filter(
+          (day) => day.booking_day_state === "bookable",
+        ).length,
+        booking_unavailable: availabilityDays.filter(
+          (day) => day.booking_day_state === "blocked",
+        ).length,
+        booking_unknown: availabilityDays.filter(
+          (day) => day.booking_day_state === "unknown",
+        ).length,
+      };
+      logStage(
+        "API_AVAIL_REFRESH",
+        `done available=${counts.available} unavailable=${counts.unavailable} other=${counts.other}`,
+      );
+
+      return {
+        ...existing,
+        fetched_at: new Date().toISOString(),
+        normalized_availability: {
+          ...existing.normalized_availability,
+          source: "pm_keyco30a",
+          external_listing_id: externalListingId,
+          captured_at: new Date().toISOString(),
+          window_start: availabilityDays[0]?.date ?? "",
+          window_end: availabilityDays[availabilityDays.length - 1]?.date ?? "",
+          code_legend: {
+            A: "available",
+            U: "unavailable",
+            M: "restricted_or_rule_constrained",
+            X: "unknown",
+          },
+          day_codes: dayCodes,
+          days: availabilityDays,
+          counts,
+        },
+        availability_raw: {
+          source_note:
+            "Dynamic refresh reused existing static detail + baseline availability and refreshed weekly sampled availability/rates via pricing-context API.",
+          has_calendar_widget:
+            typeof existing.availability_raw?.has_calendar_widget === "boolean"
+              ? existing.availability_raw.has_calendar_widget
+              : true,
+        },
+        normalized_rates: {
+          source: "pm_keyco30a",
+          external_listing_id: externalListingId,
+          captured_at: new Date().toISOString(),
+          currency: existing.normalized_rates?.currency ?? "USD",
+          window_start: normalizedRateDays[0]?.date ?? "",
+          window_end:
+            normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
+          days: normalizedRateDays,
+          stats: {
+            days_with_rate: collectedRates.length,
+            min_nightly_rate: minRate,
+            max_nightly_rate: maxRate,
+            avg_nightly_rate: avgRate,
+          },
+        },
+        rates_raw: {
+          endpoint_path: `/api/listing/${externalListingId}/pricing-context`,
+          quote_window_days: ratesWindowDays,
+          quote_sample_step_days: ratesSampleStepDays,
+          quote_max_queries: effectiveRatesMaxQueries,
+          observations: rateObservations,
+        },
+      };
+    } catch {
+      logStage(
+        "DYNAMIC_BASELINE",
+        "baseline detail missing/invalid; dynamic mode will fallback to full path",
+      );
+      // Fallback to full scrape path when baseline detail is missing or invalid.
+    }
+  }
+
+  logStage("PAGE_HTML_PULL", "start");
   const page = await browser.newPage();
 
   try {
@@ -732,6 +1204,8 @@ async function fetchDetail(
       timeout: 120000,
     });
     await page.waitForTimeout(1300);
+    logStage("PAGE_HTML_PULL", "done");
+    logStage("PAGE_SCRAPE", "start");
 
     for (let cycle = 0; cycle < 4; cycle += 1) {
       const clicks = await page.evaluate(() => {
@@ -859,6 +1333,7 @@ async function fetchDetail(
         hasCalendarWidget,
       };
     });
+    logStage("PAGE_SCRAPE", "done");
 
     const normalizedTitle = stripHtml(extracted.title).slice(0, 240);
     const normalizedH1 = stripHtml(extracted.h1).slice(0, 240);
@@ -1065,12 +1540,28 @@ async function fetchDetail(
     };
 
     const ratesWindowDays = Math.max(
-      180,
-      Number(process.env.KEYCO30A_RATES_WINDOW_DAYS ?? "180") || 180,
+      168,
+      Number(process.env.KEYCO30A_RATES_WINDOW_DAYS ?? "168") || 168,
+    );
+    const ratesSampleStepDays = Math.max(
+      7,
+      Number(process.env.KEYCO30A_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
+    );
+    const targetQuoteNights = Math.max(
+      1,
+      Number(process.env.KEYCO30A_RATES_QUOTE_NIGHTS ?? "6") || 6,
     );
     const ratesMaxQueries = Math.max(
       1,
-      Number(process.env.KEYCO30A_RATES_MAX_QUERIES ?? "220") || 220,
+      Number(process.env.KEYCO30A_RATES_MAX_QUERIES ?? "24") || 24,
+    );
+    const ratesTargetQueries = Math.max(
+      1,
+      Math.ceil(ratesWindowDays / ratesSampleStepDays),
+    );
+    const effectiveRatesMaxQueries = Math.min(
+      ratesMaxQueries,
+      ratesTargetQueries,
     );
     const ratesWindowEndIso = formatDateIso(
       new Date(
@@ -1101,38 +1592,124 @@ async function fetchDetail(
     const rateObservations: KeycoRateObservation[] = [];
     let quoteCount = 0;
 
-    for (const rateDay of normalizedRateDays) {
-      const day = availabilityByDate.get(rateDay.date);
+    const sampleDays: Array<(typeof normalizedRateDays)[number]> = [];
+    for (
+      let cursor = 0;
+      cursor < normalizedRateDays.length &&
+      quoteCount < effectiveRatesMaxQueries;
+      cursor += ratesSampleStepDays
+    ) {
+      let picked: (typeof normalizedRateDays)[number] | null = null;
+      const endExclusive = Math.min(
+        normalizedRateDays.length,
+        cursor + ratesSampleStepDays,
+      );
+
+      for (let idx = cursor; idx < endExclusive; idx += 1) {
+        const candidate = normalizedRateDays[idx];
+        if (!candidate) {
+          continue;
+        }
+        const day = availabilityByDate.get(candidate.date);
+        if (!day?.is_available) {
+          continue;
+        }
+        if (isSundayIsoDate(candidate.date)) {
+          picked = candidate;
+          break;
+        }
+        if (!picked) {
+          picked = candidate;
+        }
+      }
+
+      if (!picked) {
+        continue;
+      }
+
+      if (sampleDays.at(-1)?.date === picked.date) {
+        continue;
+      }
+
+      sampleDays.push(picked);
+      quoteCount += 1;
+    }
+
+    const sampledRatesByDate = new Map<string, number>();
+    logStage(
+      "API_RATE_CALLS",
+      `start sample_windows=${sampleDays.length} max_queries=${effectiveRatesMaxQueries}`,
+    );
+
+    for (const sampleDay of sampleDays) {
+      const day = availabilityByDate.get(sampleDay.date);
       if (!day || !day.is_available) {
         continue;
       }
-      if (quoteCount >= ratesMaxQueries) {
-        rateDay.season_name = "quote_skipped_limit";
-        continue;
-      }
 
-      const nights = Math.max(1, day.min_nights_required ?? 1);
+      const nights = Math.max(targetQuoteNights, day.min_nights_required ?? 0);
       const endDate = addDaysToIsoDate(day.date, nights);
 
-      quoteCount += 1;
       const pricing = await fetchPricingContext(
-        page,
         externalListingId,
         day.date,
         endDate,
       );
       const body = pricing.body;
-      const totalBaseRate = Number(body?.totalBaseRate);
+      const pricingNode =
+        body?.pricing && typeof body.pricing === "object" ? body.pricing : body;
+      const totalBaseRate = Number(pricingNode?.totalBaseRate);
       const hasRate = Number.isFinite(totalBaseRate) && totalBaseRate > 0;
+      const taxesTotalRaw = Number(pricingNode?.taxes);
+      const taxesTotal =
+        Number.isFinite(taxesTotalRaw) && taxesTotalRaw >= 0
+          ? taxesTotalRaw
+          : null;
+      const feeLines = Array.isArray(pricingNode?.pricingFees)
+        ? pricingNode.pricingFees
+            .map((line) => {
+              const name = String(line?.description ?? "").trim();
+              const amount = Number(line?.amount);
+              if (!name || !Number.isFinite(amount) || amount < 0) {
+                return null;
+              }
+              return { name, amount: roundCurrency(amount) };
+            })
+            .filter(
+              (
+                line,
+              ): line is {
+                name: string;
+                amount: number;
+              } => Boolean(line),
+            )
+        : [];
+      const feesTotalExclTaxes =
+        feeLines.length > 0
+          ? roundCurrency(
+              feeLines.reduce((sum, feeLine) => sum + feeLine.amount, 0),
+            )
+          : null;
+      const grandTotal =
+        hasRate && taxesTotal !== null && feesTotalExclTaxes !== null
+          ? roundCurrency(totalBaseRate + taxesTotal + feesTotalExclTaxes)
+          : null;
       const nightlyRateProxy = hasRate
-        ? Math.round((totalBaseRate / nights) * 100) / 100
+        ? roundCurrency(totalBaseRate / nights)
         : null;
+      const isAvailable =
+        typeof pricingNode?.isAvailable === "boolean"
+          ? pricingNode.isAvailable
+          : typeof body?.isAvailable === "boolean"
+            ? body.isAvailable
+            : hasRate;
 
       if (nightlyRateProxy !== null) {
-        rateDay.nightly_rate = nightlyRateProxy;
-        rateDay.season_name = "quote_window_average_proxy";
+        sampledRatesByDate.set(day.date, nightlyRateProxy);
+        sampleDay.nightly_rate = nightlyRateProxy;
+        sampleDay.season_name = "quote_weekly_sample";
       } else {
-        rateDay.season_name = "quote_unavailable";
+        sampleDay.season_name = "quote_unavailable";
       }
 
       rateObservations.push({
@@ -1140,20 +1717,89 @@ async function fetchDetail(
         end_date: endDate,
         nights,
         status: pricing.status,
-        is_available: Boolean(body?.isAvailable),
+        is_available: isAvailable,
         total_base_rate: hasRate ? totalBaseRate : null,
+        taxes_total: taxesTotal,
+        fees_total_excl_taxes: feesTotalExclTaxes,
+        fee_lines: feeLines,
+        grand_total: grandTotal,
         nightly_rate_proxy: nightlyRateProxy,
         average_base_rate_description:
-          typeof body?.averageBaseRateDescription === "string"
-            ? body.averageBaseRateDescription
+          typeof pricingNode?.averageBaseRateDescription === "string"
+            ? pricingNode.averageBaseRateDescription
             : null,
         error_message:
-          typeof body?.errorMessage === "string" ? body.errorMessage : null,
+          typeof pricingNode?.errorMessage === "string"
+            ? pricingNode.errorMessage
+            : null,
         reliability:
           nightlyRateProxy !== null ? "window_average_proxy" : "unpriced",
       });
 
       await page.waitForTimeout(55);
+    }
+    logStage(
+      "API_RATE_CALLS",
+      `done calls=${rateObservations.length} sampled_rates=${sampledRatesByDate.size}`,
+    );
+    logStage(
+      "API_AVAIL_REFRESH",
+      "skipped (availability sourced from embedded calendar in full mode)",
+    );
+
+    const sampledPoints = Array.from(sampledRatesByDate.entries())
+      .map(([date, nightlyRate]) => ({
+        date,
+        nightlyRate,
+        ts: toUtcMidnightMs(date),
+      }))
+      .sort((left, right) => left.ts - right.ts);
+
+    for (const rateDay of normalizedRateDays) {
+      const day = availabilityByDate.get(rateDay.date);
+      if (!day || !day.is_available || rateDay.nightly_rate !== null) {
+        continue;
+      }
+
+      if (sampledPoints.length === 0) {
+        rateDay.season_name = "quote_unavailable";
+        continue;
+      }
+
+      const ts = toUtcMidnightMs(rateDay.date);
+      let prevPoint: (typeof sampledPoints)[number] | null = null;
+      let nextPoint: (typeof sampledPoints)[number] | null = null;
+
+      for (const point of sampledPoints) {
+        if (point.ts <= ts) {
+          prevPoint = point;
+        }
+        if (point.ts >= ts) {
+          nextPoint = point;
+          break;
+        }
+      }
+
+      if (prevPoint && nextPoint && prevPoint.ts !== nextPoint.ts) {
+        const ratio = (ts - prevPoint.ts) / (nextPoint.ts - prevPoint.ts);
+        rateDay.nightly_rate = roundCurrency(
+          prevPoint.nightlyRate +
+            (nextPoint.nightlyRate - prevPoint.nightlyRate) * ratio,
+        );
+        rateDay.season_name = "quote_weekly_interpolated";
+        continue;
+      }
+
+      if (prevPoint) {
+        rateDay.nightly_rate = prevPoint.nightlyRate;
+        rateDay.season_name = "quote_weekly_carry_forward";
+        continue;
+      }
+
+      if (nextPoint) {
+        rateDay.nightly_rate = nextPoint.nightlyRate;
+        rateDay.season_name = "quote_weekly_backfill";
+      }
     }
 
     const collectedRates = normalizedRateDays
@@ -1274,6 +1920,8 @@ async function fetchDetail(
       rates_raw: {
         endpoint_path: `/api/listing/${externalListingId}/pricing-context`,
         quote_window_days: ratesWindowDays,
+        quote_sample_step_days: ratesSampleStepDays,
+        quote_max_queries: effectiveRatesMaxQueries,
         observations: rateObservations,
       },
       html_path: htmlPath,
@@ -1325,6 +1973,9 @@ export function createKeyco30AAdapter(): ScraperAdapter<KeycoDetailRecord> {
         context.browser,
         context.detailUrl,
         context.availabilityHorizonDays,
+        context.refreshMode,
+        context.existingDetailJsonPath,
+        context.reportDetailProgress,
       );
     },
   };

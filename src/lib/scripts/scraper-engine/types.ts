@@ -1,5 +1,8 @@
 import type { Browser, Page } from "playwright";
 
+export type ScraperRefreshMode = "full" | "dynamic" | "static";
+export type ScraperLogLevel = "default" | "debug";
+
 export type ScrapedLink = {
   link: string;
   source_url: string;
@@ -19,6 +22,10 @@ export type RunOptions = {
   networkIdleWaitMs: number;
   detailFetchConcurrency: number | null;
   detailFetchDelayMs: number | null;
+  skipFreshDetails: boolean;
+  freshHours: number;
+  refreshMode: ScraperRefreshMode;
+  logLevel: ScraperLogLevel;
 };
 
 export type DetailRecordBase = {
@@ -42,6 +49,9 @@ export type FetchDetailContext = {
   detailUrl: string;
   availabilityHorizonDays: number;
   maxCalendarAdvanceMonths: number;
+  refreshMode: ScraperRefreshMode;
+  existingDetailJsonPath?: string | null;
+  reportDetailProgress?: (message: string) => void;
 };
 
 export type ScraperAdapter<TDetail extends DetailRecordBase> = {

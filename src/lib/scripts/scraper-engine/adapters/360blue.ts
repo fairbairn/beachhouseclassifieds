@@ -605,33 +605,16 @@ function getIsoDateUtcDay(isoDate: string): number {
   return new Date(`${isoDate}T00:00:00Z`).getUTCDay();
 }
 
-function buildIsoDateRange(startDate: string, nights: number): string[] {
-  const dates: string[] = [];
-  for (let index = 0; index < nights; index += 1) {
-    dates.push(addDaysToIsoDate(startDate, index));
-  }
-  return dates;
+function isSaturdayIsoDate(isoDate: string): boolean {
+  return getIsoDateUtcDay(isoDate) === 6;
+}
+
+function toUtcMidnightMs(isoDate: string): number {
+  return Date.parse(`${isoDate}T00:00:00Z`);
 }
 
 function minIsoDate(left: string, right: string): string {
   return left <= right ? left : right;
-}
-
-function pickEarliestCheckoutDate(
-  arrivalDate: string,
-  minLos: number,
-  availableCheckOutDays: string[],
-): string | null {
-  if (!availableCheckOutDays.length) {
-    return null;
-  }
-
-  const minCheckoutDate = addDaysToIsoDate(arrivalDate, Math.max(1, minLos));
-  const candidate = availableCheckOutDays
-    .filter((date) => date >= minCheckoutDate)
-    .sort((left, right) => left.localeCompare(right))[0];
-
-  return candidate ?? null;
 }
 
 async function fetchNrbeJson<T>(
@@ -1302,269 +1285,230 @@ async function fetchDetail(
         },
       };
 
-    const normalizedRateDays: DetailRecord360Blue["normalized_rates"]["days"] =
-      [];
-    const quoteWindows: RateQuoteWindowObservation[] = [];
-    const inferredDailyRatesByDate = new Map<string, number[]>();
-    const maxQuoteDays = Math.max(
+    const ratesWindowDays = Math.max(
+      168,
+      Number(process.env.BLUE360_RATES_WINDOW_DAYS ?? "182") || 182,
+    );
+    const ratesSampleStepDays = Math.max(
+      7,
+      Number(process.env.BLUE360_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
+    );
+    const targetQuoteNights = Math.max(
+      1,
+      Number(process.env.BLUE360_RATES_QUOTE_NIGHTS ?? "7") || 7,
+    );
+    const ratesMaxQueries = Math.max(
       1,
       Number(
-        process.env.BLUE360_RATE_QUOTE_MAX_DAYS ??
-          String(availabilityHorizonDays),
-      ) || availabilityHorizonDays,
+        process.env.BLUE360_RATES_MAX_QUERIES ??
+          process.env.BLUE360_RATE_QUOTE_MAX_DAYS ??
+          "26",
+      ) || 26,
     );
-    let quoteAttempts = 0;
+    const ratesTargetQueries = Math.max(
+      1,
+      Math.ceil(ratesWindowDays / ratesSampleStepDays),
+    );
+    const effectiveRatesMaxQueries = Math.min(
+      ratesMaxQueries,
+      ratesTargetQueries,
+    );
+    const ratesWindowEndIso = addDaysToIsoDate(
+      normalizedDays[0]?.date ?? todayIso,
+      ratesWindowDays - 1,
+    );
 
-    for (const day of normalizedDays) {
-      if (!day.is_available_for_checkin || !/^\d+$/.test(unitId)) {
-        normalizedRateDays.push({
+    const availabilityByDate = new Map(
+      normalizedDays.map((day) => [day.date, day] as const),
+    );
+
+    const normalizedRateDays: DetailRecord360Blue["normalized_rates"]["days"] =
+      normalizedDays
+        .filter((day) => day.date <= ratesWindowEndIso)
+        .map((day) => ({
           date: day.date,
           nightly_rate: null,
           min_nights: day.min_nights_required,
           is_booked: day.is_available ? false : true,
           changeover_code: day.status_code,
-          season_name: "unquoted",
-        });
-        continue;
-      }
+          season_name: day.is_available ? "quote_pending" : "not_available",
+        }));
 
-      if (quoteAttempts >= maxQuoteDays) {
-        normalizedRateDays.push({
-          date: day.date,
-          nightly_rate: null,
-          min_nights: day.min_nights_required,
-          is_booked: false,
-          changeover_code: day.status_code,
-          season_name: "quote_skipped_limit",
-        });
-        continue;
-      }
+    const quoteWindows: RateQuoteWindowObservation[] = [];
+    const sampleDays: Array<(typeof normalizedRateDays)[number]> = [];
+    const unitIdIsNumeric = /^\d+$/.test(unitId);
 
-      const row = bookingAvailabilityByDate.get(day.date);
-      const minLos = day.min_nights_required ?? row?.minLOSForCheckIn ?? 1;
-      const checkoutDate = pickEarliestCheckoutDate(
-        day.date,
-        minLos,
-        row?.availableCheckOutDays ?? [],
+    for (
+      let cursor = 0;
+      cursor < normalizedRateDays.length &&
+      sampleDays.length < effectiveRatesMaxQueries;
+      cursor += ratesSampleStepDays
+    ) {
+      let picked: (typeof normalizedRateDays)[number] | null = null;
+      const endExclusive = Math.min(
+        normalizedRateDays.length,
+        cursor + ratesSampleStepDays,
       );
 
-      if (!checkoutDate) {
-        normalizedRateDays.push({
-          date: day.date,
-          nightly_rate: null,
-          min_nights: minLos,
-          is_booked: false,
-          changeover_code: day.status_code,
-          season_name: "no_checkout_window",
-        });
+      for (let idx = cursor; idx < endExclusive; idx += 1) {
+        const candidate = normalizedRateDays[idx];
+        if (!candidate) {
+          continue;
+        }
+        const day = availabilityByDate.get(candidate.date);
+        if (!day?.is_available_for_checkin || !unitIdIsNumeric) {
+          continue;
+        }
+
+        const minNights = Math.max(
+          targetQuoteNights,
+          day.min_nights_required ??
+            bookingAvailabilityByDate.get(candidate.date)?.minLOSForCheckIn ??
+            1,
+        );
+        const checkoutDate = addDaysToIsoDate(candidate.date, minNights);
+        const canCheckout =
+          bookingAvailabilityByDate
+            .get(candidate.date)
+            ?.availableCheckOutDays.includes(checkoutDate) ?? false;
+        if (!canCheckout) {
+          continue;
+        }
+
+        if (isSaturdayIsoDate(candidate.date)) {
+          picked = candidate;
+          break;
+        }
+        if (!picked) {
+          picked = candidate;
+        }
+      }
+
+      if (!picked) {
         continue;
       }
 
-      if (quoteAttempts >= maxQuoteDays) {
-        normalizedRateDays.push({
-          date: day.date,
-          nightly_rate: null,
-          min_nights: minLos,
-          is_booked: false,
-          changeover_code: day.status_code,
-          season_name: "quote_skipped_limit",
-        });
+      if (sampleDays.at(-1)?.date === picked.date) {
         continue;
       }
 
-      quoteAttempts += 1;
-      const baseQuote = await fetchReservationQuote(
+      sampleDays.push(picked);
+    }
+
+    const sampledRatesByDate = new Map<string, number>();
+    for (const sampleDay of sampleDays) {
+      const day = availabilityByDate.get(sampleDay.date);
+      if (!day || !day.is_available_for_checkin || !unitIdIsNumeric) {
+        continue;
+      }
+
+      const nights = Math.max(
+        targetQuoteNights,
+        day.min_nights_required ??
+          bookingAvailabilityByDate.get(sampleDay.date)?.minLOSForCheckIn ??
+          1,
+      );
+      const checkoutDate = addDaysToIsoDate(sampleDay.date, nights);
+      const canCheckout =
+        bookingAvailabilityByDate
+          .get(sampleDay.date)
+          ?.availableCheckOutDays.includes(checkoutDate) ?? false;
+      if (!canCheckout) {
+        sampleDay.season_name = "quote_unavailable";
+        continue;
+      }
+
+      const quote = await fetchReservationQuote(
         page,
         unitId,
-        day.date,
+        sampleDay.date,
         checkoutDate,
         1,
         0,
       );
 
-      const quoteNights = nightsBetweenIsoDates(day.date, checkoutDate);
-      if (baseQuote && quoteNights > 0) {
-        quoteWindows.push({
-          quote_kind: "base_window",
-          arrival_date: day.date,
-          departure_date: checkoutDate,
-          nights: quoteNights,
-          adults: 1,
-          children: 0,
-          subtotal: baseQuote.subTotal,
-          average_nightly_rate: baseQuote.averageNightlyRate,
-          total: baseQuote.total,
-          taxes: baseQuote.taxes,
-        });
-      }
-
-      const sortedCheckouts = (row?.availableCheckOutDays ?? [])
-        .filter((date) => date >= checkoutDate)
-        .sort((left, right) => left.localeCompare(right));
-      const extendedCheckout = sortedCheckouts.find((candidate) =>
-        isConsecutiveIsoDate(checkoutDate, candidate),
-      );
-
-      if (extendedCheckout && quoteAttempts < maxQuoteDays) {
-        quoteAttempts += 1;
-        const extendedQuote = await fetchReservationQuote(
-          page,
-          unitId,
-          day.date,
-          extendedCheckout,
-          1,
-          0,
-        );
-
-        const extendedNights = nightsBetweenIsoDates(
-          day.date,
-          extendedCheckout,
-        );
-        if (extendedQuote && extendedNights > 0) {
-          quoteWindows.push({
-            quote_kind: "extended_window",
-            arrival_date: day.date,
-            departure_date: extendedCheckout,
-            nights: extendedNights,
-            adults: 1,
-            children: 0,
-            subtotal: extendedQuote.subTotal,
-            average_nightly_rate: extendedQuote.averageNightlyRate,
-            total: extendedQuote.total,
-            taxes: extendedQuote.taxes,
-          });
-
-          if (baseQuote) {
-            const inferredRate =
-              Math.round((extendedQuote.subTotal - baseQuote.subTotal) * 100) /
-              100;
-            if (Number.isFinite(inferredRate) && inferredRate > 0) {
-              const inferredDate = checkoutDate;
-              const existing = inferredDailyRatesByDate.get(inferredDate) ?? [];
-              existing.push(inferredRate);
-              inferredDailyRatesByDate.set(inferredDate, existing);
-            }
-          }
-        }
-      }
-
-      normalizedRateDays.push({
-        date: day.date,
-        nightly_rate:
-          baseQuote && quoteNights === 1 ? baseQuote.averageNightlyRate : null,
-        min_nights: minLos,
-        is_booked: false,
-        changeover_code: day.status_code,
-        season_name: baseQuote
-          ? quoteNights === 1
-            ? "single_night_quote"
-            : "aggregated_quote_not_daily"
-          : "quote_unavailable",
-      });
-    }
-
-    for (const day of normalizedRateDays) {
-      const inferred = inferredDailyRatesByDate.get(day.date) ?? [];
-      if (!inferred.length || day.nightly_rate !== null) {
+      if (!quote || nightsBetweenIsoDates(sampleDay.date, checkoutDate) <= 0) {
+        sampleDay.season_name = "quote_unavailable";
         continue;
       }
 
-      const averageInferred =
-        Math.round(
-          (inferred.reduce((sum, value) => sum + value, 0) / inferred.length) *
-            100,
-        ) / 100;
-
-      day.nightly_rate = averageInferred;
-      day.season_name = "derived_from_quote_subtotal_delta";
-    }
-
-    const availabilityByDate = new Map(
-      normalizedDays.map((day) => [day.date, day]),
-    );
-    const weekpartQuoteCache = new Map<
-      string,
-      ReservationQuoteApiResponse | null
-    >();
-
-    for (const day of normalizedRateDays) {
-      if (day.nightly_rate !== null) {
-        continue;
+      const nightlyRate = Math.round((quote.subTotal / nights) * 100) / 100;
+      if (Number.isFinite(nightlyRate) && nightlyRate > 0) {
+        sampledRatesByDate.set(sampleDay.date, nightlyRate);
+        sampleDay.nightly_rate = nightlyRate;
+        sampleDay.season_name = "quote_weekly_sample";
+      } else {
+        sampleDay.season_name = "quote_unavailable";
       }
 
-      const dayAvailability = availabilityByDate.get(day.date);
-      if (!dayAvailability?.is_available || !/^[0-9]+$/.test(unitId)) {
-        continue;
-      }
-
-      const weekday = getIsoDateUtcDay(day.date);
-      const weekpartNights = weekday === 0 || weekday === 6 ? 2 : 5;
-      const weekpartDates = buildIsoDateRange(day.date, weekpartNights);
-      const weekpartCheckout = addDaysToIsoDate(day.date, weekpartNights);
-
-      const allDaysAvailable = weekpartDates.every(
-        (date) => availabilityByDate.get(date)?.is_available,
-      );
-      const canCheckout =
-        bookingAvailabilityByDate
-          .get(day.date)
-          ?.availableCheckOutDays.includes(weekpartCheckout) ?? false;
-
-      if (!allDaysAvailable || !canCheckout) {
-        continue;
-      }
-
-      const cacheKey = `${day.date}::${weekpartCheckout}`;
-      let weekpartQuote = weekpartQuoteCache.get(cacheKey);
-      if (weekpartQuote === undefined) {
-        weekpartQuote = await fetchReservationQuote(
-          page,
-          unitId,
-          day.date,
-          weekpartCheckout,
-          1,
-          0,
-        );
-        weekpartQuoteCache.set(cacheKey, weekpartQuote ?? null);
-      }
-
-      if (!weekpartQuote) {
-        continue;
-      }
-
-      const quoteNights = nightsBetweenIsoDates(day.date, weekpartCheckout);
-      if (quoteNights <= 0) {
-        continue;
-      }
-
-      const weekpartPerNight =
-        Math.round((weekpartQuote.subTotal / quoteNights) * 100) / 100;
       quoteWindows.push({
-        quote_kind: "weekpart_window",
-        arrival_date: day.date,
-        departure_date: weekpartCheckout,
-        nights: quoteNights,
+        quote_kind: "base_window",
+        arrival_date: sampleDay.date,
+        departure_date: checkoutDate,
+        nights,
         adults: 1,
         children: 0,
-        subtotal: weekpartQuote.subTotal,
-        average_nightly_rate: weekpartQuote.averageNightlyRate,
-        total: weekpartQuote.total,
-        taxes: weekpartQuote.taxes,
+        subtotal: quote.subTotal,
+        average_nightly_rate: quote.averageNightlyRate,
+        total: quote.total,
+        taxes: quote.taxes,
       });
+    }
 
-      for (const targetDate of weekpartDates) {
-        const target = normalizedRateDays.find(
-          (row) => row.date === targetDate,
-        );
-        if (!target || target.nightly_rate !== null) {
-          continue;
+    const sampledPoints = Array.from(sampledRatesByDate.entries())
+      .map(([date, nightlyRate]) => ({
+        date,
+        nightlyRate,
+        ts: toUtcMidnightMs(date),
+      }))
+      .sort((left, right) => left.ts - right.ts);
+
+    for (const rateDay of normalizedRateDays) {
+      const day = availabilityByDate.get(rateDay.date);
+      if (!day || !day.is_available || rateDay.nightly_rate !== null) {
+        continue;
+      }
+
+      if (sampledPoints.length === 0) {
+        rateDay.season_name = "quote_unavailable";
+        continue;
+      }
+
+      const ts = toUtcMidnightMs(rateDay.date);
+      let prevPoint: (typeof sampledPoints)[number] | null = null;
+      let nextPoint: (typeof sampledPoints)[number] | null = null;
+
+      for (const point of sampledPoints) {
+        if (point.ts <= ts) {
+          prevPoint = point;
         }
+        if (point.ts >= ts) {
+          nextPoint = point;
+          break;
+        }
+      }
 
-        target.nightly_rate = weekpartPerNight;
-        target.season_name =
-          weekpartNights === 2
-            ? "approx_weekend_window_average"
-            : "approx_weekday_window_average";
+      if (prevPoint && nextPoint && prevPoint.ts !== nextPoint.ts) {
+        const ratio = (ts - prevPoint.ts) / (nextPoint.ts - prevPoint.ts);
+        rateDay.nightly_rate =
+          Math.round(
+            (prevPoint.nightlyRate +
+              (nextPoint.nightlyRate - prevPoint.nightlyRate) * ratio) *
+              100,
+          ) / 100;
+        rateDay.season_name = "quote_weekly_interpolated";
+        continue;
+      }
+
+      if (prevPoint) {
+        rateDay.nightly_rate = prevPoint.nightlyRate;
+        rateDay.season_name = "quote_weekly_carry_forward";
+        continue;
+      }
+
+      if (nextPoint) {
+        rateDay.nightly_rate = nextPoint.nightlyRate;
+        rateDay.season_name = "quote_weekly_backfill";
       }
     }
 
