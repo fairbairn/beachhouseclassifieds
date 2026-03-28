@@ -1,11 +1,38 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { Page } from "playwright";
 
 import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
-type KeycoDayCode = "X";
+type KeycoDayCode = "A" | "U" | "M" | "X";
+
+type KeycoAvailabilityCalendarDay = {
+  date: string;
+  minStay: number | null;
+  availabilityKey: KeycoDayCode;
+};
+
+type KeycoPricingContextResponse = {
+  isAvailable?: boolean;
+  totalBaseRate?: number | null;
+  averageBaseRateDescription?: string | null;
+  errorMessage?: string | null;
+};
+
+type KeycoRateObservation = {
+  start_date: string;
+  end_date: string;
+  nights: number;
+  status: number;
+  is_available: boolean;
+  total_base_rate: number | null;
+  nightly_rate_proxy: number | null;
+  average_base_rate_description: string | null;
+  error_message: string | null;
+  reliability: "window_average_proxy" | "unpriced";
+};
 
 type KeycoDetailRecord = DetailRecordBase & {
   title: string;
@@ -70,7 +97,8 @@ type KeycoDetailRecord = DetailRecordBase & {
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
-      booking_day_state: "unknown";
+      booking_day_state: "bookable" | "blocked" | "unknown";
+      min_nights_required?: number | null;
     }>;
     counts: {
       available: number;
@@ -86,6 +114,33 @@ type KeycoDetailRecord = DetailRecordBase & {
   availability_raw: {
     source_note: string;
     has_calendar_widget: boolean;
+  };
+  normalized_rates: {
+    source: "pm_keyco30a";
+    external_listing_id: string;
+    captured_at: string;
+    currency: string;
+    window_start: string;
+    window_end: string;
+    days: Array<{
+      date: string;
+      nightly_rate: number | null;
+      min_nights: number | null;
+      is_booked: boolean | null;
+      changeover_code: string;
+      season_name: string;
+    }>;
+    stats: {
+      days_with_rate: number;
+      min_nightly_rate: number | null;
+      max_nightly_rate: number | null;
+      avg_nightly_rate: number | null;
+    };
+  };
+  rates_raw: {
+    endpoint_path: string;
+    quote_window_days: number;
+    observations: KeycoRateObservation[];
   };
 };
 
@@ -194,6 +249,12 @@ function formatDateIso(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function addDaysToIsoDate(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatDateIso(date);
+}
+
 function inferCityStateFromText(value: string): {
   city: string;
   state: string;
@@ -222,6 +283,133 @@ function dedupe(values: string[]): string[] {
     out.push(value);
   }
   return out;
+}
+
+function parseAvailabilityCalendarFromHtml(
+  html: string,
+): KeycoAvailabilityCalendarDay[] {
+  const parseArrayCandidate = (candidate: string): unknown => {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      try {
+        return JSON.parse(decodeHtmlEntityString(candidate));
+      } catch {
+        return null;
+      }
+    }
+  };
+
+  const extractArray = (source: string): unknown => {
+    const patterns = [
+      /"availabilityCalendar"\s*:\s*(\[[\s\S]*?\])(?=\s*,\s*"[^"]+"\s*:|\s*[}\]])/,
+      /\\"availabilityCalendar\\"\s*:\s*(\[[\s\S]*?\])(?=\s*,\s*\\"[^"]+\\"\s*:|\s*[}\]])/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = source.match(pattern);
+      if (!match?.[1]) {
+        continue;
+      }
+      const parsed = parseArrayCandidate(match[1]);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    return null;
+  };
+
+  const parsed =
+    extractArray(html) ?? extractArray(decodeHtmlEntityString(html));
+
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  const days: KeycoAvailabilityCalendarDay[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const maybeDate = String((entry as { date?: unknown }).date ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(maybeDate)) {
+      continue;
+    }
+
+    const rawKey = String(
+      (entry as { availabilityKey?: unknown }).availabilityKey ?? "",
+    ).trim();
+    const availabilityKey: KeycoDayCode =
+      rawKey === "A" || rawKey === "U" || rawKey === "M" ? rawKey : "X";
+
+    const rawMinStay = Number((entry as { minStay?: unknown }).minStay);
+    const minStay =
+      Number.isFinite(rawMinStay) && rawMinStay > 0
+        ? Math.floor(rawMinStay)
+        : null;
+
+    days.push({
+      date: maybeDate,
+      minStay,
+      availabilityKey,
+    });
+  }
+
+  return days;
+}
+
+async function fetchPricingContext(
+  page: Page,
+  listingId: string,
+  startDate: string,
+  endDate: string,
+): Promise<{
+  status: number;
+  body: KeycoPricingContextResponse | null;
+}> {
+  return page.evaluate(
+    async ({ id, start, end }) => {
+      const params = new URLSearchParams({
+        startDate: start,
+        endDate: end,
+        adultCount: "1",
+        childCount: "0",
+        infantCount: "0",
+        petCount: "0",
+      });
+      const response = await fetch(
+        `/api/listing/${id}/pricing-context?${params.toString()}`,
+        {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            accept: "application/json, text/plain, */*",
+          },
+        },
+      );
+
+      const text = await response.text();
+      if (!text) {
+        return { status: response.status, body: null };
+      }
+
+      try {
+        return {
+          status: response.status,
+          body: JSON.parse(text) as KeycoPricingContextResponse,
+        };
+      } catch {
+        return { status: response.status, body: null };
+      }
+    },
+    {
+      id: listingId,
+      start: startDate,
+      end: endDate,
+    },
+  );
 }
 
 function buildDescriptionExpanded(candidates: string[]): string {
@@ -819,6 +1007,11 @@ async function fetchDetail(
       todayUtc.getUTCDate() + Math.max(availabilityHorizonDays, 365),
     );
 
+    const calendarDays = parseAvailabilityCalendarFromHtml(html);
+    const calendarByDate = new Map(
+      calendarDays.map((day) => [day.date, day] as const),
+    );
+
     const availabilityDays: KeycoDetailRecord["normalized_availability"]["days"] =
       [];
     for (
@@ -826,17 +1019,155 @@ async function fetchDetail(
       cursor <= horizonUtc;
       cursor.setUTCDate(cursor.getUTCDate() + 1)
     ) {
+      const isoDate = formatDateIso(cursor);
+      const calendarDay = calendarByDate.get(isoDate);
+
+      const statusCode: KeycoDayCode = calendarDay?.availabilityKey ?? "X";
+      const bookingDayState: "bookable" | "blocked" | "unknown" =
+        statusCode === "A"
+          ? "bookable"
+          : statusCode === "U"
+            ? "blocked"
+            : "unknown";
+
       availabilityDays.push({
-        date: formatDateIso(cursor),
-        status_code: "X",
-        is_available: false,
-        is_available_for_checkin: false,
-        is_available_for_checkout: false,
-        booking_day_state: "unknown",
+        date: isoDate,
+        status_code: statusCode,
+        is_available: statusCode === "A",
+        is_available_for_checkin: statusCode === "A",
+        is_available_for_checkout: statusCode === "A",
+        booking_day_state: bookingDayState,
+        min_nights_required: calendarDay?.minStay ?? null,
       });
     }
 
     const dayCodes = availabilityDays.map((day) => day.status_code).join("");
+
+    const counts = {
+      available: availabilityDays.filter((day) => day.status_code === "A")
+        .length,
+      unavailable: availabilityDays.filter((day) => day.status_code === "U")
+        .length,
+      checkin_only: 0,
+      checkout_only: 0,
+      other: availabilityDays.filter(
+        (day) => day.status_code === "M" || day.status_code === "X",
+      ).length,
+      booking_available: availabilityDays.filter(
+        (day) => day.booking_day_state === "bookable",
+      ).length,
+      booking_unavailable: availabilityDays.filter(
+        (day) => day.booking_day_state === "blocked",
+      ).length,
+      booking_unknown: availabilityDays.filter(
+        (day) => day.booking_day_state === "unknown",
+      ).length,
+    };
+
+    const ratesWindowDays = Math.max(
+      180,
+      Number(process.env.KEYCO30A_RATES_WINDOW_DAYS ?? "180") || 180,
+    );
+    const ratesMaxQueries = Math.max(
+      1,
+      Number(process.env.KEYCO30A_RATES_MAX_QUERIES ?? "220") || 220,
+    );
+    const ratesWindowEndIso = formatDateIso(
+      new Date(
+        Date.UTC(
+          todayUtc.getUTCFullYear(),
+          todayUtc.getUTCMonth(),
+          todayUtc.getUTCDate() + ratesWindowDays - 1,
+        ),
+      ),
+    );
+
+    const availabilityByDate = new Map(
+      availabilityDays.map((day) => [day.date, day] as const),
+    );
+
+    const normalizedRateDays: KeycoDetailRecord["normalized_rates"]["days"] =
+      availabilityDays
+        .filter((day) => day.date <= ratesWindowEndIso)
+        .map((day) => ({
+          date: day.date,
+          nightly_rate: null,
+          min_nights: day.min_nights_required ?? null,
+          is_booked: day.is_available ? false : true,
+          changeover_code: day.status_code,
+          season_name: day.is_available ? "quote_pending" : "not_available",
+        }));
+
+    const rateObservations: KeycoRateObservation[] = [];
+    let quoteCount = 0;
+
+    for (const rateDay of normalizedRateDays) {
+      const day = availabilityByDate.get(rateDay.date);
+      if (!day || !day.is_available) {
+        continue;
+      }
+      if (quoteCount >= ratesMaxQueries) {
+        rateDay.season_name = "quote_skipped_limit";
+        continue;
+      }
+
+      const nights = Math.max(1, day.min_nights_required ?? 1);
+      const endDate = addDaysToIsoDate(day.date, nights);
+
+      quoteCount += 1;
+      const pricing = await fetchPricingContext(
+        page,
+        externalListingId,
+        day.date,
+        endDate,
+      );
+      const body = pricing.body;
+      const totalBaseRate = Number(body?.totalBaseRate);
+      const hasRate = Number.isFinite(totalBaseRate) && totalBaseRate > 0;
+      const nightlyRateProxy = hasRate
+        ? Math.round((totalBaseRate / nights) * 100) / 100
+        : null;
+
+      if (nightlyRateProxy !== null) {
+        rateDay.nightly_rate = nightlyRateProxy;
+        rateDay.season_name = "quote_window_average_proxy";
+      } else {
+        rateDay.season_name = "quote_unavailable";
+      }
+
+      rateObservations.push({
+        start_date: day.date,
+        end_date: endDate,
+        nights,
+        status: pricing.status,
+        is_available: Boolean(body?.isAvailable),
+        total_base_rate: hasRate ? totalBaseRate : null,
+        nightly_rate_proxy: nightlyRateProxy,
+        average_base_rate_description:
+          typeof body?.averageBaseRateDescription === "string"
+            ? body.averageBaseRateDescription
+            : null,
+        error_message:
+          typeof body?.errorMessage === "string" ? body.errorMessage : null,
+        reliability:
+          nightlyRateProxy !== null ? "window_average_proxy" : "unpriced",
+      });
+
+      await page.waitForTimeout(55);
+    }
+
+    const collectedRates = normalizedRateDays
+      .map((day) => day.nightly_rate)
+      .filter((value): value is number => Number.isFinite(value));
+    const minRate = collectedRates.length ? Math.min(...collectedRates) : null;
+    const maxRate = collectedRates.length ? Math.max(...collectedRates) : null;
+    const avgRate = collectedRates.length
+      ? Math.round(
+          (collectedRates.reduce((sum, value) => sum + value, 0) /
+            collectedRates.length) *
+            100,
+        ) / 100
+      : null;
 
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
@@ -909,25 +1240,41 @@ async function fetchDetail(
         window_start: availabilityDays[0]?.date ?? "",
         window_end: availabilityDays[availabilityDays.length - 1]?.date ?? "",
         code_legend: {
+          A: "available",
+          U: "unavailable",
+          M: "restricted_or_rule_constrained",
           X: "unknown",
         },
         day_codes: dayCodes,
         days: availabilityDays,
-        counts: {
-          available: 0,
-          unavailable: 0,
-          checkin_only: 0,
-          checkout_only: 0,
-          other: availabilityDays.length,
-          booking_available: 0,
-          booking_unavailable: 0,
-          booking_unknown: availabilityDays.length,
-        },
+        counts,
       },
       availability_raw: {
-        source_note:
-          "No stable public daily availability API detected from listing page capture; using unknown-coded normalized window.",
+        source_note: calendarDays.length
+          ? "Parsed embedded availabilityCalendar data from listing payload."
+          : "No embedded availabilityCalendar payload parsed; using unknown-coded normalized window.",
         has_calendar_widget: extracted.hasCalendarWidget,
+      },
+      normalized_rates: {
+        source: "pm_keyco30a",
+        external_listing_id: externalListingId,
+        captured_at: new Date().toISOString(),
+        currency: "USD",
+        window_start: normalizedRateDays[0]?.date ?? "",
+        window_end:
+          normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
+        days: normalizedRateDays,
+        stats: {
+          days_with_rate: collectedRates.length,
+          min_nightly_rate: minRate,
+          max_nightly_rate: maxRate,
+          avg_nightly_rate: avgRate,
+        },
+      },
+      rates_raw: {
+        endpoint_path: `/api/listing/${externalListingId}/pricing-context`,
+        quote_window_days: ratesWindowDays,
+        observations: rateObservations,
       },
       html_path: htmlPath,
     };

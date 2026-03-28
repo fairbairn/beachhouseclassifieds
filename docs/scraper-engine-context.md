@@ -175,6 +175,28 @@ Common tuning flags:
 - `--detail-fetch-concurrency`
 - `--detail-fetch-delay-ms`
 
+## Exclusion Lifecycle Policy
+
+Use exclusion lifecycle files per adapter to avoid permanent hard-coded excludes:
+
+- `src/lib/data/external-sources/<managerKey>/exclusions.lifecycle.json`
+
+Adapter behavior:
+
+- Active exclusions are loaded from lifecycle files.
+- Exclusions can be bypassed for lifecycle rechecks using `SCRAPER_INCLUDE_EXCLUDED=1`.
+
+Lifecycle behavior:
+
+- Rechecks run through normal `--refresh-known` flow.
+- Listings only move between `active`, `probation`, and `retired` when a detail JSON is actually observed in the current run.
+- If a previously pruned listing does not reappear in normal discovery, it is skipped for that cycle (not counted as a failure).
+
+Operational scripts:
+
+- Single adapter: `.tmp/scripts/run-exclusion-lifecycle-for-adapter.mjs`
+- All adapters + matrix rebuild: `.tmp/scripts/run-exclusion-lifecycle-all.mjs`
+
 ## Current History Model
 
 There is no centralized `external-sources/history` directory in the current runner flow.

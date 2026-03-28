@@ -15,6 +15,41 @@ type MinNightRule = {
   raw_rule: string;
 };
 
+type BookingAvailabilityApiRow = {
+  date: string;
+  available: boolean;
+  dateAllowsCheckIn: boolean;
+  dateAllowsCheckOut: boolean;
+  minLOSForCheckIn: number;
+  maxLOSForCheckIn: number;
+  availableCheckOutDays: string[];
+};
+
+type ReservationQuoteApiResponse = {
+  unitId: string;
+  arrivalDate: string;
+  departureDate: string;
+  adults: number;
+  children: number;
+  subTotal: number;
+  averageNightlyRate: number;
+  total: number;
+  taxes: number;
+};
+
+type RateQuoteWindowObservation = {
+  quote_kind: "base_window" | "extended_window" | "weekpart_window";
+  arrival_date: string;
+  departure_date: string;
+  nights: number;
+  adults: number;
+  children: number;
+  subtotal: number;
+  average_nightly_rate: number;
+  total: number;
+  taxes: number;
+};
+
 type DetailRecord360Blue = DetailRecordBase & {
   title: string;
   h1: string;
@@ -87,6 +122,33 @@ type DetailRecord360Blue = DetailRecordBase & {
       booking_unavailable: number;
       booking_unknown: number;
     };
+  };
+  normalized_rates: {
+    source: "pm_360blue";
+    external_listing_id: string;
+    captured_at: string;
+    currency: string;
+    window_start: string;
+    window_end: string;
+    days: Array<{
+      date: string;
+      nightly_rate: number | null;
+      min_nights: number | null;
+      is_booked: boolean | null;
+      changeover_code: string;
+      season_name: string;
+    }>;
+    stats: {
+      days_with_rate: number;
+      min_nightly_rate: number | null;
+      max_nightly_rate: number | null;
+      avg_nightly_rate: number | null;
+    };
+  };
+  rates_raw: {
+    advertised_rate_texts: string[];
+    matched_nightly_snippets: string[];
+    quote_windows: RateQuoteWindowObservation[];
   };
   normalized_matching_profile: {
     source: "pm_360blue";
@@ -216,6 +278,34 @@ function parseFirstNumber(value: string): number | null {
   }
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseFirstNightlyRate(texts: string[]): number | null {
+  for (const text of texts) {
+    const normalized = text.replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      continue;
+    }
+
+    // Prioritize values clearly tied to nightly pricing copy.
+    if (!/(night|\/\s*nt|per\s*night)/i.test(normalized)) {
+      continue;
+    }
+
+    const match = normalized.match(/\$\s*([\d,]+(?:\.\d{2})?)/);
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const parsed = Number(match[1].replace(/,/g, ""));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      continue;
+    }
+
+    return Math.round(parsed * 100) / 100;
+  }
+
+  return null;
 }
 
 function extractLatLngFromHtml(html: string): {
@@ -491,6 +581,199 @@ function resolveMinNightsForDate(
   return matchedMinNights;
 }
 
+function addDaysToIsoDate(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function nightsBetweenIsoDates(startDate: string, endDate: string): number {
+  const start = new Date(`${startDate}T00:00:00Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00Z`).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return 0;
+  }
+
+  return Math.round((end - start) / 86400000);
+}
+
+function isConsecutiveIsoDate(leftDate: string, rightDate: string): boolean {
+  return addDaysToIsoDate(leftDate, 1) === rightDate;
+}
+
+function getIsoDateUtcDay(isoDate: string): number {
+  return new Date(`${isoDate}T00:00:00Z`).getUTCDay();
+}
+
+function buildIsoDateRange(startDate: string, nights: number): string[] {
+  const dates: string[] = [];
+  for (let index = 0; index < nights; index += 1) {
+    dates.push(addDaysToIsoDate(startDate, index));
+  }
+  return dates;
+}
+
+function minIsoDate(left: string, right: string): string {
+  return left <= right ? left : right;
+}
+
+function pickEarliestCheckoutDate(
+  arrivalDate: string,
+  minLos: number,
+  availableCheckOutDays: string[],
+): string | null {
+  if (!availableCheckOutDays.length) {
+    return null;
+  }
+
+  const minCheckoutDate = addDaysToIsoDate(arrivalDate, Math.max(1, minLos));
+  const candidate = availableCheckOutDays
+    .filter((date) => date >= minCheckoutDate)
+    .sort((left, right) => left.localeCompare(right))[0];
+
+  return candidate ?? null;
+}
+
+async function fetchNrbeJson<T>(
+  page: Page,
+  endpointPath: string,
+  params: Record<string, string>,
+): Promise<T | null> {
+  const queryEntries = Object.entries(params).filter(([, value]) =>
+    Boolean(value?.trim()),
+  );
+
+  const result = await page.evaluate(
+    async ({ endpointPath: path, queryEntries: entries }) => {
+      const searchParams = new URLSearchParams();
+      for (const [key, value] of entries) {
+        searchParams.set(key, value);
+      }
+
+      const url = `${path}?${searchParams.toString()}`;
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          accept: "application/json, text/plain, */*",
+        },
+      });
+      const bodyText = await response.text();
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        bodyText,
+      };
+    },
+    {
+      endpointPath,
+      queryEntries,
+    },
+  );
+
+  if (!result.ok || !result.bodyText) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(result.bodyText) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchBookingAvailabilitySeries(
+  page: Page,
+  unitId: string,
+  startDate: string,
+  endDate: string,
+): Promise<BookingAvailabilityApiRow[]> {
+  const rowsByDate = new Map<string, BookingAvailabilityApiRow>();
+  let cursor = startDate;
+
+  while (cursor <= endDate) {
+    const chunkEnd = minIsoDate(addDaysToIsoDate(cursor, 55), endDate);
+    const chunk = await fetchNrbeJson<BookingAvailabilityApiRow[]>(
+      page,
+      "/api/nrbe/booking-availability.json",
+      {
+        unitId,
+        startDate: cursor,
+        endDate: chunkEnd,
+      },
+    );
+
+    if (Array.isArray(chunk)) {
+      for (const row of chunk) {
+        if (!row?.date) {
+          continue;
+        }
+
+        rowsByDate.set(row.date, {
+          date: row.date,
+          available: Boolean(row.available),
+          dateAllowsCheckIn: Boolean(row.dateAllowsCheckIn),
+          dateAllowsCheckOut: Boolean(row.dateAllowsCheckOut),
+          minLOSForCheckIn: Number.isFinite(row.minLOSForCheckIn)
+            ? Math.max(1, Math.floor(row.minLOSForCheckIn))
+            : 1,
+          maxLOSForCheckIn: Number.isFinite(row.maxLOSForCheckIn)
+            ? Math.max(1, Math.floor(row.maxLOSForCheckIn))
+            : 28,
+          availableCheckOutDays: Array.isArray(row.availableCheckOutDays)
+            ? row.availableCheckOutDays.filter((value) =>
+                /^\d{4}-\d{2}-\d{2}$/.test(value),
+              )
+            : [],
+        });
+      }
+    }
+
+    cursor = addDaysToIsoDate(chunkEnd, 1);
+  }
+
+  return Array.from(rowsByDate.values()).sort((left, right) =>
+    left.date.localeCompare(right.date),
+  );
+}
+
+async function fetchReservationQuote(
+  page: Page,
+  unitId: string,
+  arrivalDate: string,
+  departureDate: string,
+  adults: number,
+  children: number,
+): Promise<ReservationQuoteApiResponse | null> {
+  const quote = await fetchNrbeJson<ReservationQuoteApiResponse>(
+    page,
+    "/api/nrbe/reservation-quotes.json",
+    {
+      unitId,
+      arrivalDate,
+      departureDate,
+      adults: String(Math.max(1, Math.floor(adults))),
+      children: String(Math.max(0, Math.floor(children))),
+    },
+  );
+
+  if (!quote) {
+    return null;
+  }
+
+  if (
+    !Number.isFinite(quote.averageNightlyRate) ||
+    !Number.isFinite(quote.subTotal) ||
+    !Number.isFinite(quote.total) ||
+    !Number.isFinite(quote.taxes)
+  ) {
+    return null;
+  }
+
+  return quote;
+}
+
 async function discoverListings(
   page: Page,
   anchorUrl: string,
@@ -673,6 +956,32 @@ async function fetchDetail(
         })
         .filter(Boolean);
       const bodyText = document.body?.innerText ?? "";
+      const unitId = document.body?.dataset?.propertyId?.trim() ?? "";
+      const advertisedRateTexts = [
+        ".box-Indifrom",
+        ".nightRate",
+        ".night-rate",
+        ".nr-booking-widget-root [class*='nightRate']",
+        ".nr-booking-widget-root [class*='night-rate']",
+      ]
+        .flatMap((selector) =>
+          Array.from(document.querySelectorAll(selector)).map(
+            (node) => node.textContent ?? "",
+          ),
+        )
+        .map((value) => value.replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      const matchedNightlySnippets = Array.from(
+        new Set(
+          Array.from(
+            bodyText.matchAll(
+              /\$\s?[\d,]+(?:\.\d{2})?\s*(?:\/\s*night|per\s*night|nightly|night)/gi,
+            ),
+          )
+            .map((match) => match[0]?.trim() ?? "")
+            .filter(Boolean),
+        ),
+      ).slice(0, 20);
       const html = document.documentElement.outerHTML;
       return {
         title: document.title ?? "",
@@ -690,6 +999,9 @@ async function fetchDetail(
         amenitiesItems,
         galleryUrls,
         bodyText,
+        unitId,
+        advertisedRateTexts,
+        matchedNightlySnippets,
         html,
       };
     });
@@ -714,141 +1026,158 @@ async function fetchDetail(
 
     const horizonDate = new Date();
     horizonDate.setUTCDate(horizonDate.getUTCDate() + availabilityHorizonDays);
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const horizonIso = horizonDate.toISOString().slice(0, 10);
 
-    const dayCodeByDate = new Map<string, "A" | "U" | "I" | "O" | "X">();
-    let lastSignature = "";
+    const unitId = extracted.unitId?.trim() ?? "";
+    const bookingAvailabilityRows = /^\d+$/.test(unitId)
+      ? await fetchBookingAvailabilitySeries(page, unitId, todayIso, horizonIso)
+      : [];
+    const bookingAvailabilityByDate = new Map(
+      bookingAvailabilityRows.map((row) => [row.date, row]),
+    );
+
     let calendarPageClicks = 0;
-    let calendarIterationsUsed = 0;
+    let calendarIterationsUsed = bookingAvailabilityRows.length > 0 ? 1 : 0;
 
-    for (
-      let iteration = 0;
-      iteration < maxCalendarAdvanceMonths;
-      iteration += 1
-    ) {
-      calendarIterationsUsed = iteration + 1;
-      const pageSlice = await page.evaluate(() => {
-        const monthNameToIndex: Record<string, number> = {
-          january: 0,
-          february: 1,
-          march: 2,
-          april: 3,
-          may: 4,
-          june: 5,
-          july: 6,
-          august: 7,
-          september: 8,
-          october: 9,
-          november: 10,
-          december: 11,
-        };
+    const fallbackDayCodeByDate = new Map<
+      string,
+      "A" | "U" | "I" | "O" | "X"
+    >();
+    if (bookingAvailabilityRows.length === 0) {
+      let lastSignature = "";
 
-        const months = Array.from(
-          document.querySelectorAll(".cmp-availability-calendar__month"),
-        );
-
-        const items: Array<{
-          date: string;
-          code: "A" | "U" | "I" | "O" | "X";
-        }> = [];
-        const signatures: string[] = [];
-
-        for (const month of months) {
-          const label =
-            month
-              .querySelector(".current-date")
-              ?.textContent?.trim()
-              .replace(/\s+/g, " ") ?? "";
-          if (!label) {
-            continue;
-          }
-          signatures.push(label);
-
-          const match = label.match(/^([A-Za-z]+)\s+(\d{4})$/);
-          if (!match) {
-            continue;
-          }
-
-          const monthIndex = monthNameToIndex[match[1]!.toLowerCase()];
-          const year = Number(match[2]);
-          if (!Number.isFinite(monthIndex) || !Number.isFinite(year)) {
-            continue;
-          }
-
-          const dayNodes = Array.from(month.querySelectorAll("ul.days > li"));
-          for (const dayNode of dayNodes) {
-            const classes = Array.from(dayNode.classList);
-            if (classes.includes("inactive")) {
-              continue;
-            }
-
-            const dayNum = Number((dayNode.textContent ?? "").trim());
-            if (!Number.isFinite(dayNum) || dayNum <= 0 || dayNum > 31) {
-              continue;
-            }
-
-            let code: "A" | "U" | "I" | "O" | "X" = "X";
-            if (classes.includes("check-available")) {
-              code = "A";
-            } else if (classes.includes("check-unavailable")) {
-              code = "U";
-            } else if (classes.includes("checkin-only")) {
-              code = "I";
-            } else if (classes.includes("checkout-only")) {
-              code = "O";
-            }
-
-            const isoDate = new Date(Date.UTC(year, monthIndex, dayNum))
-              .toISOString()
-              .slice(0, 10);
-
-            items.push({
-              date: isoDate,
-              code,
-            });
-          }
-        }
-
-        return {
-          hasCalendarWidget:
-            document.querySelector(".cmp-availability-calendar") !== null,
-          signature: signatures.join("|"),
-          items,
-        };
-      });
-
-      for (const item of pageSlice.items) {
-        if (!dayCodeByDate.has(item.date)) {
-          dayCodeByDate.set(item.date, item.code);
-        }
-      }
-
-      const newestDate = Array.from(dayCodeByDate.keys()).sort().at(-1) ?? "";
-      if (newestDate && newestDate >= horizonDate.toISOString().slice(0, 10)) {
-        break;
-      }
-
-      if (
-        !pageSlice.hasCalendarWidget ||
-        pageSlice.signature === lastSignature
+      for (
+        let iteration = 0;
+        iteration < maxCalendarAdvanceMonths;
+        iteration += 1
       ) {
-        break;
-      }
-      lastSignature = pageSlice.signature;
+        calendarIterationsUsed = iteration + 1;
+        const pageSlice = await page.evaluate(() => {
+          const monthNameToIndex: Record<string, number> = {
+            january: 0,
+            february: 1,
+            march: 2,
+            april: 3,
+            may: 4,
+            june: 5,
+            july: 6,
+            august: 7,
+            september: 8,
+            october: 9,
+            november: 10,
+            december: 11,
+          };
 
-      const clicked = await page.evaluate(() => {
-        const nextButton = document.querySelector("#next");
-        if (nextButton instanceof HTMLButtonElement) {
-          nextButton.click();
-          return true;
+          const months = Array.from(
+            document.querySelectorAll(".cmp-availability-calendar__month"),
+          );
+
+          const items: Array<{
+            date: string;
+            code: "A" | "U" | "I" | "O" | "X";
+          }> = [];
+          const signatures: string[] = [];
+
+          for (const month of months) {
+            const label =
+              month
+                .querySelector(".current-date")
+                ?.textContent?.trim()
+                .replace(/\s+/g, " ") ?? "";
+            if (!label) {
+              continue;
+            }
+            signatures.push(label);
+
+            const match = label.match(/^([A-Za-z]+)\s+(\d{4})$/);
+            if (!match) {
+              continue;
+            }
+
+            const monthIndex = monthNameToIndex[match[1]!.toLowerCase()];
+            const year = Number(match[2]);
+            if (!Number.isFinite(monthIndex) || !Number.isFinite(year)) {
+              continue;
+            }
+
+            const dayNodes = Array.from(month.querySelectorAll("ul.days > li"));
+            for (const dayNode of dayNodes) {
+              const classes = Array.from(dayNode.classList);
+              if (classes.includes("inactive")) {
+                continue;
+              }
+
+              const dayNum = Number((dayNode.textContent ?? "").trim());
+              if (!Number.isFinite(dayNum) || dayNum <= 0 || dayNum > 31) {
+                continue;
+              }
+
+              let code: "A" | "U" | "I" | "O" | "X" = "X";
+              if (classes.includes("check-available")) {
+                code = "A";
+              } else if (classes.includes("check-unavailable")) {
+                code = "U";
+              } else if (classes.includes("checkin-only")) {
+                code = "I";
+              } else if (classes.includes("checkout-only")) {
+                code = "O";
+              }
+
+              const isoDate = new Date(Date.UTC(year, monthIndex, dayNum))
+                .toISOString()
+                .slice(0, 10);
+
+              items.push({
+                date: isoDate,
+                code,
+              });
+            }
+          }
+
+          return {
+            hasCalendarWidget:
+              document.querySelector(".cmp-availability-calendar") !== null,
+            signature: signatures.join("|"),
+            items,
+          };
+        });
+
+        for (const item of pageSlice.items) {
+          if (!fallbackDayCodeByDate.has(item.date)) {
+            fallbackDayCodeByDate.set(item.date, item.code);
+          }
         }
-        return false;
-      });
-      if (!clicked) {
-        break;
-      }
 
-      calendarPageClicks += 1;
-      await page.waitForTimeout(700);
+        const newestDate =
+          Array.from(fallbackDayCodeByDate.keys()).sort().at(-1) ?? "";
+        if (newestDate && newestDate >= horizonIso) {
+          break;
+        }
+
+        if (
+          !pageSlice.hasCalendarWidget ||
+          pageSlice.signature === lastSignature
+        ) {
+          break;
+        }
+        lastSignature = pageSlice.signature;
+
+        const clicked = await page.evaluate(() => {
+          const nextButton = document.querySelector("#next");
+          if (nextButton instanceof HTMLButtonElement) {
+            nextButton.click();
+            return true;
+          }
+          return false;
+        });
+        if (!clicked) {
+          break;
+        }
+
+        calendarPageClicks += 1;
+        await page.waitForTimeout(700);
+      }
     }
 
     const hasCalendarWidget = /availability\s+calendar/i.test(bodyText);
@@ -865,29 +1194,68 @@ async function fetchDetail(
       Array.from(new Set(bookingRestrictionMatches)).slice(0, 60),
     );
 
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const horizonIso = horizonDate.toISOString().slice(0, 10);
-    const normalizedDays = Array.from(dayCodeByDate.entries())
-      .filter(([date]) => date >= todayIso && date <= horizonIso)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([date, code]) => {
-        const bookingDayState: BookingDayState =
-          code === "A" || code === "O"
-            ? "bookable"
-            : code === "U" || code === "I"
-              ? "blocked"
-              : "unknown";
+    const normalizedDays =
+      bookingAvailabilityRows.length > 0
+        ? bookingAvailabilityRows
+            .filter((row) => row.date >= todayIso && row.date <= horizonIso)
+            .map((row) => {
+              let statusCode: "A" | "U" | "I" | "O" | "X" = "X";
+              if (
+                row.available &&
+                row.dateAllowsCheckIn &&
+                row.dateAllowsCheckOut
+              ) {
+                statusCode = "A";
+              } else if (row.dateAllowsCheckIn && !row.dateAllowsCheckOut) {
+                statusCode = "I";
+              } else if (!row.dateAllowsCheckIn && row.dateAllowsCheckOut) {
+                statusCode = "O";
+              } else if (!row.available) {
+                statusCode = "U";
+              }
 
-        return {
-          date,
-          status_code: code,
-          is_available: code === "A" || code === "O",
-          is_available_for_checkin: code === "A" || code === "O",
-          is_available_for_checkout: code === "A" || code === "O",
-          booking_day_state: bookingDayState,
-          min_nights_required: resolveMinNightsForDate(date, minNightRules),
-        };
-      });
+              const bookingDayState: BookingDayState = row.available
+                ? "bookable"
+                : "blocked";
+
+              return {
+                date: row.date,
+                status_code: statusCode,
+                is_available: row.available,
+                is_available_for_checkin:
+                  row.available && row.dateAllowsCheckIn,
+                is_available_for_checkout:
+                  row.available && row.dateAllowsCheckOut,
+                booking_day_state: bookingDayState,
+                min_nights_required:
+                  resolveMinNightsForDate(row.date, minNightRules) ??
+                  row.minLOSForCheckIn,
+              };
+            })
+        : Array.from(fallbackDayCodeByDate.entries())
+            .filter(([date]) => date >= todayIso && date <= horizonIso)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([date, code]) => {
+              const bookingDayState: BookingDayState =
+                code === "A" || code === "O"
+                  ? "bookable"
+                  : code === "U" || code === "I"
+                    ? "blocked"
+                    : "unknown";
+
+              return {
+                date,
+                status_code: code,
+                is_available: code === "A" || code === "O",
+                is_available_for_checkin: code === "A" || code === "O",
+                is_available_for_checkout: code === "A" || code === "O",
+                booking_day_state: bookingDayState,
+                min_nights_required: resolveMinNightsForDate(
+                  date,
+                  minNightRules,
+                ),
+              };
+            });
 
     const normalizedAvailability: DetailRecord360Blue["normalized_availability"] =
       {
@@ -934,6 +1302,303 @@ async function fetchDetail(
         },
       };
 
+    const normalizedRateDays: DetailRecord360Blue["normalized_rates"]["days"] =
+      [];
+    const quoteWindows: RateQuoteWindowObservation[] = [];
+    const inferredDailyRatesByDate = new Map<string, number[]>();
+    const maxQuoteDays = Math.max(
+      1,
+      Number(
+        process.env.BLUE360_RATE_QUOTE_MAX_DAYS ??
+          String(availabilityHorizonDays),
+      ) || availabilityHorizonDays,
+    );
+    let quoteAttempts = 0;
+
+    for (const day of normalizedDays) {
+      if (!day.is_available_for_checkin || !/^\d+$/.test(unitId)) {
+        normalizedRateDays.push({
+          date: day.date,
+          nightly_rate: null,
+          min_nights: day.min_nights_required,
+          is_booked: day.is_available ? false : true,
+          changeover_code: day.status_code,
+          season_name: "unquoted",
+        });
+        continue;
+      }
+
+      if (quoteAttempts >= maxQuoteDays) {
+        normalizedRateDays.push({
+          date: day.date,
+          nightly_rate: null,
+          min_nights: day.min_nights_required,
+          is_booked: false,
+          changeover_code: day.status_code,
+          season_name: "quote_skipped_limit",
+        });
+        continue;
+      }
+
+      const row = bookingAvailabilityByDate.get(day.date);
+      const minLos = day.min_nights_required ?? row?.minLOSForCheckIn ?? 1;
+      const checkoutDate = pickEarliestCheckoutDate(
+        day.date,
+        minLos,
+        row?.availableCheckOutDays ?? [],
+      );
+
+      if (!checkoutDate) {
+        normalizedRateDays.push({
+          date: day.date,
+          nightly_rate: null,
+          min_nights: minLos,
+          is_booked: false,
+          changeover_code: day.status_code,
+          season_name: "no_checkout_window",
+        });
+        continue;
+      }
+
+      if (quoteAttempts >= maxQuoteDays) {
+        normalizedRateDays.push({
+          date: day.date,
+          nightly_rate: null,
+          min_nights: minLos,
+          is_booked: false,
+          changeover_code: day.status_code,
+          season_name: "quote_skipped_limit",
+        });
+        continue;
+      }
+
+      quoteAttempts += 1;
+      const baseQuote = await fetchReservationQuote(
+        page,
+        unitId,
+        day.date,
+        checkoutDate,
+        1,
+        0,
+      );
+
+      const quoteNights = nightsBetweenIsoDates(day.date, checkoutDate);
+      if (baseQuote && quoteNights > 0) {
+        quoteWindows.push({
+          quote_kind: "base_window",
+          arrival_date: day.date,
+          departure_date: checkoutDate,
+          nights: quoteNights,
+          adults: 1,
+          children: 0,
+          subtotal: baseQuote.subTotal,
+          average_nightly_rate: baseQuote.averageNightlyRate,
+          total: baseQuote.total,
+          taxes: baseQuote.taxes,
+        });
+      }
+
+      const sortedCheckouts = (row?.availableCheckOutDays ?? [])
+        .filter((date) => date >= checkoutDate)
+        .sort((left, right) => left.localeCompare(right));
+      const extendedCheckout = sortedCheckouts.find((candidate) =>
+        isConsecutiveIsoDate(checkoutDate, candidate),
+      );
+
+      if (extendedCheckout && quoteAttempts < maxQuoteDays) {
+        quoteAttempts += 1;
+        const extendedQuote = await fetchReservationQuote(
+          page,
+          unitId,
+          day.date,
+          extendedCheckout,
+          1,
+          0,
+        );
+
+        const extendedNights = nightsBetweenIsoDates(
+          day.date,
+          extendedCheckout,
+        );
+        if (extendedQuote && extendedNights > 0) {
+          quoteWindows.push({
+            quote_kind: "extended_window",
+            arrival_date: day.date,
+            departure_date: extendedCheckout,
+            nights: extendedNights,
+            adults: 1,
+            children: 0,
+            subtotal: extendedQuote.subTotal,
+            average_nightly_rate: extendedQuote.averageNightlyRate,
+            total: extendedQuote.total,
+            taxes: extendedQuote.taxes,
+          });
+
+          if (baseQuote) {
+            const inferredRate =
+              Math.round((extendedQuote.subTotal - baseQuote.subTotal) * 100) /
+              100;
+            if (Number.isFinite(inferredRate) && inferredRate > 0) {
+              const inferredDate = checkoutDate;
+              const existing = inferredDailyRatesByDate.get(inferredDate) ?? [];
+              existing.push(inferredRate);
+              inferredDailyRatesByDate.set(inferredDate, existing);
+            }
+          }
+        }
+      }
+
+      normalizedRateDays.push({
+        date: day.date,
+        nightly_rate:
+          baseQuote && quoteNights === 1 ? baseQuote.averageNightlyRate : null,
+        min_nights: minLos,
+        is_booked: false,
+        changeover_code: day.status_code,
+        season_name: baseQuote
+          ? quoteNights === 1
+            ? "single_night_quote"
+            : "aggregated_quote_not_daily"
+          : "quote_unavailable",
+      });
+    }
+
+    for (const day of normalizedRateDays) {
+      const inferred = inferredDailyRatesByDate.get(day.date) ?? [];
+      if (!inferred.length || day.nightly_rate !== null) {
+        continue;
+      }
+
+      const averageInferred =
+        Math.round(
+          (inferred.reduce((sum, value) => sum + value, 0) / inferred.length) *
+            100,
+        ) / 100;
+
+      day.nightly_rate = averageInferred;
+      day.season_name = "derived_from_quote_subtotal_delta";
+    }
+
+    const availabilityByDate = new Map(
+      normalizedDays.map((day) => [day.date, day]),
+    );
+    const weekpartQuoteCache = new Map<
+      string,
+      ReservationQuoteApiResponse | null
+    >();
+
+    for (const day of normalizedRateDays) {
+      if (day.nightly_rate !== null) {
+        continue;
+      }
+
+      const dayAvailability = availabilityByDate.get(day.date);
+      if (!dayAvailability?.is_available || !/^[0-9]+$/.test(unitId)) {
+        continue;
+      }
+
+      const weekday = getIsoDateUtcDay(day.date);
+      const weekpartNights = weekday === 0 || weekday === 6 ? 2 : 5;
+      const weekpartDates = buildIsoDateRange(day.date, weekpartNights);
+      const weekpartCheckout = addDaysToIsoDate(day.date, weekpartNights);
+
+      const allDaysAvailable = weekpartDates.every(
+        (date) => availabilityByDate.get(date)?.is_available,
+      );
+      const canCheckout =
+        bookingAvailabilityByDate
+          .get(day.date)
+          ?.availableCheckOutDays.includes(weekpartCheckout) ?? false;
+
+      if (!allDaysAvailable || !canCheckout) {
+        continue;
+      }
+
+      const cacheKey = `${day.date}::${weekpartCheckout}`;
+      let weekpartQuote = weekpartQuoteCache.get(cacheKey);
+      if (weekpartQuote === undefined) {
+        weekpartQuote = await fetchReservationQuote(
+          page,
+          unitId,
+          day.date,
+          weekpartCheckout,
+          1,
+          0,
+        );
+        weekpartQuoteCache.set(cacheKey, weekpartQuote ?? null);
+      }
+
+      if (!weekpartQuote) {
+        continue;
+      }
+
+      const quoteNights = nightsBetweenIsoDates(day.date, weekpartCheckout);
+      if (quoteNights <= 0) {
+        continue;
+      }
+
+      const weekpartPerNight =
+        Math.round((weekpartQuote.subTotal / quoteNights) * 100) / 100;
+      quoteWindows.push({
+        quote_kind: "weekpart_window",
+        arrival_date: day.date,
+        departure_date: weekpartCheckout,
+        nights: quoteNights,
+        adults: 1,
+        children: 0,
+        subtotal: weekpartQuote.subTotal,
+        average_nightly_rate: weekpartQuote.averageNightlyRate,
+        total: weekpartQuote.total,
+        taxes: weekpartQuote.taxes,
+      });
+
+      for (const targetDate of weekpartDates) {
+        const target = normalizedRateDays.find(
+          (row) => row.date === targetDate,
+        );
+        if (!target || target.nightly_rate !== null) {
+          continue;
+        }
+
+        target.nightly_rate = weekpartPerNight;
+        target.season_name =
+          weekpartNights === 2
+            ? "approx_weekend_window_average"
+            : "approx_weekday_window_average";
+      }
+    }
+
+    const advertisedNightlyRate = parseFirstNightlyRate([
+      ...extracted.advertisedRateTexts,
+      ...extracted.matchedNightlySnippets,
+    ]);
+    if (
+      normalizedRateDays.every((day) => day.nightly_rate === null) &&
+      advertisedNightlyRate !== null &&
+      normalizedDays.length > 0
+    ) {
+      normalizedRateDays[0] = {
+        date: normalizedDays[0]!.date,
+        nightly_rate: advertisedNightlyRate,
+        min_nights: normalizedDays[0]!.min_nights_required,
+        is_booked: false,
+        changeover_code: normalizedDays[0]!.status_code,
+        season_name: "displayed_from_rate_fallback",
+      };
+    }
+    const rateValues = normalizedRateDays
+      .map((day) => day.nightly_rate)
+      .filter((value): value is number => Number.isFinite(value));
+    const minRate = rateValues.length ? Math.min(...rateValues) : null;
+    const maxRate = rateValues.length ? Math.max(...rateValues) : null;
+    const avgRate = rateValues.length
+      ? Math.round(
+          (rateValues.reduce((sum, value) => sum + value, 0) /
+            rateValues.length) *
+            100,
+        ) / 100
+      : null;
+
     const descriptionExpanded =
       propertyDescription || jsonLd.description || metaDescription || "";
 
@@ -948,7 +1613,7 @@ async function fetchDetail(
 
     const profileCityState = parseCityState(shortAddress);
     const propertyProfile: DetailRecord360Blue["property_profile"] = {
-      unit_id: externalListingId,
+      unit_id: extracted.unitId?.trim() || externalListingId,
       area: shortAddress,
       location: shortAddress,
       beds: bedrooms ?? bedsFallback,
@@ -1030,6 +1695,27 @@ async function fetchDetail(
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
       normalized_availability: normalizedAvailability,
+      normalized_rates: {
+        source: "pm_360blue",
+        external_listing_id: externalListingId,
+        captured_at: new Date().toISOString(),
+        currency: "USD",
+        window_start: normalizedRateDays[0]?.date ?? "",
+        window_end:
+          normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
+        days: normalizedRateDays,
+        stats: {
+          days_with_rate: rateValues.length,
+          min_nightly_rate: minRate,
+          max_nightly_rate: maxRate,
+          avg_nightly_rate: avgRate,
+        },
+      },
+      rates_raw: {
+        advertised_rate_texts: extracted.advertisedRateTexts,
+        matched_nightly_snippets: extracted.matchedNightlySnippets,
+        quote_windows: quoteWindows,
+      },
       normalized_matching_profile: {
         source: "pm_360blue",
         external_listing_id: externalListingId,

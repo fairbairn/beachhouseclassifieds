@@ -33,8 +33,16 @@ Use this document when starting a new manager probe to quickly answer:
 - API endpoint returning availability payloads
 - embedded day/state data in page source
 
-5. Select the closest existing adapter and copy its strategy skeleton.
-6. Keep normalized output contract unchanged (`normalized_matching_profile`, `normalized_availability`).
+5. Run operator-assisted booking-flow capture when rates are unclear:
+
+- Open a real detail page in browser DevTools.
+- Select valid check-in and check-out dates in the calendar widget.
+- Trigger the booking CTA (`Book`, `Reserve`, `Get Quote`, etc.).
+- Capture XHR/fetch requests fired at submit time.
+- Promote discovered endpoints into probe scripts and adapter fetch helpers.
+
+6. Select the closest existing adapter and copy its strategy skeleton.
+7. Keep normalized output contract unchanged (`normalized_matching_profile`, `normalized_availability`).
 
 ## Platform Clue Library
 
@@ -70,6 +78,7 @@ Use this document when starting a new manager probe to quickly answer:
 8. If UI calendar is required, paginate month-by-month with signature-based stop conditions.
 9. Parse inline JS/JSON for day states and min-night rules when available.
 10. Persist raw HTML and diagnostics for every detail fetch for offline reparsing.
+11. If rate endpoints remain unknown, execute manual booking-flow XHR capture and mirror that interaction path in probe automation.
 
 ## Platform Family Map (Code-Referenced)
 
@@ -129,6 +138,8 @@ Use this table to pick the nearest adapter template before starting a new manage
 - For Streamline-like adapters using `/wp-admin/admin-ajax.php?action=streamlinecore-api-request`, probe method names before building UI-only logic.
 - Common methods seen in current adapters include `GetPropertyAvailabilityRawData`, `GetPropertyRates` or `GetPropertyRatesRawData`, and (on some managers) `GetPreReservationPrice` for ad-hoc full-stay quote calculations.
 - Treat ad-hoc quote methods as optional enrichment: keep nightly/day rates in `normalized_rates` and store quote-response diagnostics in a provider-specific raw sidecar until a shared quote schema is introduced.
+- For custom/hybrid stacks, submit-time booking XHR is often more informative than passive page-load traffic; capture requests after selecting valid dates and firing the booking CTA.
+- When rate payload semantics are unclear, classify output explicitly as: exact daily, aggregated window quote, or inferred/approximated daily proxy.
 
 ## Guardrails and Reliability Rules
 

@@ -160,7 +160,10 @@
     "run:postgres:container:start": "tsx src/core/tooling/db/ops/run-local-postgres-container.ts postgres",
     "run:postgres:container:stop": "tsx src/core/tooling/db/ops/run-local-postgres-container.ts stop",
     "conformance:exclusions:lifecycle:adapter": "node .tmp/scripts/run-exclusion-lifecycle-for-adapter.mjs",
-    "conformance:exclusions:lifecycle:all": "node .tmp/scripts/run-exclusion-lifecycle-all.mjs"
+    "conformance:exclusions:lifecycle:all": "node .tmp/scripts/run-exclusion-lifecycle-all.mjs",
+    "conformance:rates:campaign": "node .tmp/scripts/build-rates-conformance-campaign.mjs",
+    "pricing:assumptions:record:raw": "tsx src/core/scripts/record-adapter-checkout-assumption.ts",
+    "pricing:assumptions:record": "npm run pricing:assumptions:record:raw --"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.0",
