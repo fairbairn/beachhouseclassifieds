@@ -59,6 +59,25 @@ Use standardized discovery event shapes:
 
 This makes logs machine-comparable across adapters while preserving free-form extras.
 
+## Minimum Run Logging Standard
+
+New adapters should preserve the shared progress event flow emitted by the runner and keep adapter messages compatible with it:
+
+- `phase`: lifecycle transitions (start, open page, discover, pull details, discover-only completion)
+- `info`: effective runtime knobs (mode, scroll/delay/concurrency)
+- `tick`: incremental progress and adapter discovery diagnostics
+- `done`: completion summary
+
+Adapter code should emit concise `reportProgress(...)` messages that naturally fit under `tick`.
+
+Preferred style reference adapters:
+
+- `stayon30a`
+- `scenicstays30a`
+- `royaldestinations` (adds manager-specific detail while staying runner-compatible)
+
+This is a minimum consistency target, not a hard cap: adapters may add richer diagnostics when it improves operability.
+
 ## Foundation Helper
 
 Use `src/lib/scripts/scraper-engine/adapter-foundation.ts` in new adapters.
