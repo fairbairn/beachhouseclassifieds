@@ -651,6 +651,19 @@ function extractPrimaryUnitTypeFromHtml(html: string): string {
   return raw;
 }
 
+function normalizeCoordinate(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  // Some feeds emit placeholder zeroes; treat them as missing so fallbacks apply.
+  if (Math.abs(value) < 0.000001) {
+    return null;
+  }
+
+  return value;
+}
+
 function extractExternalListingId(detailUrl: string): string {
   try {
     const parsed = new URL(detailUrl);
@@ -2111,18 +2124,14 @@ async function fetchDetail(
       extracted.neighborhoodText || jsonLdSignals.city,
     ).slice(0, 240);
 
-    const latitudeRaw =
-      locationPayload.latitude ??
-      unitCardSignals.latitude ??
-      jsonLdSignals.latitude ??
-      null;
-    const longitudeRaw =
-      locationPayload.longitude ??
-      unitCardSignals.longitude ??
-      jsonLdSignals.longitude ??
-      null;
-    const latitude = latitudeRaw === 0 ? null : latitudeRaw;
-    const longitude = longitudeRaw === 0 ? null : longitudeRaw;
+    const latitude =
+      normalizeCoordinate(locationPayload.latitude) ??
+      normalizeCoordinate(unitCardSignals.latitude) ??
+      normalizeCoordinate(jsonLdSignals.latitude);
+    const longitude =
+      normalizeCoordinate(locationPayload.longitude) ??
+      normalizeCoordinate(unitCardSignals.longitude) ??
+      normalizeCoordinate(jsonLdSignals.longitude);
 
     const streetAddress = stripHtml(
       locationPayload.street ||
