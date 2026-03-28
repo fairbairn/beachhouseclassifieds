@@ -1,0 +1,129 @@
+{
+  "adapter_key": "360blue",
+  "platform_family": "custom_hybrid",
+  "currency": "USD",
+  "rates_conformity": {
+    "status": "in_progress",
+    "ready": false,
+    "last_validated_at": "2026-03-28T20:40:00.000Z",
+    "blocking_gaps": [
+      "checkout handoff URL signature still needs probe-backed capture"
+    ]
+  },
+  "pricing_conformance": {
+    "pricing_profile_valid": true,
+    "listing_rate_cache": {
+      "enabled": true,
+      "status": "ready",
+      "path": "src/lib/data/external-sources/360blue/details/pricing",
+      "manifest_path": "src/lib/data/external-sources/360blue/details/pricing/index.json",
+      "horizon_weeks": 24
+    },
+    "real_time_quote": {
+      "enabled": true,
+      "status": "ready",
+      "fast_path": "direct_api",
+      "fallback": "playwright_bootstrap_then_direct_api_retry"
+    }
+  },
+  "capabilities": {
+    "listing_daily_rates": {
+      "supported": false,
+      "source": "normalized_rates.days"
+    },
+    "ad_hoc_quote": {
+      "supported": true,
+      "transport": "http_get_json",
+      "response_format": "json"
+    },
+    "checkout_handoff": {
+      "supported": true,
+      "transport": "url",
+      "requires_quote_context": false
+    }
+  },
+  "quote_signature": {
+    "method": "GET",
+    "url": "https://www.360blue.com/api/nrbe/reservation-quotes.json",
+    "required_params": [
+      "unitId",
+      "arrivalDate",
+      "departureDate",
+      "adults",
+      "children"
+    ],
+    "date_param_format": "YYYY-MM-DD",
+    "response_extractors": {
+      "rent_total": "subTotal",
+      "taxes_total": "taxes",
+      "all_in_total": "total",
+      "nightly_rate_avg": "averageNightlyRate"
+    },
+    "probe_evidence": {
+      "report_path": ".tmp/reports/360blue-rates-network-probe.json",
+      "source_listing_id": "blue-mountain-66-s-spooky-lane-83",
+      "sample_window": {
+        "check_in_date": "2026-03-28",
+        "check_out_date": "2026-03-31",
+        "nights": 3
+      }
+    },
+    "retrieval_hints": {
+      "fast_path": "direct_api",
+      "direct_api": {
+        "required_headers": ["user-agent"],
+        "recommended_headers": ["accept", "referer", "x-requested-with"],
+        "status_without_user_agent": 406,
+        "observed_latency_ms": {
+          "direct_api_avg": 534,
+          "browser_fetch_avg": 512,
+          "browser_end_to_end_avg": 2041
+        }
+      },
+      "fallback_path": {
+        "mode": "playwright_bootstrap_then_direct_api_retry",
+        "trigger_on_status_codes": [403, 406, 429]
+      }
+    }
+  },
+  "handoff_signature": {
+    "url_template": "https://www.360blue.com/destinations/{marketPath}/properties/{listingSlug}?arrivalDate={arrivalDate}&departureDate={departureDate}&adults={adults}&children={children}",
+    "required_params": [
+      "marketPath",
+      "listingSlug",
+      "arrivalDate",
+      "departureDate",
+      "adults",
+      "children"
+    ],
+    "date_param_format": "YYYY-MM-DD",
+    "source": "detail_url_template"
+  },
+  "estimation_policy": {
+    "nightly_base_strategy": "quote_window_average",
+    "fees_taxes_strategy": "adapter_assumptions_multiplier",
+    "fallback_order": [
+      "listing_daily_rates",
+      "ad_hoc_quote_window_average",
+      "adapter_assumptions"
+    ]
+  },
+  "listing_pricing_cache_policy": {
+    "path": "src/lib/data/external-sources/360blue/details/pricing",
+    "file_pattern": "{external_listing_id}.json",
+    "horizon_weeks": 24,
+    "granularity": "daily",
+    "daily_backfill_order": [
+      "normalized_rates.days.nightly_rate",
+      "rates_raw.quote_windows",
+      "interpolate_from_nearest_quoted_days",
+      "adapter_assumptions_multiplier"
+    ],
+    "refresh_cadence": "every_72h_or_after_detail_refresh"
+  },
+  "assumptions_policy": {
+    "min_samples_for_ready": 3,
+    "max_sample_age_days": 45,
+    "refresh_cadence": "monthly"
+  }
+}

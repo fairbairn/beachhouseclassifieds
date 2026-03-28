@@ -1,6 +1,6 @@
 # Rates Conformity Rollout Matrix
 
-Last updated: 2026-03-28T19:40:00Z
+Last updated: 2026-03-28T20:25:00Z
 
 This matrix maps each adapter to the data needed to satisfy [docs/rates-conformity-contract.md](docs/rates-conformity-contract.md).
 
@@ -14,38 +14,45 @@ This matrix maps each adapter to the data needed to satisfy [docs/rates-conformi
   - `quoted_url`: URL returned from quote payload
   - `template_url`: deterministic URL template
   - `detail_fallback`: link out to listing detail until checkout signature confirmed
+- `Rates Ready`:
+  - `none`: profile/assumptions/runtime readiness not yet established
+  - `seeded`: profile + initial assumptions/probe evidence exist, but not yet ready
+  - `ready`: adapter satisfies the full rates conformity contract
+- `Pricing`:
+  - `[x]`: adapter has valid pricing profile metadata, listing rate cache generated, and real-time quote retrieval validated
+  - `[ ]`: one or more of those pricing requirements are still missing
 
 ## Adapter Matrix
 
-| Adapter                 | Platform Family | API Quote Signal | API Availability Signal | Target Daily Mode | Handoff         | Must Capture For Rates Ready                                                   |
-| ----------------------- | --------------- | ---------------- | ----------------------- | ----------------- | --------------- | ------------------------------------------------------------------------------ |
-| 360blue                 | custom_hybrid   | yes              | yes                     | quote_window_avg  | template_url    | finalize quote-to-daily reconstruction + store checkout URL signature          |
-| keyco30a                | custom_hybrid   | yes              | yes                     | quote_window_avg  | template_url    | stabilize pricing-context parser + persist handoff mapping                     |
-| homeownerscollection30a | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | map `/rescms/ajax/item/pricing/simple` response to normalized totals           |
-| 30aescapes              | track_bluetent  | yes              | yes                     | quote_window_avg  | quoted_url      | persist `/rentals/ajax/get-pdp-rates.cfm` + `/rentals/book-now.cfm` signatures |
-| royaldestinations       | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | deterministic request shaping + quote parser                                   |
-| realjoy30a              | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | discover quote endpoint + checkout handoff signature                           |
-| benchmark30a            | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | normalize quote response fields and assumptions seeding                        |
-| 30avacay                | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | capture booking flow XHR + derive quote/handoff signatures                     |
-| oceanreef30a            | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | identify deterministic quote endpoint and parser                               |
-| exclusive30a            | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | identify deterministic quote endpoint and parser                               |
-| sandpiper30a            | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | capture Track/Bluetent quote + handoff signatures                              |
-| 30aluxury               | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | discover quote endpoint and required params                                    |
-| dunevr30a               | streamline      | yes              | yes                     | listing_daily     | template_url    | validate current rates path against conformity contract                        |
-| stayon30a               | streamline      | no               | yes                     | assumptions_only  | detail_fallback | probe `GetPreReservationPrice` and checkout URL signature                      |
-| sandersbeach30a         | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | discover quote endpoint + handoff URL template                                 |
-| oversee30a              | custom_hybrid   | no               | yes                     | assumptions_only  | detail_fallback | identify quote-capable endpoint and normalization rules                        |
-| fivestar30a             | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | capture quote/checkout flow + assumptions samples                              |
-| panhandle30a            | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | discover quote endpoint and URL signature                                      |
-| scenicstays30a          | streamline      | no               | yes                     | listing_daily     | template_url    | add explicit quote fallback policy and assumptions refresh                     |
-| localvr30a              | guesty          | no               | no                      | assumptions_only  | detail_fallback | probe Guesty quote endpoints + handoff signature mapping                       |
-| funvacay30a             | track_bluetent  | yes              | no                      | quote_window_avg  | template_url    | normalize quote-only path and assumptions blending                             |
-| stayat30a               | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | discover quote endpoint + checkout URL signature                               |
-| grayt30a                | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | discover quote endpoint + checkout URL signature                               |
-| coastproperties30a      | streamline      | no               | yes                     | listing_daily     | template_url    | add assumptions samples + handoff signature validation                         |
-| 30abeach                | streamline      | yes              | yes                     | listing_daily     | template_url    | verify quote parser outputs + assumptions drift policy                         |
-| beachblue               | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | identify quote endpoint and checkout URL signature                             |
-| luxe30a                 | guesty          | no               | no                      | assumptions_only  | detail_fallback | probe Guesty quote/handoff support and assumptions seed                        |
+| Adapter                 | Platform Family | API Quote Signal | API Availability Signal | Target Daily Mode | Handoff         | Rates Ready | Pricing | Must Capture For Rates Ready                                                                                                                           |
+| ----------------------- | --------------- | ---------------- | ----------------------- | ----------------- | --------------- | ----------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 360blue                 | custom_hybrid   | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | pricing profile + assumptions + 24-week listing cache + direct API quote path validated; capture probe-backed handoff URL signature for full readiness |
+| keyco30a                | custom_hybrid   | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [ ]     | assumptions 1/3 and no listing pricing cache pipeline yet; finalize handoff signature and parser reliability gates                                     |
+| homeownerscollection30a | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | none        | [ ]     | map `/rescms/ajax/item/pricing/simple` response to normalized totals                                                                                   |
+| 30aescapes              | track_bluetent  | yes              | yes                     | quote_window_avg  | quoted_url      | seeded      | [ ]     | signatures persisted in `pricing-profile.json`; assumptions seeded 1/3, complete sample minimum and runtime quote-output mapping                       |
+| royaldestinations       | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | none        | [ ]     | deterministic request shaping + quote parser                                                                                                           |
+| realjoy30a              | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + checkout handoff signature                                                                                                   |
+| benchmark30a            | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | none        | [ ]     | normalize quote response fields and assumptions seeding                                                                                                |
+| 30avacay                | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | capture booking flow XHR + derive quote/handoff signatures                                                                                             |
+| oceanreef30a            | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | identify deterministic quote endpoint and parser                                                                                                       |
+| exclusive30a            | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | identify deterministic quote endpoint and parser                                                                                                       |
+| sandpiper30a            | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | capture Track/Bluetent quote + handoff signatures                                                                                                      |
+| 30aluxury               | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint and required params                                                                                                            |
+| dunevr30a               | streamline      | yes              | yes                     | listing_daily     | template_url    | none        | [ ]     | validate current rates path against conformity contract                                                                                                |
+| stayon30a               | streamline      | no               | yes                     | assumptions_only  | detail_fallback | none        | [ ]     | probe `GetPreReservationPrice` and checkout URL signature                                                                                              |
+| sandersbeach30a         | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + handoff URL template                                                                                                         |
+| oversee30a              | custom_hybrid   | no               | yes                     | assumptions_only  | detail_fallback | none        | [ ]     | identify quote-capable endpoint and normalization rules                                                                                                |
+| fivestar30a             | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | capture quote/checkout flow + assumptions samples                                                                                                      |
+| panhandle30a            | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint and URL signature                                                                                                              |
+| scenicstays30a          | streamline      | no               | yes                     | listing_daily     | template_url    | none        | [ ]     | add explicit quote fallback policy and assumptions refresh                                                                                             |
+| localvr30a              | guesty          | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | probe Guesty quote endpoints + handoff signature mapping                                                                                               |
+| funvacay30a             | track_bluetent  | yes              | no                      | quote_window_avg  | template_url    | none        | [ ]     | normalize quote-only path and assumptions blending                                                                                                     |
+| stayat30a               | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + checkout URL signature                                                                                                       |
+| grayt30a                | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + checkout URL signature                                                                                                       |
+| coastproperties30a      | streamline      | no               | yes                     | listing_daily     | template_url    | none        | [ ]     | add assumptions samples + handoff signature validation                                                                                                 |
+| 30abeach                | streamline      | yes              | yes                     | listing_daily     | template_url    | none        | [ ]     | verify quote parser outputs + assumptions drift policy                                                                                                 |
+| beachblue               | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | identify quote endpoint and checkout URL signature                                                                                                     |
+| luxe30a                 | guesty          | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | probe Guesty quote/handoff support and assumptions seed                                                                                                |
 
 ## Required Artifact Checklist (Per Adapter)
 

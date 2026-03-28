@@ -1,0 +1,85 @@
+{
+  "adapter_key": "30aescapes",
+  "platform_family": "track_bluetent",
+  "currency": "USD",
+  "rates_conformity": {
+    "status": "in_progress",
+    "ready": false,
+    "last_validated_at": "2026-03-28T19:45:00.000Z",
+    "blocking_gaps": [
+      "requires at least 3 pricing assumption samples",
+      "quote parser not yet wired into normalized rates output"
+    ]
+  },
+  "capabilities": {
+    "listing_daily_rates": {
+      "supported": false,
+      "source": "normalized_rates.days"
+    },
+    "ad_hoc_quote": {
+      "supported": true,
+      "transport": "http_post_form",
+      "response_format": "html_fragment"
+    },
+    "checkout_handoff": {
+      "supported": true,
+      "transport": "url",
+      "requires_quote_context": true
+    }
+  },
+  "quote_signature": {
+    "method": "POST",
+    "url": "https://www.30aescapes.com/rentals/ajax/get-pdp-rates.cfm",
+    "content_type": "application/x-www-form-urlencoded",
+    "required_params": [
+      "formtype",
+      "page",
+      "propertyid",
+      "unitshortname",
+      "redskyclient",
+      "strcheckin",
+      "strcheckout"
+    ],
+    "fixed_params": {
+      "formtype": "details-datepicker",
+      "page": "0",
+      "redskyclient": "no"
+    },
+    "date_param_format": "MM/DD/YYYY",
+    "response_extractors": {
+      "rent_total": "li:contains('Rent') .text-right",
+      "taxes_total": "li:contains('Taxes') .text-right",
+      "all_in_total": ".pdp-quote-total",
+      "checkout_handoff_url": "a#detailBookBtn[href*='book-now.cfm']"
+    },
+    "probe_evidence": {
+      "report_path": ".tmp/reports/30aescapes-rates-search.json",
+      "source_listing_id": "161782",
+      "sample_window": {
+        "check_in_date": "2026-04-10",
+        "check_out_date": "2026-04-13",
+        "nights": 3
+      }
+    }
+  },
+  "handoff_signature": {
+    "url_template": "https://www.30aescapes.com/rentals/book-now.cfm?propertyid={propertyid}&strcheckin={checkin}&strcheckout={checkout}",
+    "required_params": ["propertyid", "strcheckin", "strcheckout"],
+    "date_param_format": "MM/DD/YYYY",
+    "source": "quote_response"
+  },
+  "estimation_policy": {
+    "nightly_base_strategy": "quote_window_average",
+    "fees_taxes_strategy": "adapter_assumptions_multiplier",
+    "fallback_order": [
+      "listing_daily_rates",
+      "ad_hoc_quote_window_average",
+      "adapter_assumptions"
+    ]
+  },
+  "assumptions_policy": {
+    "min_samples_for_ready": 3,
+    "max_sample_age_days": 45,
+    "refresh_cadence": "monthly"
+  }
+}

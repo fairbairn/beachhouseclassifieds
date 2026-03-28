@@ -1,6 +1,6 @@
 # Rates Conformity Contract
 
-Last updated: 2026-03-28T19:40:00Z
+Last updated: 2026-03-28T20:15:00Z
 
 This contract defines the adapter-level pricing structure required to power UX pricing consistently across all PM adapters.
 
@@ -83,6 +83,18 @@ Each adapter must maintain two pricing artifacts:
       "rent_total": "li:contains('Rent') .text-right",
       "taxes_total": "li:contains('Taxes') .text-right",
       "all_in_total": ".pdp-quote-total"
+    }
+  },
+  "quote_retrieval_hints": {
+    "fast_path": "direct_api",
+    "direct_api": {
+      "required_headers": ["user-agent"],
+      "recommended_headers": ["accept", "referer", "x-requested-with"],
+      "notes": "Non-empty user-agent is required for many anti-bot front doors."
+    },
+    "fallback_path": {
+      "mode": "browser_bootstrap_then_direct_api",
+      "trigger_on_status_codes": [403, 406, 429]
     }
   },
   "handoff_signature": {
@@ -175,3 +187,5 @@ Adapters may be Rates Ready without listing-level daily scraped rates if they sa
 - Treat quote signatures as adapter-level reusable contracts, not one-off probe artifacts.
 - Persist probe evidence in `.tmp/reports/*` and summarize essential signature fields into `pricing-profile.json`.
 - Re-validate profiles after major PM frontend changes.
+- For direct API quote probes, always send a non-empty `user-agent` header. Do not send an empty user-agent.
+- Where practical, use direct API as fast path and fall back to browser bootstrap/session only on blocked responses.

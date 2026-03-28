@@ -1,0 +1,89 @@
+{
+  "adapter_key": "keyco30a",
+  "platform_family": "custom_hybrid",
+  "currency": "USD",
+  "rates_conformity": {
+    "status": "in_progress",
+    "ready": false,
+    "last_validated_at": "2026-03-28T20:20:00.000Z",
+    "blocking_gaps": [
+      "requires at least 3 pricing assumption samples",
+      "checkout handoff URL signature still needs probe-backed capture"
+    ]
+  },
+  "capabilities": {
+    "listing_daily_rates": {
+      "supported": false,
+      "source": "normalized_rates.days"
+    },
+    "ad_hoc_quote": {
+      "supported": true,
+      "transport": "http_get_json",
+      "response_format": "json"
+    },
+    "checkout_handoff": {
+      "supported": true,
+      "transport": "url",
+      "requires_quote_context": false
+    }
+  },
+  "quote_signature": {
+    "method": "GET",
+    "url": "https://key.co/api/listing/{listingId}/pricing-context",
+    "required_params": [
+      "startDate",
+      "endDate",
+      "adultCount",
+      "childCount",
+      "infantCount",
+      "petCount"
+    ],
+    "fixed_params": {
+      "adultCount": "1",
+      "childCount": "0",
+      "infantCount": "0",
+      "petCount": "0"
+    },
+    "date_param_format": "YYYY-MM-DD",
+    "response_extractors": {
+      "is_available": "isAvailable",
+      "rent_total": "totalBaseRate",
+      "nightly_rate_hint": "averageBaseRateDescription",
+      "quote_error": "errorMessage"
+    },
+    "probe_evidence": {
+      "report_path": ".tmp/reports/keyco30a-rates-network-probe.json",
+      "source_listing_id": "kakJQH2sH0",
+      "sample_window": {
+        "check_in_date": "2026-04-19",
+        "check_out_date": "2026-04-25",
+        "nights": 6
+      }
+    }
+  },
+  "handoff_signature": {
+    "url_template": "https://key.co/listings/{listingId}?listing_adult_count={adults}&listing_start_date={checkin}&listing_end_date={checkout}",
+    "required_params": [
+      "listingId",
+      "listing_adult_count",
+      "listing_start_date",
+      "listing_end_date"
+    ],
+    "date_param_format": "YYYY-MM-DD",
+    "source": "detail_url_query"
+  },
+  "estimation_policy": {
+    "nightly_base_strategy": "quote_window_average",
+    "fees_taxes_strategy": "adapter_assumptions_multiplier",
+    "fallback_order": [
+      "listing_daily_rates",
+      "ad_hoc_quote_window_average",
+      "adapter_assumptions"
+    ]
+  },
+  "assumptions_policy": {
+    "min_samples_for_ready": 3,
+    "max_sample_age_days": 45,
+    "refresh_cadence": "monthly"
+  }
+}

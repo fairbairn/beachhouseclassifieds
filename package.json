@@ -163,7 +163,9 @@
     "conformance:exclusions:lifecycle:all": "node .tmp/scripts/run-exclusion-lifecycle-all.mjs",
     "conformance:rates:campaign": "node .tmp/scripts/build-rates-conformance-campaign.mjs",
     "pricing:assumptions:record:raw": "tsx src/core/scripts/record-adapter-checkout-assumption.ts",
-    "pricing:assumptions:record": "npm run pricing:assumptions:record:raw --"
+    "pricing:assumptions:record": "npm run pricing:assumptions:record:raw --",
+    "pricing:cache:360blue:raw": "tsx src/lib/scripts/build-360blue-listing-pricing-cache.ts",
+    "pricing:cache:360blue": "npm run pricing:cache:360blue:raw --"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.0",
