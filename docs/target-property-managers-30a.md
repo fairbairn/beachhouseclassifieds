@@ -5,9 +5,18 @@ This page stores the working target list for future scraper coverage planning.
 ## Notes
 
 - Source: user-provided ranking and estimates.
-- Last updated: 2026-03-27.
+- Last updated: 2026-03-28.
 - RealJoy expectation: 140 properties (current expected target).
 - Royal Destinations expectation: 143 properties (current expected target).
+
+## Future Adapter Tracking Adds (2026-03-28)
+
+| Company                | Manager Key      | URL                                                                |
+| ---------------------- | ---------------- | ------------------------------------------------------------------ |
+| Prominence on 30a      | prominence30a    | https://www.prominenceon30a.com/30a-vacation-rentals#q=*%3A*       |
+| 30A Cottages           | 30acottages      | https://www.30acottagesandconcierge.com/vacation-rentals#q=*%3A*   |
+| ELP Properties         | elp30a           | https://eluxuryproperties.com/30a                                  |
+| Rosemary Beach Rentals | rosemarybeach30a | https://rosemarybeach.com/rentals/?beds=&plus_bed=1&sort_by=random |
 
 ## Latest Execution Updates
 

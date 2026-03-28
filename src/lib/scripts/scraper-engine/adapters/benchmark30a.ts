@@ -204,6 +204,33 @@ function stripHtml(value: string): string {
     .trim();
 }
 
+function extractLatLngFromHtml(html: string): {
+  latitude: number | null;
+  longitude: number | null;
+} {
+  const latCandidates = Array.from(
+    html.matchAll(/"latitude"\s*:\s*(-?\d{1,2}(?:\.\d+)?)/gi),
+  )
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value) && value >= -90 && value <= 90);
+
+  const lonCandidates = Array.from(
+    html.matchAll(/"longitude"\s*:\s*(-?\d{1,3}(?:\.\d+)?)/gi),
+  )
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value) && value >= -180 && value <= 180);
+
+  const floridaLat = latCandidates.find((value) => value >= 24 && value <= 32);
+  const floridaLon = lonCandidates.find(
+    (value) => value >= -88 && value <= -79,
+  );
+
+  return {
+    latitude: floridaLat ?? latCandidates[0] ?? null,
+    longitude: floridaLon ?? lonCandidates[0] ?? null,
+  };
+}
+
 function extractExternalListingId(detailUrl: string): string {
   try {
     const parsed = new URL(detailUrl);
@@ -1431,13 +1458,14 @@ async function fetchDetail(
       state: "",
     };
 
+    const coordinates = extractLatLngFromHtml(html);
     const location: BenchmarkDetailRecord["location"] = {
       address: expanded.address,
       location_label: expanded.locationLabel,
       directions_url: expanded.directionsUrl,
       directions_daddr: expanded.directionsDaddr,
-      latitude: null,
-      longitude: null,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
     };
 
     return {

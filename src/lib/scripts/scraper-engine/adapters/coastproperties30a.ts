@@ -317,6 +317,54 @@ function decodeAvailabilityDays(
   return days;
 }
 
+function addUtcDaysFromIso(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatDateIso(date);
+}
+
+function ensureMinimumAvailabilityDays(
+  days: CoastDetailRecord["normalized_availability"]["days"],
+  minimumDays: number,
+): CoastDetailRecord["normalized_availability"]["days"] {
+  if (days.length === 0 || minimumDays <= 1) {
+    return days;
+  }
+
+  const firstDate = days[0]?.date ?? "";
+  if (!firstDate) {
+    return days;
+  }
+
+  const targetEnd = addUtcDaysFromIso(firstDate, minimumDays - 1);
+  if (!targetEnd) {
+    return days;
+  }
+
+  const byDate = new Map(days.map((day) => [day.date, day]));
+  let cursor = firstDate;
+  while (cursor && cursor <= targetEnd) {
+    if (!byDate.has(cursor)) {
+      byDate.set(cursor, {
+        date: cursor,
+        is_available: false,
+        status_code: "X",
+        is_available_for_checkin: false,
+        is_available_for_checkout: false,
+        booking_day_state: "unknown",
+      });
+    }
+    cursor = addUtcDaysFromIso(cursor, 1);
+  }
+
+  return Array.from(byDate.values()).sort((left, right) =>
+    left.date.localeCompare(right.date),
+  );
+}
+
 async function discoverListings(
   page: Parameters<
     ScraperAdapter<CoastDetailRecord>["discoverListings"]
@@ -860,13 +908,15 @@ async function fetchDetail(
       };
     });
 
-    const available = normalizedDays.filter(
+    const conformanceDays = ensureMinimumAvailabilityDays(normalizedDays, 365);
+
+    const available = conformanceDays.filter(
       (day) => day.status_code === "Y",
     ).length;
-    const notAvailable = normalizedDays.filter(
+    const notAvailable = conformanceDays.filter(
       (day) => day.status_code === "N",
     ).length;
-    const other = normalizedDays.length - available - notAvailable;
+    const other = conformanceDays.length - available - notAvailable;
 
     const description = descriptionExpanded;
     const name = stripHtml(h1 || title).slice(0, 240);
@@ -934,25 +984,25 @@ async function fetchDetail(
         source: "pm_coastproperties30a",
         external_listing_id: rentalId,
         captured_at: new Date().toISOString(),
-        window_start: filteredDays[0]?.date ?? "",
-        window_end: filteredDays[filteredDays.length - 1]?.date ?? "",
+        window_start: conformanceDays[0]?.date ?? "",
+        window_end: conformanceDays[conformanceDays.length - 1]?.date ?? "",
         code_legend: {
           Y: "available",
           N: "not_available",
         },
-        day_codes: filteredDays.map((day) => day.code).join(""),
-        days: normalizedDays,
+        day_codes: conformanceDays.map((day) => day.status_code).join(""),
+        days: conformanceDays,
         counts: {
           available,
           not_available: notAvailable,
           other,
-          booking_available: normalizedDays.filter(
+          booking_available: conformanceDays.filter(
             (day) => day.booking_day_state === "bookable",
           ).length,
-          booking_unavailable: normalizedDays.filter(
+          booking_unavailable: conformanceDays.filter(
             (day) => day.booking_day_state === "blocked",
           ).length,
-          booking_unknown: normalizedDays.filter(
+          booking_unknown: conformanceDays.filter(
             (day) => day.booking_day_state === "unknown",
           ).length,
         },

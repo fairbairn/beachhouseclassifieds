@@ -186,6 +186,29 @@ function parseFirstNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function extractLatLngFromHtml(html: string): {
+  latitude: number | null;
+  longitude: number | null;
+} {
+  const mapNodeMatch = html.match(
+    /<div[^>]+class="[^"]*cmp-pdp-map[^"]*"[^>]*>/i,
+  );
+  if (!mapNodeMatch?.[0]) {
+    return { latitude: null, longitude: null };
+  }
+
+  const mapNode = mapNodeMatch[0];
+  const latRaw = mapNode.match(/\sdata-lat="([^"]+)"/i)?.[1]?.trim() ?? "";
+  const longRaw = mapNode.match(/\sdata-long="([^"]+)"/i)?.[1]?.trim() ?? "";
+  const latitude = Number(latRaw);
+  const longitude = Number(longRaw);
+
+  return {
+    latitude: Number.isFinite(latitude) ? latitude : null,
+    longitude: Number.isFinite(longitude) ? longitude : null,
+  };
+}
+
 function normalizeGalleryUrl(rawUrl: string): string {
   const cleaned = rawUrl.trim();
   if (!cleaned) {
@@ -923,6 +946,7 @@ async function fetchDetail(
     const directionsQuery = [parsedAddress, shortAddress]
       .filter(Boolean)
       .join(", ");
+    const coordinates = extractLatLngFromHtml(html);
     const location: DetailRecord360Blue["location"] = {
       address: parsedAddress,
       location_label: shortAddress,
@@ -930,8 +954,8 @@ async function fetchDetail(
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsQuery)}`
         : "",
       directions_daddr: directionsQuery,
-      latitude: null,
-      longitude: null,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
     };
 
     const description = descriptionExpanded;

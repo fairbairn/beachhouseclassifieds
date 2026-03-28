@@ -329,6 +329,44 @@ function extractFieldLocationFromHtml(html: string): {
 
   const latitude = latitudeMatch ? Number(latitudeMatch[1]) : NaN;
   const longitude = longitudeMatch ? Number(longitudeMatch[1]) : NaN;
+  const latLngPairMatch = html.match(
+    /["']latitude["']\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]{0,120}?["']longitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  const lngLatPairMatch = html.match(
+    /["']longitude["']\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]{0,120}?["']latitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  const atCoordMatch = html.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/i);
+  const maps3d4dMatch = html.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/i);
+
+  const latitudeFallback = latLngPairMatch?.[1]
+    ? Number(latLngPairMatch[1])
+    : lngLatPairMatch?.[2]
+      ? Number(lngLatPairMatch[2])
+      : atCoordMatch?.[1]
+        ? Number(atCoordMatch[1])
+        : maps3d4dMatch?.[1]
+          ? Number(maps3d4dMatch[1])
+          : NaN;
+  const longitudeFallback = latLngPairMatch?.[2]
+    ? Number(latLngPairMatch[2])
+    : lngLatPairMatch?.[1]
+      ? Number(lngLatPairMatch[1])
+      : atCoordMatch?.[2]
+        ? Number(atCoordMatch[2])
+        : maps3d4dMatch?.[2]
+          ? Number(maps3d4dMatch[2])
+          : NaN;
+
+  const latitudeResolved = Number.isFinite(latitude)
+    ? latitude
+    : Number.isFinite(latitudeFallback)
+      ? latitudeFallback
+      : NaN;
+  const longitudeResolved = Number.isFinite(longitude)
+    ? longitude
+    : Number.isFinite(longitudeFallback)
+      ? longitudeFallback
+      : NaN;
 
   const hasMeaningfulCoords =
     (Number.isFinite(latitude) && Math.abs(latitude) > 0.000001) ||
@@ -393,6 +431,14 @@ function extractFieldLocationFromHtml(html: string): {
       street: "",
       latitude: Number.isFinite(latitudeInline) ? latitudeInline : null,
       longitude: Number.isFinite(longitudeInline) ? longitudeInline : null,
+    };
+  }
+
+  if (Number.isFinite(latitudeResolved) || Number.isFinite(longitudeResolved)) {
+    return {
+      street,
+      latitude: Number.isFinite(latitudeResolved) ? latitudeResolved : null,
+      longitude: Number.isFinite(longitudeResolved) ? longitudeResolved : null,
     };
   }
 

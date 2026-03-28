@@ -47,6 +47,7 @@ An adapter is Ready only if all files meet these required thresholds:
 - Media threshold: media_gallery.image_urls.length >= 5
 - Availability threshold (required): availability window span >= 365 days
 - Geo threshold (required): numeric latitude/longitude in location for every listing
+- Sample size threshold (required): adapter must include > 1 listing
 
 Preferred (non-blocking for Ready, tracked separately in probe output):
 
@@ -54,48 +55,48 @@ Preferred (non-blocking for Ready, tracked separately in probe output):
 
 ## Conformance Matrix
 
-| Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Rates | Image URLs | Avg Img/List | API Avail | API Rates | API Quote | Ready | Notes                                                                                                              |
-| ----------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ----: | ---------: | -----------: | :-------: | :-------: | :-------: | :---: | ------------------------------------------------------------------------------------------------------------------ |
-| 30abeach                |    17 |   17 |      17 |           17 |           17 |         17 |        17 |     17 |    17 |       1652 |        97.18 |    ✅     |    ✅     |    ✅     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| 30aescapes              |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |     0 |       6282 |        37.17 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     0 |       5247 |        49.97 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| 30avacay                |     1 |    1 |       1 |            1 |            1 |          1 |         1 |      1 |     0 |         40 |        40.00 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">geo_latlng 0/1</span>                                                           |
-| 360blue                 |   620 |  620 |     620 |          619 |          620 |        620 |       620 |    620 |     0 |      30940 |        49.90 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">description>=600 618/620, availability>=365d 594/620, geo_latlng 0/620</span>   |
-| beachblue               |    16 |   16 |      16 |           16 |           16 |         16 |        16 |     16 |     0 |        712 |        44.50 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |     0 |       8508 |        66.47 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">geo_latlng 0/128</span>                                                         |
-| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |    30 |       2063 |        68.77 |    ✅     |    ✅     |    ❌     |  ❌   | <span style="white-space: nowrap;">availability>=365d 0/30</span>                                                  |
-| dunevr30a               |    91 |   91 |      91 |           91 |           91 |         90 |        91 |     91 |    91 |       4183 |        45.97 |    ✅     |    ✅     |    ✅     |  ❌   | <span style="white-space: nowrap;">description>=600 86/91, amenities>=2 90/91</span>                               |
-| exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |       5629 |        53.10 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">geo_latlng 0/106</span>                                                         |
-| fivestar30a             |    62 |   62 |      62 |           62 |           62 |         62 |        62 |     62 |    62 |       6488 |       104.65 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| funvacay30a             |    45 |   45 |      45 |           45 |            0 |          0 |        45 |     45 |     0 |        148 |         3.29 |    ❌     |    ❌     |    ✅     |  ❌   | <span style="white-space: nowrap;">description>=600 0/45, amenities>=2 0/45, media>=5 0/45, geo_latlng 0/45</span> |
-| grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |     0 |       4495 |       128.43 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">geo_latlng 0/35</span>                                                          |
-| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |     0 |      10762 |        51.74 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| keyco30a                |   381 |  381 |     381 |          381 |          381 |        381 |       381 |    381 |     0 |      27391 |        71.89 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">description>=600 311/381, geo_latlng 379/381</span>                             |
-| localvr30a              |    42 |   42 |      42 |           42 |           42 |         42 |        42 |     42 |     0 |       1774 |        42.24 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| luxe30a                 |    12 |   12 |      12 |           12 |           12 |         12 |        12 |     12 |     0 |        781 |        65.08 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| oceanreef30a            |   111 |  111 |     111 |          111 |          111 |        111 |       111 |    111 |     0 |       8250 |        74.32 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">availability>=365d 0/111</span>                                                 |
-| oversee30a              |    67 |   67 |      67 |           67 |           67 |         67 |        67 |     67 |     0 |       3738 |        55.79 |    ✅     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| panhandle30a            |    51 |   51 |      51 |           51 |           51 |         51 |        51 |     51 |     0 |       2641 |        51.78 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">geo_latlng 0/51</span>                                                          |
-| realjoy30a              |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |     0 |      16334 |       116.67 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| royaldestinations       |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |     0 |       6677 |        46.69 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">geo_latlng 0/143</span>                                                         |
-| sandersbeach30a         |    73 |   73 |      73 |           73 |           73 |         73 |        73 |     73 |     0 |       3633 |        49.77 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| sandpiper30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |       5436 |        51.28 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">geo_latlng 0/106</span>                                                         |
-| scenicstays30a          |    46 |   46 |      46 |           46 |           44 |         46 |        46 |     46 |    46 |       2570 |        55.87 |    ✅     |    ✅     |    ❌     |  ❌   | <span style="white-space: nowrap;">description>=600 44/46</span>                                                   |
-| stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |     0 |       2418 |        65.35 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">geo_latlng 0/37</span>                                                          |
-| stayon30a               |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |     0 |      11150 |       142.95 |    ✅     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">none</span>                                                                     |
-| **TOTAL**               |  2920 | 2920 |    2920 |         2919 |         2873 |       2874 |      2920 |   2920 |   246 |     179942 |        61.62 |     —     |     —     |     —     |   —   | <span style="white-space: nowrap;">12/27 Ready</span>                                                              |
+| Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Rates | Image URLs | Avg Img/List | API Avail | API Rates | API Quote | Ready | Notes |
+| ----------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ----: | ---------: | -----------: | :-------: | :-------: | :-------: | :---: | ----- |
+| 30abeach                |    17 |    17 |    17 |    17 |    17 |    17 |    17 |    17 |    17 |       1652 |       97.18 |         ✅ |         ✅ |         ✅ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| 30aescapes              |   169 |   169 |   169 |   169 |   169 |   169 |   169 |   169 |     0 |       6282 |       37.17 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| 30aluxury               |   105 |   105 |   105 |   105 |   105 |   105 |   105 |   105 |     0 |       5247 |       49.97 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| 30avacay                |     1 |     1 |     1 |     1 |     1 |     1 |     1 |     1 |     0 |         40 |       40.00 |         ❌ |         ❌ |         ❌ |     ❌ | <span style="white-space: nowrap;">sample_size>1 1/1, geo_latlng 0/1</span> |
+| 360blue                 |   620 |   620 |   620 |   619 |   620 |   620 |   620 |   620 |     0 |      30940 |       49.90 |         ❌ |         ❌ |         ❌ |     ❌ | <span style="white-space: nowrap;">description>=600 618/620, availability>=365d 594/620</span> |
+| beachblue               |    16 |    16 |    16 |    16 |    16 |    16 |    16 |    16 |     0 |        712 |       44.50 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| benchmark30a            |   128 |   128 |   128 |   128 |   128 |   128 |   128 |   128 |     0 |       8508 |       66.47 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| coastproperties30a      |    30 |    30 |    30 |    30 |    30 |    30 |    30 |    30 |    30 |       2063 |       68.77 |         ✅ |         ✅ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| dunevr30a               |    91 |    91 |    91 |    91 |    91 |    90 |    91 |    91 |    91 |       4183 |       45.97 |         ✅ |         ✅ |         ✅ |     ❌ | <span style="white-space: nowrap;">description>=600 86/91, amenities>=2 90/91</span> |
+| exclusive30a            |   106 |   106 |   106 |   106 |   106 |   106 |   106 |   106 |     0 |       5629 |       53.10 |         ❌ |         ❌ |         ❌ |     ❌ | <span style="white-space: nowrap;">geo_latlng 0/106</span> |
+| fivestar30a             |    62 |    62 |    62 |    62 |    62 |    62 |    62 |    62 |    62 |       6488 |      104.65 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| funvacay30a             |    45 |    45 |    45 |    45 |    45 |    45 |    45 |    45 |     0 |        250 |        5.56 |         ❌ |         ❌ |         ✅ |     ❌ | <span style="white-space: nowrap;">media>=5 40/45</span> |
+| grayt30a                |    35 |    35 |    35 |    35 |    35 |    35 |    35 |    35 |     0 |       4495 |      128.43 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| homeownerscollection30a |   208 |   208 |   208 |   208 |   208 |   208 |   208 |   208 |     0 |      10762 |       51.74 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| keyco30a                |   381 |   381 |   381 |   381 |   381 |   381 |   381 |   381 |     0 |      27391 |       71.89 |         ❌ |         ❌ |         ❌ |     ❌ | <span style="white-space: nowrap;">description>=600 311/381, geo_latlng 379/381</span> |
+| localvr30a              |    42 |    42 |    42 |    42 |    42 |    42 |    42 |    42 |     0 |       1774 |       42.24 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| luxe30a                 |    12 |    12 |    12 |    12 |    12 |    12 |    12 |    12 |     0 |        781 |       65.08 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| oceanreef30a            |   111 |   111 |   111 |   111 |   111 |   111 |   111 |   111 |     0 |       8250 |       74.32 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| oversee30a              |    67 |    67 |    67 |    67 |    67 |    67 |    67 |    67 |     0 |       3738 |       55.79 |         ✅ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| panhandle30a            |    51 |    51 |    51 |    51 |    51 |    51 |    51 |    51 |     0 |       2641 |       51.78 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| realjoy30a              |   140 |   140 |   140 |   140 |   140 |   140 |   140 |   140 |     0 |      16334 |      116.67 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| royaldestinations       |   143 |   143 |   143 |   143 |   143 |   143 |   143 |   143 |     0 |       6677 |       46.69 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| sandersbeach30a         |    73 |    73 |    73 |    73 |    73 |    73 |    73 |    73 |     0 |       3633 |       49.77 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| sandpiper30a            |   106 |   106 |   106 |   106 |   106 |   106 |   106 |   106 |     0 |       5436 |       51.28 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| scenicstays30a          |    46 |    46 |    46 |    46 |    44 |    46 |    46 |    46 |    46 |       2570 |       55.87 |         ✅ |         ✅ |         ❌ |     ❌ | <span style="white-space: nowrap;">description>=600 44/46</span> |
+| stayat30a               |    37 |    37 |    37 |    37 |    37 |    37 |    37 |    37 |     0 |       2418 |       65.35 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| stayon30a               |    78 |    78 |    78 |    78 |    78 |    78 |    78 |    78 |     0 |      11150 |      142.95 |         ✅ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| **TOTAL**               |  2920 |  2920 |  2920 |  2919 |  2918 |  2919 |  2920 |  2920 |   246 |     180044 |       61.66 |         — |         — |         — |     — | <span style="white-space: nowrap;">20/27 Ready</span> |
 
 ## Current Snapshot Summary
 
 - 27 adapters audited.
 - All 27 adapters are at full required-core parity for the current captured files.
-- Threshold-ready adapters (Ready = ✅): 12 / 27.
+- Threshold-ready adapters (Ready = ✅): 20 / 27.
 - Rates coverage signal: 246 / 2920 files currently include normalized_rates.days.
 - API capability signal:
   - Availability API present: 6 / 27 adapters.
   - Rates API present: 4 / 27 adapters.
   - Pre-reservation API present: 3 / 27 adapters.
-- Geo location minimum (required): 16 / 27 adapters currently have 100% numeric lat/lng coverage.
+- Geo location minimum (required): 24 / 27 adapters currently have 100% numeric lat/lng coverage.
 - Preferred horizon (>=730d) remains non-blocking and is tracked in probe metrics, not failure notes.
 
 ## Follow-Up Refinement Backlog (Post Base-Adapter Completion)
