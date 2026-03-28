@@ -121,6 +121,37 @@ const OUTPUT_ROOT = resolve(
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 
+const EXCLUDED_LISTING_IDS = new Set<string>([
+  "blue-mountain-beach-gulf-point-hideaway-34-gulf-point-road-3034",
+  "seagrove-2-palms-41-east-grove-avenue-3021",
+  "blue-mountain-beach-blue-phoenix-16-sandcastle-court-64",
+  "blue-mountain-beach-for-shore-59-brentwood-lane-80",
+  "blue-mountain-beach-manatee-manor-490-hidden-lake-way-2976",
+  "blue-mountain-peace-of-paradise-186-ventana-blvd-141",
+  "dune-allen-side-beach-21-breeze-drive-161",
+  "grayton-beach-birdie-a-174-barton-s-way-168",
+  "inlet-beach-high-tide-28-tidewater-court-2931",
+  "rosemary-beach-heaven-on-7-67-dunmore-town-lane-748",
+  "seacrest-beach-40-sand-flea-drive-187",
+  "seacrest-beach-tranquillity-sea-la-vie-8600-e-county-highway-30a-240-200",
+  "seacrest-beach-white-sands-8580-e-county-hwy-30a-792",
+  "seagrove-beach-4-shore-54-cote-d-azur-drive-849",
+  "seagrove-beach-above-and-beyond-50-hinton-bishop-drive-847",
+  "seagrove-beach-salt-sol-121-dalton-drive-209",
+  "watercolor-1640-e-county-hwy-30a-301-1256",
+  "watercolor-23-red-basil-drive-239",
+  "watercolor-beach-barn-98-mystic-cobalt-1324",
+  "watercolor-beachside-13-1848-e-co-hwy-30a-1144",
+  "watercolor-beachside-6-1848-e-co-hwy-30a-1149",
+  "watercolor-good-times-90-silver-laurel-way-1318",
+  "watercolor-sea-la-vie-113-needlerush-drive-1163",
+  "watercolor-whitecaps-223-western-lake-drive-1214",
+  "watersound-237-salt-box-lane-253",
+  "watersound-crossings-c-426-indescribable-100-s-bridge-lane-1388",
+  "watersound-crossings-home-run-a-104-429-bridge-lane-1379",
+  "watersound-the-salty-deer-85-s-founders-lane-1369",
+]);
+
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
 }
@@ -517,6 +548,11 @@ async function discoverListings(
 
     const valid = toValidDetailUrl(href);
     if (!valid || seen.has(valid)) {
+      continue;
+    }
+
+    const listingId = extractExternalListingId(valid);
+    if (EXCLUDED_LISTING_IDS.has(listingId)) {
       continue;
     }
 

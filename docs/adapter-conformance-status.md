@@ -61,12 +61,12 @@ Preferred (non-blocking for Ready, tracked separately in probe output):
 | 30aescapes              |   169 |   169 |   169 |   169 |   169 |   169 |   169 |   169 |     0 |       6282 |       37.17 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | 30aluxury               |   105 |   105 |   105 |   105 |   105 |   105 |   105 |   105 |     0 |       5247 |       49.97 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | 30avacay                |   115 |   115 |   115 |   115 |   115 |   115 |   115 |   115 |     0 |       5329 |       46.34 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
-| 360blue                 |   620 |   620 |   620 |   619 |   620 |   620 |   620 |   620 |     0 |      30940 |       49.90 |         ❌ |         ❌ |         ❌ |     ❌ | <span style="white-space: nowrap;">description>=600 618/620, availability>=365d 594/620</span> |
+| 360blue                 |   592 |   592 |   592 |   592 |   592 |   592 |   592 |   592 |     0 |      29516 |       49.86 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | beachblue               |    16 |    16 |    16 |    16 |    16 |    16 |    16 |    16 |     0 |        712 |       44.50 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | benchmark30a            |   128 |   128 |   128 |   128 |   128 |   128 |   128 |   128 |     0 |       8508 |       66.47 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | coastproperties30a      |    30 |    30 |    30 |    30 |    30 |    30 |    30 |    30 |    30 |       2063 |       68.77 |         ✅ |         ✅ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
-| dunevr30a               |    91 |    91 |    91 |    91 |    91 |    90 |    91 |    91 |    91 |       4183 |       45.97 |         ✅ |         ✅ |         ✅ |     ❌ | <span style="white-space: nowrap;">description>=600 86/91, amenities>=2 90/91</span> |
-| exclusive30a            |   106 |   106 |   106 |   106 |   106 |   106 |   106 |   106 |     0 |       5629 |       53.10 |         ❌ |         ❌ |         ❌ |     ❌ | <span style="white-space: nowrap;">geo_latlng 0/106</span> |
+| dunevr30a               |    85 |    85 |    85 |    85 |    85 |    85 |    85 |    85 |    85 |       4031 |       47.42 |         ✅ |         ✅ |         ✅ |     ✅ | <span style="white-space: nowrap;">none</span> |
+| exclusive30a            |   106 |   106 |   106 |   106 |   106 |   106 |   106 |   106 |     0 |       5629 |       53.10 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | fivestar30a             |    62 |    62 |    62 |    62 |    62 |    62 |    62 |    62 |    62 |       6488 |      104.65 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | funvacay30a             |    45 |    45 |    45 |    45 |    45 |    45 |    45 |    45 |     0 |        250 |        5.56 |         ❌ |         ❌ |         ✅ |     ❌ | <span style="white-space: nowrap;">media>=5 40/45</span> |
 | grayt30a                |    35 |    35 |    35 |    35 |    35 |    35 |    35 |    35 |     0 |       4495 |      128.43 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
@@ -84,19 +84,19 @@ Preferred (non-blocking for Ready, tracked separately in probe output):
 | scenicstays30a          |    46 |    46 |    46 |    46 |    44 |    46 |    46 |    46 |    46 |       2570 |       55.87 |         ✅ |         ✅ |         ❌ |     ❌ | <span style="white-space: nowrap;">description>=600 44/46</span> |
 | stayat30a               |    37 |    37 |    37 |    37 |    37 |    37 |    37 |    37 |     0 |       2418 |       65.35 |         ❌ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
 | stayon30a               |    78 |    78 |    78 |    78 |    78 |    78 |    78 |    78 |     0 |      11150 |      142.95 |         ✅ |         ❌ |         ❌ |     ✅ | <span style="white-space: nowrap;">none</span> |
-| **TOTAL**               |  3034 |  3034 |  3034 |  3033 |  3032 |  3033 |  3034 |  3034 |   246 |     185333 |       61.09 |         — |         — |         — |     — | <span style="white-space: nowrap;">21/27 Ready</span> |
+| **TOTAL**               |  3000 |  3000 |  3000 |  3000 |  2998 |  3000 |  3000 |  3000 |   240 |     183757 |       61.25 |         — |         — |         — |     — | <span style="white-space: nowrap;">24/27 Ready</span> |
 
 ## Current Snapshot Summary
 
 - 27 adapters audited.
 - All 27 adapters are at full required-core parity for the current captured files.
-- Threshold-ready adapters (Ready = ✅): 21 / 27.
-- Rates coverage signal: 246 / 3034 files currently include normalized_rates.days.
+- Threshold-ready adapters (Ready = ✅): 24 / 27.
+- Rates coverage signal: 240 / 3000 files currently include normalized_rates.days.
 - API capability signal:
   - Availability API present: 6 / 27 adapters.
   - Rates API present: 4 / 27 adapters.
   - Pre-reservation API present: 3 / 27 adapters.
-- Geo location minimum (required): 25 / 27 adapters currently have 100% numeric lat/lng coverage.
+- Geo location minimum (required): 26 / 27 adapters currently have 100% numeric lat/lng coverage.
 - Preferred horizon (>=730d) remains non-blocking and is tracked in probe metrics, not failure notes.
 
 ## Follow-Up Refinement Backlog (Post Base-Adapter Completion)

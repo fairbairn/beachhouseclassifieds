@@ -1,7 +1,7 @@
 {
   "external_listing_id": "6",
   "detail_url": "https://www.exclusive30a.com/vacation-rentals/lighthouse-loft-45",
-  "fetched_at": "2026-03-27T17:59:20.048Z",
+  "fetched_at": "2026-03-28T15:19:52.684Z",
   "title": "Lighthouse Loft | Pet Friendly WaterColor Condo | Exclusive 30A",
   "h1": "Lighthouse Loft",
   "canonical_url": "https://www.exclusive30a.com/vacation-rentals/lighthouse-loft-45",
@@ -139,18 +139,18 @@
         "Tourist Attractions"
       ],
       "Highlights": [
-        "Hangers",
-        "Air Conditioning",
-        "Hair Dryer",
-        "Outdoor Shower",
-        "Living Room",
-        "Hot Water",
-        "Heating",
-        "Cable",
+        "Private Living Room",
         "Dryer",
-        "Essentials",
-        "Bed Linens",
-        "Private Entrance"
+        "Private Entrance",
+        "Hot Water",
+        "Living Room",
+        "Heating",
+        "Parking",
+        "Wifi",
+        "Kitchen",
+        "Outdoor Shower",
+        "Iron & Ironing Board",
+        "Washer"
       ]
     },
     "all": [
@@ -254,8 +254,8 @@
     "location_label": "WaterColor",
     "directions_url": "https://www.google.com/maps/dir/?api=1&destination=WaterColor%20-%20Park%20District%2C%20WaterColor",
     "directions_daddr": "WaterColor - Park District, WaterColor",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.323409,
+    "longitude": -86.144036
   },
   "media_gallery": {
     "image_count": 43,
@@ -331,23 +331,15 @@
   "normalized_availability": {
     "source": "pm_exclusive30a",
     "external_listing_id": "6",
-    "captured_at": "2026-03-27T17:59:20.048Z",
-    "window_start": "2026-03-27",
-    "window_end": "2028-03-26",
+    "captured_at": "2026-03-28T15:19:52.684Z",
+    "window_start": "2026-03-28",
+    "window_end": "2028-03-27",
     "code_legend": {
       "Y": "available",
       "N": "not_available"
     },
-    "day_codes": "YYYYYYYNNNNNNYYYYNNNNNNNNNNNNNNNNNNNNYYYYYNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
+    "day_codes": "YNYYYYNNNNNNYYYYNNNNNNNNNNNNNNNNNNNNYYYYYNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
     "days": [
-      {
-        "date": "2026-03-27",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
-      },
       {
         "date": "2026-03-28",
         "is_available": true,
@@ -358,11 +350,11 @@
       },
       {
         "date": "2026-03-29",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "status_code": "N",
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-03-30",
@@ -6187,19 +6179,31 @@
         "is_available_for_checkout": true,
         "status_code": "Y",
         "booking_day_state": "bookable"
+      },
+      {
+        "date": "2028-03-27",
+        "is_available": true,
+        "is_available_for_checkin": true,
+        "is_available_for_checkout": true,
+        "status_code": "Y",
+        "booking_day_state": "bookable"
       }
     ],
     "counts": {
-      "available": 697,
-      "not_available": 34,
+      "available": 696,
+      "not_available": 35,
       "other": 0,
-      "booking_available": 697,
-      "booking_unavailable": 34,
+      "booking_available": 696,
+      "booking_unavailable": 35,
       "booking_unknown": 0
     }
   },
   "availability_raw": {
     "booked_days": [
+      {
+        "departure_okay": 0,
+        "d": "20260329"
+      },
       {
         "departure_okay": 1,
         "d": "20260403"

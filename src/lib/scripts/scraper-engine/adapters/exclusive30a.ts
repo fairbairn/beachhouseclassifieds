@@ -255,6 +255,23 @@ function parseNumberLike(value: unknown): number | null {
   return null;
 }
 
+function parseCoordinateVariable(html: string): {
+  latitude: number | null;
+  longitude: number | null;
+} {
+  const match = html.match(
+    /var\s+coordinate\s*=\s*\{[\s\S]*?['"]lat['"]\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]*?['"](?:lng|lon|lan|longitude)['"]\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]*?\}/i,
+  );
+  if (!match?.[1] || !match[2]) {
+    return { latitude: null, longitude: null };
+  }
+
+  return {
+    latitude: parseNumberLike(match[1]),
+    longitude: parseNumberLike(match[2]),
+  };
+}
+
 function absoluteHttpUrl(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -812,8 +829,11 @@ async function fetchDetail(
           directionsDaddr,
         )}`
       : "";
-    const latitude = parseNumberLike(schemaGeo?.latitude ?? null);
-    const longitude = parseNumberLike(schemaGeo?.longitude ?? null);
+    const coordVar = parseCoordinateVariable(html);
+    const latitude =
+      parseNumberLike(schemaGeo?.latitude ?? null) ?? coordVar.latitude;
+    const longitude =
+      parseNumberLike(schemaGeo?.longitude ?? null) ?? coordVar.longitude;
 
     const bedsFromSchema = parseNumberLike(
       vacationRentalSchema?.numberOfBedrooms ??
