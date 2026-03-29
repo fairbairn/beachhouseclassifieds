@@ -1,11 +1,27 @@
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type EscapeDayCode = string;
+
+type EscapeRateObservation = {
+  sampled_at: string;
+  start_date: string;
+  end_date: string;
+  nights: number;
+  quote_available: boolean;
+  quote_unavailable_reason: string | null;
+  base_total: number | null;
+  taxes_total: number | null;
+  fees_total_excl_taxes: number | null;
+  fee_lines: Array<{ name: string; amount: number }>;
+  quoted_total: number | null;
+  handoff_url: string | null;
+  source: "quote_api";
+};
 
 type EscapeDetailRecord = DetailRecordBase & {
   title: string;
@@ -94,6 +110,42 @@ type EscapeDetailRecord = DetailRecordBase & {
       booking_unknown: number;
     };
   };
+  normalized_rates: {
+    source: "pm_30aescapes_quote_api";
+    external_listing_id: string;
+    captured_at: string;
+    currency: string;
+    quote_window_days: number;
+    quote_sample_step_days: number;
+    quote_nights: number;
+    quote_max_queries: number;
+    assumptions_sample_count: number;
+    days: Array<{
+      date: string;
+      nightly_rate: number | null;
+      min_nights: number | null;
+      is_booked: boolean | null;
+      changeover_code: EscapeDayCode;
+      season_name: string;
+    }>;
+  };
+  rates_raw: {
+    source: "30aescapes_quote_api";
+    endpoint: string;
+    method: "POST";
+    quote_signature: {
+      formtype: string;
+      page: string;
+      redskyclient: string;
+    };
+    assumptions_snapshot: {
+      sample_count: number;
+      avg_fee_pct_of_base: number;
+      avg_tax_pct_of_base: number;
+      avg_all_in_multiplier: number;
+    };
+    observations: EscapeRateObservation[];
+  };
   scrape_metrics: {
     total_ms: number;
     page_load_ms: number;
@@ -113,6 +165,35 @@ const OUTPUT_ROOT = resolve(
   "30aescapes",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+const PRICING_PROFILE_PATH = resolve(OUTPUT_ROOT, "pricing-profile.json");
+const PRICING_ASSUMPTIONS_PATH = resolve(
+  OUTPUT_ROOT,
+  "pricing-assumptions.json",
+);
+const ESCAPES_QUOTES_ENDPOINT =
+  "https://www.30aescapes.com/rentals/ajax/get-pdp-rates.cfm";
+
+type EscapesProfile = {
+  quote_signature?: {
+    fixed_params?: {
+      formtype?: string;
+      page?: string;
+      redskyclient?: string;
+    };
+  };
+};
+
+type EscapesAssumptionsStore = {
+  assumptions?: {
+    sample_count?: number;
+    avg_fee_pct_of_base?: number;
+    avg_tax_pct_of_base?: number;
+    avg_all_in_multiplier?: number;
+  };
+};
+
+let cachedEscapesProfile: EscapesProfile | null = null;
+let cachedEscapesAssumptions: EscapesAssumptionsStore | null = null;
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
@@ -180,6 +261,177 @@ function parseFirstNumber(value: string): number | null {
   }
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function addDaysToIsoDate(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime())) {
+    return isoDate;
+  }
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function isSundayIsoDate(isoDate: string): boolean {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.getUTCDay() === 0;
+}
+
+function toUsDate(isoDate: string): string {
+  const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return isoDate;
+  }
+  return `${match[2]}/${match[3]}/${match[1]}`;
+}
+
+function parseUsdAmountFromText(value: string): number | null {
+  const matches = Array.from(value.matchAll(/\$([0-9][0-9,]*\.[0-9]{2})/g));
+  const match = matches[matches.length - 1];
+  if (!match?.[1]) {
+    return null;
+  }
+  const parsed = Number((match[1] ?? "").replace(/,/g, ""));
+  return Number.isFinite(parsed) ? roundCurrency(parsed) : null;
+}
+
+function medianNumber(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return roundCurrency((sorted[middle - 1]! + sorted[middle]!) / 2);
+  }
+  return roundCurrency(sorted[middle]!);
+}
+
+async function readEscapesProfile(): Promise<EscapesProfile> {
+  if (cachedEscapesProfile) {
+    return cachedEscapesProfile;
+  }
+  try {
+    const raw = await readFile(PRICING_PROFILE_PATH, "utf8");
+    cachedEscapesProfile = JSON.parse(raw) as EscapesProfile;
+  } catch {
+    cachedEscapesProfile = {};
+  }
+  return cachedEscapesProfile;
+}
+
+async function readEscapesAssumptions(): Promise<EscapesAssumptionsStore> {
+  if (cachedEscapesAssumptions) {
+    return cachedEscapesAssumptions;
+  }
+  try {
+    const raw = await readFile(PRICING_ASSUMPTIONS_PATH, "utf8");
+    cachedEscapesAssumptions = JSON.parse(raw) as EscapesAssumptionsStore;
+  } catch {
+    cachedEscapesAssumptions = {};
+  }
+  return cachedEscapesAssumptions;
+}
+
+function extractListItemAmount(html: string, label: string): number | null {
+  const regex = new RegExp(`<li[^>]*>\\s*${label}([\\s\\S]*?)<\\/li>`, "i");
+  const segment = html.match(regex)?.[1] ?? "";
+  return parseUsdAmountFromText(segment);
+}
+
+function parseEscapesQuoteHtml(html: string): {
+  quoteAvailable: boolean;
+  unavailableReason: string | null;
+  baseTotal: number | null;
+  taxesTotal: number | null;
+  quotedTotal: number | null;
+  handoffUrl: string | null;
+  feeLines: Array<{ name: string; amount: number }>;
+} {
+  const bodyText = stripHtml(html).toLowerCase();
+  if (
+    bodyText.includes("property is not available") ||
+    bodyText.includes("unit has no availability")
+  ) {
+    return {
+      quoteAvailable: false,
+      unavailableReason: "unavailable",
+      baseTotal: null,
+      taxesTotal: null,
+      quotedTotal: null,
+      handoffUrl: null,
+      feeLines: [],
+    };
+  }
+
+  const baseTotal = extractListItemAmount(html, "Rent");
+  const taxesTotal = extractListItemAmount(html, "Taxes");
+  const quotedTotal =
+    parseUsdAmountFromText(
+      html.match(
+        /class=\"text-right\s+pdp-quote-total\"[^>]*>([^<]+)</i,
+      )?.[1] ?? "",
+    ) ?? parseUsdAmountFromText(html);
+  const handoffUrl =
+    html.match(/id=\"detailBookBtn\"[^>]*href=\"([^\"]+)\"/i)?.[1] ?? null;
+
+  const quoteAvailable =
+    Number.isFinite(baseTotal) &&
+    (Number.isFinite(quotedTotal) || Number.isFinite(taxesTotal));
+
+  return {
+    quoteAvailable,
+    unavailableReason: quoteAvailable ? null : "no_quote_totals",
+    baseTotal,
+    taxesTotal,
+    quotedTotal,
+    handoffUrl,
+    feeLines: [],
+  };
+}
+
+async function fetchEscapesQuote(params: {
+  propertyId: string;
+  unitShortName: string;
+  checkInIso: string;
+  checkOutIso: string;
+}): Promise<{
+  quoteAvailable: boolean;
+  unavailableReason: string | null;
+  baseTotal: number | null;
+  taxesTotal: number | null;
+  quotedTotal: number | null;
+  handoffUrl: string | null;
+  feeLines: Array<{ name: string; amount: number }>;
+}> {
+  const profile = await readEscapesProfile();
+  const fixed = profile.quote_signature?.fixed_params ?? {};
+  const form = new URLSearchParams({
+    formtype: fixed.formtype ?? "details-datepicker",
+    page: fixed.page ?? "0",
+    propertyid: params.propertyId,
+    unitshortname: params.unitShortName,
+    redskyclient: fixed.redskyclient ?? "no",
+    strcheckin: toUsDate(params.checkInIso),
+    strcheckout: toUsDate(params.checkOutIso),
+  });
+
+  const response = await fetch(ESCAPES_QUOTES_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      accept: "text/html, */*;q=0.1",
+      "user-agent": "Mozilla/5.0",
+    },
+    body: form.toString(),
+  });
+
+  const html = await response.text();
+  return parseEscapesQuoteHtml(html);
 }
 
 function parseCityStateFromAddress(address: string): {
@@ -1141,6 +1393,9 @@ async function fetchDetail(
   detailUrl: string,
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
+  refreshMode: "full" | "dynamic" | "static",
+  existingDetailJsonPath?: string | null,
+  reportDetailProgress?: (message: string) => void,
 ): Promise<EscapeDetailRecord | null> {
   const page = await browser.newPage();
   await installEvaluateNameShim(page);
@@ -1315,6 +1570,24 @@ async function fetchDetail(
           .trim() ??
         "";
 
+      const propertyId =
+        document
+          .querySelector('input[name="propertyid"]')
+          ?.getAttribute("value")
+          ?.trim() ??
+        propertyDetailsNode?.getAttribute("data-propertyid")?.trim() ??
+        "";
+      const unitShortName =
+        document
+          .querySelector('input[name="unitshortname"]')
+          ?.getAttribute("value")
+          ?.trim() ??
+        document
+          .querySelector('input[name="unitcode"]')
+          ?.getAttribute("value")
+          ?.trim() ??
+        "";
+
       const html = document.documentElement.outerHTML;
       return {
         title: document.title ?? "",
@@ -1327,6 +1600,8 @@ async function fetchDetail(
         infoPairs,
         iconText,
         unitId,
+        propertyId,
+        unitShortName,
         amenitiesCategories,
         galleryUrls,
         directionsAddress,
@@ -1344,6 +1619,234 @@ async function fetchDetail(
     });
     const calendarClicks = 0;
     const calendarIterations = normalizedAvailability.days.length > 0 ? 1 : 0;
+
+    const quoteWindowDays = Math.max(
+      168,
+      Number(process.env.ESCAPES30A_RATES_WINDOW_DAYS ?? "168") || 168,
+    );
+    const quoteSampleStepDays = Math.max(
+      7,
+      Number(process.env.ESCAPES30A_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
+    );
+    const quoteNightsDefault = Math.max(
+      2,
+      Number(process.env.ESCAPES30A_RATES_QUOTE_NIGHTS ?? "3") || 3,
+    );
+    const quoteMaxQueries = Math.max(
+      1,
+      Number(process.env.ESCAPES30A_RATES_MAX_QUERIES ?? "24") || 24,
+    );
+
+    const assumptionsStore = await readEscapesAssumptions();
+    const assumptionsSnapshot = {
+      sample_count: Math.max(
+        0,
+        Number(assumptionsStore.assumptions?.sample_count ?? 0) || 0,
+      ),
+      avg_fee_pct_of_base:
+        Number(assumptionsStore.assumptions?.avg_fee_pct_of_base ?? 0) || 0,
+      avg_tax_pct_of_base:
+        Number(assumptionsStore.assumptions?.avg_tax_pct_of_base ?? 0) || 0,
+      avg_all_in_multiplier:
+        Number(assumptionsStore.assumptions?.avg_all_in_multiplier ?? 0) || 0,
+    };
+
+    const existingRateByDate = new Map<string, number>();
+    if (existingDetailJsonPath) {
+      try {
+        const existingRaw = await readFile(existingDetailJsonPath, "utf8");
+        const existing = JSON.parse(existingRaw) as {
+          normalized_rates?: {
+            days?: Array<{ date?: string; nightly_rate?: number | null }>;
+          };
+        };
+        for (const day of existing.normalized_rates?.days ?? []) {
+          const date = String(day.date ?? "");
+          const nightly = Number(day.nightly_rate);
+          if (date && Number.isFinite(nightly) && nightly > 0) {
+            existingRateByDate.set(date, roundCurrency(nightly));
+          }
+        }
+      } catch {
+        // Ignore prior-rate read failures.
+      }
+    }
+
+    const windowDays = normalizedAvailability.days.slice(0, quoteWindowDays);
+    const sampledDays: Array<(typeof windowDays)[number]> = [];
+    for (
+      let cursor = 0;
+      cursor < windowDays.length && sampledDays.length < quoteMaxQueries;
+      cursor += quoteSampleStepDays
+    ) {
+      let picked: (typeof windowDays)[number] | null = null;
+      const windowEnd = Math.min(
+        windowDays.length,
+        cursor + quoteSampleStepDays,
+      );
+      for (let idx = cursor; idx < windowEnd; idx += 1) {
+        const candidate = windowDays[idx];
+        if (!candidate || !candidate.is_available) {
+          continue;
+        }
+        if (isSundayIsoDate(candidate.date)) {
+          picked = candidate;
+          break;
+        }
+        if (!picked) {
+          picked = candidate;
+        }
+      }
+      if (!picked) {
+        continue;
+      }
+      if (sampledDays.at(-1)?.date === picked.date) {
+        continue;
+      }
+      sampledDays.push(picked);
+    }
+
+    const sampledNightlyByDate = new Map<string, number>();
+    const quoteObservations: EscapeRateObservation[] = [];
+    const shouldCallQuoteApi =
+      refreshMode === "dynamic" || refreshMode === "full";
+
+    if (shouldCallQuoteApi && extracted.propertyId && extracted.unitShortName) {
+      reportDetailProgress?.(
+        `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] start sample_windows=${sampledDays.length}`,
+      );
+      for (const day of sampledDays) {
+        const nights = Math.max(
+          quoteNightsDefault,
+          day.min_nights_required ?? 0,
+        );
+        const endDate = addDaysToIsoDate(day.date, nights);
+        try {
+          const quote = await fetchEscapesQuote({
+            propertyId: extracted.propertyId,
+            unitShortName: extracted.unitShortName,
+            checkInIso: day.date,
+            checkOutIso: endDate,
+          });
+
+          day.is_available = quote.quoteAvailable;
+          day.is_available_for_checkin = quote.quoteAvailable;
+          day.is_available_for_checkout = quote.quoteAvailable;
+          day.booking_day_state = quote.quoteAvailable ? "bookable" : "blocked";
+          day.status_code = quote.quoteAvailable ? "A" : "U";
+
+          const nightly =
+            quote.quoteAvailable &&
+            Number.isFinite(quote.baseTotal) &&
+            quote.baseTotal
+              ? roundCurrency((quote.baseTotal ?? 0) / nights)
+              : null;
+          if (nightly !== null && nightly > 0) {
+            sampledNightlyByDate.set(day.date, nightly);
+          }
+
+          quoteObservations.push({
+            sampled_at: new Date().toISOString(),
+            start_date: day.date,
+            end_date: endDate,
+            nights,
+            quote_available: quote.quoteAvailable,
+            quote_unavailable_reason: quote.unavailableReason,
+            base_total: quote.baseTotal,
+            taxes_total: quote.taxesTotal,
+            fees_total_excl_taxes:
+              quote.quoteAvailable &&
+              quote.baseTotal !== null &&
+              quote.taxesTotal !== null &&
+              quote.quotedTotal !== null
+                ? roundCurrency(
+                    Math.max(
+                      0,
+                      quote.quotedTotal - quote.baseTotal - quote.taxesTotal,
+                    ),
+                  )
+                : null,
+            fee_lines: quote.feeLines,
+            quoted_total: quote.quotedTotal,
+            handoff_url: quote.handoffUrl,
+            source: "quote_api",
+          });
+        } catch {
+          quoteObservations.push({
+            sampled_at: new Date().toISOString(),
+            start_date: day.date,
+            end_date: endDate,
+            nights,
+            quote_available: false,
+            quote_unavailable_reason: "quote_request_failed",
+            base_total: null,
+            taxes_total: null,
+            fees_total_excl_taxes: null,
+            fee_lines: [],
+            quoted_total: null,
+            handoff_url: null,
+            source: "quote_api",
+          });
+        }
+      }
+      reportDetailProgress?.(
+        `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] done observations=${quoteObservations.length} priced_days=${sampledNightlyByDate.size}`,
+      );
+    }
+
+    const sampledNightlyValues = Array.from(sampledNightlyByDate.values());
+    const derivedNightly =
+      medianNumber(sampledNightlyValues) ??
+      medianNumber(Array.from(existingRateByDate.values())) ??
+      roundCurrency(
+        Number(process.env.ESCAPES30A_RATES_DERIVED_NIGHTLY_DEFAULT ?? "650") ||
+          650,
+      );
+
+    const normalizedRates: EscapeDetailRecord["normalized_rates"] = {
+      source: "pm_30aescapes_quote_api",
+      external_listing_id: externalListingId,
+      captured_at: new Date().toISOString(),
+      currency: "USD",
+      quote_window_days: quoteWindowDays,
+      quote_sample_step_days: quoteSampleStepDays,
+      quote_nights: quoteNightsDefault,
+      quote_max_queries: quoteMaxQueries,
+      assumptions_sample_count: assumptionsSnapshot.sample_count,
+      days: windowDays.map((day) => {
+        const sampled = sampledNightlyByDate.get(day.date);
+        const existing = existingRateByDate.get(day.date);
+        const nightly =
+          sampled ?? (day.is_available ? (existing ?? derivedNightly) : null);
+        return {
+          date: day.date,
+          nightly_rate: nightly,
+          min_nights: day.min_nights_required ?? null,
+          is_booked: day.is_available ? false : true,
+          changeover_code: day.status_code,
+          season_name: sampled
+            ? "quote_api"
+            : day.is_available
+              ? existing
+                ? "quote_derived_existing"
+                : "quote_derived_assumptions"
+              : "not_available",
+        };
+      }),
+    };
+
+    const ratesRaw: EscapeDetailRecord["rates_raw"] = {
+      source: "30aescapes_quote_api",
+      endpoint: ESCAPES_QUOTES_ENDPOINT,
+      method: "POST",
+      quote_signature: {
+        formtype: "details-datepicker",
+        page: "0",
+        redskyclient: "no",
+      },
+      assumptions_snapshot: assumptionsSnapshot,
+      observations: quoteObservations,
+    };
 
     const name = stripHtml(extracted.h1 || extracted.title).slice(0, 240);
     const description = stripHtml(
@@ -1473,6 +1976,8 @@ async function fetchDetail(
       property_profile: propertyProfile,
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: normalizedAvailability,
+      normalized_rates: normalizedRates,
+      rates_raw: ratesRaw,
       html_path: htmlPath,
       scrape_metrics: {
         total_ms: totalMs,
@@ -1546,6 +2051,9 @@ export function create30AEscapesAdapter(): ScraperAdapter<EscapeDetailRecord> {
         context.detailUrl,
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
+        context.refreshMode,
+        context.existingDetailJsonPath,
+        context.reportDetailProgress,
       );
     },
   };
