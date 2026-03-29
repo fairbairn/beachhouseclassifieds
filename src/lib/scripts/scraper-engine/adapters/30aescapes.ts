@@ -3,37 +3,17 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
+import {
+  assertCanonicalQuotesSidecarRecord,
+  type CanonicalQuoteObservation,
+  type CanonicalQuotesSidecarRecord,
+} from "@/lib/pricing/contracts/quote-observations-contract";
+
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type EscapeDayCode = string;
 
-type EscapeRateObservation = {
-  sampled_at: string;
-  captured_at: string;
-  source_listing_id: string;
-  currency: "USD";
-  start_date: string;
-  end_date: string;
-  check_in_date: string;
-  check_out_date: string;
-  nights: number;
-  base_nightly: number | null;
-  all_in_nightly: number | null;
-  quote_available: boolean;
-  quote_unavailable_reason: string | null;
-  base_total: number | null;
-  taxes_total: number | null;
-  fees_total_excl_taxes: number | null;
-  fee_lines: Array<{ name: string; amount: number }>;
-  grand_total: number | null;
-  quoted_total: number | null;
-  fee_pct_of_base: number | null;
-  tax_pct_of_base: number | null;
-  non_base_pct_of_total: number | null;
-  all_in_multiplier: number | null;
-  handoff_url: string | null;
-  source: "quote_api";
-};
+type EscapeRateObservation = CanonicalQuoteObservation;
 
 type EscapeDetailRecord = DetailRecordBase & {
   title: string;
@@ -216,24 +196,7 @@ type EscapesAssumptionsSnapshot = {
   avg_all_in_multiplier: number;
 };
 
-type EscapeQuotesSidecarRecord = {
-  adapter_key: "30aescapes";
-  external_listing_id: string;
-  detail_url: string;
-  captured_at: string;
-  currency: "USD";
-  quote_window_days: number;
-  quote_sample_step_days: number;
-  quote_nights: number;
-  assumptions_snapshot: {
-    sample_count: number;
-    avg_fee_pct_of_base: number;
-    avg_tax_pct_of_base: number;
-    avg_non_base_pct_of_total: number;
-    avg_all_in_multiplier: number;
-  };
-  observations: EscapeRateObservation[];
-};
+type EscapeQuotesSidecarRecord = CanonicalQuotesSidecarRecord;
 
 let cachedEscapesProfile: EscapesProfile | null = null;
 let cachedEscapesAssumptions: EscapesAssumptionsStore | null = null;
@@ -345,6 +308,16 @@ function addDaysToIsoDate(isoDate: string, days: number): string {
 function isSaturdayIsoDate(isoDate: string): boolean {
   const date = new Date(`${isoDate}T00:00:00.000Z`);
   return Number.isFinite(date.getTime()) && date.getUTCDay() === 6;
+}
+
+function firstSaturdayOnOrAfter(isoDate: string): string {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime())) {
+    return isoDate;
+  }
+  const delta = (6 - date.getUTCDay() + 7) % 7;
+  date.setUTCDate(date.getUTCDate() + delta);
+  return date.toISOString().slice(0, 10);
 }
 
 function toUsDate(isoDate: string): string {
@@ -2087,18 +2060,84 @@ async function fetchDetail(
         OUTPUT_DETAILS_QUOTES_DIR,
         `${externalListingId}.json`,
       );
+
+      if (quoteObservations.length === 0) {
+        const fallbackDays =
+          sampledDays.length > 0
+            ? sampledDays.slice(0, quoteMaxQueries)
+            : Array.from({ length: quoteMaxQueries }, (_, index) => {
+                const captureDate = new Date().toISOString().slice(0, 10);
+                const anchorDate = firstSaturdayOnOrAfter(captureDate);
+                const date = addDaysToIsoDate(anchorDate, index * 7);
+                return {
+                  date,
+                  status_code: "U",
+                  is_available: false,
+                  is_available_for_checkin: false,
+                  is_available_for_checkout: false,
+                  booking_day_state: "blocked",
+                  min_nights_required: quoteNightsDefault,
+                };
+              });
+        for (const day of fallbackDays) {
+          const capturedAt = new Date().toISOString();
+          const nights = quoteNightsDefault;
+          const endDate = addDaysToIsoDate(day.date, nights);
+          const fallbackNightly =
+            existingRateByDate.get(day.date) ?? fallbackNightlyDefault;
+          const fallbackBaseTotal = roundCurrency(fallbackNightly * nights);
+          const fallbackTaxesTotal = roundCurrency(
+            fallbackBaseTotal * assumptionsTaxPct,
+          );
+          const fallbackFeesTotal = roundCurrency(
+            fallbackBaseTotal * assumptionsFeePct,
+          );
+          const fallbackGrandTotal = roundCurrency(
+            Math.max(
+              fallbackBaseTotal + fallbackTaxesTotal + fallbackFeesTotal,
+              fallbackBaseTotal * assumptionsAllInMultiplier,
+            ),
+          );
+
+          quoteObservations.push(
+            completeObservation({
+              capturedAt,
+              day,
+              endDate,
+              nights,
+              quoteAvailable: false,
+              quoteUnavailableReason:
+                "quote_unavailable_fallback_estimated_no_api_windows",
+              baseTotal: fallbackBaseTotal,
+              taxesTotal: fallbackTaxesTotal,
+              feesTotalExclTaxes: fallbackFeesTotal,
+              feeLines: [],
+              quotedTotal: fallbackGrandTotal,
+              handoffUrl: null,
+            }),
+          );
+        }
+      }
+
+      const sidecarCapturedAt = new Date().toISOString();
+      const sidecarCaptureDate = sidecarCapturedAt.slice(0, 10);
+      const sidecarAnchorDate = firstSaturdayOnOrAfter(sidecarCaptureDate);
       const quoteSidecarRecord: EscapeQuotesSidecarRecord = {
         adapter_key: "30aescapes",
         external_listing_id: externalListingId,
         detail_url: detailUrl,
-        captured_at: new Date().toISOString(),
+        captured_at: sidecarCapturedAt,
         currency: "USD",
+        quote_window_cadence: "weekly_sat_to_sat",
+        quote_window_gap_policy: "record_unavailable_without_date_shift",
+        quote_window_anchor_date: sidecarAnchorDate,
         quote_window_days: quoteWindowDays,
         quote_sample_step_days: quoteSampleStepDays,
         quote_nights: quoteNightsDefault,
-        assumptions_snapshot: observedAssumptionsSnapshot,
+        quote_max_queries: quoteMaxQueries,
         observations: quoteObservations,
       };
+      assertCanonicalQuotesSidecarRecord(quoteSidecarRecord);
       await writeFile(
         quoteObservationsPath,
         `${JSON.stringify(quoteSidecarRecord, null, 2)}\n`,

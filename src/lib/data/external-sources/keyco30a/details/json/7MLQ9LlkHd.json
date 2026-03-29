@@ -1,7 +1,7 @@
 {
   "external_listing_id": "7MLQ9LlkHd",
   "detail_url": "https://key.co/listings/7MLQ9LlkHd",
-  "fetched_at": "2026-03-29T20:10:00.308Z",
+  "fetched_at": "2026-03-29T23:18:39.393Z",
   "title": "Pelayo Solage | KEY.co",
   "h1": "Pelayo Solage",
   "canonical_url": "https://key.co/listings/7MLQ9LlkHd",
@@ -253,7 +253,7 @@
   "normalized_availability": {
     "source": "pm_keyco30a",
     "external_listing_id": "7MLQ9LlkHd",
-    "captured_at": "2026-03-29T20:10:00.308Z",
+    "captured_at": "2026-03-29T23:18:39.393Z",
     "window_start": "2026-03-29",
     "window_end": "2028-03-28",
     "code_legend": {
@@ -262,7 +262,7 @@
       "M": "restricted_or_rule_constrained",
       "X": "unknown"
     },
-    "day_codes": "XXXXXXUXXXXXXAXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXAXXXXXXAXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "XXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXAXXXXXXAXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
       {
         "date": "2026-03-29",
@@ -383,11 +383,11 @@
       },
       {
         "date": "2026-04-11",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": null
       },
       {
@@ -6845,13 +6845,13 @@
       }
     ],
     "counts": {
-      "available": 3,
-      "unavailable": 21,
+      "available": 2,
+      "unavailable": 22,
       "checkin_only": 0,
       "checkout_only": 0,
       "other": 707,
-      "booking_available": 3,
-      "booking_unavailable": 21,
+      "booking_available": 2,
+      "booking_unavailable": 22,
       "booking_unknown": 707
     }
   },
@@ -6863,7 +6863,7 @@
   "normalized_rates": {
     "source": "pm_keyco30a",
     "external_listing_id": "7MLQ9LlkHd",
-    "captured_at": "2026-03-29T20:10:00.308Z",
+    "captured_at": "2026-03-29T23:18:39.393Z",
     "currency": "USD",
     "window_start": "2026-03-29",
     "window_end": "2026-09-12",
@@ -6974,11 +6974,11 @@
       },
       {
         "date": "2026-04-11",
-        "nightly_rate": 1018.45,
+        "nightly_rate": null,
         "min_nights": null,
-        "is_booked": false,
-        "changeover_code": "A",
-        "season_name": "quote_weekly_sample"
+        "is_booked": true,
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-04-12",
@@ -7366,11 +7366,11 @@
       },
       {
         "date": "2026-05-30",
-        "nightly_rate": 1701.72,
+        "nightly_rate": null,
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_weekly_sample"
+        "season_name": "quote_unavailable"
       },
       {
         "date": "2026-05-31",
@@ -7422,11 +7422,11 @@
       },
       {
         "date": "2026-06-06",
-        "nightly_rate": 1720.12,
+        "nightly_rate": null,
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_weekly_sample"
+        "season_name": "quote_unavailable"
       },
       {
         "date": "2026-06-07",
@@ -8214,10 +8214,10 @@
       }
     ],
     "stats": {
-      "days_with_rate": 3,
-      "min_nightly_rate": 1018.45,
-      "max_nightly_rate": 1720.12,
-      "avg_nightly_rate": 1480.1
+      "days_with_rate": 0,
+      "min_nightly_rate": null,
+      "max_nightly_rate": null,
+      "avg_nightly_rate": null
     }
   },
   "rates_raw": {

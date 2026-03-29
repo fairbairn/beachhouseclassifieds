@@ -1,7 +1,7 @@
 {
   "external_listing_id": "hsHnaTko1i",
   "detail_url": "https://key.co/listings/hsHnaTko1i",
-  "fetched_at": "2026-03-29T20:06:41.705Z",
+  "fetched_at": "2026-03-29T23:25:35.371Z",
   "title": "Almost Heaven | KEY.co",
   "h1": "Almost Heaven",
   "canonical_url": "https://key.co/listings/hsHnaTko1i",
@@ -159,7 +159,7 @@
   "normalized_availability": {
     "source": "pm_keyco30a",
     "external_listing_id": "hsHnaTko1i",
-    "captured_at": "2026-03-29T20:06:41.705Z",
+    "captured_at": "2026-03-29T23:25:35.371Z",
     "window_start": "2026-03-29",
     "window_end": "2028-03-28",
     "code_legend": {
@@ -168,7 +168,7 @@
       "M": "restricted_or_rule_constrained",
       "X": "unknown"
     },
-    "day_codes": "XXXXXXUXXXXXXUXXXXXXAXXXXXXAXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXAXXXXXXUXXXXXXAXXXXXXUXXXXXXUXXXXXXUXXXXXXAXXXXXXAXXXXXXAXXXXXXUXXXXXXUXXXXXXAXXXXXXAXXXXXXAXXXXXXUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "XXXXXXUXXXXXXUXXXXXXUXXXXXXAXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXAXXXXXXUXXXXXXAXXXXXXUXXXXXXUXXXXXXUXXXXXXAXXXXXXAXXXXXXAXXXXXXUXXXXXXUXXXXXXAXXXXXXAXXXXXXAXXXXXXUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
       {
         "date": "2026-03-29",
@@ -352,11 +352,11 @@
       },
       {
         "date": "2026-04-18",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": null
       },
       {
@@ -6751,13 +6751,13 @@
       }
     ],
     "counts": {
-      "available": 10,
-      "unavailable": 14,
+      "available": 9,
+      "unavailable": 15,
       "checkin_only": 0,
       "checkout_only": 0,
       "other": 707,
-      "booking_available": 10,
-      "booking_unavailable": 14,
+      "booking_available": 9,
+      "booking_unavailable": 15,
       "booking_unknown": 707
     }
   },
@@ -6769,7 +6769,7 @@
   "normalized_rates": {
     "source": "pm_keyco30a",
     "external_listing_id": "hsHnaTko1i",
-    "captured_at": "2026-03-29T20:06:41.705Z",
+    "captured_at": "2026-03-29T23:25:35.371Z",
     "currency": "USD",
     "window_start": "2026-03-29",
     "window_end": "2026-09-12",
@@ -6936,11 +6936,11 @@
       },
       {
         "date": "2026-04-18",
-        "nightly_rate": 802.4,
+        "nightly_rate": null,
         "min_nights": null,
-        "is_booked": false,
-        "changeover_code": "A",
-        "season_name": "quote_weekly_sample"
+        "is_booked": true,
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-04-19",
@@ -8120,10 +8120,10 @@
       }
     ],
     "stats": {
-      "days_with_rate": 10,
+      "days_with_rate": 9,
       "min_nightly_rate": 802.4,
       "max_nightly_rate": 1306.99,
-      "avg_nightly_rate": 1019.13
+      "avg_nightly_rate": 1043.21
     }
   },
   "rates_raw": {

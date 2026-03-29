@@ -20,6 +20,37 @@ function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
 }
 
+function buildUsageText(defaultAnchorUrl: string): string {
+  return [
+    "Usage:",
+    `  <script> [anchor-url] [options]`,
+    "",
+    `Default anchor URL: ${defaultAnchorUrl}`,
+    "",
+    "Options:",
+    "  --detail-url <url>                 Scrape one detail URL and exit",
+    "  --detail-urls-file <path>          Refresh URLs listed in file (one URL per line)",
+    "  --refresh-known                     Refresh known URLs from existing artifacts",
+    "  --discover-only                     Discover links only (no detail pulls)",
+    "  --max-listings <n>                  Positive integer",
+    "  --start-index <n>                   Non-negative integer",
+    "  --max-scroll-steps <n>              Positive integer",
+    "  --scroll-pause-ms <n>               Positive integer",
+    "  --network-idle-wait-ms <n>          Positive integer",
+    "  --detail-fetch-concurrency <n>      Positive integer",
+    "  --detail-fetch-delay-ms <n>         Non-negative integer",
+    "  --detail-timeout-ms <n>             Positive integer",
+    "  --skip-existing-details             Skip pull when detail JSON already exists",
+    "  --skip-fresh-details                Skip pull for fresh existing artifacts",
+    "  --fresh-hours <n>                   Positive integer",
+    "  --refresh-mode <full|dynamic|static>",
+    "  --help                              Show this help",
+    "",
+    "Mode constraints:",
+    "  --detail-url cannot be combined with --detail-urls-file, --refresh-known, or --discover-only.",
+  ].join("\n");
+}
+
 async function writeTextFileDurable(
   filePath: string,
   content: string,
@@ -59,6 +90,17 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
   let networkIdleWaitMs = 800;
   let detailFetchConcurrency: number | null = null;
   let detailFetchDelayMs: number | null = null;
+  const detailTimeoutFromEnv = Number(
+    process.env.SCRAPER_DETAIL_TIMEOUT_MS ?? "120000",
+  );
+  let detailTimeoutMs =
+    Number.isFinite(detailTimeoutFromEnv) && detailTimeoutFromEnv > 0
+      ? Math.floor(detailTimeoutFromEnv)
+      : 120000;
+  const skipExistingFromEnv =
+    process.env.SCRAPER_SKIP_EXISTING_DETAILS === "1" ||
+    process.env.SCRAPER_SKIP_EXISTING_DETAILS === "true";
+  let skipExistingDetails = skipExistingFromEnv;
   const refreshModeFromEnv =
     process.env.SCRAPER_REFRESH_MODE === "dynamic" ||
     process.env.SCRAPER_REFRESH_MODE === "static"
@@ -74,6 +116,38 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
     Number.isFinite(freshHoursFromEnv) && freshHoursFromEnv > 0
       ? Math.floor(freshHoursFromEnv)
       : 24;
+  const errors: string[] = [];
+
+  const parsePositiveInt = (value: string, flag: string): number | null => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      errors.push(`${flag} must be a positive number. Received: ${value}`);
+      return null;
+    }
+    return Math.floor(parsed);
+  };
+
+  const parseNonNegativeInt = (value: string, flag: string): number | null => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      errors.push(`${flag} must be a non-negative number. Received: ${value}`);
+      return null;
+    }
+    return Math.floor(parsed);
+  };
+
+  const requireValue = (
+    args: string[],
+    currentIndex: number,
+    flag: string,
+  ): string | null => {
+    const nextValue = args[currentIndex + 1];
+    if (!nextValue || nextValue.startsWith("--")) {
+      errors.push(`${flag} requires a value.`);
+      return null;
+    }
+    return nextValue;
+  };
 
   let index = 2;
   if (argv[index] && !argv[index]?.startsWith("--")) {
@@ -83,28 +157,44 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
 
   for (; index < argv.length; index += 1) {
     const arg = argv[index];
-    const value = argv[index + 1];
 
-    if (arg === "--max-listings" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        maxListings = Math.floor(parsed);
+    if (!arg) {
+      continue;
+    }
+
+    if (arg === "--help") {
+      throw new Error(buildUsageText(defaultAnchorUrl));
+    }
+
+    if (arg === "--max-listings") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          maxListings = parsed;
+        }
       }
       index += 1;
       continue;
     }
 
-    if (arg === "--start-index" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed >= 0) {
-        startIndex = Math.floor(parsed);
+    if (arg === "--start-index") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parseNonNegativeInt(value, arg);
+        if (parsed !== null) {
+          startIndex = parsed;
+        }
       }
       index += 1;
       continue;
     }
 
-    if (arg === "--detail-url" && value) {
-      detailUrl = value;
+    if (arg === "--detail-url") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        detailUrl = value;
+      }
       index += 1;
       continue;
     }
@@ -114,8 +204,11 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--detail-urls-file" && value) {
-      detailUrlsFile = value;
+    if (arg === "--detail-urls-file") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        detailUrlsFile = value;
+      }
       index += 1;
       continue;
     }
@@ -125,48 +218,80 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--max-scroll-steps" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        maxScrollSteps = Math.floor(parsed);
+    if (arg === "--max-scroll-steps") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          maxScrollSteps = parsed;
+        }
       }
       index += 1;
       continue;
     }
 
-    if (arg === "--scroll-pause-ms" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        scrollPauseMs = Math.floor(parsed);
+    if (arg === "--scroll-pause-ms") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          scrollPauseMs = parsed;
+        }
       }
       index += 1;
       continue;
     }
 
-    if (arg === "--network-idle-wait-ms" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        networkIdleWaitMs = Math.floor(parsed);
+    if (arg === "--network-idle-wait-ms") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          networkIdleWaitMs = parsed;
+        }
       }
       index += 1;
       continue;
     }
 
-    if (arg === "--detail-fetch-concurrency" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        detailFetchConcurrency = Math.floor(parsed);
+    if (arg === "--detail-fetch-concurrency") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          detailFetchConcurrency = parsed;
+        }
       }
       index += 1;
       continue;
     }
 
-    if (arg === "--detail-fetch-delay-ms" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed >= 0) {
-        detailFetchDelayMs = Math.floor(parsed);
+    if (arg === "--detail-fetch-delay-ms") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parseNonNegativeInt(value, arg);
+        if (parsed !== null) {
+          detailFetchDelayMs = parsed;
+        }
       }
       index += 1;
+      continue;
+    }
+
+    if (arg === "--detail-timeout-ms") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          detailTimeoutMs = parsed;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--skip-existing-details") {
+      skipExistingDetails = true;
       continue;
     }
 
@@ -175,21 +300,52 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--fresh-hours" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        freshHours = Math.floor(parsed);
+    if (arg === "--fresh-hours") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          freshHours = parsed;
+        }
       }
       index += 1;
       continue;
     }
 
-    if (arg === "--refresh-mode" && value) {
-      if (value === "full" || value === "dynamic" || value === "static") {
-        refreshMode = value;
+    if (arg === "--refresh-mode") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        if (value === "full" || value === "dynamic" || value === "static") {
+          refreshMode = value;
+        } else {
+          errors.push(
+            `${arg} must be one of: full, dynamic, static. Received: ${value}`,
+          );
+        }
       }
       index += 1;
+      continue;
     }
+
+    if (arg.startsWith("--")) {
+      errors.push(`Unknown flag: ${arg}`);
+      continue;
+    }
+
+    errors.push(`Unexpected positional argument: ${arg}`);
+  }
+
+  if (detailUrl && (detailUrlsFile || refreshKnown || discoverOnly)) {
+    errors.push(
+      "--detail-url cannot be combined with --detail-urls-file, --refresh-known, or --discover-only.",
+    );
+  }
+
+  if (errors.length > 0) {
+    const details = errors.map((entry) => `- ${entry}`).join("\n");
+    throw new Error(
+      `Invalid scraper-engine parameters:\n${details}\n\n${buildUsageText(defaultAnchorUrl)}`,
+    );
   }
 
   return {
@@ -205,10 +361,44 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
     networkIdleWaitMs,
     detailFetchConcurrency,
     detailFetchDelayMs,
+    detailTimeoutMs,
+    skipExistingDetails,
     skipFreshDetails,
     freshHours,
     refreshMode,
+    logLevel: "default",
   };
+}
+
+type TimedDetailFetchOutcome<TDetail extends DetailRecordBase> =
+  | { timedOut: false; detail: TDetail | null }
+  | { timedOut: true };
+
+async function runTimedDetailFetch<TDetail extends DetailRecordBase>(
+  fetchPromise: Promise<TDetail | null>,
+  timeoutMs: number,
+): Promise<TimedDetailFetchOutcome<TDetail>> {
+  if (timeoutMs <= 0) {
+    return { timedOut: false, detail: await fetchPromise };
+  }
+
+  const settledFetchPromise = fetchPromise.then(
+    (detail) => ({ kind: "fetch" as const, detail }),
+    (error: unknown) => {
+      throw error;
+    },
+  );
+  const timeoutPromise = new Promise<{ kind: "timeout" }>((resolvePromise) => {
+    setTimeout(() => {
+      resolvePromise({ kind: "timeout" });
+    }, timeoutMs);
+  });
+
+  const result = await Promise.race([settledFetchPromise, timeoutPromise]);
+  if (result.kind === "timeout") {
+    return { timedOut: true };
+  }
+  return { timedOut: false, detail: result.detail };
 }
 
 type ExistingDetailArtifact = {
@@ -446,6 +636,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
   progress: ReturnType<typeof createScrapeProgress>,
   detailFetchConcurrency: number,
   detailFetchDelayMs: number,
+  detailTimeoutMs: number,
   refreshMode: ScraperRefreshMode,
   existingArtifactsByUrl?: Map<string, ExistingDetailArtifact>,
 ): Promise<{
@@ -507,7 +698,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       const detailUrl = urls[currentIndex] as string;
       const existingArtifact = existingArtifactsByUrl?.get(detailUrl);
       const detailStartedAtMs = Date.now();
-      const detail = await adapter.fetchDetail({
+      const fetchPromise = adapter.fetchDetail({
         browser,
         detailUrl,
         availabilityHorizonDays: adapter.availabilityHorizonDays,
@@ -518,7 +709,17 @@ async function pullDetails<TDetail extends DetailRecordBase>(
           progress.tick(message);
         },
       });
+      const timed = await runTimedDetailFetch(fetchPromise, detailTimeoutMs);
       detailDurationsMs.push(Date.now() - detailStartedAtMs);
+
+      let detail: TDetail | null = null;
+      if (timed.timedOut) {
+        progress.tick(
+          `detail ${detailUrl} timed out after ${detailTimeoutMs}ms; marking failed and continuing`,
+        );
+      } else {
+        detail = timed.detail;
+      }
 
       detailResults[currentIndex] = detail;
       if (detail) {
@@ -568,17 +769,20 @@ async function pullDetails<TDetail extends DetailRecordBase>(
 
 export async function runScraperEngine<TDetail extends DetailRecordBase>(
   adapter: ScraperAdapter<TDetail>,
+  argv: string[] = process.argv,
 ): Promise<void> {
   const progress = createScrapeProgress({ script: adapter.scriptLabel });
-  const options = parseRunOptions(process.argv, adapter.defaultAnchorUrl);
+  const options = parseRunOptions(argv, adapter.defaultAnchorUrl);
+  const isRefreshOperation =
+    options.refreshKnown || Boolean(options.detailUrlsFile);
   const detailFetchConcurrency =
-    options.detailFetchConcurrency ?? adapter.detailFetchConcurrency;
+    options.detailFetchConcurrency ?? (isRefreshOperation ? 12 : 4);
   const detailFetchDelayMs =
     options.detailFetchDelayMs ?? adapter.detailFetchDelayMs;
 
   progress.phase("starting scraper engine run");
   progress.info(
-    `mode=${options.detailUrl ? "direct-detail" : options.refreshKnown || options.detailUrlsFile ? "refresh-known" : options.discoverOnly ? "discover-only" : "full"}, refresh_mode=${options.refreshMode}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}`,
+    `mode=${options.detailUrl ? "direct-detail" : options.refreshKnown || options.detailUrlsFile ? "refresh-known" : options.discoverOnly ? "discover-only" : "full"}, refresh_mode=${options.refreshMode}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}, detail_timeout_ms=${options.detailTimeoutMs}, skip_existing_details=${options.skipExistingDetails}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}`,
   );
 
   const root = process.cwd();
@@ -604,24 +808,36 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
 
   try {
     if (options.detailUrl) {
+      progress.info(`direct_detail_input=${options.detailUrl}`);
       const valid = adapter.isValidDetailUrl(options.detailUrl);
       if (!valid) {
         throw new Error(`Invalid detail URL: ${options.detailUrl}`);
       }
+      progress.info(`direct_detail_validated=${valid}`);
 
       progress.phase("direct detail mode: pulling one listing detail page");
-      const detail = await adapter.fetchDetail({
-        browser,
-        detailUrl: valid,
-        availabilityHorizonDays: adapter.availabilityHorizonDays,
-        maxCalendarAdvanceMonths: adapter.maxCalendarAdvanceMonths,
-        refreshMode: options.refreshMode,
-        existingDetailJsonPath: null,
-        reportDetailProgress: (message: string) => {
-          progress.tick(message);
-        },
-      });
+      const timed = await runTimedDetailFetch(
+        adapter.fetchDetail({
+          browser,
+          detailUrl: valid,
+          availabilityHorizonDays: adapter.availabilityHorizonDays,
+          maxCalendarAdvanceMonths: adapter.maxCalendarAdvanceMonths,
+          refreshMode: options.refreshMode,
+          existingDetailJsonPath: null,
+          reportDetailProgress: (message: string) => {
+            progress.tick(message);
+          },
+        }),
+        options.detailTimeoutMs,
+      );
 
+      if (timed.timedOut) {
+        throw new Error(
+          `Direct detail scrape timed out after ${options.detailTimeoutMs}ms for ${valid}`,
+        );
+      }
+
+      const detail = timed.detail;
       if (!detail) {
         throw new Error("Direct detail scrape failed for requested URL");
       }
@@ -703,7 +919,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         `refresh inputs: known=${merged.length}, selected=${selectedUrls.length}, start_index=${startIndex}, max_listings=${options.maxListings ?? "all"}`,
       );
       progress.info(
-        `refresh strategy: refresh_mode=${options.refreshMode}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}`,
+        `refresh strategy: refresh_mode=${options.refreshMode}, skip_existing_details=${options.skipExistingDetails}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}`,
       );
 
       const existingArtifacts = await loadExistingDetailArtifacts(
@@ -713,12 +929,22 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
 
       let urlsToPull = selectedUrls;
       let skippedFreshUrls: string[] = [];
+      let skippedExistingUrls: string[] = [];
+      if (options.skipExistingDetails) {
+        skippedExistingUrls = selectedUrls.filter((url) =>
+          existingArtifacts.has(url),
+        );
+        urlsToPull = selectedUrls.filter((url) => !existingArtifacts.has(url));
+        progress.tick(
+          `existing-skip evaluation complete: skipped_existing=${skippedExistingUrls.length}/${selectedUrls.length}, pull=${urlsToPull.length}`,
+        );
+      }
       if (options.skipFreshDetails) {
         progress.phase(
           "evaluating fresh detail artifacts for skip eligibility",
         );
         const checks = await Promise.all(
-          selectedUrls.map(async (url) => {
+          urlsToPull.map(async (url) => {
             const artifact = existingArtifacts.get(url);
             if (!artifact) {
               return { url, skip: false };
@@ -748,7 +974,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       }
 
       progress.phase(
-        `refresh mode: pulling known detail pages (selected=${selectedUrls.length}, pull=${urlsToPull.length}, skipped_fresh=${skippedFreshUrls.length}, concurrency=${detailFetchConcurrency})`,
+        `refresh mode: pulling known detail pages (selected=${selectedUrls.length}, pull=${urlsToPull.length}, skipped_existing=${skippedExistingUrls.length}, skipped_fresh=${skippedFreshUrls.length}, concurrency=${detailFetchConcurrency})`,
       );
 
       const refreshPullStartedAt = Date.now();
@@ -761,6 +987,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         progress,
         detailFetchConcurrency,
         detailFetchDelayMs,
+        options.detailTimeoutMs,
         options.refreshMode,
         existingArtifacts,
       );
@@ -796,12 +1023,14 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
             generated_at: new Date().toISOString(),
             mode: "refresh_known_details",
             refresh_mode: options.refreshMode,
+            skip_existing_details: options.skipExistingDetails,
             skip_fresh_details: options.skipFreshDetails,
             fresh_hours: options.freshHours,
             source_count: merged.length,
             start_index: startIndex,
             max_listings: options.maxListings,
             selected_count: selectedUrls.length,
+            detail_pages_skipped_existing: skippedExistingUrls.length,
             detail_pages_skipped_fresh: skippedFreshUrls.length,
             detail_pages_pulled: detailRecords.length,
             detail_pages_failed: failedDetailUrls.length,
@@ -810,6 +1039,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
             pull_avg_seconds_per_detail:
               avgSecondsPerPulled === null ? null : avgSecondsPerPulled,
             failed_detail_urls: failedDetailUrls,
+            skipped_existing_urls: skippedExistingUrls,
             skipped_fresh_urls: skippedFreshUrls,
             selected_urls: selectedUrls,
           },
@@ -819,15 +1049,19 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       );
 
       progress.success(
-        `refresh scrape complete (selected=${selectedUrls.length}, pulled=${detailRecords.length}, skipped_fresh=${skippedFreshUrls.length}, failed=${failedDetailUrls.length}, refresh_mode=${options.refreshMode})`,
+        `refresh scrape complete (selected=${selectedUrls.length}, pulled=${detailRecords.length}, skipped_existing=${skippedExistingUrls.length}, skipped_fresh=${skippedFreshUrls.length}, failed=${failedDetailUrls.length}, refresh_mode=${options.refreshMode})`,
       );
       console.log(`${adapter.scriptLabel} refresh scrape complete.`);
       console.log(`- refresh_mode: ${options.refreshMode}`);
+      console.log(`- skip_existing_details: ${options.skipExistingDetails}`);
       console.log(`- skip_fresh_details: ${options.skipFreshDetails}`);
       console.log(`- fresh_hours: ${options.freshHours}`);
       console.log(`- known_urls_discovered: ${merged.length}`);
       console.log(`- urls_selected: ${selectedUrls.length}`);
       console.log(`- urls_to_pull: ${urlsToPull.length}`);
+      console.log(
+        `- detail_pages_skipped_existing: ${skippedExistingUrls.length}`,
+      );
       console.log(`- detail_pages_skipped_fresh: ${skippedFreshUrls.length}`);
       console.log(`- detail_pages_pulled: ${detailRecords.length}`);
       console.log(`- detail_pages_failed: ${failedDetailUrls.length}`);
@@ -903,6 +1137,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         progress,
         detailFetchConcurrency,
         detailFetchDelayMs,
+        options.detailTimeoutMs,
         options.refreshMode,
       );
       detailRecords = pulled.detailRecords;

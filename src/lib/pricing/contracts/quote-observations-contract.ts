@@ -45,6 +45,9 @@ export type CanonicalQuotesSidecarRecord = {
   detail_url: string;
   captured_at: string;
   currency: string;
+  quote_window_cadence: "weekly_sat_to_sat";
+  quote_window_gap_policy: "record_unavailable_without_date_shift";
+  quote_window_anchor_date: string;
   quote_window_days: number;
   quote_sample_step_days: number;
   quote_nights: number;
@@ -72,6 +75,20 @@ export function assertCanonicalQuotesSidecarRecord(
 
   if (!isIsoDateTime(value.captured_at)) {
     throw new Error("Invalid quote sidecar captured_at");
+  }
+
+  if (!isIsoDate(value.quote_window_anchor_date)) {
+    throw new Error("Invalid quote sidecar quote_window_anchor_date");
+  }
+
+  if (value.quote_window_cadence !== "weekly_sat_to_sat") {
+    throw new Error("Invalid quote sidecar quote_window_cadence");
+  }
+
+  if (
+    value.quote_window_gap_policy !== "record_unavailable_without_date_shift"
+  ) {
+    throw new Error("Invalid quote sidecar quote_window_gap_policy");
   }
 
   if (!Array.isArray(value.observations)) {

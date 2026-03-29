@@ -3,6 +3,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
+import {
+  assertCanonicalQuotesSidecarRecord,
+  type CanonicalQuoteObservation,
+  type CanonicalQuotesSidecarRecord,
+} from "@/lib/pricing/contracts/quote-observations-contract";
+
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
@@ -179,20 +185,6 @@ const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
 const HOMEOWNERS_ORIGIN = "https://homeownerscollection.com";
 const HOMEOWNERS_RCAPI_PATH = "/rcapi/item/avail/search";
 
-type HomeownersQuotesSidecarRecord = {
-  adapter_key: "homeownerscollection30a";
-  external_listing_id: string;
-  detail_url: string;
-  captured_at: string;
-  endpoint_path: "/rcapi/item/avail/search";
-  quote_window_days: number;
-  quote_sample_step_days: number;
-  quote_nights: number;
-  quote_max_queries: number;
-  quote_coupon: string;
-  observations: HomeownersRateObservation[];
-};
-
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -208,6 +200,80 @@ function medianNumber(values: number[]): number | null {
     return roundCurrency((sorted[middle - 1]! + sorted[middle]!) / 2);
   }
   return roundCurrency(sorted[middle]!);
+}
+
+function toCanonicalHomeownersObservation(input: {
+  observation: HomeownersRateObservation;
+  externalListingId: string;
+  capturedAtIso: string;
+  currency: string;
+  fallbackBaseNightly: number;
+}): CanonicalQuoteObservation {
+  const { observation, externalListingId, capturedAtIso, currency } = input;
+
+  const baseNightly =
+    observation.nightly_rate_proxy && observation.nightly_rate_proxy > 0
+      ? roundCurrency(observation.nightly_rate_proxy)
+      : input.fallbackBaseNightly;
+  const baseTotal =
+    observation.base_total && observation.base_total > 0
+      ? roundCurrency(observation.base_total)
+      : roundCurrency(baseNightly * observation.nights);
+  const taxesTotal = Math.max(0, roundCurrency(observation.taxes_total ?? 0));
+  const feesTotal = Math.max(
+    0,
+    roundCurrency(observation.fees_total_excl_taxes ?? 0),
+  );
+  const grandTotal =
+    observation.grand_total && observation.grand_total > 0
+      ? roundCurrency(observation.grand_total)
+      : roundCurrency(baseTotal + taxesTotal + feesTotal);
+  const quotedTotal =
+    observation.quoted_total && observation.quoted_total > 0
+      ? roundCurrency(observation.quoted_total)
+      : grandTotal;
+  const allInNightly =
+    observation.nights > 0
+      ? roundCurrency(grandTotal / observation.nights)
+      : roundCurrency(grandTotal);
+
+  const feePctOfBase = baseTotal > 0 ? roundCurrency(feesTotal / baseTotal) : 0;
+  const taxPctOfBase =
+    baseTotal > 0 ? roundCurrency(taxesTotal / baseTotal) : 0;
+  const nonBasePctOfTotal =
+    quotedTotal > 0 ? roundCurrency((taxesTotal + feesTotal) / quotedTotal) : 0;
+  const allInMultiplier =
+    baseTotal > 0 ? roundCurrency(quotedTotal / baseTotal) : 1;
+
+  return {
+    sampled_at: capturedAtIso,
+    captured_at: capturedAtIso,
+    source_listing_id: externalListingId,
+    currency,
+    start_date: observation.start_date,
+    end_date: observation.end_date,
+    check_in_date: observation.start_date,
+    check_out_date: observation.end_date,
+    nights: observation.nights,
+    base_nightly: baseNightly,
+    all_in_nightly: allInNightly,
+    quote_available: observation.quote_available,
+    quote_unavailable_reason: observation.quote_available
+      ? null
+      : "Dates unavailable for selected stay window",
+    base_total: baseTotal,
+    taxes_total: taxesTotal,
+    fees_total_excl_taxes: feesTotal,
+    fee_lines: observation.fee_lines,
+    grand_total: grandTotal,
+    quoted_total: quotedTotal,
+    fee_pct_of_base: feePctOfBase,
+    tax_pct_of_base: taxPctOfBase,
+    non_base_pct_of_total: nonBasePctOfTotal,
+    all_in_multiplier: allInMultiplier,
+    handoff_url: observation.buy_url,
+    source: "quote_api",
+  };
 }
 
 function isIsoDate(value: string): boolean {
@@ -2131,19 +2197,46 @@ async function fetchDetail(
       OUTPUT_DETAILS_QUOTES_DIR,
       `${externalListingId}.json`,
     );
-    const quoteSidecar: HomeownersQuotesSidecarRecord = {
+    const sidecarCapturedAt = new Date().toISOString();
+    const fallbackBaseNightly =
+      medianNumber(
+        rateArtifacts.normalizedRates.days
+          .map((day) => day.nightly_rate)
+          .filter(
+            (value): value is number =>
+              typeof value === "number" && Number.isFinite(value) && value > 0,
+          ),
+      ) ?? 1;
+    const canonicalObservations = rateArtifacts.ratesRaw.observations.map(
+      (observation) =>
+        toCanonicalHomeownersObservation({
+          observation,
+          externalListingId,
+          capturedAtIso: sidecarCapturedAt,
+          currency: rateArtifacts.normalizedRates.currency || "USD",
+          fallbackBaseNightly,
+        }),
+    );
+    const quoteSidecar: CanonicalQuotesSidecarRecord = {
       adapter_key: "homeownerscollection30a",
       external_listing_id: externalListingId,
       detail_url: detailUrl,
-      captured_at: new Date().toISOString(),
-      endpoint_path: rateArtifacts.ratesRaw.endpoint_path,
+      captured_at: sidecarCapturedAt,
+      currency: rateArtifacts.normalizedRates.currency || "USD",
+      quote_window_cadence: "weekly_sat_to_sat",
+      quote_window_gap_policy: "record_unavailable_without_date_shift",
+      quote_window_anchor_date: nextUpcomingSaturdayIso(
+        sidecarCapturedAt.slice(0, 10),
+      ),
       quote_window_days: rateArtifacts.ratesRaw.quote_window_days,
       quote_sample_step_days: rateArtifacts.ratesRaw.quote_sample_step_days,
       quote_nights: rateArtifacts.ratesRaw.quote_nights,
       quote_max_queries: rateArtifacts.ratesRaw.quote_max_queries,
+      endpoint_path: rateArtifacts.ratesRaw.endpoint_path,
       quote_coupon: rateArtifacts.ratesRaw.quote_coupon,
-      observations: rateArtifacts.ratesRaw.observations,
+      observations: canonicalObservations,
     };
+    assertCanonicalQuotesSidecarRecord(quoteSidecar);
     await writeFile(
       quoteObservationsPath,
       `${JSON.stringify(quoteSidecar, null, 2)}\n`,

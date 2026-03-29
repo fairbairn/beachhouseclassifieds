@@ -1,7 +1,7 @@
 {
   "external_listing_id": "f8DCDgSH5G",
   "detail_url": "https://key.co/listings/f8DCDgSH5G",
-  "fetched_at": "2026-03-29T20:06:21.351Z",
+  "fetched_at": "2026-03-29T23:24:54.549Z",
   "title": "Azzurro Sky | KEY.co",
   "h1": "Azzurro Sky",
   "canonical_url": "https://key.co/listings/f8DCDgSH5G",
@@ -208,7 +208,7 @@
   "normalized_availability": {
     "source": "pm_keyco30a",
     "external_listing_id": "f8DCDgSH5G",
-    "captured_at": "2026-03-29T20:06:21.351Z",
+    "captured_at": "2026-03-29T23:24:54.549Z",
     "window_start": "2026-03-29",
     "window_end": "2028-03-28",
     "code_legend": {
@@ -217,7 +217,7 @@
       "M": "restricted_or_rule_constrained",
       "X": "unknown"
     },
-    "day_codes": "XXXXXXUXXXXXXUXXXXXXAXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXAXXXXXXAXXXXXXUXXXXXXAXXXXXXUXXXXXXAXXXXXXAXXXXXXUXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "XXXXXXUXXXXXXAXXXXXXAXXXXXXUXXXXXXUXXXXXXAXXXXXXUXXXXXXAXXXXXXAXXXXXXUXXXXXXAXXXXXXUXXXXXXAXXXXXXAXXXXXXUXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
       {
         "date": "2026-03-29",
@@ -338,11 +338,11 @@
       },
       {
         "date": "2026-04-11",
-        "status_code": "U",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
+        "status_code": "A",
+        "is_available": true,
+        "is_available_for_checkin": true,
+        "is_available_for_checkout": true,
+        "booking_day_state": "bookable",
         "min_nights_required": null
       },
       {
@@ -590,11 +590,11 @@
       },
       {
         "date": "2026-05-09",
-        "status_code": "U",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
+        "status_code": "A",
+        "is_available": true,
+        "is_available_for_checkin": true,
+        "is_available_for_checkout": true,
+        "booking_day_state": "bookable",
         "min_nights_required": null
       },
       {
@@ -6800,13 +6800,13 @@
       }
     ],
     "counts": {
-      "available": 15,
-      "unavailable": 9,
+      "available": 17,
+      "unavailable": 7,
       "checkin_only": 0,
       "checkout_only": 0,
       "other": 707,
-      "booking_available": 15,
-      "booking_unavailable": 9,
+      "booking_available": 17,
+      "booking_unavailable": 7,
       "booking_unknown": 707
     }
   },
@@ -6818,7 +6818,7 @@
   "normalized_rates": {
     "source": "pm_keyco30a",
     "external_listing_id": "f8DCDgSH5G",
-    "captured_at": "2026-03-29T20:06:21.351Z",
+    "captured_at": "2026-03-29T23:24:54.549Z",
     "currency": "USD",
     "window_start": "2026-03-29",
     "window_end": "2026-09-12",
@@ -6929,11 +6929,11 @@
       },
       {
         "date": "2026-04-11",
-        "nightly_rate": null,
+        "nightly_rate": 1100,
         "min_nights": null,
-        "is_booked": true,
-        "changeover_code": "U",
-        "season_name": "not_available"
+        "is_booked": false,
+        "changeover_code": "A",
+        "season_name": "quote_weekly_sample"
       },
       {
         "date": "2026-04-12",
@@ -7153,11 +7153,11 @@
       },
       {
         "date": "2026-05-09",
-        "nightly_rate": null,
+        "nightly_rate": 1100,
         "min_nights": null,
-        "is_booked": true,
-        "changeover_code": "U",
-        "season_name": "not_available"
+        "is_booked": false,
+        "changeover_code": "A",
+        "season_name": "quote_weekly_sample"
       },
       {
         "date": "2026-05-10",
@@ -8169,10 +8169,10 @@
       }
     ],
     "stats": {
-      "days_with_rate": 15,
+      "days_with_rate": 17,
       "min_nightly_rate": 1100,
       "max_nightly_rate": 2228.57,
-      "avg_nightly_rate": 1696.03
+      "avg_nightly_rate": 1625.91
     }
   },
   "rates_raw": {

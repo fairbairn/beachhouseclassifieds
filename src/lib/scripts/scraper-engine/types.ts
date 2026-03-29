@@ -22,6 +22,8 @@ export type RunOptions = {
   networkIdleWaitMs: number;
   detailFetchConcurrency: number | null;
   detailFetchDelayMs: number | null;
+  detailTimeoutMs: number;
+  skipExistingDetails: boolean;
   skipFreshDetails: boolean;
   freshHours: number;
   refreshMode: ScraperRefreshMode;

@@ -292,6 +292,11 @@ async function writeKeycoQuotesSidecar(input: {
     detail_url: input.detailUrl,
     captured_at: new Date().toISOString(),
     currency: "USD",
+    quote_window_cadence: "weekly_sat_to_sat",
+    quote_window_gap_policy: "record_unavailable_without_date_shift",
+    quote_window_anchor_date: firstSaturdayOnOrAfter(
+      new Date().toISOString().slice(0, 10),
+    ),
     quote_window_days: input.quoteWindowDays,
     quote_sample_step_days: input.quoteSampleStepDays,
     quote_nights:
@@ -708,6 +713,9 @@ function finalizeObservationsForSidecar(
     (observation) => observation.fees_total_excl_taxes,
     0.35,
   );
+  const fallbackNightlyDefault = roundCurrency(
+    Number(process.env.KEYCO30A_QUOTE_FALLBACK_NIGHTLY ?? "650") || 650,
+  );
 
   const output = observations.map((observation) => ({ ...observation }));
 
@@ -755,7 +763,7 @@ function finalizeObservationsForSidecar(
     if (Number.isFinite(next)) {
       return roundCurrency(next);
     }
-    return null;
+    return fallbackNightlyDefault;
   };
 
   for (let index = 0; index < output.length; index += 1) {

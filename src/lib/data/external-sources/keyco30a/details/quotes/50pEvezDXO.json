@@ -2,16 +2,19 @@
   "adapter_key": "keyco30a",
   "external_listing_id": "50pEvezDXO",
   "detail_url": "https://key.co/listings/50pEvezDXO",
-  "captured_at": "2026-03-29T20:00:53.057Z",
+  "captured_at": "2026-03-29T23:18:12.920Z",
   "currency": "USD",
+  "quote_window_cadence": "weekly_sat_to_sat",
+  "quote_window_gap_policy": "record_unavailable_without_date_shift",
+  "quote_window_anchor_date": "2026-04-04",
   "quote_window_days": 168,
   "quote_sample_step_days": 7,
   "quote_nights": 7,
   "quote_max_queries": 24,
   "observations": [
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-04-04",
@@ -37,8 +40,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-04-11",
@@ -64,8 +67,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-04-18",
@@ -100,8 +103,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-04-25",
@@ -136,8 +139,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-05-02",
@@ -163,8 +166,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-05-09",
@@ -190,8 +193,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-05-16",
@@ -200,25 +203,34 @@
       "check_out_date": "2026-05-23",
       "nights": 7,
       "base_nightly": 1339.65,
-      "all_in_nightly": 1728.15,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context timeout after 5000ms",
+      "all_in_nightly": 1719.66,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
       "base_total": 9377.55,
-      "taxes_total": 1875.51,
-      "fees_total_excl_taxes": 843.98,
-      "fee_lines": [],
-      "grand_total": 12097.04,
-      "quoted_total": 12097.04,
-      "fee_pct_of_base": 0.09,
-      "tax_pct_of_base": 0.2,
-      "non_base_pct_of_total": 0.224806,
-      "all_in_multiplier": 1.29,
+      "taxes_total": 1866.07,
+      "fees_total_excl_taxes": 794,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning Fee",
+          "amount": 595
+        },
+        {
+          "name": "Vacation Rental Damage Protection Plan",
+          "amount": 199
+        }
+      ],
+      "grand_total": 12037.62,
+      "quoted_total": 12037.62,
+      "fee_pct_of_base": 0.08467,
+      "tax_pct_of_base": 0.198993,
+      "non_base_pct_of_total": 0.22098,
+      "all_in_multiplier": 1.283664,
       "handoff_url": "https://itinerary.key.co/listings/50pEvezDXO/checkout?listing_start_date=2026-05-16&listing_end_date=2026-05-23&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-05-23",
@@ -244,8 +256,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-05-30",
@@ -280,8 +292,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-06-06",
@@ -316,8 +328,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-06-13",
@@ -352,8 +364,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-06-20",
@@ -388,8 +400,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-06-27",
@@ -424,8 +436,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-07-04",
@@ -460,8 +472,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-07-11",
@@ -487,8 +499,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-07-18",
@@ -523,8 +535,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-07-25",
@@ -559,8 +571,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-08-01",
@@ -595,8 +607,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-08-08",
@@ -631,8 +643,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-08-15",
@@ -667,8 +679,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-08-22",
@@ -703,8 +715,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-08-29",
@@ -739,8 +751,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-09-05",
@@ -775,8 +787,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:00:53.057Z",
-      "captured_at": "2026-03-29T20:00:53.057Z",
+      "sampled_at": "2026-03-29T23:18:12.920Z",
+      "captured_at": "2026-03-29T23:18:12.920Z",
       "source_listing_id": "50pEvezDXO",
       "currency": "USD",
       "start_date": "2026-09-12",

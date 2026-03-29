@@ -3,6 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
+import {
+  assertCanonicalQuotesSidecarRecord,
+  type CanonicalQuoteObservation,
+  type CanonicalQuotesSidecarRecord,
+} from "@/lib/pricing/contracts/quote-observations-contract";
 import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
@@ -37,18 +42,21 @@ type ReservationQuoteApiResponse = {
   taxes: number;
 };
 
-type RateQuoteWindowObservation = {
-  quote_kind: "base_window" | "extended_window" | "weekpart_window";
-  arrival_date: string;
-  departure_date: string;
-  nights: number;
-  adults: number;
-  children: number;
-  subtotal: number;
-  average_nightly_rate: number;
-  total: number;
-  taxes: number;
+type EstimatedQuotePricing = {
+  baseNightly: number;
+  allInNightly: number;
+  baseTotal: number;
+  taxesTotal: number;
+  feesTotalExclTaxes: number;
+  grandTotal: number;
+  quotedTotal: number;
+  feePctOfBase: number;
+  taxPctOfBase: number;
+  nonBasePctOfTotal: number;
+  allInMultiplier: number;
 };
+
+type RateQuoteObservation = CanonicalQuoteObservation;
 
 type DetailRecord360Blue = DetailRecordBase & {
   title: string;
@@ -148,9 +156,18 @@ type DetailRecord360Blue = DetailRecordBase & {
   rates_raw: {
     advertised_rate_texts: string[];
     matched_nightly_snippets: string[];
+    observations_count: number;
+    observations_path: string | null;
+    observations: RateQuoteObservation[];
     quote_windows_count: number;
     quote_windows_path: string | null;
-    quote_windows: RateQuoteWindowObservation[];
+    quote_windows: Array<{
+      arrival_date: string;
+      departure_date: string;
+      nights: number;
+      subtotal: number;
+      total: number;
+    }>;
   };
   normalized_matching_profile: {
     source: "pm_360blue";
@@ -186,14 +203,37 @@ const OUTPUT_ROOT = resolve(
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
+const BLUE360_CART_CREATE_ENDPOINT =
+  "https://www.callistavacations.com/api/nrbe/carts/create.json";
 
-type BlueQuoteWindowsSidecar = {
-  adapter_key: "360blue";
-  external_listing_id: string;
-  detail_url: string;
-  captured_at: string;
-  quote_windows: RateQuoteWindowObservation[];
-};
+type BlueQuoteSidecar = CanonicalQuotesSidecarRecord;
+
+function build360BlueHandoffUrl(input: {
+  unitId: string;
+  arrivalDate: string;
+  departureDate: string;
+  adults: number;
+  children: number;
+}): string | null {
+  const normalizedUnitId = Number(input.unitId);
+  if (!Number.isFinite(normalizedUnitId) || normalizedUnitId <= 0) {
+    return null;
+  }
+
+  const payload = {
+    unitId: Math.floor(normalizedUnitId),
+    arrivalDate: input.arrivalDate,
+    departureDate: input.departureDate,
+    adults: Math.max(1, Math.floor(input.adults)),
+    children: Math.max(0, Math.floor(input.children)),
+  };
+
+  const params = new URLSearchParams();
+  params.set("method", "POST");
+  params.set("contentType", "application/json");
+  params.set("payload", JSON.stringify(payload));
+  return `${BLUE360_CART_CREATE_ENDPOINT}#${params.toString()}`;
+}
 
 const EXCLUDED_LISTING_IDS = loadActiveExclusions("360blue", [
   "blue-mountain-beach-gulf-point-hideaway-34-gulf-point-road-3034",
@@ -608,16 +648,39 @@ function nightsBetweenIsoDates(startDate: string, endDate: string): number {
   return Math.round((end - start) / 86400000);
 }
 
-function isConsecutiveIsoDate(leftDate: string, rightDate: string): boolean {
-  return addDaysToIsoDate(leftDate, 1) === rightDate;
-}
-
 function getIsoDateUtcDay(isoDate: string): number {
   return new Date(`${isoDate}T00:00:00Z`).getUTCDay();
 }
 
 function isSaturdayIsoDate(isoDate: string): boolean {
   return getIsoDateUtcDay(isoDate) === 6;
+}
+
+function firstSaturdayOnOrAfter(isoDate: string): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  const day = date.getUTCDay();
+  const daysUntilSaturday = (6 - day + 7) % 7;
+  date.setUTCDate(date.getUTCDate() + daysUntilSaturday);
+  return date.toISOString().slice(0, 10);
+}
+
+function buildWeeklyQuoteWindowStarts(input: {
+  fromDateIso: string;
+  toDateIso: string;
+  maxQueries: number;
+}): string[] {
+  const starts: string[] = [];
+  let cursor = firstSaturdayOnOrAfter(input.fromDateIso);
+
+  while (
+    starts.length < Math.max(1, input.maxQueries) &&
+    cursor <= input.toDateIso
+  ) {
+    starts.push(cursor);
+    cursor = addDaysToIsoDate(cursor, 7);
+  }
+
+  return starts;
 }
 
 function toUtcMidnightMs(isoDate: string): number {
@@ -632,37 +695,60 @@ async function fetchNrbeJson<T>(
   page: Page,
   endpointPath: string,
   params: Record<string, string>,
+  timeoutMs = 12000,
 ): Promise<T | null> {
   const queryEntries = Object.entries(params).filter(([, value]) =>
     Boolean(value?.trim()),
   );
 
   const result = await page.evaluate(
-    async ({ endpointPath: path, queryEntries: entries }) => {
+    async ({
+      endpointPath: path,
+      queryEntries: entries,
+      timeoutMs: timeout,
+    }) => {
       const searchParams = new URLSearchParams();
       for (const [key, value] of entries) {
         searchParams.set(key, value);
       }
 
       const url = `${path}?${searchParams.toString()}`;
-      const response = await fetch(url, {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          accept: "application/json, text/plain, */*",
-        },
-      });
-      const bodyText = await response.text();
+      const controller = new AbortController();
+      const timeoutHandle = window.setTimeout(
+        () => controller.abort(),
+        timeout,
+      );
 
-      return {
-        ok: response.ok,
-        status: response.status,
-        bodyText,
-      };
+      try {
+        const response = await fetch(url, {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            accept: "application/json, text/plain, */*",
+          },
+          signal: controller.signal,
+        });
+        const bodyText = await response.text();
+
+        return {
+          ok: response.ok,
+          status: response.status,
+          bodyText,
+        };
+      } catch {
+        return {
+          ok: false,
+          status: 0,
+          bodyText: "",
+        };
+      } finally {
+        window.clearTimeout(timeoutHandle);
+      }
     },
     {
       endpointPath,
       queryEntries,
+      timeoutMs,
     },
   );
 
@@ -739,6 +825,7 @@ async function fetchReservationQuote(
   departureDate: string,
   adults: number,
   children: number,
+  timeoutMs: number,
 ): Promise<ReservationQuoteApiResponse | null> {
   const quote = await fetchNrbeJson<ReservationQuoteApiResponse>(
     page,
@@ -750,6 +837,7 @@ async function fetchReservationQuote(
       adults: String(Math.max(1, Math.floor(adults))),
       children: String(Math.max(0, Math.floor(children))),
     },
+    timeoutMs,
   );
 
   if (!quote) {
@@ -766,6 +854,235 @@ async function fetchReservationQuote(
   }
 
   return quote;
+}
+
+function createUnavailableObservation(input: {
+  listingId: string;
+  unitId: string;
+  arrivalDate: string;
+  departureDate: string;
+  nights: number;
+  reason: string;
+  sampledAt: string;
+  pricing: EstimatedQuotePricing;
+}): RateQuoteObservation {
+  return {
+    sampled_at: input.sampledAt,
+    captured_at: new Date().toISOString(),
+    source_listing_id: input.listingId,
+    currency: "USD",
+    start_date: input.arrivalDate,
+    end_date: input.departureDate,
+    check_in_date: input.arrivalDate,
+    check_out_date: input.departureDate,
+    nights: input.nights,
+    base_nightly: input.pricing.baseNightly,
+    all_in_nightly: input.pricing.allInNightly,
+    quote_available: false,
+    quote_unavailable_reason: input.reason,
+    base_total: input.pricing.baseTotal,
+    taxes_total: input.pricing.taxesTotal,
+    fees_total_excl_taxes: input.pricing.feesTotalExclTaxes,
+    fee_lines: [],
+    grand_total: input.pricing.grandTotal,
+    quoted_total: input.pricing.quotedTotal,
+    fee_pct_of_base: input.pricing.feePctOfBase,
+    tax_pct_of_base: input.pricing.taxPctOfBase,
+    non_base_pct_of_total: input.pricing.nonBasePctOfTotal,
+    all_in_multiplier: input.pricing.allInMultiplier,
+    handoff_url: build360BlueHandoffUrl({
+      unitId: input.unitId,
+      arrivalDate: input.arrivalDate,
+      departureDate: input.departureDate,
+      adults: 1,
+      children: 0,
+    }),
+    source: "quote_api",
+  };
+}
+
+function createAvailableObservation(input: {
+  listingId: string;
+  unitId: string;
+  arrivalDate: string;
+  departureDate: string;
+  nights: number;
+  quote: ReservationQuoteApiResponse;
+  sampledAt: string;
+}): RateQuoteObservation {
+  const baseTotal = Number(input.quote.subTotal);
+  const taxesTotal = Number(input.quote.taxes);
+  const grandTotal = Number(input.quote.total);
+  const feesTotalExclTaxes = Math.max(
+    0,
+    Math.round((grandTotal - baseTotal - taxesTotal) * 100) / 100,
+  );
+  const baseNightly =
+    Number.isFinite(baseTotal) && input.nights > 0
+      ? Math.round((baseTotal / input.nights) * 100) / 100
+      : null;
+  const allInNightly =
+    Number.isFinite(grandTotal) && input.nights > 0
+      ? Math.round((grandTotal / input.nights) * 100) / 100
+      : null;
+
+  return {
+    sampled_at: input.sampledAt,
+    captured_at: new Date().toISOString(),
+    source_listing_id: input.listingId,
+    currency: "USD",
+    start_date: input.arrivalDate,
+    end_date: input.departureDate,
+    check_in_date: input.arrivalDate,
+    check_out_date: input.departureDate,
+    nights: input.nights,
+    base_nightly: baseNightly,
+    all_in_nightly: allInNightly,
+    quote_available: true,
+    quote_unavailable_reason: null,
+    base_total: baseTotal,
+    taxes_total: taxesTotal,
+    fees_total_excl_taxes: feesTotalExclTaxes,
+    fee_lines: [],
+    grand_total: grandTotal,
+    quoted_total: grandTotal,
+    fee_pct_of_base:
+      Number.isFinite(baseTotal) && baseTotal > 0
+        ? Math.round((feesTotalExclTaxes / baseTotal) * 1_000_000) / 1_000_000
+        : 0,
+    tax_pct_of_base:
+      Number.isFinite(baseTotal) && baseTotal > 0
+        ? Math.round((taxesTotal / baseTotal) * 1_000_000) / 1_000_000
+        : 0,
+    non_base_pct_of_total:
+      Number.isFinite(grandTotal) && grandTotal > 0
+        ? Math.round(((grandTotal - baseTotal) / grandTotal) * 1_000_000) /
+          1_000_000
+        : 0,
+    all_in_multiplier:
+      Number.isFinite(baseTotal) && baseTotal > 0 && Number.isFinite(grandTotal)
+        ? Math.round((grandTotal / baseTotal) * 1_000_000) / 1_000_000
+        : null,
+    handoff_url: build360BlueHandoffUrl({
+      unitId: input.unitId,
+      arrivalDate: input.arrivalDate,
+      departureDate: input.departureDate,
+      adults: 1,
+      children: 0,
+    }),
+    source: "quote_api",
+  };
+}
+
+function createEstimatedPricing(input: {
+  baseNightly: number;
+  nights: number;
+  taxPctOfBase: number;
+}): EstimatedQuotePricing {
+  const baseTotal = Math.round(input.baseNightly * input.nights * 100) / 100;
+  const taxesTotal =
+    Math.round(baseTotal * Math.max(0, input.taxPctOfBase) * 100) / 100;
+  const feesTotalExclTaxes = 0;
+  const grandTotal =
+    Math.round((baseTotal + taxesTotal + feesTotalExclTaxes) * 100) / 100;
+  const allInNightly =
+    input.nights > 0 ? Math.round((grandTotal / input.nights) * 100) / 100 : 0;
+  const allInMultiplier =
+    baseTotal > 0
+      ? Math.round((grandTotal / baseTotal) * 1_000_000) / 1_000_000
+      : 1;
+  const nonBasePctOfTotal =
+    grandTotal > 0
+      ? Math.round(((grandTotal - baseTotal) / grandTotal) * 1_000_000) /
+        1_000_000
+      : 0;
+
+  return {
+    baseNightly: Math.round(input.baseNightly * 100) / 100,
+    allInNightly,
+    baseTotal,
+    taxesTotal,
+    feesTotalExclTaxes,
+    grandTotal,
+    quotedTotal: grandTotal,
+    feePctOfBase: 0,
+    taxPctOfBase:
+      baseTotal > 0
+        ? Math.round((taxesTotal / baseTotal) * 1_000_000) / 1_000_000
+        : 0,
+    nonBasePctOfTotal,
+    allInMultiplier,
+  };
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 1) {
+    return sorted[middle] ?? null;
+  }
+
+  const left = sorted[middle - 1];
+  const right = sorted[middle];
+  if (left === undefined || right === undefined) {
+    return null;
+  }
+
+  return Math.round(((left + right) / 2) * 100) / 100;
+}
+
+function interpolateValue(
+  values: Array<number | null>,
+  index: number,
+): number | null {
+  const direct = values[index];
+  if (direct !== null && direct !== undefined) {
+    return direct;
+  }
+
+  let previous: { value: number; index: number } | null = null;
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const value = values[cursor];
+    if (value !== null && value !== undefined) {
+      previous = { value, index: cursor };
+      break;
+    }
+  }
+
+  let next: { value: number; index: number } | null = null;
+  for (let cursor = index + 1; cursor < values.length; cursor += 1) {
+    const value = values[cursor];
+    if (value !== null && value !== undefined) {
+      next = { value, index: cursor };
+      break;
+    }
+  }
+
+  if (previous && next && previous.index !== next.index) {
+    const span = next.index - previous.index;
+    const position = index - previous.index;
+    const ratio = position / span;
+    return (
+      Math.round(
+        (previous.value + (next.value - previous.value) * ratio) * 100,
+      ) / 100
+    );
+  }
+
+  if (previous) {
+    return previous.value;
+  }
+
+  if (next) {
+    return next.value;
+  }
+
+  return null;
 }
 
 async function discoverListings(
@@ -1345,124 +1662,167 @@ async function fetchDetail(
           season_name: day.is_available ? "quote_pending" : "not_available",
         }));
 
-    const quoteWindows: RateQuoteWindowObservation[] = [];
-    const sampleDays: Array<(typeof normalizedRateDays)[number]> = [];
+    const quoteOutcomes = new Map<
+      string,
+      {
+        sampledAt: string;
+        arrivalDate: string;
+        departureDate: string;
+        nights: number;
+        reason: string | null;
+        quote: ReservationQuoteApiResponse | null;
+      }
+    >();
     const unitIdIsNumeric = /^\d+$/.test(unitId);
+    const quoteTimeoutMs = Math.max(
+      2000,
+      Number(process.env.BLUE360_RATE_QUOTE_TIMEOUT_MS ?? "12000") || 12000,
+    );
+    const quoteMaxAttempts = Math.max(
+      1,
+      Number(process.env.BLUE360_RATE_QUOTE_MAX_ATTEMPTS ?? "2") || 2,
+    );
+    const quoteCallBudget = Math.max(
+      1,
+      Number(
+        process.env.BLUE360_RATE_CALLS_BUDGET ??
+          String(effectiveRatesMaxQueries * quoteMaxAttempts),
+      ) || effectiveRatesMaxQueries * quoteMaxAttempts,
+    );
+    const maxConsecutiveQuoteFailures = Math.max(
+      1,
+      Number(process.env.BLUE360_RATE_CALLS_MAX_CONSECUTIVE_FAILURES ?? "3") ||
+        3,
+    );
 
-    for (
-      let cursor = 0;
-      cursor < normalizedRateDays.length &&
-      sampleDays.length < effectiveRatesMaxQueries;
-      cursor += ratesSampleStepDays
-    ) {
-      let picked: (typeof normalizedRateDays)[number] | null = null;
-      const endExclusive = Math.min(
-        normalizedRateDays.length,
-        cursor + ratesSampleStepDays,
-      );
-
-      for (let idx = cursor; idx < endExclusive; idx += 1) {
-        const candidate = normalizedRateDays[idx];
-        if (!candidate) {
-          continue;
-        }
-        const day = availabilityByDate.get(candidate.date);
-        if (!day?.is_available_for_checkin || !unitIdIsNumeric) {
-          continue;
-        }
-
-        const minNights = Math.max(
-          targetQuoteNights,
-          day.min_nights_required ??
-            bookingAvailabilityByDate.get(candidate.date)?.minLOSForCheckIn ??
-            1,
-        );
-        const checkoutDate = addDaysToIsoDate(candidate.date, minNights);
-        const canCheckout =
-          bookingAvailabilityByDate
-            .get(candidate.date)
-            ?.availableCheckOutDays.includes(checkoutDate) ?? false;
-        if (!canCheckout) {
-          continue;
-        }
-
-        if (isSaturdayIsoDate(candidate.date)) {
-          picked = candidate;
-          break;
-        }
-        if (!picked) {
-          picked = candidate;
-        }
-      }
-
-      if (!picked) {
-        continue;
-      }
-
-      if (sampleDays.at(-1)?.date === picked.date) {
-        continue;
-      }
-
-      sampleDays.push(picked);
-    }
+    const weeklyQuoteStarts = buildWeeklyQuoteWindowStarts({
+      fromDateIso: todayIso,
+      toDateIso: ratesWindowEndIso,
+      maxQueries: effectiveRatesMaxQueries,
+    });
 
     const sampledRatesByDate = new Map<string, number>();
-    for (const sampleDay of sampleDays) {
-      const day = availabilityByDate.get(sampleDay.date);
-      if (!day || !day.is_available_for_checkin || !unitIdIsNumeric) {
+    let quoteCallsUsed = 0;
+    let consecutiveQuoteFailures = 0;
+    for (const startDate of weeklyQuoteStarts) {
+      const sampleDay = normalizedRateDays.find(
+        (day) => day.date === startDate,
+      );
+      const day = availabilityByDate.get(startDate);
+      if (
+        !sampleDay ||
+        !day ||
+        !day.is_available_for_checkin ||
+        !unitIdIsNumeric
+      ) {
+        quoteOutcomes.set(startDate, {
+          sampledAt: new Date().toISOString(),
+          arrivalDate: startDate,
+          departureDate: addDaysToIsoDate(startDate, targetQuoteNights),
+          nights: targetQuoteNights,
+          reason: "weekly cadence start unavailable for check-in",
+          quote: null,
+        });
         continue;
       }
 
-      const nights = Math.max(
-        targetQuoteNights,
-        day.min_nights_required ??
-          bookingAvailabilityByDate.get(sampleDay.date)?.minLOSForCheckIn ??
-          1,
-      );
-      const checkoutDate = addDaysToIsoDate(sampleDay.date, nights);
+      const nights = targetQuoteNights;
+      const checkoutDate = addDaysToIsoDate(startDate, nights);
       const canCheckout =
         bookingAvailabilityByDate
-          .get(sampleDay.date)
+          .get(startDate)
           ?.availableCheckOutDays.includes(checkoutDate) ?? false;
       if (!canCheckout) {
         sampleDay.season_name = "quote_unavailable";
+        quoteOutcomes.set(startDate, {
+          sampledAt: new Date().toISOString(),
+          arrivalDate: startDate,
+          departureDate: checkoutDate,
+          nights,
+          reason: "checkout day unavailable for sampled window",
+          quote: null,
+        });
         continue;
       }
 
-      const quote = await fetchReservationQuote(
-        page,
-        unitId,
-        sampleDay.date,
-        checkoutDate,
-        1,
-        0,
-      );
-
-      if (!quote || nightsBetweenIsoDates(sampleDay.date, checkoutDate) <= 0) {
+      if (quoteCallsUsed >= quoteCallBudget) {
         sampleDay.season_name = "quote_unavailable";
+        quoteOutcomes.set(startDate, {
+          sampledAt: new Date().toISOString(),
+          arrivalDate: startDate,
+          departureDate: checkoutDate,
+          nights,
+          reason: "reservation-quotes call budget exceeded",
+          quote: null,
+        });
         continue;
       }
+
+      if (consecutiveQuoteFailures >= maxConsecutiveQuoteFailures) {
+        sampleDay.season_name = "quote_unavailable";
+        quoteOutcomes.set(startDate, {
+          sampledAt: new Date().toISOString(),
+          arrivalDate: startDate,
+          departureDate: checkoutDate,
+          nights,
+          reason: "reservation-quotes consecutive failures threshold exceeded",
+          quote: null,
+        });
+        continue;
+      }
+
+      let quote: ReservationQuoteApiResponse | null = null;
+      for (let attempt = 0; attempt < quoteMaxAttempts; attempt += 1) {
+        quoteCallsUsed += 1;
+        quote = await fetchReservationQuote(
+          page,
+          unitId,
+          startDate,
+          checkoutDate,
+          1,
+          0,
+          quoteTimeoutMs,
+        );
+        if (quote) {
+          break;
+        }
+        if (quoteCallsUsed >= quoteCallBudget) {
+          break;
+        }
+      }
+
+      if (!quote || nightsBetweenIsoDates(startDate, checkoutDate) <= 0) {
+        sampleDay.season_name = "quote_unavailable";
+        consecutiveQuoteFailures += 1;
+        quoteOutcomes.set(startDate, {
+          sampledAt: new Date().toISOString(),
+          arrivalDate: startDate,
+          departureDate: checkoutDate,
+          nights,
+          reason: "reservation-quotes request failed",
+          quote: null,
+        });
+        continue;
+      }
+
+      consecutiveQuoteFailures = 0;
 
       const nightlyRate = Math.round((quote.subTotal / nights) * 100) / 100;
       if (Number.isFinite(nightlyRate) && nightlyRate > 0) {
-        sampledRatesByDate.set(sampleDay.date, nightlyRate);
+        sampledRatesByDate.set(startDate, nightlyRate);
         sampleDay.nightly_rate = nightlyRate;
         sampleDay.season_name = "quote_weekly_sample";
       } else {
         sampleDay.season_name = "quote_unavailable";
       }
 
-      quoteWindows.push({
-        quote_kind: "base_window",
-        arrival_date: sampleDay.date,
-        departure_date: checkoutDate,
+      quoteOutcomes.set(startDate, {
+        sampledAt: new Date().toISOString(),
+        arrivalDate: startDate,
+        departureDate: checkoutDate,
         nights,
-        adults: 1,
-        children: 0,
-        subtotal: quote.subTotal,
-        average_nightly_rate: quote.averageNightlyRate,
-        total: quote.total,
-        taxes: quote.taxes,
+        reason: null,
+        quote,
       });
     }
 
@@ -1522,6 +1882,79 @@ async function fetchDetail(
         rateDay.season_name = "quote_weekly_backfill";
       }
     }
+
+    const weeklyBaseSeeds = weeklyQuoteStarts.map(
+      (startDate) => sampledRatesByDate.get(startDate) ?? null,
+    );
+    const availableTaxPcts = Array.from(quoteOutcomes.values())
+      .map((outcome) => {
+        if (!outcome.quote || outcome.nights <= 0) {
+          return null;
+        }
+        const baseTotal = Number(outcome.quote.subTotal);
+        const taxesTotal = Number(outcome.quote.taxes);
+        if (
+          !Number.isFinite(baseTotal) ||
+          baseTotal <= 0 ||
+          !Number.isFinite(taxesTotal)
+        ) {
+          return null;
+        }
+        return taxesTotal / baseTotal;
+      })
+      .filter((value): value is number => value !== null && value >= 0);
+    const defaultTaxPct = median(availableTaxPcts) ?? 0.12;
+
+    const quoteObservations: RateQuoteObservation[] = weeklyQuoteStarts.map(
+      (startDate, index) => {
+        const outcome = quoteOutcomes.get(startDate) ?? {
+          sampledAt: new Date().toISOString(),
+          arrivalDate: startDate,
+          departureDate: addDaysToIsoDate(startDate, targetQuoteNights),
+          nights: targetQuoteNights,
+          reason: "weekly cadence start unavailable for check-in",
+          quote: null,
+        };
+
+        if (outcome.quote) {
+          return createAvailableObservation({
+            listingId: externalListingId,
+            unitId,
+            arrivalDate: outcome.arrivalDate,
+            departureDate: outcome.departureDate,
+            nights: outcome.nights,
+            quote: outcome.quote,
+            sampledAt: outcome.sampledAt,
+          });
+        }
+
+        const interpolatedBaseNightly =
+          interpolateValue(weeklyBaseSeeds, index) ??
+          median(
+            sampledRatesByDate.size > 0
+              ? Array.from(sampledRatesByDate.values())
+              : [],
+          ) ??
+          500;
+        const pricing = createEstimatedPricing({
+          baseNightly: interpolatedBaseNightly,
+          nights: Math.max(1, outcome.nights),
+          taxPctOfBase: defaultTaxPct,
+        });
+
+        return createUnavailableObservation({
+          listingId: externalListingId,
+          unitId,
+          arrivalDate: outcome.arrivalDate,
+          departureDate: outcome.departureDate,
+          nights: outcome.nights,
+          reason:
+            outcome.reason ?? "weekly cadence start unavailable for check-in",
+          sampledAt: outcome.sampledAt,
+          pricing,
+        });
+      },
+    );
 
     const advertisedNightlyRate = parseFirstNightlyRate([
       ...extracted.advertisedRateTexts,
@@ -1632,22 +2065,42 @@ async function fetchDetail(
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
     await mkdir(OUTPUT_DETAILS_QUOTES_DIR, { recursive: true });
-    const quoteWindowsPath = resolve(
+    const quoteObservationsPath = resolve(
       OUTPUT_DETAILS_QUOTES_DIR,
       `${externalListingId}.json`,
     );
-    const quoteWindowsSidecar: BlueQuoteWindowsSidecar = {
+    const quoteSidecar: BlueQuoteSidecar = {
       adapter_key: "360blue",
       external_listing_id: externalListingId,
       detail_url: detailUrl,
       captured_at: new Date().toISOString(),
-      quote_windows: quoteWindows,
+      currency: "USD",
+      quote_window_cadence: "weekly_sat_to_sat",
+      quote_window_gap_policy: "record_unavailable_without_date_shift",
+      quote_window_anchor_date: firstSaturdayOnOrAfter(todayIso),
+      quote_window_days: ratesWindowDays,
+      quote_sample_step_days: ratesSampleStepDays,
+      quote_nights: targetQuoteNights,
+      quote_max_queries: effectiveRatesMaxQueries,
+      endpoint_path: "/api/nrbe/reservation-quotes.json",
+      observations: quoteObservations,
     };
+    assertCanonicalQuotesSidecarRecord(quoteSidecar);
     await writeFile(
-      quoteWindowsPath,
-      `${JSON.stringify(quoteWindowsSidecar, null, 2)}\n`,
+      quoteObservationsPath,
+      `${JSON.stringify(quoteSidecar, null, 2)}\n`,
       "utf8",
     );
+
+    const quoteWindows = quoteObservations
+      .filter((observation) => observation.quote_available)
+      .map((observation) => ({
+        arrival_date: observation.check_in_date,
+        departure_date: observation.check_out_date,
+        nights: observation.nights,
+        subtotal: observation.base_total ?? 0,
+        total: observation.grand_total ?? observation.quoted_total ?? 0,
+      }));
 
     const extractionMs = Date.now() - extractionStartedAt;
     const totalMs = Date.now() - fetchStartedAt;
@@ -1687,8 +2140,11 @@ async function fetchDetail(
       rates_raw: {
         advertised_rate_texts: extracted.advertisedRateTexts,
         matched_nightly_snippets: extracted.matchedNightlySnippets,
+        observations_count: quoteObservations.length,
+        observations_path: quoteObservationsPath,
+        observations: [],
         quote_windows_count: quoteWindows.length,
-        quote_windows_path: quoteWindowsPath,
+        quote_windows_path: quoteObservationsPath,
         quote_windows: [],
       },
       normalized_matching_profile: {
@@ -1719,7 +2175,9 @@ async function fetchDetail(
         calendar_iterations: calendarIterationsUsed,
       },
     };
-  } catch {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`360blue fetchDetail failed for ${detailUrl}: ${message}`);
     return null;
   } finally {
     await page.close();

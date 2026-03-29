@@ -33,6 +33,16 @@ type QuoteWindow = {
   total: number;
 };
 
+type QuoteObservation = {
+  check_in_date: string;
+  check_out_date: string;
+  nights: number;
+  quote_available: boolean;
+  base_total: number | null;
+  grand_total: number | null;
+  quoted_total: number | null;
+};
+
 type DetailRecord = {
   external_listing_id: string;
   detail_url: string;
@@ -44,12 +54,15 @@ type DetailRecord = {
     days?: DetailAvailabilityDay[];
   };
   rates_raw?: {
+    observations_path?: string | null;
+    observations?: QuoteObservation[];
     quote_windows_path?: string | null;
     quote_windows?: QuoteWindow[];
   };
 };
 
 type QuoteWindowsSidecar = {
+  observations?: QuoteObservation[];
   quote_windows?: QuoteWindow[];
 };
 
@@ -472,12 +485,33 @@ async function loadQuoteWindowsForDetail(
   adapterRoot: string,
   detail: DetailRecord,
 ): Promise<QuoteWindow[]> {
+  const inlineObservations = detail.rates_raw?.observations ?? [];
+  if (inlineObservations.length > 0) {
+    return inlineObservations
+      .filter((observation) => observation.quote_available)
+      .map((observation) => ({
+        arrival_date: observation.check_in_date,
+        departure_date: observation.check_out_date,
+        nights: observation.nights,
+        subtotal: Number(observation.base_total ?? 0),
+        total: Number(observation.grand_total ?? observation.quoted_total ?? 0),
+      }))
+      .filter(
+        (window) =>
+          Number.isFinite(window.nights) &&
+          window.nights > 0 &&
+          Number.isFinite(window.subtotal) &&
+          Number.isFinite(window.total),
+      );
+  }
+
   const inline = detail.rates_raw?.quote_windows ?? [];
   if (inline.length > 0) {
     return inline;
   }
 
   const sidecarPath =
+    detail.rates_raw?.observations_path ??
     detail.rates_raw?.quote_windows_path ??
     resolve(
       adapterRoot,
@@ -489,6 +523,29 @@ async function loadQuoteWindowsForDetail(
   try {
     const raw = await readFile(sidecarPath, "utf8");
     const sidecar = JSON.parse(raw) as QuoteWindowsSidecar;
+    if (
+      Array.isArray(sidecar.observations) &&
+      sidecar.observations.length > 0
+    ) {
+      return sidecar.observations
+        .filter((observation) => observation.quote_available)
+        .map((observation) => ({
+          arrival_date: observation.check_in_date,
+          departure_date: observation.check_out_date,
+          nights: observation.nights,
+          subtotal: Number(observation.base_total ?? 0),
+          total: Number(
+            observation.grand_total ?? observation.quoted_total ?? 0,
+          ),
+        }))
+        .filter(
+          (window) =>
+            Number.isFinite(window.nights) &&
+            window.nights > 0 &&
+            Number.isFinite(window.subtotal) &&
+            Number.isFinite(window.total),
+        );
+    }
     return sidecar.quote_windows ?? [];
   } catch {
     return [];

@@ -38,8 +38,8 @@
     },
     "checkout_handoff": {
       "supported": true,
-      "transport": "url",
-      "requires_quote_context": false
+      "transport": "http_post_json",
+      "requires_quote_context": true
     }
   },
   "quote_signature": {
@@ -87,17 +87,18 @@
     }
   },
   "handoff_signature": {
-    "url_template": "https://www.360blue.com/destinations/{marketPath}/properties/{listingSlug}?arrivalDate={arrivalDate}&departureDate={departureDate}&adults={adults}&children={children}",
-    "required_params": [
-      "marketPath",
-      "listingSlug",
+    "method": "POST",
+    "url": "https://www.callistavacations.com/api/nrbe/carts/create.json",
+    "required_fields": [
+      "unitId",
       "arrivalDate",
       "departureDate",
       "adults",
       "children"
     ],
+    "content_type": "application/json",
     "date_param_format": "YYYY-MM-DD",
-    "source": "detail_url_template"
+    "source": "reserve_to_checkout_cart_create"
   },
   "estimation_policy": {
     "nightly_base_strategy": "quote_window_average",

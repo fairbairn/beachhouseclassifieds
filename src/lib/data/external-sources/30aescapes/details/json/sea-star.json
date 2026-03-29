@@ -1,7 +1,7 @@
 {
   "external_listing_id": "sea-star",
   "detail_url": "https://www.30aescapes.com/rentals/sea-star",
-  "fetched_at": "2026-03-29T17:49:28.857Z",
+  "fetched_at": "2026-03-29T22:07:08.773Z",
   "title": "Sea Star - Vacation Rental in Seacrest Beach West,FL | 30a Escapes",
   "h1": "Sea Star",
   "canonical_url": "https://www.30aescapes.com/rentals/sea-star",
@@ -314,7 +314,7 @@
   "normalized_availability": {
     "source": "pm_30aescapes",
     "external_listing_id": "sea-star",
-    "captured_at": "2026-03-29T17:48:58.857Z",
+    "captured_at": "2026-03-29T22:06:39.019Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [],
@@ -889,11 +889,11 @@
       },
       {
         "date": "2026-05-30",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": null
       },
       {
@@ -6671,7 +6671,7 @@
   "normalized_rates": {
     "source": "pm_30aescapes_quote_api",
     "external_listing_id": "sea-star",
-    "captured_at": "2026-03-29T17:49:28.853Z",
+    "captured_at": "2026-03-29T22:07:08.762Z",
     "currency": "USD",
     "quote_window_days": 168,
     "quote_sample_step_days": 7,
@@ -6685,7 +6685,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "I",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-03-30",
@@ -6909,7 +6909,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-04-27",
@@ -6965,7 +6965,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "I",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-05-04",
@@ -7133,7 +7133,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-05-25",
@@ -7177,11 +7177,11 @@
       },
       {
         "date": "2026-05-30",
-        "nightly_rate": 3432.67,
+        "nightly_rate": null,
         "min_nights": null,
-        "is_booked": false,
-        "changeover_code": "A",
-        "season_name": "quote_api"
+        "is_booked": true,
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-05-31",
@@ -7189,7 +7189,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-06-01",
@@ -7301,7 +7301,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-06-15",
@@ -7469,7 +7469,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-07-06",
@@ -7861,7 +7861,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-08-24",
@@ -7917,7 +7917,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-08-31",
@@ -7973,7 +7973,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-09-07",
@@ -8047,9 +8047,9 @@
   },
   "html_path": "/Users/scott/Projects/BeachHouseClassifieds/src/lib/data/external-sources/30aescapes/details/html/sea-star.html",
   "scrape_metrics": {
-    "total_ms": 34641,
-    "page_load_ms": 4365,
-    "extraction_ms": 30276,
+    "total_ms": 34354,
+    "page_load_ms": 4481,
+    "extraction_ms": 29873,
     "calendar_clicks": 0,
     "calendar_iterations": 1
   }

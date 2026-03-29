@@ -62,16 +62,22 @@
     }
   },
   "handoff_signature": {
-    "url_template": "https://key.co/listings/{listingId}?listing_adult_count={adults}&listing_start_date={checkin}&listing_end_date={checkout}",
+    "url_template": "https://itinerary.key.co/listings/{listingId}/checkout?listing_adult_count={adults}&listing_start_date={checkin}&listing_end_date={checkout}&bookingContextId={bookingContextId}",
     "required_params": [
       "listingId",
       "listing_adult_count",
       "listing_start_date",
-      "listing_end_date"
+      "listing_end_date",
+      "bookingContextId"
     ],
     "date_param_format": "YYYY-MM-DD",
-    "source": "detail_url_query"
+    "source": "pricing_context_and_itinerary_checkout"
   },
+  "pricing_surface_notes": [
+    "Checkout/handoff pages can include an accommodation uplift versus pricing-context API quote components before taxes/fees.",
+    "Operational quote source of truth remains pricing-context API values for quote sidecars and derived nightly modeling.",
+    "Observed uplift in sampled manual check was approximately 32.5% pre-tax and should be treated as checkout-surface variance, not a quote API defect."
+  ],
   "estimation_policy": {
     "nightly_base_strategy": "quote_window_average",
     "fees_taxes_strategy": "adapter_assumptions_multiplier",

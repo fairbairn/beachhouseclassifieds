@@ -2,16 +2,19 @@
   "adapter_key": "keyco30a",
   "external_listing_id": "MlQmMCYQyK",
   "detail_url": "https://key.co/listings/MlQmMCYQyK",
-  "captured_at": "2026-03-29T20:03:55.096Z",
+  "captured_at": "2026-03-29T23:21:49.693Z",
   "currency": "USD",
+  "quote_window_cadence": "weekly_sat_to_sat",
+  "quote_window_gap_policy": "record_unavailable_without_date_shift",
+  "quote_window_anchor_date": "2026-04-04",
   "quote_window_days": 168,
   "quote_sample_step_days": 7,
   "quote_nights": 7,
   "quote_max_queries": 24,
   "observations": [
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.692Z",
+      "captured_at": "2026-03-29T23:21:49.692Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-04-04",
@@ -19,26 +22,26 @@
       "check_in_date": "2026-04-04",
       "check_out_date": "2026-04-11",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
+      "base_nightly": 1446,
+      "all_in_nightly": 2053.32,
       "quote_available": false,
-      "quote_unavailable_reason": "pricing-context timeout after 5000ms",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
+      "base_total": 10122,
+      "taxes_total": 1518.3,
+      "fees_total_excl_taxes": 2732.94,
       "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "grand_total": 14373.24,
+      "quoted_total": 14373.24,
+      "fee_pct_of_base": 0.27,
+      "tax_pct_of_base": 0.15,
+      "non_base_pct_of_total": 0.295775,
+      "all_in_multiplier": 1.42,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-04-04&listing_end_date=2026-04-11&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.692Z",
+      "captured_at": "2026-03-29T23:21:49.692Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-04-11",
@@ -46,26 +49,51 @@
       "check_in_date": "2026-04-11",
       "check_out_date": "2026-04-18",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context timeout after 5000ms",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 1446,
+      "all_in_nightly": 2186.27,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10122,
+      "taxes_total": 1639.7,
+      "fees_total_excl_taxes": 3542.2,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 759.15
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 253.05
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 15303.9,
+      "quoted_total": 15303.9,
+      "fee_pct_of_base": 0.349951,
+      "tax_pct_of_base": 0.161994,
+      "non_base_pct_of_total": 0.3386,
+      "all_in_multiplier": 1.511944,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-04-11&listing_end_date=2026-04-18&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.692Z",
+      "captured_at": "2026-03-29T23:21:49.692Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-04-18",
@@ -73,26 +101,51 @@
       "check_in_date": "2026-04-18",
       "check_out_date": "2026-04-25",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context timeout after 5000ms",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 1206,
+      "all_in_nightly": 1890.59,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 8442,
+      "taxes_total": 1417.94,
+      "fees_total_excl_taxes": 3374.2,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 633.15
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 211.05
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 13234.14,
+      "quoted_total": 13234.14,
+      "fee_pct_of_base": 0.399692,
+      "tax_pct_of_base": 0.167963,
+      "non_base_pct_of_total": 0.362104,
+      "all_in_multiplier": 1.567655,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-04-18&listing_end_date=2026-04-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.692Z",
+      "captured_at": "2026-03-29T23:21:49.692Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-04-25",
@@ -100,26 +153,26 @@
       "check_in_date": "2026-04-25",
       "check_out_date": "2026-05-02",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
+      "base_nightly": 1326,
+      "all_in_nightly": 2028.78,
       "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
+      "base_total": 9282,
+      "taxes_total": 1485.12,
+      "fees_total_excl_taxes": 3434.34,
       "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "grand_total": 14201.46,
+      "quoted_total": 14201.46,
+      "fee_pct_of_base": 0.37,
+      "tax_pct_of_base": 0.16,
+      "non_base_pct_of_total": 0.346405,
+      "all_in_multiplier": 1.53,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-04-25&listing_end_date=2026-05-02&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.692Z",
+      "captured_at": "2026-03-29T23:21:49.692Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-05-02",
@@ -127,26 +180,26 @@
       "check_in_date": "2026-05-02",
       "check_out_date": "2026-05-09",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
+      "base_nightly": 1326,
+      "all_in_nightly": 2028.78,
       "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
+      "base_total": 9282,
+      "taxes_total": 1485.12,
+      "fees_total_excl_taxes": 3434.34,
       "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "grand_total": 14201.46,
+      "quoted_total": 14201.46,
+      "fee_pct_of_base": 0.37,
+      "tax_pct_of_base": 0.16,
+      "non_base_pct_of_total": 0.346405,
+      "all_in_multiplier": 1.53,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-05-02&listing_end_date=2026-05-09&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.692Z",
+      "captured_at": "2026-03-29T23:21:49.692Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-05-09",
@@ -154,26 +207,26 @@
       "check_in_date": "2026-05-09",
       "check_out_date": "2026-05-16",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
+      "base_nightly": 1326,
+      "all_in_nightly": 2028.78,
       "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
+      "base_total": 9282,
+      "taxes_total": 1485.12,
+      "fees_total_excl_taxes": 3434.34,
       "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "grand_total": 14201.46,
+      "quoted_total": 14201.46,
+      "fee_pct_of_base": 0.37,
+      "tax_pct_of_base": 0.16,
+      "non_base_pct_of_total": 0.346405,
+      "all_in_multiplier": 1.53,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-05-09&listing_end_date=2026-05-16&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.692Z",
+      "captured_at": "2026-03-29T23:21:49.692Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-05-16",
@@ -181,26 +234,26 @@
       "check_in_date": "2026-05-16",
       "check_out_date": "2026-05-23",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
+      "base_nightly": 1326,
+      "all_in_nightly": 2028.78,
       "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
+      "base_total": 9282,
+      "taxes_total": 1485.12,
+      "fees_total_excl_taxes": 3434.34,
       "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "grand_total": 14201.46,
+      "quoted_total": 14201.46,
+      "fee_pct_of_base": 0.37,
+      "tax_pct_of_base": 0.16,
+      "non_base_pct_of_total": 0.346405,
+      "all_in_multiplier": 1.53,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-05-16&listing_end_date=2026-05-23&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.692Z",
+      "captured_at": "2026-03-29T23:21:49.692Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-05-23",
@@ -208,26 +261,51 @@
       "check_in_date": "2026-05-23",
       "check_out_date": "2026-05-30",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 2340,
+      "all_in_nightly": 3287.68,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 16380,
+      "taxes_total": 2465.76,
+      "fees_total_excl_taxes": 4168,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 1228.5
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 409.5
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 23013.76,
+      "quoted_total": 23013.76,
+      "fee_pct_of_base": 0.254457,
+      "tax_pct_of_base": 0.150535,
+      "non_base_pct_of_total": 0.288252,
+      "all_in_multiplier": 1.404991,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-05-23&listing_end_date=2026-05-30&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-05-30",
@@ -235,26 +313,26 @@
       "check_in_date": "2026-05-30",
       "check_out_date": "2026-06-06",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
+      "base_nightly": 1446,
+      "all_in_nightly": 2183.46,
       "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
+      "base_total": 10122,
+      "taxes_total": 1619.52,
+      "fees_total_excl_taxes": 3542.7,
       "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "grand_total": 15284.22,
+      "quoted_total": 15284.22,
+      "fee_pct_of_base": 0.35,
+      "tax_pct_of_base": 0.16,
+      "non_base_pct_of_total": 0.337748,
+      "all_in_multiplier": 1.51,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-05-30&listing_end_date=2026-06-06&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-06-06",
@@ -262,26 +340,51 @@
       "check_in_date": "2026-06-06",
       "check_out_date": "2026-06-13",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 2130,
+      "all_in_nightly": 3028.96,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 14910,
+      "taxes_total": 2271.72,
+      "fees_total_excl_taxes": 4021,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 1118.25
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 372.75
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 21202.72,
+      "quoted_total": 21202.72,
+      "fee_pct_of_base": 0.269685,
+      "tax_pct_of_base": 0.152362,
+      "non_base_pct_of_total": 0.296788,
+      "all_in_multiplier": 1.422047,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-06-06&listing_end_date=2026-06-13&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-06-13",
@@ -289,26 +392,51 @@
       "check_in_date": "2026-06-13",
       "check_out_date": "2026-06-20",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 2526,
+      "all_in_nightly": 3516.83,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 17682,
+      "taxes_total": 2637.62,
+      "fees_total_excl_taxes": 4298.2,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 1326.15
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 442.05
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 24617.82,
+      "quoted_total": 24617.82,
+      "fee_pct_of_base": 0.243083,
+      "tax_pct_of_base": 0.14917,
+      "non_base_pct_of_total": 0.28174,
+      "all_in_multiplier": 1.392253,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-06-13&listing_end_date=2026-06-20&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-06-20",
@@ -316,26 +444,51 @@
       "check_in_date": "2026-06-20",
       "check_out_date": "2026-06-27",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 2700,
+      "all_in_nightly": 3731.2,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 18900,
+      "taxes_total": 2798.4,
+      "fees_total_excl_taxes": 4420,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 1417.5
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 472.5
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 26118.4,
+      "quoted_total": 26118.4,
+      "fee_pct_of_base": 0.233862,
+      "tax_pct_of_base": 0.148063,
+      "non_base_pct_of_total": 0.276372,
+      "all_in_multiplier": 1.381926,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-06-20&listing_end_date=2026-06-27&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-06-27",
@@ -343,26 +496,51 @@
       "check_in_date": "2026-06-27",
       "check_out_date": "2026-07-04",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 2886,
+      "all_in_nightly": 3960.35,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 20202,
+      "taxes_total": 2970.26,
+      "fees_total_excl_taxes": 4550.2,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 1515.15
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 505.05
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 27722.46,
+      "quoted_total": 27722.46,
+      "fee_pct_of_base": 0.225235,
+      "tax_pct_of_base": 0.147028,
+      "non_base_pct_of_total": 0.271277,
+      "all_in_multiplier": 1.372263,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-06-27&listing_end_date=2026-07-04&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-07-04",
@@ -370,26 +548,51 @@
       "check_in_date": "2026-07-04",
       "check_out_date": "2026-07-11",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 2886,
+      "all_in_nightly": 3960.35,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 20202,
+      "taxes_total": 2970.26,
+      "fees_total_excl_taxes": 4550.2,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 1515.15
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 505.05
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 27722.46,
+      "quoted_total": 27722.46,
+      "fee_pct_of_base": 0.225235,
+      "tax_pct_of_base": 0.147028,
+      "non_base_pct_of_total": 0.271277,
+      "all_in_multiplier": 1.372263,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-07-04&listing_end_date=2026-07-11&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-07-11",
@@ -397,26 +600,51 @@
       "check_in_date": "2026-07-11",
       "check_out_date": "2026-07-18",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 2514,
+      "all_in_nightly": 3502.05,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 17598,
+      "taxes_total": 2626.54,
+      "fees_total_excl_taxes": 4289.8,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 1319.85
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 439.95
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 24514.34,
+      "quoted_total": 24514.34,
+      "fee_pct_of_base": 0.243766,
+      "tax_pct_of_base": 0.149252,
+      "non_base_pct_of_total": 0.282134,
+      "all_in_multiplier": 1.393019,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-07-11&listing_end_date=2026-07-18&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-07-18",
@@ -424,26 +652,51 @@
       "check_in_date": "2026-07-18",
       "check_out_date": "2026-07-25",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 2310,
+      "all_in_nightly": 3250.72,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 16170,
+      "taxes_total": 2438.04,
+      "fees_total_excl_taxes": 4147,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 1212.75
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 404.25
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 22755.04,
+      "quoted_total": 22755.04,
+      "fee_pct_of_base": 0.256463,
+      "tax_pct_of_base": 0.150776,
+      "non_base_pct_of_total": 0.289388,
+      "all_in_multiplier": 1.407238,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-07-18&listing_end_date=2026-07-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-07-25",
@@ -451,26 +704,51 @@
       "check_in_date": "2026-07-25",
       "check_out_date": "2026-08-01",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 2130,
+      "all_in_nightly": 3028.96,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 14910,
+      "taxes_total": 2271.72,
+      "fees_total_excl_taxes": 4021,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 1118.25
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 372.75
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 21202.72,
+      "quoted_total": 21202.72,
+      "fee_pct_of_base": 0.269685,
+      "tax_pct_of_base": 0.152362,
+      "non_base_pct_of_total": 0.296788,
+      "all_in_multiplier": 1.422047,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-07-25&listing_end_date=2026-08-01&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-08-01",
@@ -478,26 +756,51 @@
       "check_in_date": "2026-08-01",
       "check_out_date": "2026-08-08",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 1698,
+      "all_in_nightly": 2496.74,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 11886,
+      "taxes_total": 1872.55,
+      "fees_total_excl_taxes": 3718.6,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 891.45
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 297.15
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 17477.15,
+      "quoted_total": 17477.15,
+      "fee_pct_of_base": 0.312855,
+      "tax_pct_of_base": 0.157542,
+      "non_base_pct_of_total": 0.319912,
+      "all_in_multiplier": 1.470398,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-08-01&listing_end_date=2026-08-08&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-08-08",
@@ -505,26 +808,51 @@
       "check_in_date": "2026-08-08",
       "check_out_date": "2026-08-15",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 1326,
+      "all_in_nightly": 2038.43,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 9282,
+      "taxes_total": 1528.82,
+      "fees_total_excl_taxes": 3458.2,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 696.15
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 232.05
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 14269.02,
+      "quoted_total": 14269.02,
+      "fee_pct_of_base": 0.372571,
+      "tax_pct_of_base": 0.164708,
+      "non_base_pct_of_total": 0.3495,
+      "all_in_multiplier": 1.537279,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-08-08&listing_end_date=2026-08-15&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-08-15",
@@ -532,26 +860,51 @@
       "check_in_date": "2026-08-15",
       "check_out_date": "2026-08-22",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 1326,
+      "all_in_nightly": 2038.43,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 9282,
+      "taxes_total": 1528.82,
+      "fees_total_excl_taxes": 3458.2,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 696.15
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 232.05
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 14269.02,
+      "quoted_total": 14269.02,
+      "fee_pct_of_base": 0.372571,
+      "tax_pct_of_base": 0.164708,
+      "non_base_pct_of_total": 0.3495,
+      "all_in_multiplier": 1.537279,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-08-15&listing_end_date=2026-08-22&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-08-22",
@@ -559,26 +912,51 @@
       "check_in_date": "2026-08-22",
       "check_out_date": "2026-08-29",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 1326,
+      "all_in_nightly": 2038.43,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 9282,
+      "taxes_total": 1528.82,
+      "fees_total_excl_taxes": 3458.2,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 696.15
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 232.05
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 14269.02,
+      "quoted_total": 14269.02,
+      "fee_pct_of_base": 0.372571,
+      "tax_pct_of_base": 0.164708,
+      "non_base_pct_of_total": 0.3495,
+      "all_in_multiplier": 1.537279,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-08-22&listing_end_date=2026-08-29&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-08-29",
@@ -586,26 +964,51 @@
       "check_in_date": "2026-08-29",
       "check_out_date": "2026-09-05",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 1375.71,
+      "all_in_nightly": 2099.68,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 9630,
+      "taxes_total": 1574.76,
+      "fees_total_excl_taxes": 3493,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 722.25
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 240.75
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 14697.76,
+      "quoted_total": 14697.76,
+      "fee_pct_of_base": 0.362721,
+      "tax_pct_of_base": 0.163526,
+      "non_base_pct_of_total": 0.344798,
+      "all_in_multiplier": 1.526247,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-08-29&listing_end_date=2026-09-05&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-09-05",
@@ -613,26 +1016,51 @@
       "check_in_date": "2026-09-05",
       "check_out_date": "2026-09-12",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
-      "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
-      "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "base_nightly": 1345.71,
+      "all_in_nightly": 2062.72,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 9420,
+      "taxes_total": 1547.04,
+      "fees_total_excl_taxes": 3472,
+      "fee_lines": [
+        {
+          "name": "Admin Fee",
+          "amount": 706.5
+        },
+        {
+          "name": "Amenity Rate - weekly",
+          "amount": 1589
+        },
+        {
+          "name": "Channel Processing Fee",
+          "amount": 235.5
+        },
+        {
+          "name": "Departure Clean",
+          "amount": 550
+        },
+        {
+          "name": "Property Damage Protection",
+          "amount": 159
+        },
+        {
+          "name": "Seaside Parking-Wristbands",
+          "amount": 232
+        }
+      ],
+      "grand_total": 14439.04,
+      "quoted_total": 14439.04,
+      "fee_pct_of_base": 0.368577,
+      "tax_pct_of_base": 0.164229,
+      "non_base_pct_of_total": 0.347602,
+      "all_in_multiplier": 1.532807,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-09-05&listing_end_date=2026-09-12&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T20:03:55.096Z",
-      "captured_at": "2026-03-29T20:03:55.096Z",
+      "sampled_at": "2026-03-29T23:21:49.693Z",
+      "captured_at": "2026-03-29T23:21:49.693Z",
       "source_listing_id": "MlQmMCYQyK",
       "currency": "USD",
       "start_date": "2026-09-12",
@@ -640,20 +1068,20 @@
       "check_in_date": "2026-09-12",
       "check_out_date": "2026-09-19",
       "nights": 7,
-      "base_nightly": null,
-      "all_in_nightly": null,
+      "base_nightly": 2130,
+      "all_in_nightly": 3024.6,
       "quote_available": false,
-      "quote_unavailable_reason": "pricing-context consecutive failures threshold exceeded",
-      "base_total": null,
-      "taxes_total": null,
-      "fees_total_excl_taxes": null,
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
+      "base_total": 14910,
+      "taxes_total": 2236.5,
+      "fees_total_excl_taxes": 4025.7,
       "fee_lines": [],
-      "grand_total": null,
-      "quoted_total": null,
-      "fee_pct_of_base": null,
-      "tax_pct_of_base": null,
-      "non_base_pct_of_total": null,
-      "all_in_multiplier": null,
+      "grand_total": 21172.2,
+      "quoted_total": 21172.2,
+      "fee_pct_of_base": 0.27,
+      "tax_pct_of_base": 0.15,
+      "non_base_pct_of_total": 0.295775,
+      "all_in_multiplier": 1.42,
       "handoff_url": "https://itinerary.key.co/listings/MlQmMCYQyK/checkout?listing_start_date=2026-09-12&listing_end_date=2026-09-19&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
       "source": "quote_api"
     }

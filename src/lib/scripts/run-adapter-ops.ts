@@ -8,6 +8,7 @@ type CliOptions = {
   discoverNew: boolean;
   availabilityRefresh: boolean;
   pricingRefresh: boolean;
+  quotesValidate: boolean;
   pricingCache: boolean;
   allSteps: boolean;
   maxNewListings: number | null;
@@ -46,6 +47,7 @@ function parseArgs(argv: string[]): CliOptions {
   let discoverNew = false;
   let availabilityRefresh = false;
   let pricingRefresh = false;
+  let quotesValidate = false;
   let pricingCache = false;
   let allSteps = false;
   let maxNewListings: number | null = null;
@@ -87,6 +89,11 @@ function parseArgs(argv: string[]): CliOptions {
 
     if (arg === "--pricing-refresh") {
       pricingRefresh = true;
+      continue;
+    }
+
+    if (arg === "--quotes-validate") {
+      quotesValidate = true;
       continue;
     }
 
@@ -134,6 +141,7 @@ function parseArgs(argv: string[]): CliOptions {
     discoverNew = true;
     availabilityRefresh = true;
     pricingRefresh = true;
+    quotesValidate = true;
     pricingCache = true;
   }
 
@@ -143,6 +151,7 @@ function parseArgs(argv: string[]): CliOptions {
     discoverNew,
     availabilityRefresh,
     pricingRefresh,
+    quotesValidate,
     pricingCache,
     allSteps,
     maxNewListings,
@@ -192,12 +201,24 @@ function buildAdapterScriptCatalog(
   const byAdapter = new Map<string, AdapterScriptInfo>();
 
   for (const [scriptName, scriptCommand] of Object.entries(scripts)) {
-    const engineMatch = scriptCommand.match(/scrape-([a-z0-9-]+)-engine\.ts/i);
-    if (!engineMatch?.[1]) {
+    let adapterKey: string | null = null;
+
+    const scriptNameMatch = scriptName.match(
+      /^managers:scrape:([a-z0-9-]+):engine:raw$/i,
+    );
+    if (scriptNameMatch?.[1] && scriptNameMatch[1].toLowerCase() !== "adapter") {
+      adapterKey = scriptNameMatch[1].toLowerCase();
+    } else {
+      const legacyMatch = scriptCommand.match(/scrape-([a-z0-9-]+)-engine\.ts/i);
+      if (legacyMatch?.[1]) {
+        adapterKey = legacyMatch[1].toLowerCase();
+      }
+    }
+
+    if (!adapterKey) {
       continue;
     }
 
-    const adapterKey = engineMatch[1].toLowerCase();
     const info: AdapterScriptInfo = {
       adapterKey,
       scrapeScript: scriptName,
@@ -423,6 +444,19 @@ async function runAdapterSteps(
     );
   }
 
+  if (options.quotesValidate) {
+    const validateScript = `pricing:validate:${adapter.adapterKey}:raw`;
+    if (scripts[validateScript]) {
+      await runNpmScript(validateScript, [], options.dryRun);
+    } else {
+      await runNpmScript(
+        "pricing:validate:quotes:raw",
+        ["--adapter-key", adapter.adapterKey],
+        options.dryRun,
+      );
+    }
+  }
+
   if (options.pricingCache) {
     const pricingScript = `pricing:cache:${adapter.adapterKey}:raw`;
     if (!scripts[pricingScript]) {
@@ -447,10 +481,11 @@ function ensureAnyStepEnabled(options: CliOptions): void {
     !options.discoverNew &&
     !options.availabilityRefresh &&
     !options.pricingRefresh &&
+    !options.quotesValidate &&
     !options.pricingCache
   ) {
     throw new Error(
-      "No operation flags provided. Enable one or more: --full-scrape, --discover-new, --availability-refresh, --pricing-refresh, --pricing-cache.",
+      "No operation flags provided. Enable one or more: --full-scrape, --discover-new, --availability-refresh, --pricing-refresh, --quotes-validate, --pricing-cache.",
     );
   }
 }
@@ -515,7 +550,6 @@ main()
   .catch((error: unknown) => {
     if (wasCancelled) {
       process.exit(130);
-      return;
     }
 
     const message = error instanceof Error ? error.message : String(error);

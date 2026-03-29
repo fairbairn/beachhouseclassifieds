@@ -147,6 +147,17 @@ For any listing/date request, pricing engine should emit a normalized object:
 
 ## Estimation Rules
 
+## Quote Window Cadence Rule
+
+Quote window sampling is a firm invariant across adapters:
+
+1. Anchor at the first Saturday on or after the current UTC date.
+2. Generate windows in 7-night Saturday-to-Saturday cadence.
+3. Do not shift dates to a later available day when a weekly window cannot be quoted.
+4. Record the scheduled window as `quote_available=false` with explicit unavailable reason.
+
+This rule ensures stable week-over-week comparability and prevents cadence drift (for example, jumping from 4/4 to 5/2).
+
 When direct quote totals are present:
 
 $$

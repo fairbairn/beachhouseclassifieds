@@ -1,7 +1,7 @@
 {
   "external_listing_id": "eaglehoo",
   "detail_url": "https://www.30aescapes.com/rentals/eaglehoo",
-  "fetched_at": "2026-03-29T17:37:56.195Z",
+  "fetched_at": "2026-03-29T22:01:15.117Z",
   "title": "EagleHoo - Vacation Rental in Panama City Beach,FL | 30a Escapes",
   "h1": "EagleHoo",
   "canonical_url": "https://www.30aescapes.com/rentals/eaglehoo",
@@ -309,7 +309,7 @@
   "normalized_availability": {
     "source": "pm_30aescapes",
     "external_listing_id": "eaglehoo",
-    "captured_at": "2026-03-29T17:37:27.046Z",
+    "captured_at": "2026-03-29T22:00:45.799Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [],
@@ -1703,11 +1703,11 @@
       },
       {
         "date": "2026-08-29",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": null
       },
       {
@@ -6666,7 +6666,7 @@
   "normalized_rates": {
     "source": "pm_30aescapes_quote_api",
     "external_listing_id": "eaglehoo",
-    "captured_at": "2026-03-29T17:37:56.189Z",
+    "captured_at": "2026-03-29T22:01:15.112Z",
     "currency": "USD",
     "quote_window_days": 168,
     "quote_sample_step_days": 7,
@@ -6864,7 +6864,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-04-22",
@@ -7104,7 +7104,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-05-22",
@@ -7900,11 +7900,11 @@
       },
       {
         "date": "2026-08-29",
-        "nightly_rate": 1614.45,
+        "nightly_rate": null,
         "min_nights": null,
-        "is_booked": false,
-        "changeover_code": "A",
-        "season_name": "quote_api"
+        "is_booked": true,
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-08-30",
@@ -7968,7 +7968,7 @@
         "min_nights": null,
         "is_booked": false,
         "changeover_code": "A",
-        "season_name": "quote_derived_assumptions"
+        "season_name": "quote_derived_existing"
       },
       {
         "date": "2026-09-07",
@@ -8042,9 +8042,9 @@
   },
   "html_path": "/Users/scott/Projects/BeachHouseClassifieds/src/lib/data/external-sources/30aescapes/details/html/eaglehoo.html",
   "scrape_metrics": {
-    "total_ms": 33591,
-    "page_load_ms": 4216,
-    "extraction_ms": 29375,
+    "total_ms": 33838,
+    "page_load_ms": 4420,
+    "extraction_ms": 29418,
     "calendar_clicks": 0,
     "calendar_iterations": 1
   }

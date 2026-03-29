@@ -2,22 +2,19 @@
   "adapter_key": "30aescapes",
   "external_listing_id": "for-a-song",
   "detail_url": "https://www.30aescapes.com/rentals/for-a-song",
-  "captured_at": "2026-03-29T17:39:03.042Z",
+  "captured_at": "2026-03-29T22:01:51.587Z",
   "currency": "USD",
+  "quote_window_cadence": "weekly_sat_to_sat",
+  "quote_window_gap_policy": "record_unavailable_without_date_shift",
+  "quote_window_anchor_date": "2026-04-04",
   "quote_window_days": 168,
   "quote_sample_step_days": 7,
   "quote_nights": 7,
-  "assumptions_snapshot": {
-    "sample_count": 24,
-    "avg_fee_pct_of_base": 0,
-    "avg_tax_pct_of_base": 0.12,
-    "avg_non_base_pct_of_total": 0.107143,
-    "avg_all_in_multiplier": 1.12
-  },
+  "quote_max_queries": 24,
   "observations": [
     {
-      "sampled_at": "2026-03-29T17:38:32.905Z",
-      "captured_at": "2026-03-29T17:38:32.905Z",
+      "sampled_at": "2026-03-29T22:01:20.101Z",
+      "captured_at": "2026-03-29T22:01:20.101Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-04-04",
@@ -43,8 +40,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:34.090Z",
-      "captured_at": "2026-03-29T17:38:34.090Z",
+      "sampled_at": "2026-03-29T22:01:21.502Z",
+      "captured_at": "2026-03-29T22:01:21.502Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-04-11",
@@ -70,8 +67,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:35.290Z",
-      "captured_at": "2026-03-29T17:38:35.290Z",
+      "sampled_at": "2026-03-29T22:01:22.738Z",
+      "captured_at": "2026-03-29T22:01:22.738Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-04-18",
@@ -97,8 +94,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:36.466Z",
-      "captured_at": "2026-03-29T17:38:36.466Z",
+      "sampled_at": "2026-03-29T22:01:23.940Z",
+      "captured_at": "2026-03-29T22:01:23.940Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-04-25",
@@ -124,8 +121,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:37.640Z",
-      "captured_at": "2026-03-29T17:38:37.640Z",
+      "sampled_at": "2026-03-29T22:01:25.139Z",
+      "captured_at": "2026-03-29T22:01:25.139Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-05-02",
@@ -151,8 +148,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:38.951Z",
-      "captured_at": "2026-03-29T17:38:38.951Z",
+      "sampled_at": "2026-03-29T22:01:26.408Z",
+      "captured_at": "2026-03-29T22:01:26.408Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-05-09",
@@ -178,8 +175,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:40.213Z",
-      "captured_at": "2026-03-29T17:38:40.213Z",
+      "sampled_at": "2026-03-29T22:01:27.699Z",
+      "captured_at": "2026-03-29T22:01:27.699Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-05-16",
@@ -205,8 +202,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:41.465Z",
-      "captured_at": "2026-03-29T17:38:41.465Z",
+      "sampled_at": "2026-03-29T22:01:29.187Z",
+      "captured_at": "2026-03-29T22:01:29.187Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-05-23",
@@ -232,8 +229,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:42.666Z",
-      "captured_at": "2026-03-29T17:38:42.666Z",
+      "sampled_at": "2026-03-29T22:01:30.395Z",
+      "captured_at": "2026-03-29T22:01:30.395Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-05-30",
@@ -243,24 +240,24 @@
       "nights": 7,
       "base_nightly": 793.96,
       "all_in_nightly": 889.24,
-      "quote_available": true,
-      "quote_unavailable_reason": null,
-      "base_total": 5557.74,
+      "quote_available": false,
+      "quote_unavailable_reason": "no_quote_totals",
+      "base_total": 5557.72,
       "taxes_total": 666.93,
       "fees_total_excl_taxes": 0,
       "fee_lines": [],
-      "grand_total": 6224.67,
-      "quoted_total": 6224.67,
+      "grand_total": 6224.65,
+      "quoted_total": 6224.65,
       "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.12,
+      "tax_pct_of_base": 0.120001,
       "non_base_pct_of_total": 0.107143,
-      "all_in_multiplier": 1.12,
-      "handoff_url": "https://www.30aescapes.com/rentals/book-now.cfm?propertyid=161344&strcheckin=05/30/2026&strcheckout=06/06/2026",
+      "all_in_multiplier": 1.120001,
+      "handoff_url": null,
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:43.940Z",
-      "captured_at": "2026-03-29T17:38:43.940Z",
+      "sampled_at": "2026-03-29T22:01:32.245Z",
+      "captured_at": "2026-03-29T22:01:32.245Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-06-06",
@@ -286,8 +283,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:45.147Z",
-      "captured_at": "2026-03-29T17:38:45.147Z",
+      "sampled_at": "2026-03-29T22:01:33.437Z",
+      "captured_at": "2026-03-29T22:01:33.437Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-06-13",
@@ -313,8 +310,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:46.440Z",
-      "captured_at": "2026-03-29T17:38:46.440Z",
+      "sampled_at": "2026-03-29T22:01:34.653Z",
+      "captured_at": "2026-03-29T22:01:34.653Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-06-20",
@@ -340,8 +337,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:47.766Z",
-      "captured_at": "2026-03-29T17:38:47.766Z",
+      "sampled_at": "2026-03-29T22:01:35.837Z",
+      "captured_at": "2026-03-29T22:01:35.837Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-06-27",
@@ -367,8 +364,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:49.062Z",
-      "captured_at": "2026-03-29T17:38:49.062Z",
+      "sampled_at": "2026-03-29T22:01:37.007Z",
+      "captured_at": "2026-03-29T22:01:37.007Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-07-04",
@@ -394,8 +391,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:50.340Z",
-      "captured_at": "2026-03-29T17:38:50.340Z",
+      "sampled_at": "2026-03-29T22:01:38.257Z",
+      "captured_at": "2026-03-29T22:01:38.257Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-07-11",
@@ -421,8 +418,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:51.543Z",
-      "captured_at": "2026-03-29T17:38:51.543Z",
+      "sampled_at": "2026-03-29T22:01:39.448Z",
+      "captured_at": "2026-03-29T22:01:39.448Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-07-18",
@@ -448,8 +445,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:52.791Z",
-      "captured_at": "2026-03-29T17:38:52.791Z",
+      "sampled_at": "2026-03-29T22:01:40.637Z",
+      "captured_at": "2026-03-29T22:01:40.637Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-07-25",
@@ -475,8 +472,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:54.090Z",
-      "captured_at": "2026-03-29T17:38:54.090Z",
+      "sampled_at": "2026-03-29T22:01:41.890Z",
+      "captured_at": "2026-03-29T22:01:41.890Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-08-01",
@@ -502,8 +499,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:55.400Z",
-      "captured_at": "2026-03-29T17:38:55.400Z",
+      "sampled_at": "2026-03-29T22:01:43.408Z",
+      "captured_at": "2026-03-29T22:01:43.408Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-08-08",
@@ -529,8 +526,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:56.590Z",
-      "captured_at": "2026-03-29T17:38:56.590Z",
+      "sampled_at": "2026-03-29T22:01:45.239Z",
+      "captured_at": "2026-03-29T22:01:45.239Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-08-15",
@@ -556,8 +553,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:57.794Z",
-      "captured_at": "2026-03-29T17:38:57.794Z",
+      "sampled_at": "2026-03-29T22:01:46.536Z",
+      "captured_at": "2026-03-29T22:01:46.536Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-08-22",
@@ -583,8 +580,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:38:59.068Z",
-      "captured_at": "2026-03-29T17:38:59.068Z",
+      "sampled_at": "2026-03-29T22:01:47.788Z",
+      "captured_at": "2026-03-29T22:01:47.788Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-08-29",
@@ -610,8 +607,8 @@
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:39:00.361Z",
-      "captured_at": "2026-03-29T17:39:00.361Z",
+      "sampled_at": "2026-03-29T22:01:49.058Z",
+      "captured_at": "2026-03-29T22:01:49.058Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-09-05",
@@ -619,26 +616,26 @@
       "check_in_date": "2026-09-05",
       "check_out_date": "2026-09-12",
       "nights": 7,
-      "base_nightly": 482.14,
-      "all_in_nightly": 539.99,
+      "base_nightly": 688.46,
+      "all_in_nightly": 771.08,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 3374.95,
-      "taxes_total": 405,
+      "base_total": 4819.24,
+      "taxes_total": 578.31,
       "fees_total_excl_taxes": 0,
       "fee_lines": [],
-      "grand_total": 3779.95,
-      "quoted_total": 3779.95,
+      "grand_total": 5397.55,
+      "quoted_total": 5397.55,
       "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.120002,
-      "non_base_pct_of_total": 0.107144,
-      "all_in_multiplier": 1.120002,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.107143,
+      "all_in_multiplier": 1.12,
       "handoff_url": "https://www.30aescapes.com/rentals/book-now.cfm?propertyid=161344&strcheckin=09/05/2026&strcheckout=09/12/2026",
       "source": "quote_api"
     },
     {
-      "sampled_at": "2026-03-29T17:39:01.723Z",
-      "captured_at": "2026-03-29T17:39:01.723Z",
+      "sampled_at": "2026-03-29T22:01:50.317Z",
+      "captured_at": "2026-03-29T22:01:50.317Z",
       "source_listing_id": "for-a-song",
       "currency": "USD",
       "start_date": "2026-09-12",
