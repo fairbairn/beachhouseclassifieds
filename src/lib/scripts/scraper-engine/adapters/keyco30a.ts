@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { loadActiveExclusions } from "../shared/exclusion-registry";
@@ -159,6 +159,8 @@ type KeycoDetailRecord = DetailRecordBase & {
     quote_window_days: number;
     quote_sample_step_days: number;
     quote_max_queries: number;
+    observations_count: number;
+    observations_path: string | null;
     observations: KeycoRateObservation[];
   };
 };
@@ -175,6 +177,18 @@ const OUTPUT_ROOT = resolve(
   "keyco30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
+
+type KeycoQuotesSidecarRecord = {
+  adapter_key: "keyco30a";
+  external_listing_id: string;
+  detail_url: string;
+  captured_at: string;
+  quote_window_days: number;
+  quote_sample_step_days: number;
+  quote_max_queries: number;
+  observations: KeycoRateObservation[];
+};
 
 const EXCLUDED_LISTING_IDS = loadActiveExclusions("keyco30a", ["ra3jpPCp6O"]);
 
@@ -237,6 +251,37 @@ function hashSha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+async function writeKeycoQuotesSidecar(input: {
+  externalListingId: string;
+  detailUrl: string;
+  quoteWindowDays: number;
+  quoteSampleStepDays: number;
+  quoteMaxQueries: number;
+  observations: KeycoRateObservation[];
+}): Promise<string> {
+  await mkdir(OUTPUT_DETAILS_QUOTES_DIR, { recursive: true });
+  const sidecarPath = resolve(
+    OUTPUT_DETAILS_QUOTES_DIR,
+    `${input.externalListingId}.json`,
+  );
+  const sidecarRecord: KeycoQuotesSidecarRecord = {
+    adapter_key: "keyco30a",
+    external_listing_id: input.externalListingId,
+    detail_url: input.detailUrl,
+    captured_at: new Date().toISOString(),
+    quote_window_days: input.quoteWindowDays,
+    quote_sample_step_days: input.quoteSampleStepDays,
+    quote_max_queries: input.quoteMaxQueries,
+    observations: input.observations,
+  };
+  await writeFile(
+    sidecarPath,
+    `${JSON.stringify(sidecarRecord, null, 2)}\n`,
+    "utf8",
+  );
+  return sidecarPath;
+}
+
 function parseNumberLike(
   value: string | number | null | undefined,
 ): number | null {
@@ -282,9 +327,9 @@ function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function isSundayIsoDate(isoDate: string): boolean {
+function isSaturdayIsoDate(isoDate: string): boolean {
   const day = new Date(`${isoDate}T00:00:00Z`).getUTCDay();
-  return day === 0;
+  return day === 6;
 }
 
 function inferCityStateFromText(value: string): {
@@ -831,8 +876,8 @@ async function fetchDetail(
         Number(process.env.KEYCO30A_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
       );
       const targetQuoteNights = Math.max(
-        1,
-        Number(process.env.KEYCO30A_RATES_QUOTE_NIGHTS ?? "6") || 6,
+        7,
+        Number(process.env.KEYCO30A_RATES_QUOTE_NIGHTS ?? "7") || 7,
       );
       const ratesMaxQueries = Math.max(
         1,
@@ -895,7 +940,7 @@ async function fetchDetail(
           if (!day) {
             continue;
           }
-          if (isSundayIsoDate(candidate.date)) {
+          if (isSaturdayIsoDate(candidate.date)) {
             picked = candidate;
             break;
           }
@@ -1133,6 +1178,14 @@ async function fetchDetail(
         "API_AVAIL_REFRESH",
         `done available=${counts.available} unavailable=${counts.unavailable} other=${counts.other}`,
       );
+      const observationsPath = await writeKeycoQuotesSidecar({
+        externalListingId,
+        detailUrl: normalizedDetailUrl,
+        quoteWindowDays: ratesWindowDays,
+        quoteSampleStepDays: ratesSampleStepDays,
+        quoteMaxQueries: effectiveRatesMaxQueries,
+        observations: rateObservations,
+      });
 
       return {
         ...existing,
@@ -1183,7 +1236,9 @@ async function fetchDetail(
           quote_window_days: ratesWindowDays,
           quote_sample_step_days: ratesSampleStepDays,
           quote_max_queries: effectiveRatesMaxQueries,
-          observations: rateObservations,
+          observations_count: rateObservations.length,
+          observations_path: observationsPath,
+          observations: [],
         },
       };
     } catch {
@@ -1548,8 +1603,8 @@ async function fetchDetail(
       Number(process.env.KEYCO30A_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
     );
     const targetQuoteNights = Math.max(
-      1,
-      Number(process.env.KEYCO30A_RATES_QUOTE_NIGHTS ?? "6") || 6,
+      7,
+      Number(process.env.KEYCO30A_RATES_QUOTE_NIGHTS ?? "7") || 7,
     );
     const ratesMaxQueries = Math.max(
       1,
@@ -1614,7 +1669,7 @@ async function fetchDetail(
         if (!day?.is_available) {
           continue;
         }
-        if (isSundayIsoDate(candidate.date)) {
+        if (isSaturdayIsoDate(candidate.date)) {
           picked = candidate;
           break;
         }
@@ -1820,6 +1875,14 @@ async function fetchDetail(
       `${externalListingId}.html`,
     );
     await writeFile(htmlPath, `${html}\n`, "utf8");
+    const observationsPath = await writeKeycoQuotesSidecar({
+      externalListingId,
+      detailUrl: normalizedDetailUrl,
+      quoteWindowDays: ratesWindowDays,
+      quoteSampleStepDays: ratesSampleStepDays,
+      quoteMaxQueries: effectiveRatesMaxQueries,
+      observations: rateObservations,
+    });
 
     return {
       external_listing_id: externalListingId,
@@ -1922,7 +1985,9 @@ async function fetchDetail(
         quote_window_days: ratesWindowDays,
         quote_sample_step_days: ratesSampleStepDays,
         quote_max_queries: effectiveRatesMaxQueries,
-        observations: rateObservations,
+        observations_count: rateObservations.length,
+        observations_path: observationsPath,
+        observations: [],
       },
       html_path: htmlPath,
     };

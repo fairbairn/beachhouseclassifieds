@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
@@ -9,16 +9,28 @@ type EscapeDayCode = string;
 
 type EscapeRateObservation = {
   sampled_at: string;
+  captured_at: string;
+  source_listing_id: string;
+  currency: "USD";
   start_date: string;
   end_date: string;
+  check_in_date: string;
+  check_out_date: string;
   nights: number;
+  base_nightly: number | null;
+  all_in_nightly: number | null;
   quote_available: boolean;
   quote_unavailable_reason: string | null;
   base_total: number | null;
   taxes_total: number | null;
   fees_total_excl_taxes: number | null;
   fee_lines: Array<{ name: string; amount: number }>;
+  grand_total: number | null;
   quoted_total: number | null;
+  fee_pct_of_base: number | null;
+  tax_pct_of_base: number | null;
+  non_base_pct_of_total: number | null;
+  all_in_multiplier: number | null;
   handoff_url: string | null;
   source: "quote_api";
 };
@@ -144,6 +156,8 @@ type EscapeDetailRecord = DetailRecordBase & {
       avg_tax_pct_of_base: number;
       avg_all_in_multiplier: number;
     };
+    observations_count: number;
+    observations_path: string | null;
     observations: EscapeRateObservation[];
   };
   scrape_metrics: {
@@ -165,6 +179,7 @@ const OUTPUT_ROOT = resolve(
   "30aescapes",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
 const PRICING_PROFILE_PATH = resolve(OUTPUT_ROOT, "pricing-profile.json");
 const PRICING_ASSUMPTIONS_PATH = resolve(
   OUTPUT_ROOT,
@@ -188,8 +203,36 @@ type EscapesAssumptionsStore = {
     sample_count?: number;
     avg_fee_pct_of_base?: number;
     avg_tax_pct_of_base?: number;
+    avg_non_base_pct_of_total?: number;
     avg_all_in_multiplier?: number;
   };
+};
+
+type EscapesAssumptionsSnapshot = {
+  sample_count: number;
+  avg_fee_pct_of_base: number;
+  avg_tax_pct_of_base: number;
+  avg_non_base_pct_of_total: number;
+  avg_all_in_multiplier: number;
+};
+
+type EscapeQuotesSidecarRecord = {
+  adapter_key: "30aescapes";
+  external_listing_id: string;
+  detail_url: string;
+  captured_at: string;
+  currency: "USD";
+  quote_window_days: number;
+  quote_sample_step_days: number;
+  quote_nights: number;
+  assumptions_snapshot: {
+    sample_count: number;
+    avg_fee_pct_of_base: number;
+    avg_tax_pct_of_base: number;
+    avg_non_base_pct_of_total: number;
+    avg_all_in_multiplier: number;
+  };
+  observations: EscapeRateObservation[];
 };
 
 let cachedEscapesProfile: EscapesProfile | null = null;
@@ -267,6 +310,29 @@ function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function safeRatio(
+  numerator: number | null,
+  denominator: number | null,
+): number | null {
+  if (
+    numerator === null ||
+    denominator === null ||
+    !Number.isFinite(numerator) ||
+    !Number.isFinite(denominator) ||
+    denominator <= 0
+  ) {
+    return null;
+  }
+  return Number((numerator / denominator).toFixed(6));
+}
+
+function coerceMoney(value: number | null | undefined): number | null {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return roundCurrency(Number(value));
+}
+
 function addDaysToIsoDate(isoDate: string, days: number): string {
   const date = new Date(`${isoDate}T00:00:00.000Z`);
   if (!Number.isFinite(date.getTime())) {
@@ -276,9 +342,9 @@ function addDaysToIsoDate(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function isSundayIsoDate(isoDate: string): boolean {
+function isSaturdayIsoDate(isoDate: string): boolean {
   const date = new Date(`${isoDate}T00:00:00.000Z`);
-  return Number.isFinite(date.getTime()) && date.getUTCDay() === 0;
+  return Number.isFinite(date.getTime()) && date.getUTCDay() === 6;
 }
 
 function toUsDate(isoDate: string): string {
@@ -309,6 +375,39 @@ function medianNumber(values: number[]): number | null {
     return roundCurrency((sorted[middle - 1]! + sorted[middle]!) / 2);
   }
   return roundCurrency(sorted[middle]!);
+}
+
+function averageRatio(values: Array<number | null | undefined>): number | null {
+  const finite = values.filter(
+    (value): value is number =>
+      Number.isFinite(value) && value !== null && value !== undefined,
+  );
+  if (finite.length === 0) {
+    return null;
+  }
+  const avg = finite.reduce((sum, value) => sum + value, 0) / finite.length;
+  return Number(avg.toFixed(6));
+}
+
+function buildObservationAssumptionsSnapshot(
+  observations: EscapeRateObservation[],
+  fallback: EscapesAssumptionsSnapshot,
+): EscapesAssumptionsSnapshot {
+  return {
+    sample_count: observations.length,
+    avg_fee_pct_of_base:
+      averageRatio(observations.map((item) => item.fee_pct_of_base)) ??
+      fallback.avg_fee_pct_of_base,
+    avg_tax_pct_of_base:
+      averageRatio(observations.map((item) => item.tax_pct_of_base)) ??
+      fallback.avg_tax_pct_of_base,
+    avg_non_base_pct_of_total:
+      averageRatio(observations.map((item) => item.non_base_pct_of_total)) ??
+      fallback.avg_non_base_pct_of_total,
+    avg_all_in_multiplier:
+      averageRatio(observations.map((item) => item.all_in_multiplier)) ??
+      fallback.avg_all_in_multiplier,
+  };
 }
 
 async function readEscapesProfile(): Promise<EscapesProfile> {
@@ -372,12 +471,11 @@ function parseEscapesQuoteHtml(html: string): {
   const taxesTotal = extractListItemAmount(html, "Taxes");
   const quotedTotal =
     parseUsdAmountFromText(
-      html.match(
-        /class=\"text-right\s+pdp-quote-total\"[^>]*>([^<]+)</i,
-      )?.[1] ?? "",
+      html.match(/class="text-right\s+pdp-quote-total"[^>]*>([^<]+)</i)?.[1] ??
+        "",
     ) ?? parseUsdAmountFromText(html);
   const handoffUrl =
-    html.match(/id=\"detailBookBtn\"[^>]*href=\"([^\"]+)\"/i)?.[1] ?? null;
+    html.match(/id="detailBookBtn"[^>]*href="([^"]+)"/i)?.[1] ?? null;
 
   const quoteAvailable =
     Number.isFinite(baseTotal) &&
@@ -1629,8 +1727,8 @@ async function fetchDetail(
       Number(process.env.ESCAPES30A_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
     );
     const quoteNightsDefault = Math.max(
-      2,
-      Number(process.env.ESCAPES30A_RATES_QUOTE_NIGHTS ?? "3") || 3,
+      7,
+      Number(process.env.ESCAPES30A_RATES_QUOTE_NIGHTS ?? "7") || 7,
     );
     const quoteMaxQueries = Math.max(
       1,
@@ -1638,7 +1736,7 @@ async function fetchDetail(
     );
 
     const assumptionsStore = await readEscapesAssumptions();
-    const assumptionsSnapshot = {
+    const assumptionsSnapshot: EscapesAssumptionsSnapshot = {
       sample_count: Math.max(
         0,
         Number(assumptionsStore.assumptions?.sample_count ?? 0) || 0,
@@ -1647,9 +1745,26 @@ async function fetchDetail(
         Number(assumptionsStore.assumptions?.avg_fee_pct_of_base ?? 0) || 0,
       avg_tax_pct_of_base:
         Number(assumptionsStore.assumptions?.avg_tax_pct_of_base ?? 0) || 0,
+      avg_non_base_pct_of_total:
+        Number(assumptionsStore.assumptions?.avg_non_base_pct_of_total ?? 0) ||
+        0,
       avg_all_in_multiplier:
         Number(assumptionsStore.assumptions?.avg_all_in_multiplier ?? 0) || 0,
     };
+    const assumptionsFeePct = Math.max(
+      0,
+      assumptionsSnapshot.avg_fee_pct_of_base,
+    );
+    const assumptionsTaxPct = Math.max(
+      0,
+      assumptionsSnapshot.avg_tax_pct_of_base,
+    );
+    const assumptionsAllInMultiplier = Math.max(
+      1,
+      assumptionsSnapshot.avg_all_in_multiplier > 0
+        ? assumptionsSnapshot.avg_all_in_multiplier
+        : 1 + assumptionsFeePct + assumptionsTaxPct,
+    );
 
     const existingRateByDate = new Map<string, number>();
     if (existingDetailJsonPath) {
@@ -1673,54 +1788,153 @@ async function fetchDetail(
     }
 
     const windowDays = normalizedAvailability.days.slice(0, quoteWindowDays);
-    const sampledDays: Array<(typeof windowDays)[number]> = [];
-    for (
-      let cursor = 0;
-      cursor < windowDays.length && sampledDays.length < quoteMaxQueries;
-      cursor += quoteSampleStepDays
-    ) {
-      let picked: (typeof windowDays)[number] | null = null;
-      const windowEnd = Math.min(
-        windowDays.length,
-        cursor + quoteSampleStepDays,
-      );
-      for (let idx = cursor; idx < windowEnd; idx += 1) {
-        const candidate = windowDays[idx];
-        if (!candidate || !candidate.is_available) {
-          continue;
-        }
-        if (isSundayIsoDate(candidate.date)) {
-          picked = candidate;
-          break;
-        }
-        if (!picked) {
-          picked = candidate;
-        }
-      }
-      if (!picked) {
-        continue;
-      }
-      if (sampledDays.at(-1)?.date === picked.date) {
-        continue;
-      }
-      sampledDays.push(picked);
-    }
+    const sampledDays = windowDays
+      .filter((day) => isSaturdayIsoDate(day.date))
+      .slice(0, quoteMaxQueries);
 
     const sampledNightlyByDate = new Map<string, number>();
     const quoteObservations: EscapeRateObservation[] = [];
     const shouldCallQuoteApi =
       refreshMode === "dynamic" || refreshMode === "full";
 
+    const existingNightlyValues = Array.from(existingRateByDate.values());
+    const fallbackAnchorNightly =
+      medianNumber(existingNightlyValues) ??
+      roundCurrency(
+        Number(process.env.ESCAPES30A_RATES_DERIVED_NIGHTLY_DEFAULT ?? "650") ||
+          650,
+      );
+
+    const fallbackTaxPct =
+      assumptionsSnapshot.avg_tax_pct_of_base > 0
+        ? assumptionsSnapshot.avg_tax_pct_of_base
+        : 0;
+    const fallbackFeePct =
+      assumptionsSnapshot.avg_fee_pct_of_base > 0
+        ? assumptionsSnapshot.avg_fee_pct_of_base
+        : Math.max(
+            0,
+            assumptionsSnapshot.avg_all_in_multiplier - 1 - fallbackTaxPct,
+          );
+
+    const completeObservation = (input: {
+      capturedAt: string;
+      day: (typeof sampledDays)[number];
+      endDate: string;
+      nights: number;
+      quoteAvailable: boolean;
+      quoteUnavailableReason: string | null;
+      baseTotal: number | null;
+      taxesTotal: number | null;
+      feesTotalExclTaxes: number | null;
+      feeLines: Array<{ name: string; amount: number }>;
+      quotedTotal: number | null;
+      handoffUrl: string | null;
+    }): EscapeRateObservation => {
+      const sampledNightlyMedian = medianNumber(
+        Array.from(sampledNightlyByDate.values()),
+      );
+      const sourceNightly =
+        existingRateByDate.get(input.day.date) ??
+        sampledNightlyMedian ??
+        fallbackAnchorNightly;
+
+      const inferredBaseFromNightly = roundCurrency(
+        sourceNightly * input.nights,
+      );
+      let baseTotal = coerceMoney(input.baseTotal) ?? inferredBaseFromNightly;
+      let taxesTotal = coerceMoney(input.taxesTotal);
+      let feesTotalExclTaxes = coerceMoney(input.feesTotalExclTaxes);
+      let grandTotal = coerceMoney(input.quotedTotal);
+
+      if (baseTotal <= 0 && grandTotal !== null && grandTotal > 0) {
+        const divisor =
+          assumptionsSnapshot.avg_all_in_multiplier > 1
+            ? assumptionsSnapshot.avg_all_in_multiplier
+            : Math.max(1, 1 + fallbackTaxPct + fallbackFeePct);
+        baseTotal = roundCurrency(grandTotal / divisor);
+      }
+
+      if (taxesTotal === null) {
+        taxesTotal = roundCurrency(baseTotal * fallbackTaxPct);
+      }
+      if (feesTotalExclTaxes === null) {
+        feesTotalExclTaxes = roundCurrency(baseTotal * fallbackFeePct);
+      }
+      if (grandTotal === null) {
+        grandTotal = roundCurrency(baseTotal + taxesTotal + feesTotalExclTaxes);
+      }
+
+      const feePctOfBase = safeRatio(feesTotalExclTaxes, baseTotal);
+      const taxPctOfBase = safeRatio(taxesTotal, baseTotal);
+      const nonBasePctOfTotal = safeRatio(
+        Math.max(0, grandTotal - baseTotal),
+        grandTotal,
+      );
+      const allInMultiplier = safeRatio(grandTotal, baseTotal);
+      const baseNightly =
+        input.nights > 0 ? roundCurrency(baseTotal / input.nights) : null;
+      const allInNightly =
+        input.nights > 0 ? roundCurrency(grandTotal / input.nights) : null;
+
+      return {
+        sampled_at: input.capturedAt,
+        captured_at: input.capturedAt,
+        source_listing_id: externalListingId,
+        currency: "USD",
+        start_date: input.day.date,
+        end_date: input.endDate,
+        check_in_date: input.day.date,
+        check_out_date: input.endDate,
+        nights: input.nights,
+        base_nightly: baseNightly,
+        all_in_nightly: allInNightly,
+        quote_available: input.quoteAvailable,
+        quote_unavailable_reason: input.quoteUnavailableReason,
+        base_total: baseTotal,
+        taxes_total: taxesTotal,
+        fees_total_excl_taxes: feesTotalExclTaxes,
+        fee_lines: input.feeLines,
+        grand_total: grandTotal,
+        quoted_total: grandTotal,
+        fee_pct_of_base: feePctOfBase,
+        tax_pct_of_base: taxPctOfBase,
+        non_base_pct_of_total: nonBasePctOfTotal,
+        all_in_multiplier: allInMultiplier,
+        handoff_url: input.handoffUrl,
+        source: "quote_api",
+      };
+    };
+    const fallbackNightlyDefault =
+      medianNumber(Array.from(existingRateByDate.values())) ??
+      roundCurrency(
+        Number(process.env.ESCAPES30A_RATES_DERIVED_NIGHTLY_DEFAULT ?? "650") ||
+          650,
+      );
+
     if (shouldCallQuoteApi && extracted.propertyId && extracted.unitShortName) {
       reportDetailProgress?.(
         `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] start sample_windows=${sampledDays.length}`,
       );
       for (const day of sampledDays) {
-        const nights = Math.max(
-          quoteNightsDefault,
-          day.min_nights_required ?? 0,
-        );
+        const capturedAt = new Date().toISOString();
+        const nights = quoteNightsDefault;
         const endDate = addDaysToIsoDate(day.date, nights);
+        const fallbackNightly =
+          existingRateByDate.get(day.date) ?? fallbackNightlyDefault;
+        const fallbackBaseTotal = roundCurrency(fallbackNightly * nights);
+        const fallbackTaxesTotal = roundCurrency(
+          fallbackBaseTotal * assumptionsTaxPct,
+        );
+        const fallbackFeesTotal = roundCurrency(
+          fallbackBaseTotal * assumptionsFeePct,
+        );
+        const fallbackGrandTotal = roundCurrency(
+          Math.max(
+            fallbackBaseTotal + fallbackTaxesTotal + fallbackFeesTotal,
+            fallbackBaseTotal * assumptionsAllInMultiplier,
+          ),
+        );
         try {
           const quote = await fetchEscapesQuote({
             propertyId: extracted.propertyId,
@@ -1735,58 +1949,84 @@ async function fetchDetail(
           day.booking_day_state = quote.quoteAvailable ? "bookable" : "blocked";
           day.status_code = quote.quoteAvailable ? "A" : "U";
 
-          const nightly =
-            quote.quoteAvailable &&
-            Number.isFinite(quote.baseTotal) &&
-            quote.baseTotal
-              ? roundCurrency((quote.baseTotal ?? 0) / nights)
+          const quoteBaseTotal =
+            Number.isFinite(quote.baseTotal) && (quote.baseTotal ?? 0) > 0
+              ? roundCurrency(quote.baseTotal ?? 0)
               : null;
-          if (nightly !== null && nightly > 0) {
+          const quoteTaxesTotal =
+            Number.isFinite(quote.taxesTotal) && (quote.taxesTotal ?? 0) >= 0
+              ? roundCurrency(quote.taxesTotal ?? 0)
+              : null;
+          const quoteGrandTotal =
+            Number.isFinite(quote.quotedTotal) && (quote.quotedTotal ?? 0) > 0
+              ? roundCurrency(quote.quotedTotal ?? 0)
+              : null;
+
+          const baseTotal =
+            quoteBaseTotal ??
+            (quoteGrandTotal !== null
+              ? roundCurrency(quoteGrandTotal / assumptionsAllInMultiplier)
+              : fallbackBaseTotal);
+          const taxesTotal =
+            quoteTaxesTotal ?? roundCurrency(baseTotal * assumptionsTaxPct);
+          const feesTotalExclTaxes =
+            quoteGrandTotal !== null &&
+            quoteBaseTotal !== null &&
+            quoteTaxesTotal !== null
+              ? roundCurrency(
+                  Math.max(
+                    0,
+                    quoteGrandTotal - quoteBaseTotal - quoteTaxesTotal,
+                  ),
+                )
+              : roundCurrency(baseTotal * assumptionsFeePct);
+          const grandTotal =
+            quoteGrandTotal ??
+            roundCurrency(baseTotal + taxesTotal + feesTotalExclTaxes);
+          const nightly = roundCurrency(baseTotal / nights);
+
+          // Only use successful quote windows as interpolation anchors.
+          // Unavailable responses still produce observations, but do not seed rates.
+          if (quote.quoteAvailable && nightly > 0) {
             sampledNightlyByDate.set(day.date, nightly);
           }
 
-          quoteObservations.push({
-            sampled_at: new Date().toISOString(),
-            start_date: day.date,
-            end_date: endDate,
-            nights,
-            quote_available: quote.quoteAvailable,
-            quote_unavailable_reason: quote.unavailableReason,
-            base_total: quote.baseTotal,
-            taxes_total: quote.taxesTotal,
-            fees_total_excl_taxes:
-              quote.quoteAvailable &&
-              quote.baseTotal !== null &&
-              quote.taxesTotal !== null &&
-              quote.quotedTotal !== null
-                ? roundCurrency(
-                    Math.max(
-                      0,
-                      quote.quotedTotal - quote.baseTotal - quote.taxesTotal,
-                    ),
-                  )
-                : null,
-            fee_lines: quote.feeLines,
-            quoted_total: quote.quotedTotal,
-            handoff_url: quote.handoffUrl,
-            source: "quote_api",
-          });
+          quoteObservations.push(
+            completeObservation({
+              capturedAt,
+              day,
+              endDate,
+              nights,
+              quoteAvailable: quote.quoteAvailable,
+              quoteUnavailableReason: quote.quoteAvailable
+                ? quote.unavailableReason
+                : (quote.unavailableReason ??
+                  "quote_unavailable_fallback_estimated"),
+              baseTotal,
+              taxesTotal,
+              feesTotalExclTaxes,
+              feeLines: quote.feeLines,
+              quotedTotal: grandTotal,
+              handoffUrl: quote.handoffUrl,
+            }),
+          );
         } catch {
-          quoteObservations.push({
-            sampled_at: new Date().toISOString(),
-            start_date: day.date,
-            end_date: endDate,
-            nights,
-            quote_available: false,
-            quote_unavailable_reason: "quote_request_failed",
-            base_total: null,
-            taxes_total: null,
-            fees_total_excl_taxes: null,
-            fee_lines: [],
-            quoted_total: null,
-            handoff_url: null,
-            source: "quote_api",
-          });
+          quoteObservations.push(
+            completeObservation({
+              capturedAt,
+              day,
+              endDate,
+              nights,
+              quoteAvailable: false,
+              quoteUnavailableReason: "quote_request_failed_fallback_estimated",
+              baseTotal: fallbackBaseTotal,
+              taxesTotal: fallbackTaxesTotal,
+              feesTotalExclTaxes: fallbackFeesTotal,
+              feeLines: [],
+              quotedTotal: fallbackGrandTotal,
+              handoffUrl: null,
+            }),
+          );
         }
       }
       reportDetailProgress?.(
@@ -1803,6 +2043,11 @@ async function fetchDetail(
           650,
       );
 
+    const observedAssumptionsSnapshot = buildObservationAssumptionsSnapshot(
+      quoteObservations,
+      assumptionsSnapshot,
+    );
+
     const normalizedRates: EscapeDetailRecord["normalized_rates"] = {
       source: "pm_30aescapes_quote_api",
       external_listing_id: externalListingId,
@@ -1812,7 +2057,7 @@ async function fetchDetail(
       quote_sample_step_days: quoteSampleStepDays,
       quote_nights: quoteNightsDefault,
       quote_max_queries: quoteMaxQueries,
-      assumptions_sample_count: assumptionsSnapshot.sample_count,
+      assumptions_sample_count: observedAssumptionsSnapshot.sample_count,
       days: windowDays.map((day) => {
         const sampled = sampledNightlyByDate.get(day.date);
         const existing = existingRateByDate.get(day.date);
@@ -1835,6 +2080,32 @@ async function fetchDetail(
       }),
     };
 
+    let quoteObservationsPath: string | null = null;
+    if (shouldCallQuoteApi) {
+      await mkdir(OUTPUT_DETAILS_QUOTES_DIR, { recursive: true });
+      quoteObservationsPath = resolve(
+        OUTPUT_DETAILS_QUOTES_DIR,
+        `${externalListingId}.json`,
+      );
+      const quoteSidecarRecord: EscapeQuotesSidecarRecord = {
+        adapter_key: "30aescapes",
+        external_listing_id: externalListingId,
+        detail_url: detailUrl,
+        captured_at: new Date().toISOString(),
+        currency: "USD",
+        quote_window_days: quoteWindowDays,
+        quote_sample_step_days: quoteSampleStepDays,
+        quote_nights: quoteNightsDefault,
+        assumptions_snapshot: observedAssumptionsSnapshot,
+        observations: quoteObservations,
+      };
+      await writeFile(
+        quoteObservationsPath,
+        `${JSON.stringify(quoteSidecarRecord, null, 2)}\n`,
+        "utf8",
+      );
+    }
+
     const ratesRaw: EscapeDetailRecord["rates_raw"] = {
       source: "30aescapes_quote_api",
       endpoint: ESCAPES_QUOTES_ENDPOINT,
@@ -1844,8 +2115,10 @@ async function fetchDetail(
         page: "0",
         redskyclient: "no",
       },
-      assumptions_snapshot: assumptionsSnapshot,
-      observations: quoteObservations,
+      assumptions_snapshot: observedAssumptionsSnapshot,
+      observations_count: quoteObservations.length,
+      observations_path: quoteObservationsPath,
+      observations: [],
     };
 
     const name = stripHtml(extracted.h1 || extracted.title).slice(0, 240);

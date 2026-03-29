@@ -24,7 +24,7 @@ Each adapter must maintain two pricing artifacts:
 1. `src/lib/data/external-sources/<adapterKey>/pricing-assumptions.json`
 2. `src/lib/data/external-sources/<adapterKey>/pricing-profile.json`
 
-`pricing-assumptions.json` is already defined by [docs/adapter-pricing-assumptions.md](docs/adapter-pricing-assumptions.md).
+`pricing-assumptions.json` is already defined by [adapter-pricing-assumptions.md](./adapter-pricing-assumptions.md).
 
 `pricing-profile.json` is the adapter-level control plane for acquisition + UX behavior.
 

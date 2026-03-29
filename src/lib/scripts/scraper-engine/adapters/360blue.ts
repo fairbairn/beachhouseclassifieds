@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
@@ -148,6 +148,8 @@ type DetailRecord360Blue = DetailRecordBase & {
   rates_raw: {
     advertised_rate_texts: string[];
     matched_nightly_snippets: string[];
+    quote_windows_count: number;
+    quote_windows_path: string | null;
     quote_windows: RateQuoteWindowObservation[];
   };
   normalized_matching_profile: {
@@ -183,6 +185,15 @@ const OUTPUT_ROOT = resolve(
   "360blue",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
+
+type BlueQuoteWindowsSidecar = {
+  adapter_key: "360blue";
+  external_listing_id: string;
+  detail_url: string;
+  captured_at: string;
+  quote_windows: RateQuoteWindowObservation[];
+};
 
 const EXCLUDED_LISTING_IDS = loadActiveExclusions("360blue", [
   "blue-mountain-beach-gulf-point-hideaway-34-gulf-point-road-3034",
@@ -1620,6 +1631,24 @@ async function fetchDetail(
     );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
+    await mkdir(OUTPUT_DETAILS_QUOTES_DIR, { recursive: true });
+    const quoteWindowsPath = resolve(
+      OUTPUT_DETAILS_QUOTES_DIR,
+      `${externalListingId}.json`,
+    );
+    const quoteWindowsSidecar: BlueQuoteWindowsSidecar = {
+      adapter_key: "360blue",
+      external_listing_id: externalListingId,
+      detail_url: detailUrl,
+      captured_at: new Date().toISOString(),
+      quote_windows: quoteWindows,
+    };
+    await writeFile(
+      quoteWindowsPath,
+      `${JSON.stringify(quoteWindowsSidecar, null, 2)}\n`,
+      "utf8",
+    );
+
     const extractionMs = Date.now() - extractionStartedAt;
     const totalMs = Date.now() - fetchStartedAt;
 
@@ -1658,7 +1687,9 @@ async function fetchDetail(
       rates_raw: {
         advertised_rate_texts: extracted.advertisedRateTexts,
         matched_nightly_snippets: extracted.matchedNightlySnippets,
-        quote_windows: quoteWindows,
+        quote_windows_count: quoteWindows.length,
+        quote_windows_path: quoteWindowsPath,
+        quote_windows: [],
       },
       normalized_matching_profile: {
         source: "pm_360blue",

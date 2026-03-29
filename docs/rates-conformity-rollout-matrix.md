@@ -2,7 +2,7 @@
 
 Last updated: 2026-03-28T20:25:00Z
 
-This matrix maps each adapter to the data needed to satisfy [docs/rates-conformity-contract.md](docs/rates-conformity-contract.md).
+This matrix maps each adapter to the data needed to satisfy [rates-conformity-contract.md](./rates-conformity-contract.md).
 
 ## Legend
 

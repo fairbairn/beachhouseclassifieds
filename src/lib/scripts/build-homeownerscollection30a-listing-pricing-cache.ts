@@ -49,8 +49,13 @@ type HomeownersDetailRecord = {
     days?: RateDay[];
   };
   rates_raw?: {
+    observations_path?: string | null;
     observations?: RateObservation[];
   };
+};
+
+type HomeownersQuotesSidecar = {
+  observations?: RateObservation[];
 };
 
 const ADAPTER_KEY = "homeownerscollection30a" as const;
@@ -183,6 +188,33 @@ function readJson<T>(raw: string): T {
   return JSON.parse(raw) as T;
 }
 
+async function loadObservationsForDetail(
+  adapterRoot: string,
+  detail: HomeownersDetailRecord,
+): Promise<RateObservation[]> {
+  const inline = detail.rates_raw?.observations ?? [];
+  if (inline.length > 0) {
+    return inline;
+  }
+
+  const sidecarPath =
+    detail.rates_raw?.observations_path ??
+    resolve(
+      adapterRoot,
+      "details",
+      "quotes",
+      `${detail.external_listing_id}.json`,
+    );
+
+  try {
+    const raw = await readFile(sidecarPath, "utf8");
+    const sidecar = readJson<HomeownersQuotesSidecar>(raw);
+    return sidecar.observations ?? [];
+  } catch {
+    return [];
+  }
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const root = process.cwd();
@@ -234,6 +266,7 @@ async function main(): Promise<void> {
     const detailPath = resolve(detailsJsonDir, fileName);
     const raw = await readFile(detailPath, "utf8");
     const detail = readJson<HomeownersDetailRecord>(raw);
+    const observations = await loadObservationsForDetail(adapterRoot, detail);
 
     const availabilityMap = new Map(
       (detail.normalized_availability?.days ?? []).map((day) => [
@@ -245,12 +278,10 @@ async function main(): Promise<void> {
       (detail.normalized_rates?.days ?? []).map((day) => [day.date, day]),
     );
 
-    const validObservations = (detail.rates_raw?.observations ?? []).filter(
-      (observation) => {
-        const baseTotal = Number(observation.base_total);
-        return Number.isFinite(baseTotal) && baseTotal > 0;
-      },
-    );
+    const validObservations = observations.filter((observation) => {
+      const baseTotal = Number(observation.base_total);
+      return Number.isFinite(baseTotal) && baseTotal > 0;
+    });
 
     const feePcts = validObservations
       .map((observation) => {

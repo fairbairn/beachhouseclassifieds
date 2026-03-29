@@ -19,3 +19,4 @@ Welcome to the docs site scaffold.
 - Use [Scraper Engine Adapter Foundation](./scraper-engine-adapter-foundation.md) for runtime parameter and logging minimum standards on new adapters.
 - Use [Universal Detail JSON Structure](./universal-detail-json-structure.md) as the cross-adapter detail schema contract and gap-audit checklist.
 - Use [Adapter Conformance Status](./adapter-conformance-status.md) for the adapter-by-adapter implementation matrix and refinement backlog.
+- Use [Pricing Quote Sync Reference](./pricing-quote-sync-reference.md) for the quote-to-cache ordering, interpolation policy, and UX serving guidance.

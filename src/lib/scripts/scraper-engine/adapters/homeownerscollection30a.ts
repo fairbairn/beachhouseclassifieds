@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
@@ -149,6 +149,8 @@ type LuxuryDetailRecord = DetailRecordBase & {
     quote_nights: number;
     quote_max_queries: number;
     quote_coupon: string;
+    observations_count: number;
+    observations_path: string | null;
     observations: HomeownersRateObservation[];
   };
   scrape_metrics: {
@@ -172,9 +174,24 @@ const OUTPUT_ROOT = resolve(
   "homeownerscollection30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
 
 const HOMEOWNERS_ORIGIN = "https://homeownerscollection.com";
 const HOMEOWNERS_RCAPI_PATH = "/rcapi/item/avail/search";
+
+type HomeownersQuotesSidecarRecord = {
+  adapter_key: "homeownerscollection30a";
+  external_listing_id: string;
+  detail_url: string;
+  captured_at: string;
+  endpoint_path: "/rcapi/item/avail/search";
+  quote_window_days: number;
+  quote_sample_step_days: number;
+  quote_nights: number;
+  quote_max_queries: number;
+  quote_coupon: string;
+  observations: HomeownersRateObservation[];
+};
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -1059,6 +1076,8 @@ async function buildWeeklyRateArtifacts(input: {
       quote_nights: quoteNights,
       quote_max_queries: ratesMaxQueries,
       quote_coupon: quoteCoupon,
+      observations_count: observations.length,
+      observations_path: null,
       observations,
     },
   };
@@ -1996,6 +2015,8 @@ async function fetchDetail(
             quote_nights: 0,
             quote_max_queries: 0,
             quote_coupon: "",
+            observations_count: 0,
+            observations_path: null,
             observations: [],
           },
         };
@@ -2105,6 +2126,42 @@ async function fetchDetail(
     const extractionMs = Date.now() - beforeLoad - pageLoadMs;
     const totalMs = Date.now() - startedAt;
 
+    await mkdir(OUTPUT_DETAILS_QUOTES_DIR, { recursive: true });
+    const quoteObservationsPath = resolve(
+      OUTPUT_DETAILS_QUOTES_DIR,
+      `${externalListingId}.json`,
+    );
+    const quoteSidecar: HomeownersQuotesSidecarRecord = {
+      adapter_key: "homeownerscollection30a",
+      external_listing_id: externalListingId,
+      detail_url: detailUrl,
+      captured_at: new Date().toISOString(),
+      endpoint_path: rateArtifacts.ratesRaw.endpoint_path,
+      quote_window_days: rateArtifacts.ratesRaw.quote_window_days,
+      quote_sample_step_days: rateArtifacts.ratesRaw.quote_sample_step_days,
+      quote_nights: rateArtifacts.ratesRaw.quote_nights,
+      quote_max_queries: rateArtifacts.ratesRaw.quote_max_queries,
+      quote_coupon: rateArtifacts.ratesRaw.quote_coupon,
+      observations: rateArtifacts.ratesRaw.observations,
+    };
+    await writeFile(
+      quoteObservationsPath,
+      `${JSON.stringify(quoteSidecar, null, 2)}\n`,
+      "utf8",
+    );
+
+    const ratesRawSlim: LuxuryDetailRecord["rates_raw"] = {
+      endpoint_path: rateArtifacts.ratesRaw.endpoint_path,
+      quote_window_days: rateArtifacts.ratesRaw.quote_window_days,
+      quote_sample_step_days: rateArtifacts.ratesRaw.quote_sample_step_days,
+      quote_nights: rateArtifacts.ratesRaw.quote_nights,
+      quote_max_queries: rateArtifacts.ratesRaw.quote_max_queries,
+      quote_coupon: rateArtifacts.ratesRaw.quote_coupon,
+      observations_count: rateArtifacts.ratesRaw.observations.length,
+      observations_path: quoteObservationsPath,
+      observations: [],
+    };
+
     return {
       external_listing_id: externalListingId,
       detail_url: detailUrl,
@@ -2145,7 +2202,7 @@ async function fetchDetail(
         counts: buildAvailabilityCounts(rateArtifacts.availabilityDays),
       },
       normalized_rates: rateArtifacts.normalizedRates,
-      rates_raw: rateArtifacts.ratesRaw,
+      rates_raw: ratesRawSlim,
       html_path: htmlPath,
       scrape_metrics: {
         total_ms: totalMs,

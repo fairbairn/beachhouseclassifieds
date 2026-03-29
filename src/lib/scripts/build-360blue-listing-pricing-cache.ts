@@ -44,8 +44,13 @@ type DetailRecord = {
     days?: DetailAvailabilityDay[];
   };
   rates_raw?: {
+    quote_windows_path?: string | null;
     quote_windows?: QuoteWindow[];
   };
+};
+
+type QuoteWindowsSidecar = {
+  quote_windows?: QuoteWindow[];
 };
 
 type DayCache = {
@@ -294,6 +299,7 @@ function buildListingCache(
   assumptions: AdapterPricingAssumptionsStore,
   fromDate: string,
   weeks: number,
+  quoteWindows: QuoteWindow[],
 ): ListingPricingCache {
   const days = weeks * 7;
   const horizonDates = isoRange(fromDate, days);
@@ -302,7 +308,7 @@ function buildListingCache(
     detail.normalized_rates?.currency ?? assumptions.currency ?? "USD";
   const availabilityByDate = buildAvailabilityMap(detail);
   const ratesByDate = buildRateMap(detail);
-  const quoteByDate = applyQuoteWindows(detail.rates_raw?.quote_windows ?? []);
+  const quoteByDate = applyQuoteWindows(quoteWindows);
   const assumptionsMultiplier =
     assumptions.assumptions.avg_all_in_multiplier > 0
       ? assumptions.assumptions.avg_all_in_multiplier
@@ -462,6 +468,33 @@ function buildListingCache(
   };
 }
 
+async function loadQuoteWindowsForDetail(
+  adapterRoot: string,
+  detail: DetailRecord,
+): Promise<QuoteWindow[]> {
+  const inline = detail.rates_raw?.quote_windows ?? [];
+  if (inline.length > 0) {
+    return inline;
+  }
+
+  const sidecarPath =
+    detail.rates_raw?.quote_windows_path ??
+    resolve(
+      adapterRoot,
+      "details",
+      "quotes",
+      `${detail.external_listing_id}.json`,
+    );
+
+  try {
+    const raw = await readFile(sidecarPath, "utf8");
+    const sidecar = JSON.parse(raw) as QuoteWindowsSidecar;
+    return sidecar.quote_windows ?? [];
+  } catch {
+    return [];
+  }
+}
+
 async function loadAssumptionsStore(
   assumptionsPath: string,
 ): Promise<AdapterPricingAssumptionsStore> {
@@ -472,35 +505,17 @@ async function loadAssumptionsStore(
 async function main(): Promise<number> {
   const options = parseArgs(process.argv.slice(2));
   const root = process.cwd();
-  const detailsJsonDir = resolve(
+  const adapterRoot = resolve(
     root,
     "src",
     "lib",
     "data",
     "external-sources",
     "360blue",
-    "details",
-    "json",
   );
-  const detailsPricingDir = resolve(
-    root,
-    "src",
-    "lib",
-    "data",
-    "external-sources",
-    "360blue",
-    "details",
-    "pricing",
-  );
-  const assumptionsPath = resolve(
-    root,
-    "src",
-    "lib",
-    "data",
-    "external-sources",
-    "360blue",
-    "pricing-assumptions.json",
-  );
+  const detailsJsonDir = resolve(adapterRoot, "details", "json");
+  const detailsPricingDir = resolve(adapterRoot, "details", "pricing");
+  const assumptionsPath = resolve(adapterRoot, "pricing-assumptions.json");
 
   const assumptions = await loadAssumptionsStore(assumptionsPath);
   const entries = await readdir(detailsJsonDir, { withFileTypes: true });
@@ -546,11 +561,14 @@ async function main(): Promise<number> {
         continue;
       }
 
+      const quoteWindows = await loadQuoteWindowsForDetail(adapterRoot, detail);
+
       const cache = buildListingCache(
         detail,
         assumptions,
         options.fromDate,
         options.weeks,
+        quoteWindows,
       );
       const cachePath = resolve(
         detailsPricingDir,
