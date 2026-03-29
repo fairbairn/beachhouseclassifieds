@@ -6,7 +6,8 @@ import {
   type ListingPricingCacheIndex,
   type ListingPricingCacheRecord,
   type ListingPricingDayRecord,
-} from "@/core/pricing/listing-pricing-cache";
+} from "@/lib/pricing/contracts/listing-pricing-cache-contract";
+import type { CanonicalQuoteObservation } from "@/lib/pricing/contracts/quote-observations-contract";
 
 type CliOptions = {
   weeks: number;
@@ -39,6 +40,10 @@ type KeycoDetailRecord = {
     currency?: string;
     days?: RateDay[];
   };
+};
+
+type KeycoQuoteSidecarRecord = {
+  observations?: CanonicalQuoteObservation[];
 };
 
 type KeycoAssumptionsStore = {
@@ -181,6 +186,45 @@ function median(values: number[]): number | null {
   return roundCurrency(sorted[mid]!);
 }
 
+function readQuoteAnchorsByDate(
+  observations: CanonicalQuoteObservation[] | undefined,
+): Map<string, number> {
+  const totalsByDate = new Map<string, { total: number; count: number }>();
+  for (const observation of observations ?? []) {
+    if (!observation.quote_available) {
+      continue;
+    }
+
+    const nightly = Number(observation.base_nightly);
+    const nights = Number(observation.nights);
+    if (!Number.isFinite(nightly) || nightly <= 0) {
+      continue;
+    }
+    if (!Number.isFinite(nights) || nights <= 0) {
+      continue;
+    }
+
+    const span = Math.max(1, Math.floor(nights));
+    for (let offset = 0; offset < span; offset += 1) {
+      const date = addDays(observation.check_in_date, offset);
+      const existing = totalsByDate.get(date) ?? { total: 0, count: 0 };
+      existing.total += nightly;
+      existing.count += 1;
+      totalsByDate.set(date, existing);
+    }
+  }
+
+  const anchors = new Map<string, number>();
+  for (const [date, stats] of totalsByDate.entries()) {
+    if (stats.count <= 0) {
+      continue;
+    }
+    anchors.set(date, roundCurrency(stats.total / stats.count));
+  }
+
+  return anchors;
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const root = process.cwd();
@@ -195,6 +239,7 @@ async function main(): Promise<void> {
   );
   const detailsJsonDir = resolve(adapterRoot, "details", "json");
   const pricingDir = resolve(adapterRoot, "details", "pricing");
+  const quotesDir = resolve(adapterRoot, "details", "quotes");
   const assumptionsPath = resolve(adapterRoot, "pricing-assumptions.json");
 
   const assumptionsRaw = await readFile(assumptionsPath, "utf8");
@@ -265,6 +310,19 @@ async function main(): Promise<void> {
     const raw = await readFile(detailPath, "utf8");
     const detail = readJson<KeycoDetailRecord>(raw);
 
+    let quoteAnchorsByDate = new Map<string, number>();
+    try {
+      const quotePath = resolve(
+        quotesDir,
+        `${detail.external_listing_id}.json`,
+      );
+      const quoteRaw = await readFile(quotePath, "utf8");
+      const quoteSidecar = readJson<KeycoQuoteSidecarRecord>(quoteRaw);
+      quoteAnchorsByDate = readQuoteAnchorsByDate(quoteSidecar.observations);
+    } catch {
+      // Sidecar quotes are optional; continue with normalized rates fallback.
+    }
+
     const availabilityMap = new Map(
       (detail.normalized_availability?.days ?? []).map((day) => [
         day.date,
@@ -278,6 +336,12 @@ async function main(): Promise<void> {
     const seededValues: Array<number | null> = dates.map((date) => {
       const availability = availabilityMap.get(date);
       const rateDay = rateMap.get(date);
+
+      const quoteAnchor = quoteAnchorsByDate.get(date);
+      if (Number.isFinite(quoteAnchor) && (quoteAnchor ?? 0) > 0) {
+        return roundCurrency(quoteAnchor);
+      }
+
       const nightly = Number(rateDay?.nightly_rate);
       if (
         availability?.is_available &&

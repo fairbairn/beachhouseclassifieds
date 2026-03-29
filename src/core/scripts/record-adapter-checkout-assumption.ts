@@ -7,7 +7,7 @@ import {
   upsertCheckoutSample,
   type AdapterPricingAssumptionsStore,
   type CheckoutFeeLine,
-} from "@/core/pricing/adapter-pricing-assumptions";
+} from "@/lib/pricing/contracts/adapter-pricing-assumptions-contract";
 
 type CliOptions = {
   adapterKey: string;

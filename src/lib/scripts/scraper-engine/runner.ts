@@ -1,11 +1,4 @@
-import {
-  access,
-  mkdir,
-  readFile,
-  readdir,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { access, mkdir, open, readFile, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser } from "playwright";
 
@@ -25,6 +18,19 @@ function sleep(ms: number): Promise<void> {
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
+}
+
+async function writeTextFileDurable(
+  filePath: string,
+  content: string,
+): Promise<void> {
+  const handle = await open(filePath, "w");
+  try {
+    await handle.writeFile(content, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
 }
 
 async function loadPlaywright(): Promise<{
@@ -515,6 +521,16 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       detailDurationsMs.push(Date.now() - detailStartedAtMs);
 
       detailResults[currentIndex] = detail;
+      if (detail) {
+        const detailPath = resolve(
+          outputDetailsJsonDir,
+          `${detail.external_listing_id}.json`,
+        );
+        await writeTextFileDurable(
+          detailPath,
+          `${JSON.stringify(detail, null, 2)}\n`,
+        );
+      }
       processed += 1;
       if (!detail) {
         liveFailures += 1;
@@ -545,11 +561,6 @@ async function pullDetails<TDetail extends DetailRecordBase>(
     }
 
     detailRecords.push(detail);
-    const detailPath = resolve(
-      outputDetailsJsonDir,
-      `${detail.external_listing_id}.json`,
-    );
-    await writeFile(detailPath, `${JSON.stringify(detail, null, 2)}\n`, "utf8");
   }
 
   return { detailRecords, failedDetailUrls };
@@ -619,17 +630,16 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         outputDetailsJsonDir,
         `${detail.external_listing_id}.json`,
       );
-      await writeFile(
+      await writeTextFileDurable(
         detailPath,
         `${JSON.stringify(detail, null, 2)}\n`,
-        "utf8",
       );
 
       const reportPath = resolve(
         reportsDir,
         `${adapter.managerKey}-direct-detail-report.json`,
       );
-      await writeFile(
+      await writeTextFileDurable(
         reportPath,
         `${JSON.stringify(
           {
@@ -642,7 +652,6 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
           null,
           2,
         )}\n`,
-        "utf8",
       );
 
       progress.success(
@@ -780,7 +789,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         reportsDir,
         `${adapter.managerKey}-refresh-known-report.json`,
       );
-      await writeFile(
+      await writeTextFileDurable(
         reportPath,
         `${JSON.stringify(
           {
@@ -807,7 +816,6 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
           null,
           2,
         )}\n`,
-        "utf8",
       );
 
       progress.success(
@@ -936,20 +944,17 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         : `${adapter.managerKey}-details-manifest.json`,
     );
 
-    await writeFile(
+    await writeTextFileDurable(
       reportPath,
       `${JSON.stringify(payload, null, 2)}\n`,
-      "utf8",
     );
-    await writeFile(
+    await writeTextFileDurable(
       sourcePath,
       `${JSON.stringify(subsetRows, null, 2)}\n`,
-      "utf8",
     );
-    await writeFile(
+    await writeTextFileDurable(
       detailsManifestPath,
       `${JSON.stringify(detailRecords, null, 2)}\n`,
-      "utf8",
     );
 
     progress.success(

@@ -6,7 +6,7 @@ import {
   type ListingPricingCacheIndex,
   type ListingPricingCacheRecord,
   type ListingPricingDayRecord,
-} from "@/core/pricing/listing-pricing-cache";
+} from "@/lib/pricing/contracts/listing-pricing-cache-contract";
 
 type CliOptions = {
   weeks: number;

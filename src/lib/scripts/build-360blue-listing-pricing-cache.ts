@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import type { AdapterPricingAssumptionsStore } from "@/core/pricing/adapter-pricing-assumptions";
+import type { AdapterPricingAssumptionsStore } from "@/lib/pricing/contracts/adapter-pricing-assumptions-contract";
 
 type CliOptions = {
   weeks: number;
