@@ -71,7 +71,11 @@ async function normalizeScope(
   adapterKey: string,
   passthroughArgs: string[],
 ): Promise<string[]> {
-  if (adapterKey !== "royaldestinations") {
+  const requiresScopedSelection = new Set([
+    "royaldestinations",
+    "benchmark30a",
+  ]);
+  if (!requiresScopedSelection.has(adapterKey)) {
     return passthroughArgs;
   }
 
@@ -82,7 +86,7 @@ async function normalizeScope(
   if (!hasScopedSelection && !hasAllListings) {
     throw new Error(
       [
-        "Missing selection scope for adapter 'royaldestinations'.",
+        `Missing selection scope for adapter '${adapterKey}'.`,
         "Use one of:",
         "- --listing-id <id>",
         "- --max-listings <n>",

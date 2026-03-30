@@ -1,3 +1,4 @@
+import { runBenchmark30aQuoteCli } from "@/lib/pricing/quotes/quote-benchmark30a";
 import { runHomeownerscollection30aQuoteCli } from "@/lib/pricing/quotes/quote-homeownerscollection30a";
 import { runRoyaldestinationsQuoteCli } from "@/lib/pricing/quotes/quote-royaldestinations";
 import type { QuoteAdapter } from "@/lib/pricing/quotes/types";
@@ -7,6 +8,12 @@ const QUOTE_ADAPTERS: QuoteAdapter[] = [
     adapterKey: "royaldestinations",
     async run(argv, progress) {
       await runRoyaldestinationsQuoteCli(argv, progress);
+    },
+  },
+  {
+    adapterKey: "benchmark30a",
+    async run(argv, progress) {
+      await runBenchmark30aQuoteCli(argv, progress);
     },
   },
   {

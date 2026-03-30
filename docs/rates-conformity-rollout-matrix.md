@@ -1,6 +1,6 @@
 # Rates Conformity Rollout Matrix
 
-Last updated: 2026-03-30T13:30:00Z
+Last updated: 2026-03-30T13:46:00Z
 
 This matrix maps each adapter to the data needed to satisfy [rates-conformity-contract.md](./rates-conformity-contract.md).
 
@@ -30,9 +30,9 @@ This matrix maps each adapter to the data needed to satisfy [rates-conformity-co
 | keyco30a                | custom_hybrid   | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | pricing cache + quote validators now passing (381/381); finalize handoff signature proof and increase assumptions sample depth                         |
 | homeownerscollection30a | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | pricing profile + 24-week listing cache now at full nightly parity; expand canonical quote sidecar coverage and handoff signature proof                |
 | 30aescapes              | track_bluetent  | yes              | yes                     | quote_window_avg  | quoted_url      | seeded      | [x]     | quote/pricing conformity passing (169/169); increase assumptions sample minimum and preserve runtime quote-output mapping stability                    |
-| royaldestinations       | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | full quote + pricing runtime pass complete (143/143); finalize assumptions sample depth and handoff signature proof for `ready`                      |
+| royaldestinations       | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | full quote + pricing runtime pass complete (143/143); finalize assumptions sample depth and handoff signature proof for `ready`                        |
 | realjoy30a              | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + checkout handoff signature                                                                                                   |
-| benchmark30a            | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | none        | [ ]     | normalize quote response fields and assumptions seeding                                                                                                |
+| benchmark30a            | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | full quote + pricing runtime pass complete (128/128); finalize assumptions sample depth and handoff signature proof for `ready`                        |
 | 30avacay                | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | capture booking flow XHR + derive quote/handoff signatures                                                                                             |
 | oceanreef30a            | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | identify deterministic quote endpoint and parser                                                                                                       |
 | exclusive30a            | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | identify deterministic quote endpoint and parser                                                                                                       |

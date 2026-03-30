@@ -1,0 +1,81 @@
+{
+  "adapter_key": "benchmark30a",
+  "platform_family": "track_bluetent",
+  "currency": "USD",
+  "rates_conformity": {
+    "status": "in_progress",
+    "ready": false,
+    "last_validated_at": "2026-03-30T00:00:00.000Z",
+    "blocking_gaps": [
+      "requires at least 3 pricing assumption samples",
+      "checkout handoff URL signature still needs probe-backed capture"
+    ]
+  },
+  "capabilities": {
+    "listing_daily_rates": {
+      "supported": false,
+      "source": "normalized_rates.days"
+    },
+    "ad_hoc_quote": {
+      "supported": true,
+      "transport": "http_get_json",
+      "response_format": "json"
+    },
+    "checkout_handoff": {
+      "supported": true,
+      "transport": "url",
+      "requires_quote_context": true
+    }
+  },
+  "quote_signature": {
+    "method": "GET",
+    "url": "https://www.benchmark30a.com/rcapi/item/avail/search",
+    "required_params": [
+      "rcav[begin]",
+      "rcav[end]",
+      "rcav[eid]",
+      "rcav[IDs][8][]"
+    ],
+    "date_param_format": "MM/DD/YYYY",
+    "response_extractors": {
+      "rent_total": "prices[0].p",
+      "currency": "prices[0].c",
+      "checkout_handoff_url": "derived_template"
+    },
+    "probe_evidence": {
+      "report_path": "",
+      "source_listing_id": "",
+      "sample_window": {
+        "check_in_date": "",
+        "check_out_date": "",
+        "nights": 0
+      }
+    }
+  },
+  "handoff_signature": {
+    "url_template": "https://www.benchmark30a.com/rescms/item/{eid}/buy?rcav[begin]={checkin}&rcav[end]={checkout}&rcav[eid]={eid}&rcav[IDs][8][]={ids}",
+    "required_params": [
+      "eid",
+      "rcav[begin]",
+      "rcav[end]",
+      "rcav[eid]",
+      "rcav[IDs][8][]"
+    ],
+    "date_param_format": "MM/DD/YYYY",
+    "source": "quote_runtime_template"
+  },
+  "estimation_policy": {
+    "nightly_base_strategy": "quote_window_average",
+    "fees_taxes_strategy": "adapter_assumptions_multiplier",
+    "fallback_order": [
+      "listing_daily_rates",
+      "ad_hoc_quote_window_average",
+      "adapter_assumptions"
+    ]
+  },
+  "assumptions_policy": {
+    "min_samples_for_ready": 3,
+    "max_sample_age_days": 45,
+    "refresh_cadence": "monthly"
+  }
+}
