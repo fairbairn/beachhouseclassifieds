@@ -4,6 +4,7 @@
 
 - Put generic, reusable modules in `src/core/*`.
 - Keep app-specific behavior in `src/lib/*`, `src/routes/*`, `src/components/*`, and app scripts.
+- Do not add new scripts or app-specific modules under `src/core/*` without explicit user approval.
 - Do not move reusable core modules out of `src/core/*` unless explicitly requested.
 
 ## Baseline Expectations

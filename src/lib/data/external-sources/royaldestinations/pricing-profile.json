@@ -32,11 +32,7 @@
     "method": "POST",
     "url": "https://www.royaldestinations.com/rescms/ajax/item/pricing/simple",
     "content_type": "application/x-www-form-urlencoded",
-    "required_params": [
-      "begin",
-      "end",
-      "eid"
-    ],
+    "required_params": ["begin", "end", "eid"],
     "date_param_format": "MM/DD/YYYY",
     "response_extractors": {
       "rent_total": "pending_probe",
@@ -56,11 +52,7 @@
   },
   "handoff_signature": {
     "url_template": "https://www.royaldestinations.com/booking-checkout?eid={eid}&begin={checkin}&end={checkout}",
-    "required_params": [
-      "eid",
-      "begin",
-      "end"
-    ],
+    "required_params": ["eid", "begin", "end"],
     "date_param_format": "MM/DD/YYYY",
     "source": "pending_probe"
   },

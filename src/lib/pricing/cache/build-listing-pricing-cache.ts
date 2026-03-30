@@ -8,14 +8,6 @@ import {
   type ListingPricingDayRecord,
 } from "@/lib/pricing/contracts/listing-pricing-cache-contract";
 
-type CliOptions = {
-  weeks: number;
-  fromDate: string;
-  listingId: string | null;
-  maxListings: number | null;
-  dryRun: boolean;
-};
-
 type AvailabilityDay = {
   date: string;
   is_available: boolean;
@@ -29,7 +21,7 @@ type RateDay = {
   is_booked: boolean | null;
 };
 
-type EscapesDetailRecord = {
+type DetailRecord = {
   external_listing_id: string;
   detail_url: string;
   normalized_availability?: {
@@ -48,11 +40,11 @@ type QuoteObservation = {
   quote_available: boolean;
 };
 
-type EscapesQuoteSidecarRecord = {
+type QuoteSidecarRecord = {
   observations?: QuoteObservation[];
 };
 
-type EscapesAssumptionsStore = {
+type PricingAssumptionsStore = {
   assumptions?: {
     avg_fee_pct_of_base?: number;
     avg_tax_pct_of_base?: number;
@@ -64,9 +56,37 @@ type EscapesAssumptionsStore = {
   }>;
 };
 
-const ADAPTER_KEY = "30aescapes" as const;
-const DEFAULT_WEEKS = 24;
-const GLOBAL_DEFAULT_BASE_NIGHTLY = 650;
+export type PricingCacheCliOptions = {
+  weeks: number;
+  fromDate: string;
+  listingId: string | null;
+  maxListings: number | null;
+  dryRun: boolean;
+};
+
+export type BuildListingPricingCacheInput = {
+  adapterKey: string;
+  options: PricingCacheCliOptions;
+  defaultAssumptions: {
+    avgFeePct: number;
+    avgTaxPct: number;
+    avgAllInMultiplier?: number;
+  };
+  globalDefaultBaseNightly?: number;
+  assumptionsAnchorFallbackMultiplier?: number;
+  rootDir?: string;
+};
+
+export type BuildListingPricingCacheResult = {
+  adapterKey: string;
+  weeks: number;
+  fromDate: string;
+  toDate: string;
+  listingCount: number;
+  dryRun: boolean;
+  avgBaseNightly: number | null;
+  avgAllInNightly: number | null;
+};
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -86,63 +106,11 @@ function addDays(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function parseArgs(argv: string[]): CliOptions {
-  let weeks = DEFAULT_WEEKS;
-  let fromDate = toIsoDate(new Date());
-  let listingId: string | null = null;
-  let maxListings: number | null = null;
-  let dryRun = false;
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const value = argv[index + 1];
-
-    if (arg === "--weeks" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed > 0 && parsed <= 52) {
-        weeks = Math.floor(parsed);
-      }
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--from-date" && value) {
-      fromDate = toIsoDate(value);
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--listing-id" && value) {
-      listingId = value.trim();
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--max-listings" && value) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        maxListings = Math.floor(parsed);
-      }
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--dry-run") {
-      dryRun = true;
-    }
-  }
-
-  return { weeks, fromDate, listingId, maxListings, dryRun };
-}
-
 function readJson<T>(raw: string): T {
   return JSON.parse(raw) as T;
 }
 
-function interpolateValue(
-  values: Array<number | null>,
-  index: number,
-): number | null {
+function interpolateValue(values: Array<number | null>, index: number): number | null {
   const current = values[index];
   if (current !== null) {
     return current;
@@ -192,9 +160,7 @@ function median(values: number[]): number | null {
   return roundCurrency(sorted[mid]!);
 }
 
-function readQuoteAnchorsByDate(
-  observations: QuoteObservation[] | undefined,
-): Map<string, number> {
+function readQuoteAnchorsByDate(observations: QuoteObservation[] | undefined): Map<string, number> {
   const totalsByDate = new Map<string, { total: number; count: number }>();
   for (const observation of observations ?? []) {
     if (!observation.quote_available) {
@@ -231,9 +197,62 @@ function readQuoteAnchorsByDate(
   return anchors;
 }
 
-async function main(): Promise<void> {
-  const options = parseArgs(process.argv.slice(2));
-  const root = process.cwd();
+export function parsePricingCacheCliArgs(argv: string[], defaultWeeks: number): PricingCacheCliOptions {
+  let weeks = defaultWeeks;
+  let fromDate = toIsoDate(new Date());
+  let listingId: string | null = null;
+  let maxListings: number | null = null;
+  let dryRun = false;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const value = argv[index + 1];
+
+    if (arg === "--weeks" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0 && parsed <= 52) {
+        weeks = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--from-date" && value) {
+      fromDate = toIsoDate(value);
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--listing-id" && value) {
+      listingId = value.trim();
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--max-listings" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        maxListings = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--dry-run") {
+      dryRun = true;
+    }
+  }
+
+  return { weeks, fromDate, listingId, maxListings, dryRun };
+}
+
+export async function buildListingPricingCacheForAdapter(
+  input: BuildListingPricingCacheInput,
+): Promise<BuildListingPricingCacheResult> {
+  const root = input.rootDir ?? process.cwd();
+  const globalDefaultBaseNightly = input.globalDefaultBaseNightly ?? 650;
+  const assumptionsAnchorFallbackMultiplier =
+    input.assumptionsAnchorFallbackMultiplier ?? 0.92;
 
   const adapterRoot = resolve(
     root,
@@ -241,7 +260,7 @@ async function main(): Promise<void> {
     "lib",
     "data",
     "external-sources",
-    ADAPTER_KEY,
+    input.adapterKey,
   );
   const detailsJsonDir = resolve(adapterRoot, "details", "json");
   const pricingDir = resolve(adapterRoot, "details", "pricing");
@@ -249,16 +268,19 @@ async function main(): Promise<void> {
   const assumptionsPath = resolve(adapterRoot, "pricing-assumptions.json");
 
   const assumptionsRaw = await readFile(assumptionsPath, "utf8");
-  const assumptionsStore = readJson<EscapesAssumptionsStore>(assumptionsRaw);
+  const assumptionsStore = readJson<PricingAssumptionsStore>(assumptionsRaw);
 
   const avgFeePct = Number(
-    assumptionsStore.assumptions?.avg_fee_pct_of_base ?? 0.03,
+    assumptionsStore.assumptions?.avg_fee_pct_of_base ??
+      input.defaultAssumptions.avgFeePct,
   );
   const avgTaxPct = Number(
-    assumptionsStore.assumptions?.avg_tax_pct_of_base ?? 0.12,
+    assumptionsStore.assumptions?.avg_tax_pct_of_base ??
+      input.defaultAssumptions.avgTaxPct,
   );
   const avgAllInMultiplier = Number(
     assumptionsStore.assumptions?.avg_all_in_multiplier ??
+      input.defaultAssumptions.avgAllInMultiplier ??
       1 + avgFeePct + avgTaxPct,
   );
 
@@ -266,18 +288,15 @@ async function main(): Promise<void> {
     .map((sample) => {
       const baseTotal = Number(sample.base_total);
       const nights = Number(sample.nights);
-      if (
-        !Number.isFinite(baseTotal) ||
-        !Number.isFinite(nights) ||
-        nights <= 0
-      ) {
+      if (!Number.isFinite(baseTotal) || !Number.isFinite(nights) || nights <= 0) {
         return null;
       }
       return baseTotal / nights;
     })
     .filter((value): value is number => value !== null && value > 0);
   const assumptionsAnchorBase =
-    median(sampleAnchors) ?? roundCurrency(GLOBAL_DEFAULT_BASE_NIGHTLY * 0.92);
+    median(sampleAnchors) ??
+    roundCurrency(globalDefaultBaseNightly * assumptionsAnchorFallbackMultiplier);
 
   const entries = await readdir(detailsJsonDir, { withFileTypes: true });
   const detailFiles = entries
@@ -286,19 +305,19 @@ async function main(): Promise<void> {
     .sort();
 
   let selected = detailFiles;
-  if (options.listingId) {
-    const targetFile = `${options.listingId}.json`;
+  if (input.options.listingId) {
+    const targetFile = `${input.options.listingId}.json`;
     selected = detailFiles.filter((fileName) => fileName === targetFile);
   }
-  if (options.maxListings !== null) {
-    selected = selected.slice(0, options.maxListings);
+  if (input.options.maxListings !== null) {
+    selected = selected.slice(0, input.options.maxListings);
   }
 
-  const horizonDays = options.weeks * 7;
+  const horizonDays = input.options.weeks * 7;
   const dates = Array.from({ length: horizonDays }, (_, index) =>
-    addDays(options.fromDate, index),
+    addDays(input.options.fromDate, index),
   );
-  const toDate = dates[dates.length - 1] ?? options.fromDate;
+  const toDate = dates[dates.length - 1] ?? input.options.fromDate;
 
   const indexRows: ListingPricingCacheIndex["listings"] = [];
 
@@ -307,33 +326,27 @@ async function main(): Promise<void> {
   let totalBase = 0;
   let totalAllIn = 0;
 
-  if (!options.dryRun) {
+  if (!input.options.dryRun) {
     await mkdir(pricingDir, { recursive: true });
   }
 
   for (const fileName of selected) {
     const detailPath = resolve(detailsJsonDir, fileName);
     const raw = await readFile(detailPath, "utf8");
-    const detail = readJson<EscapesDetailRecord>(raw);
+    const detail = readJson<DetailRecord>(raw);
 
     let quoteAnchorsByDate = new Map<string, number>();
     try {
-      const quotePath = resolve(
-        quotesDir,
-        `${detail.external_listing_id}.json`,
-      );
+      const quotePath = resolve(quotesDir, `${detail.external_listing_id}.json`);
       const quoteRaw = await readFile(quotePath, "utf8");
-      const quoteSidecar = readJson<EscapesQuoteSidecarRecord>(quoteRaw);
+      const quoteSidecar = readJson<QuoteSidecarRecord>(quoteRaw);
       quoteAnchorsByDate = readQuoteAnchorsByDate(quoteSidecar.observations);
     } catch {
-      // Sidecar quotes are optional; continue with normalized rates fallback.
+      // Quote sidecars are optional in bootstrap phases.
     }
 
     const availabilityMap = new Map(
-      (detail.normalized_availability?.days ?? []).map((day) => [
-        day.date,
-        day,
-      ]),
+      (detail.normalized_availability?.days ?? []).map((day) => [day.date, day]),
     );
     const rateMap = new Map(
       (detail.normalized_rates?.days ?? []).map((day) => [day.date, day]),
@@ -344,16 +357,12 @@ async function main(): Promise<void> {
       const rateDay = rateMap.get(date);
 
       const quoteAnchor = quoteAnchorsByDate.get(date);
-      if (Number.isFinite(quoteAnchor) && (quoteAnchor ?? 0) > 0) {
+      if (typeof quoteAnchor === "number" && Number.isFinite(quoteAnchor) && quoteAnchor > 0) {
         return roundCurrency(quoteAnchor);
       }
 
       const nightly = Number(rateDay?.nightly_rate);
-      if (
-        availability?.is_available &&
-        Number.isFinite(nightly) &&
-        nightly > 0
-      ) {
+      if (availability?.is_available && Number.isFinite(nightly) && nightly > 0) {
         return nightly;
       }
       return null;
@@ -383,15 +392,12 @@ async function main(): Promise<void> {
           baseNightly = interpolated;
           source = "derived_interpolated";
           confidence = "medium";
-        } else if (
-          Number.isFinite(listingAnchorBase) &&
-          listingAnchorBase > 0
-        ) {
+        } else if (Number.isFinite(listingAnchorBase) && listingAnchorBase > 0) {
           baseNightly = listingAnchorBase;
           source = "derived_assumptions_anchor";
           confidence = "low";
         } else {
-          baseNightly = GLOBAL_DEFAULT_BASE_NIGHTLY;
+          baseNightly = globalDefaultBaseNightly;
           source = "derived_global_default";
           confidence = "low";
         }
@@ -427,12 +433,8 @@ async function main(): Promise<void> {
     });
 
     const sourceSummary: ListingPricingCacheRecord["source_summary"] = {
-      accurate_scrape_days: days.filter(
-        (day) => day.source === "accurate_scrape",
-      ).length,
-      derived_interpolated_days: days.filter(
-        (day) => day.source === "derived_interpolated",
-      ).length,
+      accurate_scrape_days: days.filter((day) => day.source === "accurate_scrape").length,
+      derived_interpolated_days: days.filter((day) => day.source === "derived_interpolated").length,
       derived_assumptions_anchor_days: days.filter(
         (day) => day.source === "derived_assumptions_anchor",
       ).length,
@@ -442,14 +444,14 @@ async function main(): Promise<void> {
     };
 
     const listingCache: ListingPricingCacheRecord = {
-      adapter_key: ADAPTER_KEY,
+      adapter_key: input.adapterKey,
       external_listing_id: detail.external_listing_id,
       detail_url: detail.detail_url,
       generated_at: new Date().toISOString(),
       horizon: {
-        from_date: options.fromDate,
+        from_date: input.options.fromDate,
         to_date: toDate,
-        weeks: options.weeks,
+        weeks: input.options.weeks,
       },
       assumptions_snapshot: {
         avg_fee_pct_of_base: avgFeePct,
@@ -472,12 +474,8 @@ async function main(): Promise<void> {
     const cachePath = resolve(pricingDir, `${detail.external_listing_id}.json`);
     const cachePathRelative = `details/pricing/${detail.external_listing_id}.json`;
 
-    if (!options.dryRun) {
-      await writeFile(
-        cachePath,
-        `${JSON.stringify(listingCache, null, 2)}\n`,
-        "utf8",
-      );
+    if (!input.options.dryRun) {
+      await writeFile(cachePath, `${JSON.stringify(listingCache, null, 2)}\n`, "utf8");
     }
 
     indexRows.push({
@@ -497,41 +495,30 @@ async function main(): Promise<void> {
   }
 
   const indexPayload: ListingPricingCacheIndex = {
-    adapter_key: ADAPTER_KEY,
+    adapter_key: input.adapterKey,
     generated_at: new Date().toISOString(),
-    weeks: options.weeks,
-    from_date: options.fromDate,
+    weeks: input.options.weeks,
+    from_date: input.options.fromDate,
     to_date: toDate,
     listing_count: listingCount,
-    avg_base_nightly:
-      listingCount > 0 ? roundCurrency(totalBase / totalDays) : null,
+    avg_base_nightly: listingCount > 0 ? roundCurrency(totalBase / totalDays) : null,
     avg_all_in_nightly:
       listingCount > 0 ? roundCurrency(totalAllIn / totalDays) : null,
     listings: indexRows,
   };
 
-  if (!options.dryRun) {
-    await writeFile(
-      resolve(pricingDir, "index.json"),
-      `${JSON.stringify(indexPayload, null, 2)}\n`,
-      "utf8",
-    );
+  if (!input.options.dryRun) {
+    await writeFile(resolve(pricingDir, "index.json"), `${JSON.stringify(indexPayload, null, 2)}\n`, "utf8");
   }
 
-  console.log(`${ADAPTER_KEY} listing pricing cache build complete.`);
-  console.log(`- weeks: ${options.weeks}`);
-  console.log(`- from_date: ${options.fromDate}`);
-  console.log(`- to_date: ${toDate}`);
-  console.log(`- listings: ${listingCount}`);
-  console.log(`- dry_run: ${options.dryRun}`);
-  console.log(`- avg_base_nightly: ${indexPayload.avg_base_nightly ?? "n/a"}`);
-  console.log(
-    `- avg_all_in_nightly: ${indexPayload.avg_all_in_nightly ?? "n/a"}`,
-  );
+  return {
+    adapterKey: input.adapterKey,
+    weeks: input.options.weeks,
+    fromDate: input.options.fromDate,
+    toDate,
+    listingCount,
+    dryRun: input.options.dryRun,
+    avgBaseNightly: indexPayload.avg_base_nightly,
+    avgAllInNightly: indexPayload.avg_all_in_nightly,
+  };
 }
-
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`Failed to build 30aescapes listing pricing cache: ${message}`);
-  process.exit(1);
-});

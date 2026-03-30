@@ -1,8 +1,5 @@
-import {
-  createAdapterByKey,
-  getKnownAdapterKeys,
-} from "./scraper-engine/adapter-registry";
-import { runScraperEngine } from "./scraper-engine/runner";
+import { createAdapterByKey, getKnownAdapterKeys } from "./adapter-registry";
+import { runScraperEngine } from "./runner";
 
 type ParsedAdapterArgs = {
   adapterKey: string | null;
@@ -10,12 +7,12 @@ type ParsedAdapterArgs = {
   showHelp: boolean;
 };
 
-function buildUsageText(): string {
+function buildUsageText(entryPath: string): string {
   const adapters = getKnownAdapterKeys().join(", ");
   return [
     "Usage:",
-    "  tsx src/lib/scripts/scrape-adapter-engine.ts --adapter-key <adapter> [engine-options]",
-    "  tsx src/lib/scripts/scrape-adapter-engine.ts <adapter> [engine-options]",
+    `  tsx ${entryPath} --adapter-key <adapter> [engine-options]`,
+    `  tsx ${entryPath} <adapter> [engine-options]`,
     "",
     "Examples:",
     "  npm run managers:scrape:360blue:engine -- --detail-url <url>",
@@ -77,37 +74,36 @@ function parseAdapterArgs(argv: string[]): ParsedAdapterArgs {
   };
 }
 
-async function main(): Promise<void> {
-  const parsed = parseAdapterArgs(process.argv.slice(2));
+export async function runAdapterScrapeCli(
+  argv: string[],
+  processArgv: string[] = process.argv,
+): Promise<void> {
+  const parsed = parseAdapterArgs(argv);
+  const entryPath = processArgv[1] ?? "src/lib/scripts/run-scrape-engine.ts";
+
   if (parsed.showHelp) {
-    console.log(buildUsageText());
+    console.log(buildUsageText(entryPath));
     process.exit(0);
   }
 
   if (!parsed.adapterKey) {
     throw new Error(
-      `Missing adapter key. Use --adapter-key <adapter>.\n\n${buildUsageText()}`,
+      `Missing adapter key. Use --adapter-key <adapter>.\n\n${buildUsageText(entryPath)}`,
     );
   }
 
   const adapter = createAdapterByKey(parsed.adapterKey);
   if (!adapter) {
     throw new Error(
-      `Unknown adapter key '${parsed.adapterKey}'.\n\n${buildUsageText()}`,
+      `Unknown adapter key '${parsed.adapterKey}'.\n\n${buildUsageText(entryPath)}`,
     );
   }
 
   const forwardedArgv = [
-    process.argv[0] ?? "node",
-    process.argv[1] ?? "scrape-adapter-engine",
+    processArgv[0] ?? "node",
+    processArgv[1] ?? "run-scrape-engine",
     ...parsed.passthroughArgs,
   ];
 
   await runScraperEngine(adapter, forwardedArgv);
 }
-
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`Adapter engine scrape failed: ${message}`);
-  process.exit(1);
-});

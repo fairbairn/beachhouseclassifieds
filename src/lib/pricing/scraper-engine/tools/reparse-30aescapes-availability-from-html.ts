@@ -1,7 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { buildEscapesAvailabilityFromHtml } from "./scraper-engine/adapters/30aescapes";
+import { buildEscapesAvailabilityFromHtml } from "@/lib/pricing/scraper-engine/adapters/30aescapes";
 
 type DetailJsonRecord = {
   external_listing_id?: string;

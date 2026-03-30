@@ -10,6 +10,7 @@
 
 - Reusable infrastructure belongs in `src/core/*`.
 - App-specific workflows belong in `src/lib/*`, `src/routes/*`, `src/components/*`, and app scripts.
+- Do not add new scripts or app-specific modules under `src/core/*` without explicit user approval.
 - Preserve core boundaries unless explicitly requested.
 
 ## Startup Baseline

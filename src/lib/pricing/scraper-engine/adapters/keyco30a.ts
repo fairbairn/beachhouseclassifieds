@@ -889,11 +889,6 @@ function toCanonicalKeycoObservation(input: {
   };
 }
 
-function isSaturdayIsoDate(isoDate: string): boolean {
-  const day = new Date(`${isoDate}T00:00:00Z`).getUTCDay();
-  return day === 6;
-}
-
 function inferCityStateFromText(value: string): {
   city: string;
   state: string;

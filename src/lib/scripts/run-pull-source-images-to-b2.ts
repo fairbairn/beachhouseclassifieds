@@ -256,7 +256,7 @@ function parseArgs(argv: string[]): Args {
     }
     if (token === "--help" || token === "-h") {
       console.log(
-        "Usage: tsx src/lib/scripts/pull-source-images-to-b2.ts [--stage stage1|stage2|both] [--listing-id <canonical_or_source_id>] [--limit 10] [--listing-concurrency 2] [--image-concurrency 3] [--force-reprocess]",
+        "Usage: tsx src/lib/scripts/run-pull-source-images-to-b2.ts [--stage stage1|stage2|both] [--listing-id <canonical_or_source_id>] [--limit 10] [--listing-concurrency 2] [--image-concurrency 3] [--force-reprocess]",
       );
       process.exit(0);
     }

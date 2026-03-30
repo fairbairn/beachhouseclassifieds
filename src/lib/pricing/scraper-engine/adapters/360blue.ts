@@ -648,14 +648,6 @@ function nightsBetweenIsoDates(startDate: string, endDate: string): number {
   return Math.round((end - start) / 86400000);
 }
 
-function getIsoDateUtcDay(isoDate: string): number {
-  return new Date(`${isoDate}T00:00:00Z`).getUTCDay();
-}
-
-function isSaturdayIsoDate(isoDate: string): boolean {
-  return getIsoDateUtcDay(isoDate) === 6;
-}
-
 function firstSaturdayOnOrAfter(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00Z`);
   const day = date.getUTCDay();

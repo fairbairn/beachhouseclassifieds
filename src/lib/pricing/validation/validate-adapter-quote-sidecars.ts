@@ -1,11 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import type { CanonicalQuotesSidecarRecord } from "@/lib/pricing/contracts/quote-observations-contract";
 import {
   validateCanonicalQuoteSidecar,
   type QuoteValidationIssue,
-} from "@/core/pricing/quote-sidecar-validator";
-import type { CanonicalQuotesSidecarRecord } from "@/lib/pricing/contracts/quote-observations-contract";
+} from "@/lib/pricing/validation/quote-sidecar-validator";
 
 type CliOptions = {
   adapterKey: string;
