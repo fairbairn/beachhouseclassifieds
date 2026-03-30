@@ -1,3 +1,8 @@
+import { SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS } from "@/lib/pricing/cache/listing-pricing-cache-adapter-definitions";
+import { runSharedListingPricingCacheCli } from "@/lib/pricing/cache/run-shared-listing-pricing-cache-cli";
+import { getKnownQuoteAdapterKeys } from "@/lib/pricing/quotes/adapter-registry";
+import { runQuoteRunnerCli } from "@/lib/pricing/quotes/runner";
+import { runValidateAdapterQuoteSidecarsCli } from "@/lib/pricing/validation/validate-adapter-quote-sidecars";
 import { create30ABeachAdapter } from "./adapters/30abeach";
 import { create30AEscapesAdapter } from "./adapters/30aescapes";
 import { create30ALuxuryAdapter } from "./adapters/30aluxury";
@@ -25,6 +30,7 @@ import { createSandpiper30AAdapter } from "./adapters/sandpiper30a";
 import { createScenicStays30AAdapter } from "./adapters/scenicstays30a";
 import { createStayAt30AAdapter } from "./adapters/stayat30a";
 import { createStayOn30AAdapter } from "./adapters/stayon30a";
+import { runScraperEngine } from "./runner";
 import type { DetailRecordBase, ScraperAdapter } from "./types";
 
 type AdapterFactory = () => ScraperAdapter<DetailRecordBase>;
@@ -59,6 +65,103 @@ const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   stayon30a: createStayOn30AAdapter,
 };
 
+const QUOTE_CAPABLE = new Set(getKnownQuoteAdapterKeys());
+const CACHE_CAPABLE = new Set(
+  Object.keys(SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS),
+);
+
+export type AdapterOperationProxy = {
+  adapterKey: string;
+  capabilities: {
+    quoteCapture: boolean;
+    quoteValidation: boolean;
+    pricingCache: boolean;
+  };
+  runScrape(argv: string[]): Promise<void>;
+  runQuoteCapture(argv: string[]): Promise<void>;
+  runQuoteValidation(argv?: string[]): Promise<void>;
+  runPricingCache(argv: string[]): Promise<void>;
+};
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+function isAsyncMethod(
+  value: unknown,
+): value is (...args: unknown[]) => Promise<void> {
+  return typeof value === "function";
+}
+
+export function validateAdapterOperationProxy(
+  proxy: AdapterOperationProxy,
+): void {
+  if (!proxy.adapterKey || proxy.adapterKey.trim().length === 0) {
+    throw new Error("Invalid adapter proxy: adapterKey is required.");
+  }
+
+  if (!isBoolean(proxy.capabilities.quoteCapture)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': capabilities.quoteCapture must be boolean.`,
+    );
+  }
+
+  if (!isBoolean(proxy.capabilities.quoteValidation)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': capabilities.quoteValidation must be boolean.`,
+    );
+  }
+
+  if (!isBoolean(proxy.capabilities.pricingCache)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': capabilities.pricingCache must be boolean.`,
+    );
+  }
+
+  if (!isAsyncMethod(proxy.runScrape)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': runScrape must be a function.`,
+    );
+  }
+
+  if (!isAsyncMethod(proxy.runQuoteCapture)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': runQuoteCapture must be a function.`,
+    );
+  }
+
+  if (!isAsyncMethod(proxy.runQuoteValidation)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': runQuoteValidation must be a function.`,
+    );
+  }
+
+  if (!isAsyncMethod(proxy.runPricingCache)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': runPricingCache must be a function.`,
+    );
+  }
+
+  const normalized = proxy.adapterKey.trim().toLowerCase();
+  if (proxy.capabilities.quoteCapture !== QUOTE_CAPABLE.has(normalized)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': quoteCapture capability mismatch.`,
+    );
+  }
+
+  if (proxy.capabilities.quoteValidation !== QUOTE_CAPABLE.has(normalized)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': quoteValidation capability mismatch.`,
+    );
+  }
+
+  if (proxy.capabilities.pricingCache !== CACHE_CAPABLE.has(normalized)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': pricingCache capability mismatch.`,
+    );
+  }
+}
+
 export function getKnownAdapterKeys(): string[] {
   return Object.keys(ADAPTER_FACTORIES).sort();
 }
@@ -72,4 +175,72 @@ export function createAdapterByKey(
     return null;
   }
   return factory();
+}
+
+export function createAdapterOperationProxyByKey(
+  adapterKey: string,
+): AdapterOperationProxy | null {
+  const normalized = adapterKey.trim().toLowerCase();
+  const adapter = createAdapterByKey(normalized);
+  if (!adapter) {
+    return null;
+  }
+
+  const quoteCapture = QUOTE_CAPABLE.has(normalized);
+  const quoteValidation = QUOTE_CAPABLE.has(normalized);
+  const pricingCache = CACHE_CAPABLE.has(normalized);
+
+  const proxy: AdapterOperationProxy = {
+    adapterKey: normalized,
+    capabilities: {
+      quoteCapture,
+      quoteValidation,
+      pricingCache,
+    },
+    async runScrape(argv: string[]): Promise<void> {
+      await runScraperEngine(adapter, ["node", "run-scrape-engine", ...argv]);
+    },
+    async runQuoteCapture(argv: string[]): Promise<void> {
+      if (!quoteCapture) {
+        throw new Error("adapter is not quote-capable");
+      }
+      await runQuoteRunnerCli(["--adapter-key", normalized, ...argv]);
+    },
+    async runQuoteValidation(argv: string[] = []): Promise<void> {
+      if (!quoteValidation) {
+        throw new Error("adapter is not quote-capable");
+      }
+
+      const code = await runValidateAdapterQuoteSidecarsCli([
+        "--adapter-key",
+        normalized,
+        ...argv,
+      ]);
+      if (code !== 0) {
+        throw new Error(`quote validation failed with exit code ${code}`);
+      }
+    },
+    async runPricingCache(argv: string[]): Promise<void> {
+      if (!pricingCache) {
+        throw new Error("adapter has no shared cache definition");
+      }
+
+      await runSharedListingPricingCacheCli(normalized, argv);
+    },
+  };
+
+  validateAdapterOperationProxy(proxy);
+  return proxy;
+}
+
+export function createValidatedAdapterOperationProxyByKey(
+  adapterKey: string,
+): AdapterOperationProxy | null {
+  const proxy = createAdapterOperationProxyByKey(adapterKey);
+  if (!proxy) {
+    return null;
+  }
+
+  validateAdapterOperationProxy(proxy);
+  return proxy;
 }

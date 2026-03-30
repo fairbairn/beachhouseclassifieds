@@ -25,6 +25,24 @@ Define what stays, what should be reduced, and what can be removed only after co
 - Adapter-specific concurrency logic is allowed only for clear edge cases and must be documented inline.
 - Weekly refresh-oriented operations should default to safe parallel settings and allow explicit override flags.
 
+## Adapter Proxy Contract Policy
+
+- Unified operation call-in API must be adapter-owned via `AdapterOperationProxy` in `src/lib/pricing/scraper-engine/adapter-registry.ts`.
+- Runners must resolve adapters through `createValidatedAdapterOperationProxyByKey(...)` and avoid direct operation wiring.
+- Proxy validation is required before execution and must enforce:
+  - method presence (`runScrape`, `runQuoteCapture`, `runQuoteValidation`, `runPricingCache`)
+  - capability booleans
+  - capability consistency against registry-backed capability sets
+- Adapter internals can diverge for optimization, but the proxy API surface must remain stable.
+
+## Quote Scope Controls
+
+- `run-adapter-ops` quote capture requires explicit selection scope for adapters that enforce it (for example royaldestinations).
+- Use one of:
+  - `--quote-listing-id <id>`
+  - `--quote-max-listings <n>`
+  - `--quote-all-listings`
+
 ## Review For Deprecation (After Replacement Exists)
 
 - Adapter-specific quote wrapper scripts should remain removed; route through the universal quote runner.

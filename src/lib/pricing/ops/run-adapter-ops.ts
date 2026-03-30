@@ -1,6 +1,11 @@
-import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+
+import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
+import {
+  createValidatedAdapterOperationProxyByKey,
+  getKnownAdapterKeys,
+} from "@/lib/pricing/scraper-engine/adapter-registry";
 
 type CliOptions = {
   adapters: string[] | "all";
@@ -8,23 +13,20 @@ type CliOptions = {
   discoverNew: boolean;
   availabilityRefresh: boolean;
   pricingRefresh: boolean;
+  quoteCapture: boolean;
   quotesValidate: boolean;
   pricingCache: boolean;
   allSteps: boolean;
   maxNewListings: number | null;
+  quoteWeeks: number;
+  quoteConcurrency: number;
+  quoteListingConcurrency: number;
+  quoteListingId: string | null;
+  quoteMaxListings: number | null;
+  quoteAllListings: boolean;
   pricingWeeks: number;
   continueOnError: boolean;
   dryRun: boolean;
-};
-
-type PackageJson = {
-  scripts?: Record<string, string>;
-};
-
-type AdapterScriptInfo = {
-  adapterKey: string;
-  scrapeScript: string;
-  scrapeCommand: string;
 };
 
 type KnownDetailRecord = {
@@ -37,8 +39,8 @@ type DiscoveredListingRecord = {
 
 const ROOT = process.cwd();
 const REPORTS_DIR = resolve(ROOT, ".tmp", "reports");
+const progress = createScrapeProgress({ script: "adapter-runtime" });
 
-let activeChild: ReturnType<typeof spawn> | null = null;
 let wasCancelled = false;
 
 function parseArgs(argv: string[]): CliOptions {
@@ -47,10 +49,17 @@ function parseArgs(argv: string[]): CliOptions {
   let discoverNew = false;
   let availabilityRefresh = false;
   let pricingRefresh = false;
+  let quoteCapture = false;
   let quotesValidate = false;
   let pricingCache = false;
   let allSteps = false;
   let maxNewListings: number | null = null;
+  let quoteWeeks = 24;
+  let quoteConcurrency = 4;
+  let quoteListingConcurrency = 2;
+  let quoteListingId: string | null = null;
+  let quoteMaxListings: number | null = null;
+  let quoteAllListings = false;
   let pricingWeeks = 24;
   let continueOnError = false;
   let dryRun = false;
@@ -92,6 +101,11 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--quote-capture") {
+      quoteCapture = true;
+      continue;
+    }
+
     if (arg === "--quotes-validate") {
       quotesValidate = true;
       continue;
@@ -113,6 +127,53 @@ function parseArgs(argv: string[]): CliOptions {
         maxNewListings = Math.floor(parsed);
       }
       index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-weeks" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0 && parsed <= 52) {
+        quoteWeeks = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-concurrency" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        quoteConcurrency = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-listing-concurrency" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        quoteListingConcurrency = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-listing-id" && value) {
+      quoteListingId = value.trim();
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-max-listings" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        quoteMaxListings = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-all-listings") {
+      quoteAllListings = true;
       continue;
     }
 
@@ -141,6 +202,7 @@ function parseArgs(argv: string[]): CliOptions {
     discoverNew = true;
     availabilityRefresh = true;
     pricingRefresh = true;
+    quoteCapture = true;
     quotesValidate = true;
     pricingCache = true;
   }
@@ -151,10 +213,17 @@ function parseArgs(argv: string[]): CliOptions {
     discoverNew,
     availabilityRefresh,
     pricingRefresh,
+    quoteCapture,
     quotesValidate,
     pricingCache,
     allSteps,
     maxNewListings,
+    quoteWeeks,
+    quoteConcurrency,
+    quoteListingConcurrency,
+    quoteListingId,
+    quoteMaxListings,
+    quoteAllListings,
     pricingWeeks,
     continueOnError,
     dryRun,
@@ -165,83 +234,13 @@ function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
 }
 
-function choosePreferredScript(
-  existing: AdapterScriptInfo | null,
-  incoming: AdapterScriptInfo,
-): AdapterScriptInfo {
-  if (!existing) {
-    return incoming;
-  }
-
-  const score = (scriptName: string): number => {
-    if (scriptName.endsWith(":engine:raw")) {
-      return 3;
-    }
-    if (scriptName.endsWith(":raw")) {
-      return 2;
-    }
-    return 1;
-  };
-
-  return score(incoming.scrapeScript) > score(existing.scrapeScript)
-    ? incoming
-    : existing;
-}
-
-async function readPackageScripts(): Promise<Record<string, string>> {
-  const packageJsonPath = resolve(ROOT, "package.json");
-  const raw = await readFile(packageJsonPath, "utf8");
-  const parsed = JSON.parse(raw) as PackageJson;
-  return parsed.scripts ?? {};
-}
-
-function buildAdapterScriptCatalog(
-  scripts: Record<string, string>,
-): Map<string, AdapterScriptInfo> {
-  const byAdapter = new Map<string, AdapterScriptInfo>();
-
-  for (const [scriptName, scriptCommand] of Object.entries(scripts)) {
-    let adapterKey: string | null = null;
-
-    const scriptNameMatch = scriptName.match(
-      /^managers:scrape:([a-z0-9-]+):engine:raw$/i,
-    );
-    if (scriptNameMatch?.[1] && scriptNameMatch[1].toLowerCase() !== "adapter") {
-      adapterKey = scriptNameMatch[1].toLowerCase();
-    } else {
-      const legacyMatch = scriptCommand.match(/scrape-([a-z0-9-]+)-engine\.ts/i);
-      if (legacyMatch?.[1]) {
-        adapterKey = legacyMatch[1].toLowerCase();
-      }
-    }
-
-    if (!adapterKey) {
-      continue;
-    }
-
-    const info: AdapterScriptInfo = {
-      adapterKey,
-      scrapeScript: scriptName,
-      scrapeCommand: scriptCommand,
-    };
-
-    const existing = byAdapter.get(adapterKey) ?? null;
-    byAdapter.set(adapterKey, choosePreferredScript(existing, info));
-  }
-
-  return byAdapter;
-}
-
-function resolveSelectedAdapters(
-  requested: string[] | "all",
-  catalog: Map<string, AdapterScriptInfo>,
-): string[] {
-  const known = Array.from(catalog.keys()).sort();
+function resolveSelectedAdapters(requested: string[] | "all"): string[] {
+  const known = getKnownAdapterKeys();
   if (requested === "all") {
     return known;
   }
 
-  const unknown = requested.filter((adapter) => !catalog.has(adapter));
+  const unknown = requested.filter((adapter) => !known.includes(adapter));
   if (unknown.length > 0) {
     throw new Error(
       `Unknown adapter(s): ${unknown.join(", ")}. Known adapters: ${known.join(", ")}`,
@@ -251,50 +250,117 @@ function resolveSelectedAdapters(
   return requested;
 }
 
-async function runNpmScript(
-  scriptName: string,
+function ensureNotCancelled(): void {
+  if (wasCancelled) {
+    throw new Error("Operation cancelled by user.");
+  }
+}
+
+function logDryRun(
+  operation: string,
+  adapterKey: string,
+  args: string[],
+): void {
+  const renderedArgs = args.join(" ");
+  progress.tick(
+    `[dry-run] ${operation} adapter=${adapterKey}${renderedArgs.length > 0 ? ` args=${renderedArgs}` : ""}`,
+  );
+}
+
+async function runScrape(
+  adapterKey: string,
   args: string[],
   dryRun: boolean,
 ): Promise<void> {
-  const commandText = `npm run ${scriptName}${args.length > 0 ? ` -- ${args.join(" ")}` : ""}`;
+  ensureNotCancelled();
   if (dryRun) {
-    console.log(`[dry-run] ${commandText}`);
+    logDryRun("scrape", adapterKey, args);
     return;
   }
 
-  await new Promise<void>((resolvePromise, rejectPromise) => {
-    const child = spawn("npm", ["run", scriptName, "--", ...args], {
-      cwd: ROOT,
-      stdio: "inherit",
-      env: process.env,
-    });
+  const proxy = createValidatedAdapterOperationProxyByKey(adapterKey);
+  if (!proxy) {
+    throw new Error(`Unknown scrape adapter '${adapterKey}'.`);
+  }
 
-    activeChild = child;
+  await proxy.runScrape(args);
+}
 
-    child.on("error", (error) => {
-      activeChild = null;
-      rejectPromise(error);
-    });
+async function runQuoteCapture(
+  adapterKey: string,
+  args: string[],
+  dryRun: boolean,
+): Promise<void> {
+  ensureNotCancelled();
+  const proxy = createValidatedAdapterOperationProxyByKey(adapterKey);
+  if (!proxy) {
+    throw new Error(`Unknown adapter '${adapterKey}'.`);
+  }
 
-    child.on("exit", (code, signal) => {
-      activeChild = null;
+  if (!proxy.capabilities.quoteCapture) {
+    progress.warn(
+      `${adapterKey}: skipped quote-capture (adapter not quote-capable).`,
+    );
+    return;
+  }
 
-      if (signal === "SIGINT" || signal === "SIGTERM") {
-        wasCancelled = true;
-        rejectPromise(new Error(`Command interrupted: ${commandText}`));
-        return;
-      }
+  if (dryRun) {
+    logDryRun("quote", adapterKey, args);
+    return;
+  }
 
-      if (code === 0) {
-        resolvePromise();
-        return;
-      }
+  await proxy.runQuoteCapture(args);
+}
 
-      rejectPromise(
-        new Error(`Command failed (${code ?? "unknown"}): ${commandText}`),
-      );
-    });
-  });
+async function runQuoteValidation(
+  adapterKey: string,
+  dryRun: boolean,
+): Promise<void> {
+  ensureNotCancelled();
+  const proxy = createValidatedAdapterOperationProxyByKey(adapterKey);
+  if (!proxy) {
+    throw new Error(`Unknown adapter '${adapterKey}'.`);
+  }
+
+  if (!proxy.capabilities.quoteValidation) {
+    progress.warn(
+      `${adapterKey}: skipped quotes-validate (adapter not quote-capable).`,
+    );
+    return;
+  }
+
+  if (dryRun) {
+    logDryRun("validate", adapterKey, ["--adapter-key", adapterKey]);
+    return;
+  }
+
+  await proxy.runQuoteValidation();
+}
+
+async function runPricingCache(
+  adapterKey: string,
+  args: string[],
+  dryRun: boolean,
+): Promise<void> {
+  ensureNotCancelled();
+  const proxy = createValidatedAdapterOperationProxyByKey(adapterKey);
+  if (!proxy) {
+    throw new Error(`Unknown adapter '${adapterKey}'.`);
+  }
+
+  if (!proxy.capabilities.pricingCache) {
+    progress.warn(
+      `${adapterKey}: skipped pricing-cache (adapter has no shared cache definition).`,
+    );
+    return;
+  }
+
+  if (dryRun) {
+    logDryRun("cache", adapterKey, args);
+    return;
+  }
+
+  await proxy.runPricingCache(args);
 }
 
 async function loadKnownDetailUrls(adapterKey: string): Promise<Set<string>> {
@@ -310,9 +376,12 @@ async function loadKnownDetailUrls(adapterKey: string): Promise<Set<string>> {
     "json",
   );
 
-  let entries: Awaited<ReturnType<typeof readdir>> = [];
+  let entries: Array<{ isFile(): boolean; name: string }> = [];
   try {
-    entries = await readdir(detailsJsonDir, { withFileTypes: true });
+    entries = await readdir(detailsJsonDir, {
+      withFileTypes: true,
+      encoding: "utf8",
+    });
   } catch {
     return known;
   }
@@ -358,12 +427,12 @@ async function loadDiscoveredDetailUrls(adapterKey: string): Promise<string[]> {
 }
 
 async function runDiscoverNewStep(
-  adapter: AdapterScriptInfo,
+  adapterKey: string,
   maxNewListings: number | null,
   dryRun: boolean,
 ): Promise<void> {
-  await runNpmScript(
-    adapter.scrapeScript,
+  await runScrape(
+    adapterKey,
     ["--discover-only", "--refresh-mode", "static"],
     dryRun,
   );
@@ -373,8 +442,8 @@ async function runDiscoverNewStep(
   }
 
   const [knownUrls, discoveredUrls] = await Promise.all([
-    loadKnownDetailUrls(adapter.adapterKey),
-    loadDiscoveredDetailUrls(adapter.adapterKey),
+    loadKnownDetailUrls(adapterKey),
+    loadDiscoveredDetailUrls(adapterKey),
   ]);
 
   const newUrls = Array.from(new Set(discoveredUrls))
@@ -385,94 +454,100 @@ async function runDiscoverNewStep(
     maxNewListings === null ? newUrls : newUrls.slice(0, maxNewListings);
 
   if (selectedNewUrls.length === 0) {
-    console.log(
-      `${adapter.adapterKey}: no new listings detected in discovery.`,
-    );
+    progress.info(`${adapterKey}: no new listings detected in discovery.`);
     return;
   }
 
   await mkdir(REPORTS_DIR, { recursive: true });
   const urlsFilePath = resolve(
     REPORTS_DIR,
-    `${adapter.adapterKey}-new-listings-urls.txt`,
+    `${adapterKey}-new-listings-urls.txt`,
   );
   await writeFile(urlsFilePath, `${selectedNewUrls.join("\n")}\n`, "utf8");
 
-  await runNpmScript(
-    adapter.scrapeScript,
+  await runScrape(
+    adapterKey,
     ["--detail-urls-file", urlsFilePath, "--refresh-mode", "static"],
     false,
   );
 
-  console.log(
-    `${adapter.adapterKey}: ingested ${selectedNewUrls.length} new listing(s) from discovery.`,
+  progress.success(
+    `${adapterKey}: ingested ${selectedNewUrls.length} new listing(s) from discovery.`,
   );
 }
 
 async function runAdapterSteps(
-  adapter: AdapterScriptInfo,
+  adapterKey: string,
   options: CliOptions,
-  scripts: Record<string, string>,
 ): Promise<void> {
-  console.log(`adapter ${adapter.adapterKey}: starting requested operations`);
+  progress.phase(`adapter=${adapterKey} starting requested operations`);
 
   if (options.fullScrape) {
-    await runNpmScript(
-      adapter.scrapeScript,
-      ["--refresh-mode", "full"],
+    await runScrape(adapterKey, ["--refresh-mode", "full"], options.dryRun);
+  }
+
+  if (options.discoverNew) {
+    await runDiscoverNewStep(
+      adapterKey,
+      options.maxNewListings,
       options.dryRun,
     );
   }
 
-  if (options.discoverNew) {
-    await runDiscoverNewStep(adapter, options.maxNewListings, options.dryRun);
-  }
-
   if (options.availabilityRefresh) {
-    await runNpmScript(
-      adapter.scrapeScript,
+    await runScrape(
+      adapterKey,
       ["--refresh-known", "--refresh-mode", "static"],
       options.dryRun,
     );
   }
 
   if (options.pricingRefresh) {
-    await runNpmScript(
-      adapter.scrapeScript,
+    await runScrape(
+      adapterKey,
       ["--refresh-known", "--refresh-mode", "dynamic"],
       options.dryRun,
     );
   }
 
-  if (options.quotesValidate) {
-    const validateScript = `pricing:validate:${adapter.adapterKey}:raw`;
-    if (scripts[validateScript]) {
-      await runNpmScript(validateScript, [], options.dryRun);
-    } else {
-      await runNpmScript(
-        "pricing:validate:quotes:raw",
-        ["--adapter-key", adapter.adapterKey],
-        options.dryRun,
-      );
+  if (options.quoteCapture) {
+    const quoteScopeArgs: string[] = [];
+    if (options.quoteListingId) {
+      quoteScopeArgs.push("--listing-id", options.quoteListingId);
+    } else if (options.quoteMaxListings !== null) {
+      quoteScopeArgs.push("--max-listings", String(options.quoteMaxListings));
+    } else if (options.quoteAllListings) {
+      quoteScopeArgs.push("--all-listings");
     }
+
+    await runQuoteCapture(
+      adapterKey,
+      [
+        "--weeks",
+        String(options.quoteWeeks),
+        "--quote-concurrency",
+        String(options.quoteConcurrency),
+        "--listing-concurrency",
+        String(options.quoteListingConcurrency),
+        ...quoteScopeArgs,
+      ],
+      options.dryRun,
+    );
+  }
+
+  if (options.quotesValidate) {
+    await runQuoteValidation(adapterKey, options.dryRun);
   }
 
   if (options.pricingCache) {
-    const pricingScript = `pricing:cache:${adapter.adapterKey}:raw`;
-    if (!scripts[pricingScript]) {
-      console.log(
-        `${adapter.adapterKey}: skipped pricing-cache (no script '${pricingScript}').`,
-      );
-    } else {
-      await runNpmScript(
-        pricingScript,
-        ["--weeks", String(options.pricingWeeks)],
-        options.dryRun,
-      );
-    }
+    await runPricingCache(
+      adapterKey,
+      ["--weeks", String(options.pricingWeeks)],
+      options.dryRun,
+    );
   }
 
-  console.log(`adapter ${adapter.adapterKey}: completed requested operations`);
+  progress.success(`adapter=${adapterKey} completed requested operations`);
 }
 
 function ensureAnyStepEnabled(options: CliOptions): void {
@@ -481,11 +556,12 @@ function ensureAnyStepEnabled(options: CliOptions): void {
     !options.discoverNew &&
     !options.availabilityRefresh &&
     !options.pricingRefresh &&
+    !options.quoteCapture &&
     !options.quotesValidate &&
     !options.pricingCache
   ) {
     throw new Error(
-      "No operation flags provided. Enable one or more: --full-scrape, --discover-new, --availability-refresh, --pricing-refresh, --quotes-validate, --pricing-cache.",
+      "No operation flags provided. Enable one or more: --full-scrape, --discover-new, --availability-refresh, --pricing-refresh, --quote-capture, --quotes-validate, --pricing-cache.",
     );
   }
 }
@@ -494,38 +570,29 @@ async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   ensureAnyStepEnabled(options);
 
+  progress.phase("starting unified adapter runtime");
+  progress.info(
+    `adapters=${options.adapters === "all" ? "all" : options.adapters.join(",")} dry_run=${options.dryRun} quote_weeks=${options.quoteWeeks} quote_concurrency=${options.quoteConcurrency} quote_listing_concurrency=${options.quoteListingConcurrency} quote_listing_id=${options.quoteListingId ?? "n/a"} quote_max_listings=${options.quoteMaxListings ?? "n/a"} quote_all_listings=${options.quoteAllListings} pricing_weeks=${options.pricingWeeks}`,
+  );
+
   process.on("SIGINT", () => {
     wasCancelled = true;
-    if (activeChild && !activeChild.killed) {
-      activeChild.kill("SIGINT");
-    }
   });
 
-  const scripts = await readPackageScripts();
-  const catalog = buildAdapterScriptCatalog(scripts);
-  const selectedAdapters = resolveSelectedAdapters(options.adapters, catalog);
-
+  const selectedAdapters = resolveSelectedAdapters(options.adapters);
   const failures: Array<{ adapterKey: string; reason: string }> = [];
 
   for (const adapterKey of selectedAdapters) {
-    const adapter = catalog.get(adapterKey);
-    if (!adapter) {
-      failures.push({
-        adapterKey,
-        reason: "missing scrape script mapping",
-      });
-      if (!options.continueOnError) {
-        break;
-      }
-      continue;
+    if (wasCancelled) {
+      break;
     }
 
     try {
-      await runAdapterSteps(adapter, options, scripts);
+      await runAdapterSteps(adapterKey, options);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push({ adapterKey, reason: message });
-      console.error(`${adapterKey}: ${message}`);
+      progress.failure(`${adapterKey}: ${message}`);
       if (!options.continueOnError) {
         break;
       }
@@ -538,6 +605,8 @@ async function main(): Promise<void> {
       .join(" | ");
     throw new Error(`adapter ops completed with failures -> ${summary}`);
   }
+
+  progress.success("unified adapter runtime complete");
 }
 
 main()
@@ -553,6 +622,6 @@ main()
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`adapter ops failed: ${message}`);
+    progress.failure(`adapter runtime failed: ${message}`);
     process.exit(1);
   });

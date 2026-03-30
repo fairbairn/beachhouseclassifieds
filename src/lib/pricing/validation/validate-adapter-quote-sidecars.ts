@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import type { CanonicalQuotesSidecarRecord } from "@/lib/pricing/contracts/quote-observations-contract";
 import {
@@ -104,8 +105,10 @@ function printFailureSummary(failures: ListingValidationFailure[]): void {
   }
 }
 
-async function main(): Promise<number> {
-  const options = parseArgs(process.argv.slice(2));
+export async function runValidateAdapterQuoteSidecarsCli(
+  argv: string[] = process.argv.slice(2),
+): Promise<number> {
+  const options = parseArgs(argv);
   const root = process.cwd();
   const quotesDir = resolve(
     root,
@@ -198,12 +201,14 @@ process.on("SIGINT", () => {
   process.exit(130);
 });
 
-main()
-  .then((code) => {
-    process.exit(code);
-  })
-  .catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Quote validator failed: ${message}\n`);
-    process.exit(1);
-  });
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  runValidateAdapterQuoteSidecarsCli()
+    .then((code) => {
+      process.exit(code);
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`Quote validator failed: ${message}\n`);
+      process.exit(1);
+    });
+}

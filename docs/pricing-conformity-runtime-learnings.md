@@ -1,6 +1,6 @@
 # Pricing Conformity Runtime Learnings
 
-Last updated: 2026-03-28T20:25:00Z
+Last updated: 2026-03-30T13:22:00Z
 
 ## 360blue (Completed Learnings)
 
@@ -21,3 +21,10 @@ Last updated: 2026-03-28T20:25:00Z
   - valid pricing profile metadata,
   - listing daily rate cache generated,
   - real-time quote path validated.
+
+## Royaldestinations (Completed Runtime Pass)
+
+- Unified runtime executed full quote capture across all listings with `--quote-concurrency 4` and `--quote-all-listings`.
+- Quote sampling completed for 143 listings over a 24-week horizon.
+- Pricing cache fulfillment completed for 143 listings.
+- Quote sidecar conformity validation passed: `validated=143`, `failed=0`.

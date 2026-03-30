@@ -33,3 +33,25 @@ This folder holds reusable pricing logic used by scripts and adapter workflows.
 4. Keep scraper runtime internals in `scraper-engine/` and expose only wrapper entrypoints via `src/lib/scripts/*`.
 5. Keep adapter orchestration internals in `ops/` with script wrappers in `src/lib/scripts/*`.
 6. Implement quote and listing refresh concurrency in shared engine layers and expose adapter-agnostic concurrency flags via runner entrypoints.
+
+## Unified Adapter Operation Proxy
+
+- Adapter operation call-in contract is defined in `src/lib/pricing/scraper-engine/adapter-registry.ts` as `AdapterOperationProxy`.
+- The runner obtains adapter call-in functions only via `createValidatedAdapterOperationProxyByKey(...)`.
+- The proxy validator enforces that each adapter exposes the same callable API surface:
+  - `runScrape(argv)`
+  - `runQuoteCapture(argv)`
+  - `runQuoteValidation(argv?)`
+  - `runPricingCache(argv)`
+- Capability flags (`quoteCapture`, `quoteValidation`, `pricingCache`) are validated against known registry-backed capability sets.
+
+## Royaldestinations Operational Runbook
+
+- Full quote + pricing cache refresh across all listings:
+  - `npm run adapters:ops:raw -- --adapters royaldestinations --quote-capture --pricing-cache --quote-concurrency 4 --quote-all-listings`
+- Conformity validation pass:
+  - `npm run adapters:ops:raw -- --adapters royaldestinations --quotes-validate`
+- Scope controls for quote capture:
+  - `--quote-listing-id <id>`
+  - `--quote-max-listings <n>`
+  - `--quote-all-listings`
