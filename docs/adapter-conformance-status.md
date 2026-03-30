@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds plus pricing-record parity.
 
-Audit date: 2026-03-28
+Audit date: 2026-03-29
 
 Data source:
 
