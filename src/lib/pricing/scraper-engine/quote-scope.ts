@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 const QUOTE_SCOPED_ADAPTERS = new Set([
   "30abeach",
   "30aluxury",
+  "beachblue",
   "royaldestinations",
   "benchmark30a",
   "dunevr30a",

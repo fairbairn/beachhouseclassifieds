@@ -135,4 +135,15 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 700,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  beachblue: {
+    adapterKey: "beachblue",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.03,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.15,
+    },
+    globalDefaultBaseNightly: 650,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
 };

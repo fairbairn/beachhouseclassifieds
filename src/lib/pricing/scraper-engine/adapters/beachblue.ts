@@ -3,7 +3,9 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Page } from "playwright";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runBeachBlueQuoteCli } from "./quotes/beachblue";
 
 type BeachBlueDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -847,6 +849,13 @@ export function createBeachBlueAdapter(): ScraperAdapter<BeachBlueDetailRecord> 
     },
     async fetchDetail(context) {
       return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "beachblue",
+        argv,
+      );
+      await runBeachBlueQuoteCli(normalizedArgs, progress);
     },
   };
 }
