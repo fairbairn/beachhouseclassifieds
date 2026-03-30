@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runCoastProperties30AQuoteCli } from "./quotes/coastproperties30a";
 
 type CoastDetailRecord = DetailRecordBase & {
   title: string;
@@ -1090,6 +1092,13 @@ export function createCoastProperties30AAdapter(): ScraperAdapter<CoastDetailRec
     },
     async fetchDetail(context) {
       return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "coastproperties30a",
+        argv,
+      );
+      await runCoastProperties30AQuoteCli(normalizedArgs, progress);
     },
   };
 }
