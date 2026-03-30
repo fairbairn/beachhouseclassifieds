@@ -2,6 +2,7 @@ import {
   fetchHomeownersCheckoutQuote,
   resolveHomeownersEntityIdFromDetailUrl,
 } from "@/core/server/homeownerscollection30a-quote";
+import type { QuoteProgress } from "@/lib/pricing/quotes/types";
 
 type CliOptions = {
   detailUrl: string | null;
@@ -151,8 +152,13 @@ function printUsage(): void {
   );
 }
 
-async function main(): Promise<number> {
-  const options = parseArgs(process.argv.slice(2));
+export async function runHomeownerscollection30aQuoteCli(
+  argv: string[] = process.argv.slice(2),
+  progress: QuoteProgress | null = null,
+): Promise<number> {
+  const options = parseArgs(argv);
+
+  progress?.phase("starting homeownerscollection30a quote");
 
   if (!options.detailUrl) {
     console.error("Missing required argument: --detail-url");
@@ -210,26 +216,6 @@ async function main(): Promise<number> {
   }
 
   console.log(JSON.stringify(result, null, 2));
+  progress?.success("homeownerscollection30a quote complete");
   return 0;
 }
-
-let interrupted = false;
-process.on("SIGINT", () => {
-  interrupted = true;
-});
-
-main()
-  .then((code) => {
-    if (interrupted) {
-      process.exit(130);
-    }
-    process.exit(code);
-  })
-  .catch((error: unknown) => {
-    if (interrupted) {
-      process.exit(130);
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Failed to fetch homeowners quote: ${message}`);
-    process.exit(1);
-  });

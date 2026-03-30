@@ -6,6 +6,8 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
+import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
+import type { QuoteProgress } from "@/lib/pricing/quotes/types";
 
 type CliOptions = {
   maxListings: number;
@@ -15,6 +17,8 @@ type CliOptions = {
   nights: number;
   adults: number;
   children: number;
+  quoteConcurrency: number;
+  listingConcurrency: number;
 };
 
 type RoyalDestinationsDetailRecord = {
@@ -44,6 +48,8 @@ const ADAPTER_KEY = "royaldestinations" as const;
 const DEFAULT_LISTINGS = 10;
 const DEFAULT_WEEKS = 24;
 const DEFAULT_NIGHTS = 7;
+const DEFAULT_QUOTE_CONCURRENCY = 4;
+const DEFAULT_LISTING_CONCURRENCY = 2;
 const FIXED_TAX_RATE = 0.12;
 const FIXED_FEE_RATE = 0;
 const GLOBAL_DEFAULT_BASE_NIGHTLY = 650;
@@ -139,6 +145,8 @@ function parseArgs(argv: string[]): CliOptions {
   let nights = DEFAULT_NIGHTS;
   let adults = 1;
   let children = 0;
+  let quoteConcurrency = DEFAULT_QUOTE_CONCURRENCY;
+  let listingConcurrency = DEFAULT_LISTING_CONCURRENCY;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -200,6 +208,24 @@ function parseArgs(argv: string[]): CliOptions {
       index += 1;
       continue;
     }
+
+    if (arg === "--quote-concurrency" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        quoteConcurrency = Math.max(1, Math.floor(parsed));
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--listing-concurrency" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        listingConcurrency = Math.max(1, Math.floor(parsed));
+      }
+      index += 1;
+      continue;
+    }
   }
 
   return {
@@ -210,6 +236,8 @@ function parseArgs(argv: string[]): CliOptions {
     nights,
     adults,
     children,
+    quoteConcurrency,
+    listingConcurrency,
   };
 }
 
@@ -360,37 +388,44 @@ async function buildSidecarForListing(input: {
   const sampleStepDays = input.options.nights;
   const sampleCount = Math.max(1, Math.floor(quoteWindowDays / sampleStepDays));
 
-  const rawObservations: RawObservation[] = [];
-  for (let index = 0; index < sampleCount; index += 1) {
-    const startDate = addDays(anchorDate, index * sampleStepDays);
-    const endDate = addDays(startDate, input.options.nights);
+  const sampleIndexes = Array.from(
+    { length: sampleCount },
+    (_, index) => index,
+  );
+  const rawObservations = await runWithConcurrency(
+    sampleIndexes,
+    input.options.quoteConcurrency,
+    async (index) => {
+      const startDate = addDays(anchorDate, index * sampleStepDays);
+      const endDate = addDays(startDate, input.options.nights);
 
-    const quote = await fetchRcapiBaseTotal({
-      detailUrl: detail.detail_url,
-      checkInIso: startDate,
-      checkOutIso: endDate,
-      adults: input.options.adults,
-      children: input.options.children,
-      entityId,
-      idsTuple,
-    });
-
-    rawObservations.push({
-      startDate,
-      endDate,
-      quoteAvailable: quote.quoteAvailable,
-      baseTotal: quote.baseTotal,
-      currency: quote.currency,
-      handoffUrl: buildCheckoutUrl({
+      const quote = await fetchRcapiBaseTotal({
+        detailUrl: detail.detail_url,
         checkInIso: startDate,
         checkOutIso: endDate,
         adults: input.options.adults,
         children: input.options.children,
         entityId,
         idsTuple,
-      }),
-    });
-  }
+      });
+
+      return {
+        startDate,
+        endDate,
+        quoteAvailable: quote.quoteAvailable,
+        baseTotal: quote.baseTotal,
+        currency: quote.currency,
+        handoffUrl: buildCheckoutUrl({
+          checkInIso: startDate,
+          checkOutIso: endDate,
+          adults: input.options.adults,
+          children: input.options.children,
+          entityId,
+          idsTuple,
+        }),
+      } satisfies RawObservation;
+    },
+  );
 
   const baseNightlySeries: Array<number | null> = rawObservations.map((obs) =>
     obs.baseTotal !== null
@@ -485,8 +520,11 @@ async function buildSidecarForListing(input: {
   };
 }
 
-async function main(): Promise<void> {
-  const options = parseArgs(process.argv.slice(2));
+export async function runRoyaldestinationsQuoteCli(
+  argv: string[] = process.argv.slice(2),
+  progress: QuoteProgress | null = null,
+): Promise<void> {
+  const options = parseArgs(argv);
   const root = process.cwd();
   const adapterRoot = resolve(
     root,
@@ -516,27 +554,40 @@ async function main(): Promise<void> {
     throw new Error("No detail files selected for quoting.");
   }
 
+  progress?.phase("starting royaldestinations quote sampling");
+  progress?.info(
+    `listings_selected=${selected.length} weeks=${options.weeks} nights=${options.nights} quote_concurrency=${options.quoteConcurrency} listing_concurrency=${options.listingConcurrency}`,
+  );
+
   const capturedAtIso = new Date().toISOString();
   const summaries: Array<{
     listingId: string;
     observations: number;
     availableQuotes: number;
-  }> = [];
+  }> = await runWithConcurrency(
+    selected,
+    options.listingConcurrency,
+    async (fileName) => {
+      const listingId = fileName.replace(/\.json$/i, "");
+      const summary = await buildSidecarForListing({
+        detailPath: resolve(detailsJsonDir, fileName),
+        htmlPath: resolve(detailsHtmlDir, `${listingId}.html`),
+        quotesDir,
+        options,
+        capturedAtIso,
+      });
 
-  for (const fileName of selected) {
-    const listingId = fileName.replace(/\.json$/i, "");
-    const summary = await buildSidecarForListing({
-      detailPath: resolve(detailsJsonDir, fileName),
-      htmlPath: resolve(detailsHtmlDir, `${listingId}.html`),
-      quotesDir,
-      options,
-      capturedAtIso,
-    });
-    summaries.push(summary);
-    console.log(
-      `quoted listing=${summary.listingId} observations=${summary.observations} available=${summary.availableQuotes}`,
-    );
-  }
+      progress?.tick(
+        `quoted listing=${summary.listingId} observations=${summary.observations} available=${summary.availableQuotes}`,
+      );
+      if (!progress) {
+        console.log(
+          `quoted listing=${summary.listingId} observations=${summary.observations} available=${summary.availableQuotes}`,
+        );
+      }
+      return summary;
+    },
+  );
 
   console.log(`${ADAPTER_KEY} quote sidecar generation complete.`);
   console.log(`- listings: ${summaries.length}`);
@@ -544,12 +595,8 @@ async function main(): Promise<void> {
   console.log(
     `- listing_ids: ${summaries.map((item) => item.listingId).join(", ")}`,
   );
-}
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(
-    `Failed to generate royaldestinations quote sidecars: ${message}`,
+  progress?.success(
+    `royaldestinations quote sampling complete listings=${summaries.length}`,
   );
-  process.exit(1);
-});
+}

@@ -18,6 +18,13 @@ Define what stays, what should be reduced, and what can be removed only after co
 - `src/lib/scripts/run-scrape-engine.ts`
   - Universal scrape CLI entrypoint (`--adapter-key`) for adapter scrape engine runs.
 
+## Concurrency Policy
+
+- Quote and listing operations must expose configurable concurrency controls across adapters.
+- Concurrency should be implemented in shared runner/engine layers (not bespoke per-adapter wrappers) whenever feasible.
+- Adapter-specific concurrency logic is allowed only for clear edge cases and must be documented inline.
+- Weekly refresh-oriented operations should default to safe parallel settings and allow explicit override flags.
+
 ## Review For Deprecation (After Replacement Exists)
 
 - Adapter-specific quote wrapper scripts should remain removed; route through the universal quote runner.

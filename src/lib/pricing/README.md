@@ -32,3 +32,4 @@ This folder holds reusable pricing logic used by scripts and adapter workflows.
 3. Extract reusable quote-sidecar logic into `quotes/` as adapters converge.
 4. Keep scraper runtime internals in `scraper-engine/` and expose only wrapper entrypoints via `src/lib/scripts/*`.
 5. Keep adapter orchestration internals in `ops/` with script wrappers in `src/lib/scripts/*`.
+6. Implement quote and listing refresh concurrency in shared engine layers and expose adapter-agnostic concurrency flags via runner entrypoints.
