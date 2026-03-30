@@ -80,4 +80,15 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 650,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  dunevr30a: {
+    adapterKey: "dunevr30a",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.35,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.47,
+    },
+    globalDefaultBaseNightly: 700,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
 };

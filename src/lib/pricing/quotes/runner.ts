@@ -74,6 +74,7 @@ async function normalizeScope(
   const requiresScopedSelection = new Set([
     "royaldestinations",
     "benchmark30a",
+    "dunevr30a",
   ]);
   if (!requiresScopedSelection.has(adapterKey)) {
     return passthroughArgs;

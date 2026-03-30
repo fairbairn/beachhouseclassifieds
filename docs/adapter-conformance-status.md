@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds plus pricing-record parity.
 
-Audit date: 2026-03-30T13:46:00Z
+Audit date: 2026-03-30T14:38:30Z
 
 Data source:
 
@@ -69,7 +69,7 @@ Preferred (non-blocking):
 | beachblue               |    16 |   16 |      16 |           16 |           16 |         16 |        16 |     16 |     0 |               0 |        712 |        44.50 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                             |
 | benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |     0 |             128 |       8508 |        66.47 |    ✅     |    ❌     |    ✅     |  ✅   | <span style="white-space: nowrap;">Quote sidecar validator passing (128/128) with full pricing parity (`details/pricing/*.json` + `index.json`)</span>                                     |
 | coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |    30 |               0 |       2063 |        68.77 |    ✅     |    ✅     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                             |
-| dunevr30a               |    85 |   85 |      85 |           85 |           85 |         85 |        85 |     85 |    85 |               0 |       4031 |        47.42 |    ✅     |    ✅     |    ✅     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                             |
+| dunevr30a               |    85 |   85 |      85 |           85 |           85 |         85 |        85 |     85 |    85 |              85 |       4031 |        47.42 |    ✅     |    ✅     |    ✅     |  ✅   | <span style="white-space: nowrap;">Quote sidecar validator passing (85/85) with full pricing parity (`details/pricing/*.json` + `index.json`)</span>                                       |
 | exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |               0 |       5629 |        53.10 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                             |
 | fivestar30a             |    62 |   62 |      62 |           62 |           62 |         62 |        62 |     62 |    62 |               0 |       6488 |       104.65 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                             |
 | funvacay30a             |    40 |   40 |      40 |           40 |           40 |         40 |        40 |     40 |     0 |               0 |        240 |         6.00 |    ❌     |    ❌     |    ✅     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                             |
@@ -88,15 +88,15 @@ Preferred (non-blocking):
 | scenicstays30a          |    44 |   44 |      44 |           44 |           44 |         44 |        44 |     44 |    44 |               0 |       2490 |        56.59 |    ✅     |    ✅     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                             |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |     0 |               0 |       2418 |        65.35 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                             |
 | stayon30a               |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |     0 |               0 |      11150 |       142.95 |    ✅     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                             |
-| **TOTAL**               |  2993 | 2993 |    2993 |         2993 |         2993 |       2993 |      2993 |   2993 |  1588 |            1621 |     183840 |        61.42 |     —     |     —     |     —     |   —   | <span style="white-space: nowrap;">6/27 Ready</span>                                                                                                                                       |
+| **TOTAL**               |  2993 | 2993 |    2993 |         2993 |         2993 |       2993 |      2993 |   2993 |  1588 |            1706 |     183840 |        61.42 |     —     |     —     |     —     |   —   | <span style="white-space: nowrap;">7/27 Ready</span>                                                                                                                                       |
 
 ## Current Snapshot Summary
 
 - 27 adapters audited.
 - All 27 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 6 / 27.
+- Combined-ready adapters (Ready = ✅): 7 / 27.
 - Rates coverage signal: 1588 / 2993 files currently include normalized_rates.days.
-- Pricing-records coverage signal: 1621 / 2993 files currently have per-listing pricing JSON records.
+- Pricing-records coverage signal: 1706 / 2993 files currently have per-listing pricing JSON records.
 - API capability signal:
   - Availability API present: 12 / 27 adapters.
   - Rates API present: 6 / 27 adapters.

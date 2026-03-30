@@ -1,6 +1,6 @@
 # Rates Conformity Rollout Matrix
 
-Last updated: 2026-03-30T13:46:00Z
+Last updated: 2026-03-30T14:38:30Z
 
 This matrix maps each adapter to the data needed to satisfy [rates-conformity-contract.md](./rates-conformity-contract.md).
 
@@ -38,7 +38,7 @@ This matrix maps each adapter to the data needed to satisfy [rates-conformity-co
 | exclusive30a            | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | identify deterministic quote endpoint and parser                                                                                                       |
 | sandpiper30a            | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | capture Track/Bluetent quote + handoff signatures                                                                                                      |
 | 30aluxury               | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint and required params                                                                                                            |
-| dunevr30a               | streamline      | yes              | yes                     | listing_daily     | template_url    | none        | [ ]     | validate current rates path against conformity contract                                                                                                |
+| dunevr30a               | streamline      | yes              | yes                     | listing_daily     | template_url    | seeded      | [x]     | full quote + pricing runtime pass complete (85/85); finalize assumptions sample depth and checkout handoff signature proof for `ready`                 |
 | stayon30a               | streamline      | no               | yes                     | assumptions_only  | detail_fallback | none        | [ ]     | probe `GetPreReservationPrice` and checkout URL signature                                                                                              |
 | sandersbeach30a         | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + handoff URL template                                                                                                         |
 | oversee30a              | custom_hybrid   | no               | yes                     | assumptions_only  | detail_fallback | none        | [ ]     | identify quote-capable endpoint and normalization rules                                                                                                |
