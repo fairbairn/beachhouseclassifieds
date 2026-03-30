@@ -24,6 +24,7 @@ type CliOptions = {
   quoteListingId: string | null;
   quoteMaxListings: number | null;
   quoteAllListings: boolean;
+  quoteSkipExisting: boolean;
   pricingWeeks: number;
   continueOnError: boolean;
   dryRun: boolean;
@@ -60,6 +61,7 @@ function parseArgs(argv: string[]): CliOptions {
   let quoteListingId: string | null = null;
   let quoteMaxListings: number | null = null;
   let quoteAllListings = false;
+  let quoteSkipExisting = false;
   let pricingWeeks = 24;
   let continueOnError = false;
   let dryRun = false;
@@ -177,6 +179,11 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--quote-skip-existing") {
+      quoteSkipExisting = true;
+      continue;
+    }
+
     if (arg === "--pricing-weeks" && value) {
       const parsed = Number(value);
       if (Number.isFinite(parsed) && parsed > 0 && parsed <= 52) {
@@ -224,6 +231,7 @@ function parseArgs(argv: string[]): CliOptions {
     quoteListingId,
     quoteMaxListings,
     quoteAllListings,
+    quoteSkipExisting,
     pricingWeeks,
     continueOnError,
     dryRun,
@@ -546,6 +554,7 @@ async function runAdapterSteps(
         String(options.quoteConcurrency),
         "--listing-concurrency",
         String(options.quoteListingConcurrency),
+        ...(options.quoteSkipExisting ? ["--skip-existing"] : []),
         ...quoteScopeArgs,
       ],
       options.dryRun,
@@ -591,7 +600,7 @@ async function main(): Promise<void> {
 
   runtimeProgress.phase("starting unified adapter runtime");
   runtimeProgress.info(
-    `adapters=${options.adapters === "all" ? "all" : options.adapters.join(",")} dry_run=${options.dryRun} quote_weeks=${options.quoteWeeks} quote_concurrency=${options.quoteConcurrency} quote_listing_concurrency=${options.quoteListingConcurrency} quote_listing_id=${options.quoteListingId ?? "n/a"} quote_max_listings=${options.quoteMaxListings ?? "n/a"} quote_all_listings=${options.quoteAllListings} pricing_weeks=${options.pricingWeeks}`,
+    `adapters=${options.adapters === "all" ? "all" : options.adapters.join(",")} dry_run=${options.dryRun} quote_weeks=${options.quoteWeeks} quote_concurrency=${options.quoteConcurrency} quote_listing_concurrency=${options.quoteListingConcurrency} quote_listing_id=${options.quoteListingId ?? "n/a"} quote_max_listings=${options.quoteMaxListings ?? "n/a"} quote_all_listings=${options.quoteAllListings} quote_skip_existing=${options.quoteSkipExisting} pricing_weeks=${options.pricingWeeks}`,
   );
 
   process.on("SIGINT", () => {

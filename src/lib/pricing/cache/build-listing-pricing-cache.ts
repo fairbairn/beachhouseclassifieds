@@ -110,7 +110,10 @@ function readJson<T>(raw: string): T {
   return JSON.parse(raw) as T;
 }
 
-function interpolateValue(values: Array<number | null>, index: number): number | null {
+function interpolateValue(
+  values: Array<number | null>,
+  index: number,
+): number | null {
   const current = values[index];
   if (current !== null) {
     return current;
@@ -160,7 +163,9 @@ function median(values: number[]): number | null {
   return roundCurrency(sorted[mid]!);
 }
 
-function readQuoteAnchorsByDate(observations: QuoteObservation[] | undefined): Map<string, number> {
+function readQuoteAnchorsByDate(
+  observations: QuoteObservation[] | undefined,
+): Map<string, number> {
   const totalsByDate = new Map<string, { total: number; count: number }>();
   for (const observation of observations ?? []) {
     if (!observation.quote_available) {
@@ -197,7 +202,10 @@ function readQuoteAnchorsByDate(observations: QuoteObservation[] | undefined): M
   return anchors;
 }
 
-export function parsePricingCacheCliArgs(argv: string[], defaultWeeks: number): PricingCacheCliOptions {
+export function parsePricingCacheCliArgs(
+  argv: string[],
+  defaultWeeks: number,
+): PricingCacheCliOptions {
   let weeks = defaultWeeks;
   let fromDate = toIsoDate(new Date());
   let listingId: string | null = null;
@@ -267,8 +275,14 @@ export async function buildListingPricingCacheForAdapter(
   const quotesDir = resolve(adapterRoot, "details", "quotes");
   const assumptionsPath = resolve(adapterRoot, "pricing-assumptions.json");
 
-  const assumptionsRaw = await readFile(assumptionsPath, "utf8");
-  const assumptionsStore = readJson<PricingAssumptionsStore>(assumptionsRaw);
+  let assumptionsStore: PricingAssumptionsStore = {};
+  try {
+    const assumptionsRaw = await readFile(assumptionsPath, "utf8");
+    assumptionsStore = readJson<PricingAssumptionsStore>(assumptionsRaw);
+  } catch {
+    // Some adapters only have detail + quote sidecars. Fall back to defaults.
+    assumptionsStore = {};
+  }
 
   const avgFeePct = Number(
     assumptionsStore.assumptions?.avg_fee_pct_of_base ??
@@ -288,7 +302,11 @@ export async function buildListingPricingCacheForAdapter(
     .map((sample) => {
       const baseTotal = Number(sample.base_total);
       const nights = Number(sample.nights);
-      if (!Number.isFinite(baseTotal) || !Number.isFinite(nights) || nights <= 0) {
+      if (
+        !Number.isFinite(baseTotal) ||
+        !Number.isFinite(nights) ||
+        nights <= 0
+      ) {
         return null;
       }
       return baseTotal / nights;
@@ -296,7 +314,9 @@ export async function buildListingPricingCacheForAdapter(
     .filter((value): value is number => value !== null && value > 0);
   const assumptionsAnchorBase =
     median(sampleAnchors) ??
-    roundCurrency(globalDefaultBaseNightly * assumptionsAnchorFallbackMultiplier);
+    roundCurrency(
+      globalDefaultBaseNightly * assumptionsAnchorFallbackMultiplier,
+    );
 
   const entries = await readdir(detailsJsonDir, { withFileTypes: true });
   const detailFiles = entries
@@ -337,7 +357,10 @@ export async function buildListingPricingCacheForAdapter(
 
     let quoteAnchorsByDate = new Map<string, number>();
     try {
-      const quotePath = resolve(quotesDir, `${detail.external_listing_id}.json`);
+      const quotePath = resolve(
+        quotesDir,
+        `${detail.external_listing_id}.json`,
+      );
       const quoteRaw = await readFile(quotePath, "utf8");
       const quoteSidecar = readJson<QuoteSidecarRecord>(quoteRaw);
       quoteAnchorsByDate = readQuoteAnchorsByDate(quoteSidecar.observations);
@@ -346,7 +369,10 @@ export async function buildListingPricingCacheForAdapter(
     }
 
     const availabilityMap = new Map(
-      (detail.normalized_availability?.days ?? []).map((day) => [day.date, day]),
+      (detail.normalized_availability?.days ?? []).map((day) => [
+        day.date,
+        day,
+      ]),
     );
     const rateMap = new Map(
       (detail.normalized_rates?.days ?? []).map((day) => [day.date, day]),
@@ -357,12 +383,20 @@ export async function buildListingPricingCacheForAdapter(
       const rateDay = rateMap.get(date);
 
       const quoteAnchor = quoteAnchorsByDate.get(date);
-      if (typeof quoteAnchor === "number" && Number.isFinite(quoteAnchor) && quoteAnchor > 0) {
+      if (
+        typeof quoteAnchor === "number" &&
+        Number.isFinite(quoteAnchor) &&
+        quoteAnchor > 0
+      ) {
         return roundCurrency(quoteAnchor);
       }
 
       const nightly = Number(rateDay?.nightly_rate);
-      if (availability?.is_available && Number.isFinite(nightly) && nightly > 0) {
+      if (
+        availability?.is_available &&
+        Number.isFinite(nightly) &&
+        nightly > 0
+      ) {
         return nightly;
       }
       return null;
@@ -392,7 +426,10 @@ export async function buildListingPricingCacheForAdapter(
           baseNightly = interpolated;
           source = "derived_interpolated";
           confidence = "medium";
-        } else if (Number.isFinite(listingAnchorBase) && listingAnchorBase > 0) {
+        } else if (
+          Number.isFinite(listingAnchorBase) &&
+          listingAnchorBase > 0
+        ) {
           baseNightly = listingAnchorBase;
           source = "derived_assumptions_anchor";
           confidence = "low";
@@ -433,8 +470,12 @@ export async function buildListingPricingCacheForAdapter(
     });
 
     const sourceSummary: ListingPricingCacheRecord["source_summary"] = {
-      accurate_scrape_days: days.filter((day) => day.source === "accurate_scrape").length,
-      derived_interpolated_days: days.filter((day) => day.source === "derived_interpolated").length,
+      accurate_scrape_days: days.filter(
+        (day) => day.source === "accurate_scrape",
+      ).length,
+      derived_interpolated_days: days.filter(
+        (day) => day.source === "derived_interpolated",
+      ).length,
       derived_assumptions_anchor_days: days.filter(
         (day) => day.source === "derived_assumptions_anchor",
       ).length,
@@ -475,7 +516,11 @@ export async function buildListingPricingCacheForAdapter(
     const cachePathRelative = `details/pricing/${detail.external_listing_id}.json`;
 
     if (!input.options.dryRun) {
-      await writeFile(cachePath, `${JSON.stringify(listingCache, null, 2)}\n`, "utf8");
+      await writeFile(
+        cachePath,
+        `${JSON.stringify(listingCache, null, 2)}\n`,
+        "utf8",
+      );
     }
 
     indexRows.push({
@@ -501,14 +546,19 @@ export async function buildListingPricingCacheForAdapter(
     from_date: input.options.fromDate,
     to_date: toDate,
     listing_count: listingCount,
-    avg_base_nightly: listingCount > 0 ? roundCurrency(totalBase / totalDays) : null,
+    avg_base_nightly:
+      listingCount > 0 ? roundCurrency(totalBase / totalDays) : null,
     avg_all_in_nightly:
       listingCount > 0 ? roundCurrency(totalAllIn / totalDays) : null,
     listings: indexRows,
   };
 
   if (!input.options.dryRun) {
-    await writeFile(resolve(pricingDir, "index.json"), `${JSON.stringify(indexPayload, null, 2)}\n`, "utf8");
+    await writeFile(
+      resolve(pricingDir, "index.json"),
+      `${JSON.stringify(indexPayload, null, 2)}\n`,
+      "utf8",
+    );
   }
 
   return {

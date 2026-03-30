@@ -3,7 +3,9 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runThirtyAVacayQuoteCli } from "./quotes/30avacay";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -2422,6 +2424,13 @@ export function createThirtyAVacayAdapter(): ScraperAdapter<LuxuryDetailRecord> 
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "30avacay",
+        argv,
+      );
+      await runThirtyAVacayQuoteCli(normalizedArgs, progress);
     },
   };
 }
