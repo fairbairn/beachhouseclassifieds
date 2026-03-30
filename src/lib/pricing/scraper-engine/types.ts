@@ -1,3 +1,4 @@
+import type { QuoteProgress } from "@/lib/pricing/quotes/types";
 import type { Browser, Page } from "playwright";
 
 export type ScraperRefreshMode = "full" | "dynamic" | "static";
@@ -67,4 +68,5 @@ export type ScraperAdapter<TDetail extends DetailRecordBase> = {
   isValidDetailUrl(value: string): string | null;
   discoverListings(context: DiscoverContext): Promise<ScrapedLink[]>;
   fetchDetail(context: FetchDetailContext): Promise<TDetail | null>;
+  runQuoteCapture?(argv: string[], progress: QuoteProgress): Promise<void>;
 };

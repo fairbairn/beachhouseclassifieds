@@ -1,0 +1,82 @@
+{
+  "adapter_key": "30abeach",
+  "platform_family": "streamline",
+  "currency": "USD",
+  "rates_conformity": {
+    "status": "in_progress",
+    "ready": false,
+    "last_validated_at": "2026-03-30T00:00:00.000Z",
+    "blocking_gaps": ["requires at least 3 pricing assumption samples"]
+  },
+  "capabilities": {
+    "listing_daily_rates": {
+      "supported": true,
+      "source": "normalized_rates.days"
+    },
+    "ad_hoc_quote": {
+      "supported": true,
+      "transport": "http_get_json",
+      "response_format": "json"
+    },
+    "checkout_handoff": {
+      "supported": true,
+      "transport": "url",
+      "requires_quote_context": true
+    }
+  },
+  "quote_signature": {
+    "method": "GET",
+    "url": "https://30abeachproperties.com/wp-admin/admin-ajax.php",
+    "required_params": [
+      "action=streamlinecore-api-request",
+      "methodName=GetPreReservationPrice",
+      "unit_id",
+      "startdate",
+      "enddate",
+      "occupants"
+    ],
+    "date_param_format": "MM/DD/YYYY",
+    "response_extractors": {
+      "rent_total": "data.price",
+      "taxes_total": "data.taxes_details[].value",
+      "fees_total_excl_taxes": "data.required_fees[].value",
+      "all_in_total": "data.total",
+      "currency": "data.currency",
+      "checkout_handoff_url": "derived_template"
+    },
+    "probe_evidence": {
+      "report_path": "",
+      "source_listing_id": "480605",
+      "sample_window": {
+        "check_in_date": "2026-04-11",
+        "check_out_date": "2026-04-18",
+        "nights": 7
+      }
+    }
+  },
+  "handoff_signature": {
+    "url_template": "https://30abeachproperties.com/checkout/?book_unit={listing_id}&book_start_date={checkin}&book_end_date={checkout}&book_occupants={adults}&book_occupants_small={children}&book_pets={pets}",
+    "required_params": [
+      "book_unit",
+      "book_start_date",
+      "book_end_date",
+      "book_occupants"
+    ],
+    "date_param_format": "MM/DD/YYYY",
+    "source": "quote_runtime_template"
+  },
+  "estimation_policy": {
+    "nightly_base_strategy": "listing_daily_then_quote_window_average",
+    "fees_taxes_strategy": "quote_observation_ratios_with_assumptions_fallback",
+    "fallback_order": [
+      "ad_hoc_quote_window_average",
+      "listing_daily_rates",
+      "adapter_assumptions"
+    ]
+  },
+  "assumptions_policy": {
+    "min_samples_for_ready": 3,
+    "max_sample_age_days": 45,
+    "refresh_cadence": "monthly"
+  }
+}

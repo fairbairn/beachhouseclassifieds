@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { runRoyaldestinationsQuoteCli } from "./quotes/royaldestinations";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type RoyalDestinationsDayCode = "A" | "U" | "I" | "O" | "X";
@@ -1499,6 +1501,13 @@ export function createRoyalDestinationsAdapter(): ScraperAdapter<RoyalDestinatio
     },
     async fetchDetail(context) {
       return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "royaldestinations",
+        argv,
+      );
+      await runRoyaldestinationsQuoteCli(normalizedArgs, progress);
     },
   };
 }

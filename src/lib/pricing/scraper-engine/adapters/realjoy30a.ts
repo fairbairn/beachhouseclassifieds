@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { runRealjoy30aQuoteCli } from "./quotes/realjoy30a";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type RealJoyDayCode = "A" | "U" | "I" | "O" | "X";
@@ -1119,6 +1121,13 @@ export function createRealJoy30AAdapter(): ScraperAdapter<RealJoyDetailRecord> {
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "realjoy30a",
+        argv,
+      );
+      await runRealjoy30aQuoteCli(normalizedArgs, progress);
     },
   };
 }

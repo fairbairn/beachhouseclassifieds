@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
+import { runBenchmark30aQuoteCli } from "./quotes/benchmark30a";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type BenchmarkDayCode = "A" | "U" | "I" | "O" | "X";
@@ -1598,6 +1600,13 @@ export function createBenchmark30AAdapter(): ScraperAdapter<BenchmarkDetailRecor
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "benchmark30a",
+        argv,
+      );
+      await runBenchmark30aQuoteCli(normalizedArgs, progress);
     },
   };
 }

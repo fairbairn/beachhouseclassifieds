@@ -1,0 +1,73 @@
+{
+  "adapter_key": "realjoy30a",
+  "platform_family": "track_bluetent",
+  "currency": "USD",
+  "rates_conformity": {
+    "status": "in_progress",
+    "ready": false,
+    "last_validated_at": "2026-03-30T00:00:00.000Z",
+    "blocking_gaps": ["requires at least 3 pricing assumption samples"]
+  },
+  "capabilities": {
+    "listing_daily_rates": {
+      "supported": false,
+      "source": "none"
+    },
+    "ad_hoc_quote": {
+      "supported": true,
+      "transport": "http_post_form",
+      "response_format": "html"
+    },
+    "checkout_handoff": {
+      "supported": true,
+      "transport": "url",
+      "requires_quote_context": true
+    }
+  },
+  "quote_signature": {
+    "method": "POST",
+    "url": "https://www.realjoy.com/ajax/quote",
+    "required_params": [
+      "checkin",
+      "checkout",
+      "propertyID",
+      "roomTypeID",
+      "propertyName",
+      "hash"
+    ],
+    "date_param_format": "MM/DD/YYYY",
+    "response_extractors": {
+      "rent_total": "html .pdp-quote-item-text=Rent -> sibling .pdp-quote-item-price[data-price]",
+      "taxes_total": "html .pdp-quote-item-text=Taxes -> sibling .pdp-quote-item-price[data-price]",
+      "fees_total_excl_taxes": "html .pdp-quote-item-text=Fees -> sibling .pdp-quote-item-price[data-price]",
+      "all_in_total": "html .pdp-quote-item-text=Total -> sibling .pdp-quote-item-price[data-price]",
+      "currency": "USD (fixed)",
+      "checkout_handoff_url": "html #bookNowURL[value]"
+    },
+    "probe_evidence": {
+      "report_path": "",
+      "source_listing_id": "1512",
+      "sample_window": {
+        "check_in_date": "2026-04-11",
+        "check_out_date": "2026-05-02",
+        "nights": 21
+      }
+    }
+  },
+  "handoff_signature": {
+    "url_template": "https://www.realjoy.com/beach-rentals/book-now?propertyID={listing_id}&checkin={checkin}&checkout={checkout}",
+    "required_params": ["propertyID", "checkin", "checkout"],
+    "date_param_format": "MM/DD/YYYY",
+    "source": "quote_response_hidden_field"
+  },
+  "estimation_policy": {
+    "nightly_base_strategy": "quote_window_average",
+    "fees_taxes_strategy": "quote_observation_ratios_with_assumptions_fallback",
+    "fallback_order": ["ad_hoc_quote_window_average", "adapter_assumptions"]
+  },
+  "assumptions_policy": {
+    "min_samples_for_ready": 3,
+    "max_sample_age_days": 45,
+    "refresh_cadence": "monthly"
+  }
+}

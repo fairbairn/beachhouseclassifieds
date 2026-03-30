@@ -7,7 +7,9 @@ import {
   createDiscoveryLogger,
   resolveAdapterRuntime,
 } from "../adapter-foundation";
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runThirtyABeachQuoteCli } from "./quotes/30abeach";
 
 type ThirtyABeachListingRow = {
   id: string;
@@ -1706,6 +1708,13 @@ export function create30ABeachAdapter(): ScraperAdapter<ThirtyABeachDetailRecord
       void context.browser;
       void context.maxCalendarAdvanceMonths;
       return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "30abeach",
+        argv,
+      );
+      await runThirtyABeachQuoteCli(normalizedArgs, progress);
     },
   };
 }

@@ -39,7 +39,7 @@ type DiscoveredListingRecord = {
 
 const ROOT = process.cwd();
 const REPORTS_DIR = resolve(ROOT, ".tmp", "reports");
-const progress = createScrapeProgress({ script: "adapter-runtime" });
+const runtimeProgress = createScrapeProgress({ script: "adapter-ops" });
 
 let wasCancelled = false;
 
@@ -260,6 +260,7 @@ function logDryRun(
   operation: string,
   adapterKey: string,
   args: string[],
+  progress: ReturnType<typeof createScrapeProgress>,
 ): void {
   const renderedArgs = args.join(" ");
   progress.tick(
@@ -271,10 +272,11 @@ async function runScrape(
   adapterKey: string,
   args: string[],
   dryRun: boolean,
+  progress: ReturnType<typeof createScrapeProgress>,
 ): Promise<void> {
   ensureNotCancelled();
   if (dryRun) {
-    logDryRun("scrape", adapterKey, args);
+    logDryRun("scrape", adapterKey, args, progress);
     return;
   }
 
@@ -290,6 +292,7 @@ async function runQuoteCapture(
   adapterKey: string,
   args: string[],
   dryRun: boolean,
+  progress: ReturnType<typeof createScrapeProgress>,
 ): Promise<void> {
   ensureNotCancelled();
   const proxy = createValidatedAdapterOperationProxyByKey(adapterKey);
@@ -305,16 +308,17 @@ async function runQuoteCapture(
   }
 
   if (dryRun) {
-    logDryRun("quote", adapterKey, args);
+    logDryRun("quote", adapterKey, args, progress);
     return;
   }
 
-  await proxy.runQuoteCapture(args);
+  await proxy.runQuoteCapture(args, progress);
 }
 
 async function runQuoteValidation(
   adapterKey: string,
   dryRun: boolean,
+  progress: ReturnType<typeof createScrapeProgress>,
 ): Promise<void> {
   ensureNotCancelled();
   const proxy = createValidatedAdapterOperationProxyByKey(adapterKey);
@@ -330,7 +334,7 @@ async function runQuoteValidation(
   }
 
   if (dryRun) {
-    logDryRun("validate", adapterKey, ["--adapter-key", adapterKey]);
+    logDryRun("validate", adapterKey, ["--adapter-key", adapterKey], progress);
     return;
   }
 
@@ -341,6 +345,7 @@ async function runPricingCache(
   adapterKey: string,
   args: string[],
   dryRun: boolean,
+  progress: ReturnType<typeof createScrapeProgress>,
 ): Promise<void> {
   ensureNotCancelled();
   const proxy = createValidatedAdapterOperationProxyByKey(adapterKey);
@@ -356,7 +361,7 @@ async function runPricingCache(
   }
 
   if (dryRun) {
-    logDryRun("cache", adapterKey, args);
+    logDryRun("cache", adapterKey, args, progress);
     return;
   }
 
@@ -430,11 +435,13 @@ async function runDiscoverNewStep(
   adapterKey: string,
   maxNewListings: number | null,
   dryRun: boolean,
+  progress: ReturnType<typeof createScrapeProgress>,
 ): Promise<void> {
   await runScrape(
     adapterKey,
     ["--discover-only", "--refresh-mode", "static"],
     dryRun,
+    progress,
   );
 
   if (dryRun) {
@@ -469,6 +476,7 @@ async function runDiscoverNewStep(
     adapterKey,
     ["--detail-urls-file", urlsFilePath, "--refresh-mode", "static"],
     false,
+    progress,
   );
 
   progress.success(
@@ -480,10 +488,16 @@ async function runAdapterSteps(
   adapterKey: string,
   options: CliOptions,
 ): Promise<void> {
-  progress.phase(`adapter=${adapterKey} starting requested operations`);
+  const progress = createScrapeProgress({ script: adapterKey });
+  progress.phase("starting requested operations");
 
   if (options.fullScrape) {
-    await runScrape(adapterKey, ["--refresh-mode", "full"], options.dryRun);
+    await runScrape(
+      adapterKey,
+      ["--refresh-mode", "full"],
+      options.dryRun,
+      progress,
+    );
   }
 
   if (options.discoverNew) {
@@ -491,6 +505,7 @@ async function runAdapterSteps(
       adapterKey,
       options.maxNewListings,
       options.dryRun,
+      progress,
     );
   }
 
@@ -499,6 +514,7 @@ async function runAdapterSteps(
       adapterKey,
       ["--refresh-known", "--refresh-mode", "static"],
       options.dryRun,
+      progress,
     );
   }
 
@@ -507,6 +523,7 @@ async function runAdapterSteps(
       adapterKey,
       ["--refresh-known", "--refresh-mode", "dynamic"],
       options.dryRun,
+      progress,
     );
   }
 
@@ -532,11 +549,12 @@ async function runAdapterSteps(
         ...quoteScopeArgs,
       ],
       options.dryRun,
+      progress,
     );
   }
 
   if (options.quotesValidate) {
-    await runQuoteValidation(adapterKey, options.dryRun);
+    await runQuoteValidation(adapterKey, options.dryRun, progress);
   }
 
   if (options.pricingCache) {
@@ -544,10 +562,11 @@ async function runAdapterSteps(
       adapterKey,
       ["--weeks", String(options.pricingWeeks)],
       options.dryRun,
+      progress,
     );
   }
 
-  progress.success(`adapter=${adapterKey} completed requested operations`);
+  progress.success("completed requested operations");
 }
 
 function ensureAnyStepEnabled(options: CliOptions): void {
@@ -570,8 +589,8 @@ async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   ensureAnyStepEnabled(options);
 
-  progress.phase("starting unified adapter runtime");
-  progress.info(
+  runtimeProgress.phase("starting unified adapter runtime");
+  runtimeProgress.info(
     `adapters=${options.adapters === "all" ? "all" : options.adapters.join(",")} dry_run=${options.dryRun} quote_weeks=${options.quoteWeeks} quote_concurrency=${options.quoteConcurrency} quote_listing_concurrency=${options.quoteListingConcurrency} quote_listing_id=${options.quoteListingId ?? "n/a"} quote_max_listings=${options.quoteMaxListings ?? "n/a"} quote_all_listings=${options.quoteAllListings} pricing_weeks=${options.pricingWeeks}`,
   );
 
@@ -592,7 +611,8 @@ async function main(): Promise<void> {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push({ adapterKey, reason: message });
-      progress.failure(`${adapterKey}: ${message}`);
+      const adapterProgress = createScrapeProgress({ script: adapterKey });
+      adapterProgress.failure(message);
       if (!options.continueOnError) {
         break;
       }
@@ -606,7 +626,7 @@ async function main(): Promise<void> {
     throw new Error(`adapter ops completed with failures -> ${summary}`);
   }
 
-  progress.success("unified adapter runtime complete");
+  runtimeProgress.success("unified adapter runtime complete");
 }
 
 main()
@@ -622,6 +642,6 @@ main()
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    progress.failure(`adapter runtime failed: ${message}`);
+    runtimeProgress.failure(`adapter runtime failed: ${message}`);
     process.exit(1);
   });

@@ -80,6 +80,28 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 650,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  "30abeach": {
+    adapterKey: "30abeach",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.16,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.28,
+    },
+    globalDefaultBaseNightly: 650,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
+  "30aluxury": {
+    adapterKey: "30aluxury",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.12,
+    },
+    globalDefaultBaseNightly: 700,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
   dunevr30a: {
     adapterKey: "dunevr30a",
     defaultWeeks: 24,
@@ -87,6 +109,17 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
       avgFeePct: 0.35,
       avgTaxPct: 0.12,
       avgAllInMultiplier: 1.47,
+    },
+    globalDefaultBaseNightly: 700,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
+  realjoy30a: {
+    adapterKey: "realjoy30a",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.03,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.15,
     },
     globalDefaultBaseNightly: 700,
     assumptionsAnchorFallbackMultiplier: 0.92,

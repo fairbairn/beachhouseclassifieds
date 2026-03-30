@@ -8,6 +8,7 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
+import { runHomeownerscollection30aQuoteCli } from "./quotes/homeownerscollection30a";
 
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
@@ -2380,6 +2381,14 @@ export function createHomeownersCollection30AAdapter(): ScraperAdapter<LuxuryDet
         context.existingDetailJsonPath,
         context.reportDetailProgress,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const exitCode = await runHomeownerscollection30aQuoteCli(argv, progress);
+      if (exitCode !== 0) {
+        throw new Error(
+          `homeownerscollection30a quote failed with exit code ${exitCode}`,
+        );
+      }
     },
   };
 }

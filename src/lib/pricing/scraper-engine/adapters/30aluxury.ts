@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
+import { runThirtyALuxuryQuoteCli } from "./quotes/30aluxury";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
@@ -1225,6 +1227,13 @@ export function create30ALuxuryAdapter(): ScraperAdapter<LuxuryDetailRecord> {
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "30aluxury",
+        argv,
+      );
+      await runThirtyALuxuryQuoteCli(normalizedArgs, progress);
     },
   };
 }

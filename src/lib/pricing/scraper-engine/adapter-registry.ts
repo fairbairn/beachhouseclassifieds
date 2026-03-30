@@ -1,7 +1,7 @@
+import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
 import { SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS } from "@/lib/pricing/cache/listing-pricing-cache-adapter-definitions";
 import { runSharedListingPricingCacheCli } from "@/lib/pricing/cache/run-shared-listing-pricing-cache-cli";
-import { getKnownQuoteAdapterKeys } from "@/lib/pricing/quotes/adapter-registry";
-import { runQuoteRunnerCli } from "@/lib/pricing/quotes/runner";
+import type { QuoteProgress } from "@/lib/pricing/quotes/types";
 import { runValidateAdapterQuoteSidecarsCli } from "@/lib/pricing/validation/validate-adapter-quote-sidecars";
 import { create30ABeachAdapter } from "./adapters/30abeach";
 import { create30AEscapesAdapter } from "./adapters/30aescapes";
@@ -65,7 +65,6 @@ const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   stayon30a: createStayOn30AAdapter,
 };
 
-const QUOTE_CAPABLE = new Set(getKnownQuoteAdapterKeys());
 const CACHE_CAPABLE = new Set(
   Object.keys(SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS),
 );
@@ -78,7 +77,7 @@ export type AdapterOperationProxy = {
     pricingCache: boolean;
   };
   runScrape(argv: string[]): Promise<void>;
-  runQuoteCapture(argv: string[]): Promise<void>;
+  runQuoteCapture(argv: string[], progress?: QuoteProgress): Promise<void>;
   runQuoteValidation(argv?: string[]): Promise<void>;
   runPricingCache(argv: string[]): Promise<void>;
 };
@@ -143,18 +142,6 @@ export function validateAdapterOperationProxy(
   }
 
   const normalized = proxy.adapterKey.trim().toLowerCase();
-  if (proxy.capabilities.quoteCapture !== QUOTE_CAPABLE.has(normalized)) {
-    throw new Error(
-      `Invalid adapter proxy '${proxy.adapterKey}': quoteCapture capability mismatch.`,
-    );
-  }
-
-  if (proxy.capabilities.quoteValidation !== QUOTE_CAPABLE.has(normalized)) {
-    throw new Error(
-      `Invalid adapter proxy '${proxy.adapterKey}': quoteValidation capability mismatch.`,
-    );
-  }
-
   if (proxy.capabilities.pricingCache !== CACHE_CAPABLE.has(normalized)) {
     throw new Error(
       `Invalid adapter proxy '${proxy.adapterKey}': pricingCache capability mismatch.`,
@@ -186,8 +173,8 @@ export function createAdapterOperationProxyByKey(
     return null;
   }
 
-  const quoteCapture = QUOTE_CAPABLE.has(normalized);
-  const quoteValidation = QUOTE_CAPABLE.has(normalized);
+  const quoteCapture = typeof adapter.runQuoteCapture === "function";
+  const quoteValidation = quoteCapture;
   const pricingCache = CACHE_CAPABLE.has(normalized);
 
   const proxy: AdapterOperationProxy = {
@@ -200,11 +187,23 @@ export function createAdapterOperationProxyByKey(
     async runScrape(argv: string[]): Promise<void> {
       await runScraperEngine(adapter, ["node", "run-scrape-engine", ...argv]);
     },
-    async runQuoteCapture(argv: string[]): Promise<void> {
+    async runQuoteCapture(
+      argv: string[],
+      progress?: QuoteProgress,
+    ): Promise<void> {
       if (!quoteCapture) {
         throw new Error("adapter is not quote-capable");
       }
-      await runQuoteRunnerCli(["--adapter-key", normalized, ...argv]);
+
+      if (!adapter.runQuoteCapture) {
+        throw new Error(
+          `Adapter '${normalized}' does not implement runQuoteCapture.`,
+        );
+      }
+
+      const quoteProgress =
+        progress ?? createScrapeProgress({ script: normalized });
+      await adapter.runQuoteCapture(argv, quoteProgress);
     },
     async runQuoteValidation(argv: string[] = []): Promise<void> {
       if (!quoteValidation) {
