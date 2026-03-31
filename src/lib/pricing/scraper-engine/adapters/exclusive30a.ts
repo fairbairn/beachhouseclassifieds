@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runExclusive30aQuoteCli } from "./quotes/exclusive30a";
 
 type ExclusiveBookedDay = {
   d?: string;
@@ -988,6 +990,13 @@ export function createExclusive30AAdapter(): ScraperAdapter<ExclusiveDetailRecor
     },
     async fetchDetail(context) {
       return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "exclusive30a",
+        argv,
+      );
+      await runExclusive30aQuoteCli(normalizedArgs, progress);
     },
   };
 }

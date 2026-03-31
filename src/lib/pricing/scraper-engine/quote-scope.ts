@@ -6,6 +6,7 @@ const QUOTE_SCOPED_ADAPTERS = new Set([
   "30aluxury",
   "beachblue",
   "coastproperties30a",
+  "exclusive30a",
   "royaldestinations",
   "benchmark30a",
   "dunevr30a",
