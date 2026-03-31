@@ -27,6 +27,7 @@ type FiveStarDetailRecord = {
   detail_url: string;
   property_profile?: {
     unit_id?: string;
+    location_id?: string;
   };
 };
 
@@ -75,6 +76,7 @@ const MAX_LISTING_CONCURRENCY = 1;
 const MAX_RATE_LIMIT_RETRIES = 3;
 const RATE_LIMIT_BACKOFF_MS = 900;
 const DEFAULT_BASE_NIGHTLY_FALLBACK = 700;
+const DEFAULT_HANDOFF_LOCATION_ID = 1;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -231,6 +233,7 @@ function toUnixSecondsAtUtcMidnight(isoDate: string): number {
 
 function buildCheckoutUrl(input: {
   unitId: string;
+  locationId: number;
   startDate: string;
   endDate: string;
   nights: number;
@@ -239,11 +242,26 @@ function buildCheckoutUrl(input: {
   const params = new URLSearchParams();
   params.set("id", input.unitId);
   params.set("quote", "yes");
+  params.set("locid", String(input.locationId));
   params.set("arr", String(toUnixSecondsAtUtcMidnight(input.startDate)));
   params.set("depart", String(toUnixSecondsAtUtcMidnight(input.endDate)));
   params.set("nights", String(input.nights));
   params.set("persons", String(input.persons));
   return `${BASE_HOST}/vacation-rentals/checkout/?${params.toString()}`;
+}
+
+function resolveCheckoutLocationId(detail: FiveStarDetailRecord): number {
+  const fromDetail = Number(detail.property_profile?.location_id ?? "");
+  if (Number.isInteger(fromDetail) && fromDetail > 0) {
+    return fromDetail;
+  }
+
+  const fromEnv = Number(process.env.FIVESTAR30A_HANDOFF_LOCID ?? "");
+  if (Number.isInteger(fromEnv) && fromEnv > 0) {
+    return fromEnv;
+  }
+
+  return DEFAULT_HANDOFF_LOCATION_ID;
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -388,6 +406,7 @@ async function listDetailFiles(detailsJsonDir: string): Promise<string[]> {
 async function fetchRouterQuote(input: {
   detailUrl: string;
   unitId: string;
+  locationId: number;
   startDate: string;
   endDate: string;
   adults: number;
@@ -418,6 +437,7 @@ async function fetchRouterQuote(input: {
     currency: "USD",
     handoffUrl: buildCheckoutUrl({
       unitId: input.unitId,
+      locationId: input.locationId,
       startDate: input.startDate,
       endDate: input.endDate,
       nights:
@@ -562,6 +582,7 @@ async function buildSidecarForListing(input: {
       `Missing property_profile.unit_id for listing ${detail.external_listing_id}`,
     );
   }
+  const locationId = resolveCheckoutLocationId(detail);
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const anchorDate = firstSaturdayOnOrAfter(todayIso);
@@ -579,6 +600,7 @@ async function buildSidecarForListing(input: {
       return fetchRouterQuote({
         detailUrl: detail.detail_url,
         unitId,
+        locationId,
         startDate,
         endDate,
         adults: input.options.adults,

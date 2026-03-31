@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 import { runFiveStar30aQuoteCli } from "./quotes/fivestar30a";
@@ -25,6 +26,13 @@ type RateRule = {
   dailyRate: number;
   weeklyRate: number;
   monthlyRate: number;
+};
+
+type BatchPricingEntry = {
+  unitId?: unknown;
+  isAvailable?: unknown;
+  rent?: unknown;
+  total?: unknown;
 };
 
 type ParsedRule = {
@@ -137,6 +145,7 @@ type FiveStarDetailRecord = DetailRecordBase & {
   };
   property_profile: {
     unit_id: string;
+    location_id: string;
     area: string;
     location: string;
     beds: number | null;
@@ -160,6 +169,10 @@ const OUTPUT_ROOT = resolve(
   "fivestar30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+const ROUTER_ENDPOINT =
+  "https://www.fivestargulfrentals.com/vacation-rentals/router/";
+const DEFAULT_DETERMINISTIC_RATE_QUERY_DAYS = 120;
+const DEFAULT_DETERMINISTIC_RATE_CONCURRENCY = 3;
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
@@ -362,6 +375,107 @@ function parseSlashDate(value: string): Date | null {
 
 function formatIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
+}
+
+function formatRouterDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-");
+  if (!year || !month || !day) {
+    return isoDate;
+  }
+  return `${year}-${Number(month)}-${Number(day)}`;
+}
+
+function addIsoDays(isoDate: string, delta: number): string {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + delta);
+  return formatIsoDate(date);
+}
+
+function normalizePositiveMoney(value: unknown): number | null {
+  const parsed = toFiniteNumber(value);
+  if (parsed === null || parsed <= 0) {
+    return null;
+  }
+
+  return Math.round(parsed * 100) / 100;
+}
+
+function readBatchPricingEntry(
+  payload: unknown,
+  unitId: string,
+): BatchPricingEntry | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const keyed = payload as Record<string, unknown>;
+  const fromKey = keyed[unitId];
+  if (fromKey && typeof fromKey === "object") {
+    return fromKey as BatchPricingEntry;
+  }
+
+  for (const value of Object.values(keyed)) {
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+
+    const candidate = value as BatchPricingEntry;
+    const candidateUnitId = String(candidate.unitId ?? "").trim();
+    if (candidateUnitId === unitId) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+async function fetchDeterministicDailyRate(input: {
+  unitId: string;
+  detailUrl: string;
+  startDateIso: string;
+}): Promise<number | null> {
+  const endDateIso = addIsoDays(input.startDateIso, 1);
+
+  const response = await fetch(ROUTER_ENDPOINT, {
+    method: "POST",
+    headers: {
+      accept: "application/json, text/plain, */*",
+      "content-type": "application/json;charset=UTF-8",
+      origin: "https://www.fivestargulfrentals.com",
+      referer: input.detailUrl,
+      "user-agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    },
+    body: JSON.stringify({
+      call: "getBatchPricing",
+      arrive_date: formatRouterDate(input.startDateIso),
+      depart_date: formatRouterDate(endDateIso),
+      unitIdsArray: [input.unitId],
+    }),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  let payload: unknown;
+  try {
+    payload = (await response.json()) as unknown;
+  } catch {
+    return null;
+  }
+
+  const entry = readBatchPricingEntry(payload, input.unitId);
+  if (!entry) {
+    return null;
+  }
+
+  const availability = String(entry.isAvailable ?? "").toLowerCase();
+  if (availability === "false" || availability === "0") {
+    return null;
+  }
+
+  return normalizePositiveMoney(entry.rent);
 }
 
 function readJsonObjectAfterKey<T extends object>(
@@ -921,12 +1035,15 @@ async function fetchDetail(
       ).length,
     };
 
-    const availabilityByDate = new Map(
-      normalizedDays.map((day) => [day.date, day.status_code]),
-    );
+    const rateMap = new Map<
+      string,
+      {
+        nightly_rate: number | null;
+        min_nights: number | null;
+        season_name: string;
+      }
+    >();
 
-    const normalizedRateDays: FiveStarDetailRecord["normalized_rates"]["days"] =
-      [];
     for (const rateRule of rateRules) {
       const start = parseSlashDate(rateRule.startDate);
       const end = parseSlashDate(rateRule.endDate);
@@ -946,18 +1063,90 @@ async function fetchDetail(
       const cursorRate = new Date(start);
       while (cursorRate <= end) {
         const isoDate = formatIsoDate(cursorRate);
-        const statusCode = availabilityByDate.get(isoDate) ?? "X";
-        normalizedRateDays.push({
-          date: isoDate,
+        rateMap.set(isoDate, {
           nightly_rate: dailyRate,
           min_nights: minNights,
-          is_booked: statusCode === "U",
-          changeover_code: statusCode,
-          season_name: "default",
+          season_name: "embedded_rates",
         });
         cursorRate.setUTCDate(cursorRate.getUTCDate() + 1);
       }
     }
+
+    const deterministicRateWindowDays = Math.max(
+      0,
+      Number(
+        process.env.FIVESTAR30A_DETERMINISTIC_RATE_QUERY_DAYS ??
+          String(DEFAULT_DETERMINISTIC_RATE_QUERY_DAYS),
+      ) || DEFAULT_DETERMINISTIC_RATE_QUERY_DAYS,
+    );
+    const deterministicRateConcurrency = Math.max(
+      1,
+      Number(
+        process.env.FIVESTAR30A_DETERMINISTIC_RATE_CONCURRENCY ??
+          String(DEFAULT_DETERMINISTIC_RATE_CONCURRENCY),
+      ) || DEFAULT_DETERMINISTIC_RATE_CONCURRENCY,
+    );
+
+    const embeddedCoverageFloor = Math.min(
+      normalizedDays.length,
+      deterministicRateWindowDays,
+      60,
+    );
+    const shouldUseDeterministicFallback =
+      deterministicRateWindowDays > 0 &&
+      (rateMap.size === 0 || rateMap.size < embeddedCoverageFloor);
+
+    if (shouldUseDeterministicFallback) {
+      const queryDays = normalizedDays
+        .slice(0, deterministicRateWindowDays)
+        .filter((day) => day.status_code !== "U")
+        .map((day) => day.date);
+
+      const deterministicResults = await runWithConcurrency(
+        queryDays,
+        deterministicRateConcurrency,
+        async (dateIso) => {
+          const nightlyRate = await fetchDeterministicDailyRate({
+            unitId: String(propDetails.unit_id ?? externalListingId),
+            detailUrl: normalizedDetailUrl,
+            startDateIso: dateIso,
+          });
+
+          return {
+            dateIso,
+            nightlyRate,
+          };
+        },
+      );
+
+      for (const result of deterministicResults) {
+        if (result.nightlyRate === null) {
+          continue;
+        }
+
+        const existing = rateMap.get(result.dateIso);
+        rateMap.set(result.dateIso, {
+          nightly_rate: result.nightlyRate,
+          min_nights:
+            existing?.min_nights ??
+            resolveMinNightsForDate(result.dateIso, parsedRules),
+          season_name: "router_batch_pricing",
+        });
+      }
+    }
+
+    const normalizedRateDays: FiveStarDetailRecord["normalized_rates"]["days"] =
+      normalizedDays.map((day) => {
+        const derived = rateMap.get(day.date);
+        return {
+          date: day.date,
+          nightly_rate: derived?.nightly_rate ?? null,
+          min_nights: derived?.min_nights ?? day.min_nights_required,
+          is_booked: day.status_code === "U",
+          changeover_code: day.status_code,
+          season_name: derived?.season_name ?? "default",
+        };
+      });
 
     normalizedRateDays.sort((left, right) =>
       left.date.localeCompare(right.date),
@@ -1249,6 +1438,7 @@ async function fetchDetail(
       },
       property_profile: {
         unit_id: String(propDetails.unit_id ?? externalListingId),
+        location_id: String(propDetails.location_id ?? ""),
         area: String(propDetails.area ?? ""),
         location: String(propDetails.location ?? ""),
         beds: Number.isFinite(Number(propDetails.bed))
