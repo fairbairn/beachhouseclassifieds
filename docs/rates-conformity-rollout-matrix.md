@@ -1,6 +1,6 @@
 # Rates Conformity Rollout Matrix
 
-Last updated: 2026-03-30T14:38:30Z
+Last updated: 2026-03-31T00:36:00Z
 
 This matrix maps each adapter to the data needed to satisfy [rates-conformity-contract.md](./rates-conformity-contract.md).
 
@@ -42,7 +42,7 @@ This matrix maps each adapter to the data needed to satisfy [rates-conformity-co
 | stayon30a               | streamline      | no               | yes                     | assumptions_only  | detail_fallback | none        | [ ]     | probe `GetPreReservationPrice` and checkout URL signature                                                                                              |
 | sandersbeach30a         | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + handoff URL template                                                                                                         |
 | oversee30a              | custom_hybrid   | no               | yes                     | assumptions_only  | detail_fallback | none        | [ ]     | identify quote-capable endpoint and normalization rules                                                                                                |
-| fivestar30a             | custom_hybrid   | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | capture quote/checkout flow + assumptions samples                                                                                                      |
+| fivestar30a             | custom_hybrid   | yes              | no                      | quote_window_avg  | template_url    | seeded      | [x]     | full quote + pricing runtime pass complete (62/62); next tighten assumptions sample depth and optionally add deterministic daily-rates endpoint         |
 | panhandle30a            | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint and URL signature                                                                                                              |
 | scenicstays30a          | streamline      | no               | yes                     | listing_daily     | template_url    | none        | [ ]     | add explicit quote fallback policy and assumptions refresh                                                                                             |
 | localvr30a              | guesty          | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | probe Guesty quote endpoints + handoff signature mapping                                                                                               |

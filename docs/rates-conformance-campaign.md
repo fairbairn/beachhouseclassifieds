@@ -33,7 +33,7 @@ Prepare all adapters for rates-required conformance by completing adapter-level 
 |   14 | stayon30a               |    78 |     0 |  78 | needs_rates | no               | yes                     | no               | streamline      | Probe wp-admin streamline methods first (GetPropertyRates or GetPropertyRatesRawData), then map response days to normalized_rates.                                                                                                                        |
 |   15 | sandersbeach30a         |    73 |     0 |  73 | needs_rates | no               | no                      | no               | track_bluetent  | Probe Track/Bluetent router and booking endpoints for daily or season rates; fallback to DOM rates table if API unavailable.                                                                                                                              |
 |   16 | oversee30a              |    67 |     0 |  67 | needs_rates | no               | yes                     | no               | custom_hybrid   | Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics.                                                                                                               |
-|   17 | fivestar30a             |    62 |    62 |   0 | complete    | no               | no                      | no               | custom_hybrid   | Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics.                                                                                                               |
+|   17 | fivestar30a             |    62 |    62 |   0 | in_progress | no               | no                      | yes              | custom_hybrid   | `/vacation-rentals/router/` (`call=getPrice`) quote contract now integrated and validated end-to-end (62/62 quote sidecars + pricing cache + validator pass). Remaining gap: deterministic daily-rates path for `normalized_rates` parity.              |
 |   18 | panhandle30a            |    51 |     0 |  51 | needs_rates | no               | no                      | no               | track_bluetent  | Probe Track/Bluetent router and booking endpoints for daily or season rates; fallback to DOM rates table if API unavailable.                                                                                                                              |
 |   19 | scenicstays30a          |    44 |    44 |   0 | complete    | yes              | yes                     | no               | streamline      | Probe wp-admin streamline methods first (GetPropertyRates or GetPropertyRatesRawData), then map response days to normalized_rates.                                                                                                                        |
 |   20 | localvr30a              |    42 |     0 |  42 | needs_rates | no               | no                      | no               | guesty          | Probe Guesty property/quote endpoints for nightly pricing payloads; align date windows with normalized_availability horizon.                                                                                                                              |
@@ -87,6 +87,11 @@ Prepare all adapters for rates-required conformance by completing adapter-level 
   - Coverage after refresh audit: normalized rates 169/169, rates raw observations 169/169
   - Listing pricing cache generated for all 169 listings under `details/pricing/*.json` plus `details/pricing/index.json`
   - Current readiness hardening gap: assumptions sample depth remains 1
+- fivestar30a quote flow is now wired and operational:
+  - Direct quote endpoint validated: `POST /vacation-rentals/router/` with `call=getPrice`
+  - Full quote capture complete: 62 listings x 24 weekly windows
+  - Listing pricing cache generated for all 62 listings under `details/pricing/*.json` plus `details/pricing/index.json`
+  - Strict quote validation pass: 62 validated, 0 failed
 
 ## Campaign Summary
 

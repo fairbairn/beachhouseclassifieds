@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runFiveStar30aQuoteCli } from "./quotes/fivestar30a";
 
 type FiveStarDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -1299,6 +1301,13 @@ export function createFiveStar30AAdapter(): ScraperAdapter<FiveStarDetailRecord>
     },
     async fetchDetail(context) {
       return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "fivestar30a",
+        argv,
+      );
+      await runFiveStar30aQuoteCli(normalizedArgs, progress);
     },
   };
 }
