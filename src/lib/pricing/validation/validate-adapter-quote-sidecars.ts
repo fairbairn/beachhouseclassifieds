@@ -1,6 +1,9 @@
+import { Chalk } from "chalk";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+
+const chalk = new Chalk({ level: 1 });
 
 import type { CanonicalQuotesSidecarRecord } from "@/lib/pricing/contracts/quote-observations-contract";
 import {
@@ -91,17 +94,25 @@ async function collectQuoteFiles(
 
 function printFailureSummary(failures: ListingValidationFailure[]): void {
   for (const failure of failures.slice(0, 25)) {
-    console.error(`listing=${failure.listingId} file=${failure.fileName}`);
+    console.error(
+      `${chalk.red("listing=")}${chalk.bold(failure.listingId)} ${chalk.red("file=")}${chalk.bold(failure.fileName)}`,
+    );
     for (const issue of failure.issues.slice(0, 12)) {
-      console.error(`  - [${issue.code}] ${issue.message}`);
+      console.error(
+        `  ${chalk.red("-")} ${chalk.yellow(`[${issue.code}]`)} ${issue.message}`,
+      );
     }
     if (failure.issues.length > 12) {
-      console.error(`  - ... ${failure.issues.length - 12} more issue(s)`);
+      console.error(
+        `  ${chalk.yellow("-")} ... ${failure.issues.length - 12} more issue(s)`,
+      );
     }
   }
 
   if (failures.length > 25) {
-    console.error(`... ${failures.length - 25} more failing listing(s)`);
+    console.error(
+      chalk.yellow(`... ${failures.length - 25} more failing listing(s)`),
+    );
   }
 }
 
@@ -179,14 +190,18 @@ export async function runValidateAdapterQuoteSidecarsCli(
 
   if (failed > 0) {
     console.error(
-      `Quote validator failed for adapter=${options.adapterKey} validated=${validated} failed=${failed}`,
+      chalk.red(
+        `Quote validator failed for adapter=${options.adapterKey} validated=${validated} failed=${failed}`,
+      ),
     );
     printFailureSummary(failures);
     return 1;
   }
 
   console.log(
-    `Quote validator passed for adapter=${options.adapterKey} validated=${validated} failed=0`,
+    chalk.green(
+      `Quote validator passed for adapter=${options.adapterKey} validated=${validated} failed=0`,
+    ),
   );
   return 0;
 }

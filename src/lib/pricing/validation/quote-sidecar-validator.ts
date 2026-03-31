@@ -12,9 +12,13 @@ export type QuoteValidationIssue = {
 export type QuoteValidationOptions = {
   requireNonNullPricingFields?: boolean;
   expectedNights?: number;
+  minimumMaxQueries?: number;
+  minimumObservationCount?: number;
 };
 
 const DEFAULT_EXPECTED_NIGHTS = 7;
+const DEFAULT_MINIMUM_MAX_QUERIES = 24;
+const DEFAULT_MINIMUM_OBSERVATION_COUNT = 24;
 
 function addDays(isoDate: string, days: number): string {
   const date = new Date(`${isoDate}T00:00:00.000Z`);
@@ -133,6 +137,10 @@ export function validateCanonicalQuoteSidecar(
 ): QuoteValidationIssue[] {
   const issues: QuoteValidationIssue[] = [];
   const expectedNights = options.expectedNights ?? DEFAULT_EXPECTED_NIGHTS;
+  const minimumMaxQueries =
+    options.minimumMaxQueries ?? DEFAULT_MINIMUM_MAX_QUERIES;
+  const minimumObservationCount =
+    options.minimumObservationCount ?? DEFAULT_MINIMUM_OBSERVATION_COUNT;
   const requireNonNullPricingFields =
     options.requireNonNullPricingFields ?? true;
 
@@ -150,6 +158,28 @@ export function validateCanonicalQuoteSidecar(
   const observations = [...sidecar.observations].sort((left, right) =>
     left.start_date.localeCompare(right.start_date),
   );
+
+  if (sidecar.quote_nights !== expectedNights) {
+    issues.push({
+      code: "invalid_quote_nights",
+      message: `quote_nights must equal ${expectedNights}`,
+    });
+  }
+
+  const quoteMaxQueries = sidecar.quote_max_queries;
+  if (!isFiniteNumber(quoteMaxQueries) || quoteMaxQueries < minimumMaxQueries) {
+    issues.push({
+      code: "invalid_quote_max_queries",
+      message: `quote_max_queries must be >= ${minimumMaxQueries}`,
+    });
+  }
+
+  if (observations.length < minimumObservationCount) {
+    issues.push({
+      code: "invalid_observation_count",
+      message: `observations must contain at least ${minimumObservationCount} attempted records`,
+    });
+  }
 
   if (observations.length === 0) {
     issues.push({

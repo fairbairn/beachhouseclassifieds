@@ -7,8 +7,10 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runKeyco30aQuoteCli } from "./quotes/keyco30a";
 
 type KeycoDayCode = "A" | "U" | "M" | "X";
 
@@ -3001,6 +3003,13 @@ export function createKeyco30AAdapter(): ScraperAdapter<KeycoDetailRecord> {
         context.existingDetailJsonPath,
         context.reportDetailProgress,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "keyco30a",
+        argv,
+      );
+      await runKeyco30aQuoteCli(normalizedArgs, progress);
     },
   };
 }

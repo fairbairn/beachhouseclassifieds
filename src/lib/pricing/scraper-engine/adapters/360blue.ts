@@ -8,8 +8,10 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { run360BlueQuoteCli } from "./quotes/360blue";
 
 type BookingDayState = "bookable" | "blocked" | "unknown";
 
@@ -2217,6 +2219,13 @@ export function create360BlueAdapter(): ScraperAdapter<DetailRecord360Blue> {
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "360blue",
+        argv,
+      );
+      await run360BlueQuoteCli(normalizedArgs, progress);
     },
   };
 }

@@ -8,8 +8,10 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runThirtyAEscapesQuoteCli } from "./quotes/30aescapes";
 
 type EscapeDayCode = string;
 
@@ -2367,6 +2369,13 @@ export function create30AEscapesAdapter(): ScraperAdapter<EscapeDetailRecord> {
         context.existingDetailJsonPath,
         context.reportDetailProgress,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "30aescapes",
+        argv,
+      );
+      await runThirtyAEscapesQuoteCli(normalizedArgs, progress);
     },
   };
 }

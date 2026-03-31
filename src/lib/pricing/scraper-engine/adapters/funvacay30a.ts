@@ -3,8 +3,10 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runFunVacay30AQuoteCli } from "./quotes/funvacay30a";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -2430,6 +2432,13 @@ export function createFunVacay30AAdapter(): ScraperAdapter<LuxuryDetailRecord> {
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "funvacay30a",
+        argv,
+      );
+      await runFunVacay30AQuoteCli(normalizedArgs, progress);
     },
   };
 }
