@@ -2288,10 +2288,43 @@ async function fetchDetail(
       handoffUrl: string | null;
     }): EscapeRateObservation => {
       if (!input.quoteAvailable) {
-        const baseTotal = coerceMoney(input.baseTotal);
-        const taxesTotal = coerceMoney(input.taxesTotal);
-        const feesTotalExclTaxes = coerceMoney(input.feesTotalExclTaxes);
-        const grandTotal = coerceMoney(input.quotedTotal);
+        const sampledNightlyMedian = medianNumber(
+          Array.from(sampledNightlyByDate.values()),
+        );
+        const sourceNightly =
+          existingRateByDate.get(input.day.date) ??
+          sampledNightlyMedian ??
+          fallbackAnchorNightly;
+
+        const inferredBaseFromNightly = roundCurrency(
+          sourceNightly * input.nights,
+        );
+
+        let baseTotal = coerceMoney(input.baseTotal) ?? inferredBaseFromNightly;
+        let taxesTotal = coerceMoney(input.taxesTotal);
+        let feesTotalExclTaxes = coerceMoney(input.feesTotalExclTaxes);
+        let grandTotal = coerceMoney(input.quotedTotal);
+
+        if (baseTotal <= 0 && grandTotal !== null && grandTotal > 0) {
+          const divisor =
+            assumptionsSnapshot.avg_all_in_multiplier > 1
+              ? assumptionsSnapshot.avg_all_in_multiplier
+              : Math.max(1, 1 + fallbackTaxPct + fallbackFeePct);
+          baseTotal = roundCurrency(grandTotal / divisor);
+        }
+
+        if (taxesTotal === null) {
+          taxesTotal = roundCurrency(baseTotal * fallbackTaxPct);
+        }
+        if (feesTotalExclTaxes === null) {
+          feesTotalExclTaxes = roundCurrency(baseTotal * fallbackFeePct);
+        }
+        if (grandTotal === null) {
+          grandTotal = roundCurrency(
+            baseTotal + taxesTotal + feesTotalExclTaxes,
+          );
+        }
+
         const feePctOfBase = safeRatio(feesTotalExclTaxes, baseTotal);
         const taxPctOfBase = safeRatio(taxesTotal, baseTotal);
         const nonBasePctOfTotal = safeRatio(
@@ -2656,6 +2689,18 @@ async function fetchDetail(
           const capturedAt = new Date().toISOString();
           const nights = quoteNightsDefault;
           const endDate = addDaysToIsoDate(day.date, nights);
+          const estimatedBaseTotal = roundCurrency(
+            fallbackAnchorNightly * nights,
+          );
+          const estimatedTaxesTotal = roundCurrency(
+            estimatedBaseTotal * fallbackTaxPct,
+          );
+          const estimatedFeesTotal = roundCurrency(
+            estimatedBaseTotal * fallbackFeePct,
+          );
+          const estimatedGrandTotal = roundCurrency(
+            estimatedBaseTotal + estimatedTaxesTotal + estimatedFeesTotal,
+          );
 
           quoteObservations.push(
             completeObservation({
@@ -2666,11 +2711,11 @@ async function fetchDetail(
               quoteAvailable: false,
               quoteUnavailableReason:
                 "quote_unavailable_fallback_estimated_no_api_windows",
-              baseTotal: null,
-              taxesTotal: null,
-              feesTotalExclTaxes: null,
+              baseTotal: estimatedBaseTotal,
+              taxesTotal: estimatedTaxesTotal,
+              feesTotalExclTaxes: estimatedFeesTotal,
               feeLines: [],
-              quotedTotal: null,
+              quotedTotal: estimatedGrandTotal,
               handoffUrl: null,
             }),
           );

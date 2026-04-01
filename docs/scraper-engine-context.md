@@ -266,6 +266,54 @@ Run history is currently represented by:
 
 If we later add a dedicated history ledger, keep this document updated and keep legacy artifacts backward-compatible.
 
+## Platform Hints and Troubleshooting
+
+Use these adapter/platform hints when quote/handoff validation fails in ways that look transport-related instead of data-related.
+
+### Signed Handoff URLs (Marker Contract)
+
+Some adapters intentionally encode handoff request behavior in the URL hash fragment.
+
+Contract markers:
+
+- `method`
+- `contentType`
+- `payload`
+
+Example:
+
+- `https://www.callistavacations.com/api/nrbe/carts/create.json#method=POST&contentType=application%2Fjson&payload=...`
+
+Guidance:
+
+- Do not treat these marker URLs as plain GET endpoints.
+- Parse the hash markers and execute the specified request shape exactly.
+- Preserve backward compatibility: non-marker URLs continue using normal GET/query flow.
+
+### 360blue / Callista Handoff Behavior
+
+Observed behavior:
+
+- `create.json` returns `200` JSON (cart/session payload) rather than a direct HTML checkout page.
+- `/booking` depends on session state and redirects to home when state is missing.
+
+Resolution pattern:
+
+1. Execute signed `POST` from browser context (Playwright).
+2. Carry session forward by setting the cart/session references expected by the booking app (`nret[sessionId]` cookie and cart session payload).
+3. Navigate to `/booking` in the same browser context.
+4. Wait for hydration (`networkidle` + short settle delay).
+5. Read visible total from booking DOM (`#total-price`) for compliance checks.
+
+Diagnostic symptom:
+
+- Repeated `405` or home-page redirects in handoff validation usually indicate marker/session flow was bypassed.
+
+### LocalVR and 360blue Completion Notes
+
+- `localvr30a`: quote pricing validation passing (`42/42`) with pricing parity.
+- `360blue`: quote pricing validation passing (`592/592`) and handoff validation aligned to visible booking total path.
+
 ## New Adapter Checklist
 
 Before merging a new adapter:

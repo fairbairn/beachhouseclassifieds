@@ -17,6 +17,8 @@ const DEFAULT_CONCURRENCY = 4;
 const MAX_CONCURRENCY = 6;
 const DEFAULT_TOLERANCE = 1;
 const DEFAULT_HANDOFF_RETRY_DELAYS_MS = [0, 1000, 2500, 5000, 9000];
+const BEACHBLUE_NAVIGATION_TIMEOUT_MS = 8_000;
+const BEACHBLUE_AJAX_WAIT_TIMEOUT_MS = 15_000;
 
 let validationHttpActive = 0;
 let validationHttpLastStartMs = 0;
@@ -588,7 +590,9 @@ async function tryExtractSignedHandoffTotal(
     };
   }
 
-  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  // Beachblue checkout totals should render quickly after router/ajax hydration.
+  // Keep this path bounded and fail fast when #checkout-total is not present.
+  const retryDelaysMs = [0];
   const browser = await playwrightModule.chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ userAgent: USER_AGENT });
@@ -760,6 +764,192 @@ async function tryExtractSignedHandoffTotal(
     kind: "request_error",
     message:
       "signed handoff flow exhausted retries without visible #total-price on booking page",
+  };
+}
+
+async function tryExtractBeachblueCheckoutTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (
+    !parsed.hostname.endsWith("beachblueproperties.com") ||
+    !parsed.pathname.includes("/vacation-rentals/checkout/")
+  ) {
+    return { kind: "unsupported" };
+  }
+
+  const playwrightModule = await import("playwright").catch(() => null);
+  if (!playwrightModule?.chromium) {
+    return {
+      kind: "request_error",
+      message:
+        "playwright chromium unavailable for beachblue checkout validation",
+    };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const browser = await playwrightModule.chromium.launch({ headless: true });
+
+  const parseRouterAmount = (value: unknown): number | null => {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
+    }
+    if (typeof value === "string") {
+      return parseMoney(value);
+    }
+    return null;
+  };
+
+  const parseBeachblueRouterResult = (
+    payload: unknown,
+  ):
+    | { kind: "success"; total: number }
+    | { kind: "status_error"; message: string }
+    | null => {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    const record = payload as Record<string, unknown>;
+    const isAvailable = record.isAvailable === true;
+    const bookingTotal = parseRouterAmount(record.bookingTotal);
+
+    if (!isAvailable) {
+      const reason =
+        typeof record.errorMsg === "string" && record.errorMsg.trim().length > 0
+          ? record.errorMsg.trim()
+          : typeof record.apiError === "string" && record.apiError.trim().length > 0
+            ? record.apiError.trim()
+            : "beachblue router reported unavailable status";
+      return { kind: "status_error", message: reason };
+    }
+
+    if (bookingTotal !== null && bookingTotal > 0) {
+      return { kind: "success", total: bookingTotal };
+    }
+
+    return null;
+  };
+
+  try {
+    const context = await browser.newContext({ userAgent: USER_AGENT });
+    const page = await context.newPage();
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      let routerResult:
+        | { kind: "success"; total: number }
+        | { kind: "status_error"; message: string }
+        | null = null;
+
+      const onResponse = async (response: {
+        url(): string;
+        request(): { method(): string };
+        json(): Promise<unknown>;
+      }): Promise<void> => {
+        if (
+          !response.url().includes("/vacation-rentals/router/") ||
+          response.request().method() !== "POST"
+        ) {
+          return;
+        }
+
+        try {
+          const parsed = parseBeachblueRouterResult(await response.json());
+          if (parsed !== null) {
+            routerResult = parsed;
+          }
+        } catch {
+          // Ignore non-JSON router responses.
+        }
+      };
+      page.on("response", onResponse);
+
+      try {
+        await page.goto(candidate.handoffUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: BEACHBLUE_NAVIGATION_TIMEOUT_MS,
+        });
+      } catch (error: unknown) {
+        page.off("response", onResponse);
+        const message = error instanceof Error ? error.message : String(error);
+        reportProgress?.(
+          `beachblue checkout retry ${attempt + 1}/${retryDelaysMs.length} navigation_error=${message}`,
+        );
+        continue;
+      }
+
+      await page
+        .waitForSelector("#price-block, #checkout-total", {
+          timeout: BEACHBLUE_AJAX_WAIT_TIMEOUT_MS,
+        })
+        .catch(() => null);
+
+      const totalText = await page
+        .locator("#checkout-total")
+        .first()
+        .textContent()
+        .catch(() => null);
+
+      const parsedTotal = totalText ? parseMoney(totalText) : null;
+      if (parsedTotal !== null && parsedTotal > 0) {
+        page.off("response", onResponse);
+        return {
+          kind: "success",
+          total: parsedTotal,
+        };
+      }
+
+      if (routerResult?.kind === "success") {
+        page.off("response", onResponse);
+        return {
+          kind: "success",
+          total: routerResult.total,
+        };
+      }
+
+      if (routerResult?.kind === "status_error") {
+        page.off("response", onResponse);
+        return routerResult;
+      }
+
+      const warningText = await page
+        .locator("body")
+        .innerText()
+        .catch(() => "");
+      if (/unable to obtain current pricing/i.test(warningText)) {
+        page.off("response", onResponse);
+        return {
+          kind: "status_error",
+          message: "beachblue checkout page returned pricing unavailable warning",
+        };
+      }
+
+      page.off("response", onResponse);
+
+      reportProgress?.(
+        `beachblue checkout retry ${attempt + 1}/${retryDelaysMs.length} no #checkout-total after ${BEACHBLUE_AJAX_WAIT_TIMEOUT_MS}ms`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    kind: "request_error",
+    message:
+      "beachblue checkout total not rendered in #checkout-total after retries",
   };
 }
 
@@ -1449,6 +1639,42 @@ async function validateObservation(
       };
     }
     return null;
+  }
+
+  const beachblueCheckout = await tryExtractBeachblueCheckoutTotal(
+    candidate,
+    reportProgress,
+  );
+  if (beachblueCheckout.kind === "success") {
+    const diff = Math.abs(
+      beachblueCheckout.total - candidate.observedGrandTotal,
+    );
+    if (diff > tolerance) {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "grand_total_mismatch",
+        message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from beachblue checkout total=${beachblueCheckout.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+        extractedTotal: beachblueCheckout.total,
+      };
+    }
+    return null;
+  }
+
+  if (beachblueCheckout.kind === "request_error") {
+    return {
+      listingId: candidate.listingId,
+      startDate: candidate.startDate,
+      endDate: candidate.endDate,
+      observedGrandTotal: candidate.observedGrandTotal,
+      handoffUrl: candidate.handoffUrl,
+      code: "request_error",
+      message: `beachblue checkout extraction failed: ${beachblueCheckout.message}`,
+      extractedTotal: null,
+    };
   }
 
   if (escapesDirect.kind === "status_error") {
