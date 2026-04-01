@@ -12,6 +12,16 @@ Welcome to the docs site scaffold.
 
 - Add feature docs as separate markdown files in this folder.
 - Keep architecture and setup docs updated as the project evolves.
+- Use [Pricing and Conformance System Reference](./pricing-system-reference.md) as the hub for scrape, quote, cache, validation, and readiness workflows.
+- Use [Adapter Scrape and Extraction](./adapter-scrape-and-extraction.md) for how primary adapters discover, fetch, and normalize listing detail payloads.
+- Use [Quote Modules and Platform Strategy](./quote-modules-platform-strategy.md) for quote-sidecar behavior and stack-specific extraction strategy.
+- Use [Pricing Cache Builder](./pricing-cache-builder.md) for cache inputs, interpolation policy, and parity outputs.
+- Use [Quote Validator](./quote-validator.md) for sidecar enforcement rules and failure classes.
+- Use [Handoff Validator](./handoff-validator.md) for checkout parity validation paths, pacing, and retry behavior.
+- Use [Central Runner and Modular Adapters](./central-runner-and-modular-adapters.md) for shared-runtime versus adapter-module boundaries.
+- Use [Adapter Catalog and Platform Differences](./adapter-catalog-and-platform-differences.md) for family-level targeting differences.
+- Use [Known Peculiarities and Workarounds](./known-peculiarities-and-workarounds.md) for known issues and proven mitigations.
+- Use [Ready Roadmap](./ready-roadmap.md) for the ongoing plan to move remaining adapters to Ready status.
 - See the manager target reference at [Target 30A Property Managers](./target-property-managers-30a.md).
 - Use [Scraper New Session Context](./scraper-new-session-context.md) to start a fresh chat with current progress, standards, and next steps.
 - Use [Scraper Adapter Pattern Playbook](./scraper-adapter-pattern-playbook.md) for platform clues, probe attack vectors, and reusable extraction strategies.
