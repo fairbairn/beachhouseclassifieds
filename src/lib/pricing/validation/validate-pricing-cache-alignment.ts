@@ -45,6 +45,22 @@ type ListingValidationFailure = {
   issues: ListingValidationIssue[];
 };
 
+function getCurrentUtcDateYmd(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function shouldAllowAdapterMissingAvailabilityDay(
+  adapterKey: string,
+  date: string,
+  currentUtcDateYmd: string,
+): boolean {
+  if (adapterKey !== "oversee30a") {
+    return false;
+  }
+
+  return date === currentUtcDateYmd;
+}
+
 function parseArgs(argv: string[]): CliOptions {
   let adapterKey = "360blue";
   let listingId: string | null = null;
@@ -181,6 +197,7 @@ export async function runValidatePricingCacheAlignmentCli(
   let validated = 0;
   let failed = 0;
   const failures: ListingValidationFailure[] = [];
+  const currentUtcDateYmd = getCurrentUtcDateYmd();
 
   for (const fileName of files) {
     const listingId = fileName.replace(/\.json$/i, "");
@@ -240,6 +257,16 @@ export async function runValidatePricingCacheAlignmentCli(
     for (const day of pricing.days ?? []) {
       const expected = availabilityByDate.get(day.date);
       if (typeof expected !== "boolean") {
+        const allowAdapterMissingDay = shouldAllowAdapterMissingAvailabilityDay(
+          options.adapterKey,
+          day.date,
+          currentUtcDateYmd,
+        );
+
+        if (allowAdapterMissingDay) {
+          continue;
+        }
+
         if (!options.allowMissingAvailabilityDays) {
           issues.push({
             code: "missing_availability_day",

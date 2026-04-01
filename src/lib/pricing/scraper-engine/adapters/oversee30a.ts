@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { runOversee30aQuoteCli } from "./quotes/oversee30a";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type OverseeDayCode = "A" | "U" | "I" | "O" | "X";
@@ -131,7 +133,7 @@ type OverseeDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://oversee.us/vrp/search/results/?search%5Bbedrooms%5D=3&search%5Bshow%5D=15";
+  "https://oversee.us/vrp/search/results/?search%5Bmeta%5D%5Bnodeid%5D=5&search%5Bmeta%5D%5Bnodeid%5D=8&search%5Bmeta%5D%5Bnodeid%5D=4&search%5Bmeta%5D%5Bnodeid%5D=18&search%5Bmeta%5D%5Bnodeid%5D=14%7C15&search%5Bmeta%5D%5Bnodeid%5D=5%7C8%7C4%7C18%7C14%7C15&search%5BAdults%5D=1&search%5BChildren%5D=0&search%5BInfants%5D=0&search%5Bmeta%5D%5Bnodeid%5D=5&search%5Bmeta%5D%5Bnodeid%5D=8&search%5Bmeta%5D%5Bnodeid%5D=4&search%5Bmeta%5D%5Bnodeid%5D=18&search%5Bmeta%5D%5Bnodeid%5D=14%7C15&search%5Bmeta%5D%5Bnodeid%5D=5%7C8%7C4%7C18%7C14%7C15&search%5Bbedrooms%5D=3&search%5Bbathrooms%5D=1&search%5Bshowmax%5D=true&search%5BmetaOr%5D=0&search%5Bshow%5D=15&search%5Bsort%5D=random&search%5Battrs_exact%5D=1&search%5Bbedroom_exact%5D=0&search%5Bbathroom_exact%5D=0&search%5Bflexdays%5D=0&search%5Border%5D=10";
 const OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
@@ -1068,6 +1070,13 @@ export function createOversee30AAdapter(): ScraperAdapter<OverseeDetailRecord> {
     },
     async fetchDetail(context) {
       return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "oversee30a",
+        argv,
+      );
+      await runOversee30aQuoteCli(normalizedArgs, progress);
     },
   };
 }

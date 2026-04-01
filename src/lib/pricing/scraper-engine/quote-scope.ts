@@ -14,6 +14,7 @@ const QUOTE_SCOPED_ADAPTERS = new Set([
   "fivestar30a",
   "keyco30a",
   "oceanreef30a",
+  "oversee30a",
   "realjoy30a",
 ]);
 

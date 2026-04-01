@@ -1394,6 +1394,85 @@ async function tryExtractOceanreefDirectTotal(
   }
 }
 
+async function tryExtractOverseeStep3Total(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (
+    !parsed.hostname.endsWith("oversee.us") ||
+    !parsed.pathname.includes("/vrp/book/step3/")
+  ) {
+    return { kind: "unsupported" };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+
+  try {
+    const responseResult = await fetchWithRetry({
+      url: candidate.handoffUrl,
+      init: {
+        headers: {
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "user-agent": USER_AGENT,
+          referer: candidate.detailUrl,
+        },
+      },
+      retryDelaysMs,
+      reportProgress,
+      retryLabel: "oversee step3 page",
+    });
+
+    if (!responseResult.ok) {
+      return { kind: "request_error", message: responseResult.message };
+    }
+
+    const html = await responseResult.response.text();
+    const reservationTotalMatch = html.match(
+      /Reservation\s*Total:\s*<\/td>\s*<td[^>]*>\$\s*([0-9,]+(?:\.[0-9]{2})?)/i,
+    );
+    if (reservationTotalMatch?.[1]) {
+      const total = parseMoney(reservationTotalMatch[1]);
+      if (total !== null && total > 0) {
+        return { kind: "success", total };
+      }
+    }
+
+    // Fallback in case the table markup shifts but label text remains.
+    const flattened = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ");
+    const textMatch = flattened.match(
+      /Reservation\s*Total:\s*\$\s*([0-9,]+(?:\.[0-9]{2})?)/i,
+    );
+    if (textMatch?.[1]) {
+      const total = parseMoney(textMatch[1]);
+      if (total !== null && total > 0) {
+        return { kind: "success", total };
+      }
+    }
+
+    return {
+      kind: "request_error",
+      message: "oversee step3 payload missing Reservation Total",
+    };
+  } catch (error: unknown) {
+    return {
+      kind: "request_error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function tryExtractDirectStreamlineTotal(
   candidate: ObservationCandidate,
   reportProgress?: ObservationProgressReporter,
@@ -1944,6 +2023,43 @@ async function validateObservation(
         handoffUrl: candidate.handoffUrl,
         code: "request_error",
         message: `oceanreef pricesummary extraction failed: ${oceanreefDirect.message}`,
+        extractedTotal: null,
+      };
+    }
+  }
+
+  if (candidate.adapterKey === "oversee30a") {
+    const overseeDirect = await tryExtractOverseeStep3Total(
+      candidate,
+      reportProgress,
+    );
+
+    if (overseeDirect.kind === "success") {
+      const diff = Math.abs(overseeDirect.total - candidate.observedGrandTotal);
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from oversee step3 total=${overseeDirect.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: overseeDirect.total,
+        };
+      }
+      return null;
+    }
+
+    if (overseeDirect.kind === "request_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "request_error",
+        message: `oversee step3 extraction failed: ${overseeDirect.message}`,
         extractedTotal: null,
       };
     }
