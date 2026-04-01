@@ -1,6 +1,6 @@
 # Rates Conformity Rollout Matrix
 
-Last updated: 2026-04-01T01:39:30Z
+Last updated: 2026-04-01T12:42:21Z
 
 This matrix maps each adapter to the data needed to satisfy [rates-conformity-contract.md](./rates-conformity-contract.md).
 
@@ -46,7 +46,7 @@ This matrix maps each adapter to the data needed to satisfy [rates-conformity-co
 | panhandle30a            | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint and URL signature                                                                                                                                                          |
 | scenicstays30a          | streamline      | no               | yes                     | listing_daily     | template_url    | none        | [ ]     | add explicit quote fallback policy and assumptions refresh                                                                                                                                         |
 | localvr30a              | guesty          | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | probe Guesty quote endpoints + handoff signature mapping                                                                                                                                           |
-| funvacay30a             | track_bluetent  | yes              | no                      | quote_window_avg  | template_url    | none        | [ ]     | normalize quote-only path and assumptions blending                                                                                                                                                 |
+| funvacay30a             | track_bluetent  | yes              | no                      | quote_window_avg  | template_url    | ready       | [x]     | full adapter requote complete (40 listings), quote validator passing (40/40), pricing cache rebuilt (40 records), and handoff alignment passing (521/521); keep assumptions blending tuned over time |
 | stayat30a               | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + checkout URL signature                                                                                                                                                   |
 | grayt30a                | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + checkout URL signature                                                                                                                                                   |
 | coastproperties30a      | streamline      | no               | yes                     | listing_daily     | template_url    | none        | [ ]     | add assumptions samples + handoff signature validation                                                                                                                                             |
