@@ -178,6 +178,8 @@
     "pricing:validate:handoff:all": "npm run pricing:validate:handoff:all:raw --",
     "pricing:validate:handoff:render:raw": "tsx src/lib/scripts/run-quote-handoff-render-sample.ts",
     "pricing:validate:handoff:render": "npm run pricing:validate:handoff:render:raw --",
+    "pricing:validate:cache:raw": "tsx src/lib/scripts/run-pricing-validation.ts",
+    "pricing:validate:cache": "npm run pricing:validate:cache:raw --",
     "pricing:validate:360blue:raw": "tsx src/lib/scripts/run-quote-validation.ts --adapter-key 360blue",
     "pricing:validate:360blue": "npm run pricing:validate:360blue:raw --",
     "pricing:validate:30aescapes:raw": "tsx src/lib/scripts/run-quote-validation.ts --adapter-key 30aescapes",

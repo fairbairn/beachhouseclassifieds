@@ -16,7 +16,7 @@ export async function runThirtyAEscapesQuoteCli(
   if (!hasFlag(normalizedArgv, "--detail-fetch-concurrency")) {
     const concurrency = Math.max(
       1,
-      Number(process.env.ESCAPES30A_QUOTE_DETAIL_FETCH_CONCURRENCY ?? "6") || 6,
+      Number(process.env.ESCAPES30A_QUOTE_DETAIL_FETCH_CONCURRENCY ?? "8") || 8,
     );
     normalizedArgv.push("--detail-fetch-concurrency", String(concurrency));
   }

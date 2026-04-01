@@ -3,6 +3,14 @@ import type { Browser, Page } from "playwright";
 
 export type ScraperRefreshMode = "full" | "dynamic" | "static";
 export type ScraperLogLevel = "default" | "debug";
+export type ScraperRunMode =
+  | "detail"
+  | "avail"
+  | "quote"
+  | "detail,avail"
+  | "detail,quote"
+  | "avail,quote"
+  | "detail,avail,quote";
 
 export type ScrapedLink = {
   link: string;
@@ -24,10 +32,21 @@ export type RunOptions = {
   detailFetchConcurrency: number | null;
   detailFetchDelayMs: number | null;
   detailTimeoutMs: number;
+  detailRetryAttempts: number;
+  detailRetryDelayMs: number;
   skipExistingDetails: boolean;
   skipFreshDetails: boolean;
   freshHours: number;
   refreshMode: ScraperRefreshMode;
+  mode: ScraperRunMode;
+  availHorizonDays: number | null;
+  availMaxCalendarMonths: number | null;
+  quoteWindowDays: number | null;
+  quoteSampleStepDays: number | null;
+  quoteNights: number | null;
+  quoteMaxQueries: number | null;
+  quoteAnchorDate: string | null;
+  quoteObservationRetryDelaysMs: string | null;
   logLevel: ScraperLogLevel;
 };
 
@@ -53,6 +72,7 @@ export type FetchDetailContext = {
   availabilityHorizonDays: number;
   maxCalendarAdvanceMonths: number;
   refreshMode: ScraperRefreshMode;
+  mode: ScraperRunMode;
   existingDetailJsonPath?: string | null;
   reportDetailProgress?: (message: string) => void;
 };

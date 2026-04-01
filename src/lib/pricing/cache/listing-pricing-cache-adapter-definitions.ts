@@ -201,4 +201,15 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 700,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  localvr30a: {
+    adapterKey: "localvr30a",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.2,
+      avgTaxPct: 0.15,
+      avgAllInMultiplier: 1.35,
+    },
+    globalDefaultBaseNightly: 700,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
 };

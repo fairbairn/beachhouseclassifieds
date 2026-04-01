@@ -180,7 +180,7 @@ function runNpmScript(scriptRaw: string, args: string[]): Promise<void> {
 }
 
 function hasFlag(args: string[], flag: string): boolean {
-  return args.includes(flag);
+  return args.includes(flag) || args.some((arg) => arg.startsWith(`${flag}=`));
 }
 
 async function runWithEnv<T>(
@@ -231,6 +231,12 @@ export async function runLegacyAdapterQuoteViaEngine(
   }
 
   const engineArgs: string[] = ["--refresh-mode", options.refreshMode];
+  if (
+    !hasFlag(options.passthroughArgs, "--mode") &&
+    !hasFlag(options.passthroughArgs, "--run-mode")
+  ) {
+    engineArgs.push("--run-mode", "quote");
+  }
   if (options.listingId) {
     const detailUrl = await resolveDetailUrlByListingId(
       input.adapterKey,
@@ -254,7 +260,7 @@ export async function runLegacyAdapterQuoteViaEngine(
   if (!hasFlag(engineArgs, "--detail-fetch-concurrency")) {
     const fastConcurrency = Math.max(
       1,
-      Number(process.env.QUOTE_CAPTURE_DETAIL_FETCH_CONCURRENCY ?? "16") || 16,
+      Number(process.env.QUOTE_CAPTURE_DETAIL_FETCH_CONCURRENCY ?? "8") || 8,
     );
     engineArgs.push("--detail-fetch-concurrency", String(fastConcurrency));
   }

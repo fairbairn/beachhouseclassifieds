@@ -175,6 +175,63 @@ Common tuning flags:
 - `--detail-fetch-concurrency`
 - `--detail-fetch-delay-ms`
 
+## Runner CLI Contract
+
+The shared runner now uses prefixed flag families so mixed commands are unambiguous.
+
+### `run-*`
+
+- `--run-mode <detail|avail|quote|...>`
+- `--run-refresh-mode <full|dynamic|static>`
+- `--run-discover-only`
+
+Defaults:
+
+- `run-mode` defaults to `detail,avail`.
+- If `run-refresh-mode` is omitted:
+  - mode includes `quote` => defaults to `dynamic`
+  - mode excludes `quote` => defaults to `static`
+
+### `target-*`
+
+- `--target-detail-url <url>`
+- `--target-detail-urls-file <path>`
+- `--target-refresh-known`
+- `--target-max-listings <n>`
+- `--target-start-index <n>`
+
+Constraints:
+
+- `target-detail-url` cannot be combined with `target-detail-urls-file`, `target-refresh-known`, or `run-discover-only`.
+
+### `detail-*`
+
+- `--detail-fetch-concurrency <n>`
+- `--detail-fetch-delay-ms <n>`
+- `--detail-timeout-ms <n>`
+
+### `avail-*`
+
+- `--avail-horizon-days <n>`
+- `--avail-max-calendar-months <n>`
+
+### `quote-*`
+
+- `--quote-window-days <n>`
+- `--quote-sample-step-days <n>`
+- `--quote-nights <n>`
+- `--quote-max-queries <n>`
+- `--quote-anchor-date <YYYY-MM-DD>`
+- `--quote-observation-retry-delays-ms <csv>`
+
+Typed validation:
+
+- Numeric flags must be valid positive integers (delay flags allow non-negative values).
+- `quote-anchor-date` must match `YYYY-MM-DD`.
+- `quote-observation-retry-delays-ms` must be comma-separated non-negative integers.
+
+Backward-compatible aliases remain supported for existing scripts (`--mode`, `--refresh-mode`, `--detail-url`, `--detail-urls-file`, `--refresh-known`, `--discover-only`, `--max-listings`, `--start-index`, `--max-scroll-steps`, `--scroll-pause-ms`, `--network-idle-wait-ms`).
+
 ## Exclusion Lifecycle Policy
 
 Use exclusion lifecycle files per adapter to avoid permanent hard-coded excludes:

@@ -14,6 +14,7 @@ const USER_AGENT =
 
 const DEFAULT_MAX_OBSERVATIONS = 4;
 const DEFAULT_CONCURRENCY = 4;
+const MAX_CONCURRENCY = 6;
 const DEFAULT_TOLERANCE = 1;
 const DEFAULT_HANDOFF_RETRY_DELAYS_MS = [0, 1000, 2500, 5000, 9000];
 
@@ -125,7 +126,10 @@ function parseArgs(argv: string[]): CliOptions {
     if (arg === "--concurrency" && value) {
       const parsed = Number(value);
       if (Number.isFinite(parsed) && parsed > 0) {
-        concurrency = Math.max(1, Math.floor(parsed));
+        concurrency = Math.min(
+          MAX_CONCURRENCY,
+          Math.max(1, Math.floor(parsed)),
+        );
       }
       index += 1;
       continue;
@@ -295,7 +299,7 @@ function getValidationHttpConcurrencyLimit(): number {
   if (!Number.isFinite(parsed) || parsed < 1) {
     return 3;
   }
-  return Math.floor(parsed);
+  return Math.min(MAX_CONCURRENCY, Math.floor(parsed));
 }
 
 function getValidationHttpMinGapMs(): number {
@@ -463,6 +467,300 @@ function collectSetCookieValues(headers: Headers): string[] {
 
   const joined = headers.get("set-cookie") ?? "";
   return parseSetCookieHeader(joined);
+}
+
+type SignedHandoffSpec = {
+  requestUrl: string;
+  method: string;
+  contentType: string | null;
+  payload: string | null;
+};
+
+function parseSignedHandoffSpec(handoffUrl: string): SignedHandoffSpec | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(handoffUrl);
+  } catch {
+    return null;
+  }
+
+  const hash = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+  if (!hash) {
+    return null;
+  }
+
+  const hashParams = new URLSearchParams(hash);
+  const methodRaw = hashParams.get("method")?.trim() ?? "";
+  const payloadRaw = hashParams.get("payload");
+
+  if (!methodRaw || !payloadRaw) {
+    return null;
+  }
+
+  const method = methodRaw.toUpperCase();
+  const contentType = hashParams.get("contentType")?.trim() ?? null;
+  const requestUrl = `${parsed.origin}${parsed.pathname}${parsed.search}`;
+
+  return {
+    requestUrl,
+    method,
+    contentType,
+    payload: payloadRaw,
+  };
+}
+
+function findFirstUrlInJsonLikeText(text: string): string | null {
+  const quotedUrlPattern =
+    /"(?:redirect(?:_url|Url)?|url|booking(?:_url|Url)?|checkout(?:_url|Url)?)"\s*:\s*"([^"\n]+)"/i;
+  const quotedMatch = text.match(quotedUrlPattern);
+  if (quotedMatch?.[1]) {
+    const normalized = quotedMatch[1].replace(/\\\//g, "/");
+    if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+      return normalized;
+    }
+    if (normalized.startsWith("/")) {
+      return normalized;
+    }
+  }
+
+  const bareUrlPattern = /(https?:\/\/[^\s"'<>]+)/i;
+  return text.match(bareUrlPattern)?.[1] ?? null;
+}
+
+function parseSignedHandoffTotalFromJsonText(text: string): {
+  total: number;
+  baseTotal: number | null;
+  taxesTotal: number | null;
+} | null {
+  try {
+    const payload = JSON.parse(text) as Record<string, unknown>;
+    const total = Number(payload.total);
+    if (!Number.isFinite(total) || total <= 0) {
+      return null;
+    }
+
+    const subTotalRaw = Number(payload.subTotal);
+    const taxesRaw = Number(payload.taxes);
+
+    return {
+      total,
+      baseTotal: Number.isFinite(subTotalRaw) ? subTotalRaw : null,
+      taxesTotal: Number.isFinite(taxesRaw) ? taxesRaw : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseSignedHandoffCartStateFromJsonText(text: string): {
+  sessionId: string;
+  cart: Record<string, unknown>;
+} | null {
+  try {
+    const payload = JSON.parse(text) as Record<string, unknown>;
+    const sessionIdRaw = payload.sessionId;
+    if (typeof sessionIdRaw !== "string" || sessionIdRaw.trim().length === 0) {
+      return null;
+    }
+    return {
+      sessionId: sessionIdRaw.trim(),
+      cart: payload,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function tryExtractSignedHandoffTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  const spec = parseSignedHandoffSpec(candidate.handoffUrl);
+  if (!spec) {
+    return { kind: "unsupported" };
+  }
+
+  const playwrightModule = await import("playwright").catch(() => null);
+  if (!playwrightModule?.chromium) {
+    return {
+      kind: "request_error",
+      message: "playwright chromium unavailable for signed handoff validation",
+    };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const browser = await playwrightModule.chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ userAgent: USER_AGENT });
+    const page = await context.newPage();
+    const handoffOrigin = new URL(spec.requestUrl).origin;
+    const bookingUrl = new URL("/booking", spec.requestUrl).toString();
+
+    await page.goto(handoffOrigin, {
+      waitUntil: "domcontentloaded",
+      timeout: 120_000,
+    });
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      const postResult = await page.evaluate(
+        async ({ requestUrl, method, contentType, payload, referer }) => {
+          try {
+            const response = await fetch(requestUrl, {
+              method,
+              headers: {
+                accept: "application/json, text/plain, */*",
+                ...(contentType ? { "content-type": contentType } : {}),
+                origin: new URL(requestUrl).origin,
+                referer,
+              },
+              body: payload,
+              credentials: "include",
+            });
+            const text = await response.text();
+            return {
+              ok: true,
+              status: response.status,
+              text,
+            };
+          } catch (error) {
+            return {
+              ok: false,
+              status: 0,
+              text: String(error),
+            };
+          }
+        },
+        {
+          requestUrl: spec.requestUrl,
+          method: spec.method,
+          contentType: spec.contentType,
+          payload: spec.payload,
+          referer: candidate.detailUrl,
+        },
+      );
+
+      if (!postResult.ok) {
+        reportProgress?.(
+          `signed handoff request retry ${attempt + 1}/${retryDelaysMs.length} request_error=${postResult.text}`,
+        );
+        continue;
+      }
+
+      const postJsonTotals = parseSignedHandoffTotalFromJsonText(
+        postResult.text,
+      );
+      const postCartState = parseSignedHandoffCartStateFromJsonText(
+        postResult.text,
+      );
+      if (!postJsonTotals) {
+        reportProgress?.(
+          `signed handoff request retry ${attempt + 1}/${retryDelaysMs.length} missing quoted total in response status=${postResult.status}`,
+        );
+        continue;
+      }
+
+      if (postCartState) {
+        await page.evaluate((input) => {
+          document.cookie = `nret[sessionId]=${input.sessionId}; path=/`;
+          sessionStorage.setItem("cart", JSON.stringify(input.cart));
+        }, postCartState);
+      }
+
+      const pollDelaysMs = [0, 600, 1200, 2500, 5000, 9000];
+      for (let poll = 0; poll < pollDelaysMs.length; poll += 1) {
+        const pollDelay = pollDelaysMs[poll] ?? 0;
+        if (pollDelay > 0) {
+          await sleep(pollDelay);
+        }
+
+        try {
+          await page.goto(bookingUrl, {
+            waitUntil: "networkidle",
+            timeout: 120_000,
+          });
+          await page.waitForTimeout(1500);
+        } catch {
+          reportProgress?.(
+            `signed handoff booking poll ${poll + 1}/${pollDelaysMs.length} navigation_failed`,
+          );
+          continue;
+        }
+
+        const totalTexts = await page
+          .locator("#total-price")
+          .allInnerTexts()
+          .catch(() => []);
+        const parsedTotals = totalTexts
+          .map((text) => parseMoney(text))
+          .filter(
+            (value): value is number => typeof value === "number" && value > 0,
+          );
+        if (parsedTotals.length > 0) {
+          const best = parsedTotals.reduce(
+            (currentBest, candidateTotal) => {
+              if (currentBest === null) {
+                return candidateTotal;
+              }
+              const currentDiff = Math.abs(
+                currentBest - candidate.observedGrandTotal,
+              );
+              const candidateDiff = Math.abs(
+                candidateTotal - candidate.observedGrandTotal,
+              );
+              return candidateDiff < currentDiff ? candidateTotal : currentBest;
+            },
+            null as number | null,
+          );
+
+          if (best !== null) {
+            return {
+              kind: "success",
+              total: best,
+              baseTotal: postJsonTotals.baseTotal,
+              taxesTotal: postJsonTotals.taxesTotal,
+            };
+          }
+        }
+
+        const html = await page.content();
+        const match = html.match(
+          /id=["']total-price["'][^>]*>\s*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i,
+        );
+        if (match?.[1]) {
+          const visibleTotal = parseMoney(match[1]);
+          if (visibleTotal !== null && visibleTotal > 0) {
+            return {
+              kind: "success",
+              total: visibleTotal,
+              baseTotal: postJsonTotals.baseTotal,
+              taxesTotal: postJsonTotals.taxesTotal,
+            };
+          }
+        }
+
+        reportProgress?.(
+          `signed handoff booking poll ${poll + 1}/${pollDelaysMs.length} waiting for #total-price (url=${page.url()})`,
+        );
+      }
+
+      reportProgress?.(
+        `signed handoff retry ${attempt + 1}/${retryDelaysMs.length} no visible #total-price after booking load`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    kind: "request_error",
+    message:
+      "signed handoff flow exhausted retries without visible #total-price on booking page",
+  };
 }
 
 function extract30AEscapesAjaxPath(
@@ -1130,6 +1428,27 @@ async function validateObservation(
         extractedTotal: null,
       };
     }
+  }
+
+  const signedHandoff = await tryExtractSignedHandoffTotal(
+    candidate,
+    reportProgress,
+  );
+  if (signedHandoff.kind === "success") {
+    const diff = Math.abs(signedHandoff.total - candidate.observedGrandTotal);
+    if (diff > tolerance) {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "grand_total_mismatch",
+        message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from signed handoff total=${signedHandoff.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+        extractedTotal: signedHandoff.total,
+      };
+    }
+    return null;
   }
 
   if (escapesDirect.kind === "status_error") {

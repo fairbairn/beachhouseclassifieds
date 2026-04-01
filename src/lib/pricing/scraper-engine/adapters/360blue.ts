@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
@@ -1161,6 +1161,16 @@ async function fetchDetail(
   detailUrl: string,
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
+  mode:
+    | "detail"
+    | "avail"
+    | "quote"
+    | "detail,avail"
+    | "detail,quote"
+    | "avail,quote"
+    | "detail,avail,quote",
+  existingDetailJsonPath?: string | null,
+  reportDetailProgress?: (message: string) => void,
 ): Promise<DetailRecord360Blue | null> {
   const externalListingId = extractExternalListingId(detailUrl);
   if (EXCLUDED_LISTING_IDS.has(externalListingId)) {
@@ -1335,9 +1345,16 @@ async function fetchDetail(
     const horizonIso = horizonDate.toISOString().slice(0, 10);
 
     const unitId = extracted.unitId?.trim() ?? "";
-    const bookingAvailabilityRows = /^\d+$/.test(unitId)
-      ? await fetchBookingAvailabilitySeries(page, unitId, todayIso, horizonIso)
-      : [];
+    const shouldUseBookingAvailabilityApi = mode !== "avail";
+    const bookingAvailabilityRows =
+      shouldUseBookingAvailabilityApi && /^\d+$/.test(unitId)
+        ? await fetchBookingAvailabilitySeries(
+            page,
+            unitId,
+            todayIso,
+            horizonIso,
+          )
+        : [];
     const bookingAvailabilityByDate = new Map(
       bookingAvailabilityRows.map((row) => [row.date, row]),
     );
@@ -1606,6 +1623,42 @@ async function fetchDetail(
           ).length,
         },
       };
+
+    if (mode === "avail") {
+      if (!existingDetailJsonPath) {
+        throw new Error(
+          `mode=avail requires existing detail artifact for ${externalListingId}`,
+        );
+      }
+
+      const existingRaw = await readFile(existingDetailJsonPath, "utf8");
+      const existingDetail = JSON.parse(existingRaw) as DetailRecord360Blue;
+      const nowIso = new Date().toISOString();
+      const extractionMs = Date.now() - extractionStartedAt;
+      const totalMs = Date.now() - fetchStartedAt;
+
+      return {
+        ...existingDetail,
+        external_listing_id: externalListingId,
+        detail_url: detailUrl,
+        fetched_at: nowIso,
+        normalized_availability: normalizedAvailability,
+        scrape_metrics: {
+          ...(existingDetail.scrape_metrics ?? {
+            total_ms: 0,
+            page_load_and_expand_ms: 0,
+            extraction_ms: 0,
+            calendar_pagination_clicks: 0,
+            calendar_iterations: 0,
+          }),
+          total_ms: totalMs,
+          page_load_and_expand_ms: pageLoadAndExpandMs,
+          extraction_ms: extractionMs,
+          calendar_pagination_clicks: calendarPageClicks,
+          calendar_iterations: calendarIterationsUsed,
+        },
+      };
+    }
 
     const ratesWindowDays = Math.max(
       168,
@@ -2171,7 +2224,9 @@ async function fetchDetail(
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`360blue fetchDetail failed for ${detailUrl}: ${message}`);
+    reportDetailProgress?.(
+      `detail ${externalListingId} fetchDetail failed: ${message}`,
+    );
     return null;
   } finally {
     await page.close();
@@ -2218,6 +2273,9 @@ export function create360BlueAdapter(): ScraperAdapter<DetailRecord360Blue> {
         context.detailUrl,
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
+        context.mode,
+        context.existingDetailJsonPath,
+        context.reportDetailProgress,
       );
     },
     async runQuoteCapture(argv, progress) {

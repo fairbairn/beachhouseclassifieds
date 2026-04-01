@@ -10,7 +10,32 @@ import type {
   ScrapedLink,
   ScraperAdapter,
   ScraperRefreshMode,
+  ScraperRunMode,
 } from "./types";
+
+const RUN_MODE_ORDER = ["detail", "avail", "quote"] as const;
+
+function normalizeMode(value: string): ScraperRunMode | null {
+  const tokens = value
+    .split(",")
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean);
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  const unique = new Set(tokens);
+  for (const token of unique) {
+    if (!RUN_MODE_ORDER.includes(token as (typeof RUN_MODE_ORDER)[number])) {
+      return null;
+    }
+  }
+
+  const canonical = RUN_MODE_ORDER.filter((token) => unique.has(token)).join(
+    ",",
+  );
+  return canonical as ScraperRunMode;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
@@ -51,26 +76,41 @@ function buildUsageText(defaultAnchorUrl: string): string {
     `Default anchor URL: ${defaultAnchorUrl}`,
     "",
     "Options:",
-    "  --detail-url <url>                 Scrape one detail URL and exit",
-    "  --detail-urls-file <path>          Refresh URLs listed in file (one URL per line)",
-    "  --refresh-known                     Refresh known URLs from existing artifacts",
-    "  --discover-only                     Discover links only (no detail pulls)",
-    "  --max-listings <n>                  Positive integer",
-    "  --start-index <n>                   Non-negative integer",
-    "  --max-scroll-steps <n>              Positive integer",
-    "  --scroll-pause-ms <n>               Positive integer",
-    "  --network-idle-wait-ms <n>          Positive integer",
+    "  --target-detail-url <url>          Scrape one detail URL and exit",
+    "  --target-detail-urls-file <path>   Refresh URLs listed in file (one URL per line)",
+    "  --target-refresh-known              Refresh known URLs from existing artifacts",
+    "  --run-discover-only                 Discover links only (no detail pulls)",
+    "  --target-max-listings <n>          Positive integer",
+    "  --target-start-index <n>           Non-negative integer",
+    "  --engine-scroll-steps <n>          Positive integer",
+    "  --engine-scroll-pause-ms <n>       Positive integer",
+    "  --engine-network-idle-wait-ms <n>  Positive integer",
     "  --detail-fetch-concurrency <n>      Positive integer",
     "  --detail-fetch-delay-ms <n>         Non-negative integer",
     "  --detail-timeout-ms <n>             Positive integer",
+    "  --detail-retry-attempts <n>         Non-negative integer (bounded retry passes)",
+    "  --detail-retry-delay-ms <n>         Non-negative integer (delay between retries)",
     "  --skip-existing-details             Skip pull when detail JSON already exists",
     "  --skip-fresh-details                Skip pull for fresh existing artifacts",
     "  --fresh-hours <n>                   Positive integer",
-    "  --refresh-mode <full|dynamic|static>",
+    "  --run-mode <detail|avail|quote|...> Data pull mode (canonical order detail,avail,quote)",
+    "  --run-refresh-mode <full|dynamic|static>",
+    "  --avail-horizon-days <n>            Override availability horizon days",
+    "  --avail-max-calendar-months <n>     Override availability calendar months",
+    "  --quote-window-days <n>             Override quote window days",
+    "  --quote-sample-step-days <n>        Override quote sample step days",
+    "  --quote-nights <n>                  Override quote nights",
+    "  --quote-max-queries <n>             Override quote sample count",
+    "  --quote-anchor-date <YYYY-MM-DD>    Override quote anchor date",
+    "  --quote-observation-retry-delays-ms <csv> Override quote retry delays",
+    "  --mode, --refresh-mode, --detail-url, --detail-urls-file,",
+    "  --refresh-known, --discover-only, --max-listings, --start-index,",
+    "  --max-scroll-steps, --scroll-pause-ms, --network-idle-wait-ms",
+    "                                   are supported as backward-compatible aliases.",
     "  --help                              Show this help",
     "",
     "Mode constraints:",
-    "  --detail-url cannot be combined with --detail-urls-file, --refresh-known, or --discover-only.",
+    "  --target-detail-url cannot be combined with --target-detail-urls-file, --target-refresh-known, or --run-discover-only.",
   ].join("\n");
 }
 
@@ -120,6 +160,21 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
     Number.isFinite(detailTimeoutFromEnv) && detailTimeoutFromEnv > 0
       ? Math.floor(detailTimeoutFromEnv)
       : 120000;
+  const detailRetryAttemptsFromEnv = Number(
+    process.env.SCRAPER_DETAIL_RETRY_ATTEMPTS ?? "1",
+  );
+  let detailRetryAttempts =
+    Number.isFinite(detailRetryAttemptsFromEnv) &&
+    detailRetryAttemptsFromEnv >= 0
+      ? Math.min(5, Math.floor(detailRetryAttemptsFromEnv))
+      : 1;
+  const detailRetryDelayFromEnv = Number(
+    process.env.SCRAPER_DETAIL_RETRY_DELAY_MS ?? "2000",
+  );
+  let detailRetryDelayMs =
+    Number.isFinite(detailRetryDelayFromEnv) && detailRetryDelayFromEnv >= 0
+      ? Math.floor(detailRetryDelayFromEnv)
+      : 2000;
   const skipExistingFromEnv =
     process.env.SCRAPER_SKIP_EXISTING_DETAILS === "1" ||
     process.env.SCRAPER_SKIP_EXISTING_DETAILS === "true";
@@ -130,6 +185,17 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       ? (process.env.SCRAPER_REFRESH_MODE as ScraperRefreshMode)
       : "full";
   let refreshMode: ScraperRefreshMode = refreshModeFromEnv;
+  let refreshModeExplicit = false;
+  const modeFromEnv = normalizeMode(process.env.SCRAPER_MODE ?? "");
+  let mode: ScraperRunMode = modeFromEnv ?? "detail,avail";
+  let availHorizonDays: number | null = null;
+  let availMaxCalendarMonths: number | null = null;
+  let quoteWindowDays: number | null = null;
+  let quoteSampleStepDays: number | null = null;
+  let quoteNights: number | null = null;
+  let quoteMaxQueries: number | null = null;
+  let quoteAnchorDate: string | null = null;
+  let quoteObservationRetryDelaysMs: string | null = null;
   const skipFreshFromEnv =
     process.env.SCRAPER_SKIP_FRESH_DETAILS === "1" ||
     process.env.SCRAPER_SKIP_FRESH_DETAILS === "true";
@@ -189,7 +255,7 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       throw new Error(buildUsageText(defaultAnchorUrl));
     }
 
-    if (arg === "--max-listings") {
+    if (arg === "--max-listings" || arg === "--target-max-listings") {
       const value = requireValue(argv, index, arg);
       if (value) {
         const parsed = parsePositiveInt(value, arg);
@@ -201,7 +267,7 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--start-index") {
+    if (arg === "--start-index" || arg === "--target-start-index") {
       const value = requireValue(argv, index, arg);
       if (value) {
         const parsed = parseNonNegativeInt(value, arg);
@@ -213,7 +279,7 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--detail-url") {
+    if (arg === "--detail-url" || arg === "--target-detail-url") {
       const value = requireValue(argv, index, arg);
       if (value) {
         detailUrl = value;
@@ -222,12 +288,12 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--discover-only") {
+    if (arg === "--discover-only" || arg === "--run-discover-only") {
       discoverOnly = true;
       continue;
     }
 
-    if (arg === "--detail-urls-file") {
+    if (arg === "--detail-urls-file" || arg === "--target-detail-urls-file") {
       const value = requireValue(argv, index, arg);
       if (value) {
         detailUrlsFile = value;
@@ -236,12 +302,12 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--refresh-known") {
+    if (arg === "--refresh-known" || arg === "--target-refresh-known") {
       refreshKnown = true;
       continue;
     }
 
-    if (arg === "--max-scroll-steps") {
+    if (arg === "--max-scroll-steps" || arg === "--engine-scroll-steps") {
       const value = requireValue(argv, index, arg);
       if (value) {
         const parsed = parsePositiveInt(value, arg);
@@ -253,7 +319,7 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--scroll-pause-ms") {
+    if (arg === "--scroll-pause-ms" || arg === "--engine-scroll-pause-ms") {
       const value = requireValue(argv, index, arg);
       if (value) {
         const parsed = parsePositiveInt(value, arg);
@@ -265,7 +331,10 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--network-idle-wait-ms") {
+    if (
+      arg === "--network-idle-wait-ms" ||
+      arg === "--engine-network-idle-wait-ms"
+    ) {
       const value = requireValue(argv, index, arg);
       if (value) {
         const parsed = parsePositiveInt(value, arg);
@@ -313,6 +382,30 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
+    if (arg === "--detail-retry-attempts") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parseNonNegativeInt(value, arg);
+        if (parsed !== null) {
+          detailRetryAttempts = Math.min(5, parsed);
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--detail-retry-delay-ms") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parseNonNegativeInt(value, arg);
+        if (parsed !== null) {
+          detailRetryDelayMs = parsed;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
     if (arg === "--skip-existing-details") {
       skipExistingDetails = true;
       continue;
@@ -335,16 +428,138 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
-    if (arg === "--refresh-mode") {
+    if (arg === "--refresh-mode" || arg === "--run-refresh-mode") {
       const value = requireValue(argv, index, arg);
       if (value) {
         if (value === "full" || value === "dynamic" || value === "static") {
           refreshMode = value;
+          refreshModeExplicit = true;
         } else {
           errors.push(
             `${arg} must be one of: full, dynamic, static. Received: ${value}`,
           );
         }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--mode" || arg === "--run-mode") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const normalized = normalizeMode(value);
+        if (normalized) {
+          mode = normalized;
+        } else {
+          errors.push(
+            `${arg} must be a comma-separated subset of: detail, avail, quote. Received: ${value}`,
+          );
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--detail-only") {
+      mode = "detail,avail";
+      continue;
+    }
+
+    if (arg === "--availability-only") {
+      mode = "avail";
+      continue;
+    }
+
+    if (arg === "--quote-only") {
+      mode = "quote";
+      continue;
+    }
+
+    if (arg === "--avail-horizon-days") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          availHorizonDays = parsed;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--avail-max-calendar-months") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          availMaxCalendarMonths = parsed;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-window-days") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          quoteWindowDays = parsed;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-sample-step-days") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          quoteSampleStepDays = parsed;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-nights") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          quoteNights = parsed;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-max-queries") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const parsed = parsePositiveInt(value, arg);
+        if (parsed !== null) {
+          quoteMaxQueries = parsed;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-anchor-date") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        quoteAnchorDate = value.trim();
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--quote-observation-retry-delays-ms") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        quoteObservationRetryDelaysMs = value.trim();
       }
       index += 1;
       continue;
@@ -360,8 +575,36 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
 
   if (detailUrl && (detailUrlsFile || refreshKnown || discoverOnly)) {
     errors.push(
-      "--detail-url cannot be combined with --detail-urls-file, --refresh-known, or --discover-only.",
+      "--target-detail-url cannot be combined with --target-detail-urls-file, --target-refresh-known, or --run-discover-only.",
     );
+  }
+
+  if (quoteAnchorDate && !/^\d{4}-\d{2}-\d{2}$/.test(quoteAnchorDate)) {
+    errors.push(
+      `--quote-anchor-date must be YYYY-MM-DD. Received: ${quoteAnchorDate}`,
+    );
+  }
+
+  if (quoteObservationRetryDelaysMs) {
+    const csvValid = quoteObservationRetryDelaysMs
+      .split(",")
+      .map((token) => token.trim())
+      .filter(Boolean)
+      .every((token) => /^\d+$/.test(token));
+    if (!csvValid) {
+      errors.push(
+        `--quote-observation-retry-delays-ms must be comma-separated non-negative integers. Received: ${quoteObservationRetryDelaysMs}`,
+      );
+    }
+  }
+
+  if (!refreshModeExplicit) {
+    if (mode.includes("quote")) {
+      refreshMode = "dynamic";
+    }
+    if (!mode.includes("quote")) {
+      refreshMode = "static";
+    }
   }
 
   if (errors.length > 0) {
@@ -385,10 +628,21 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
     detailFetchConcurrency,
     detailFetchDelayMs,
     detailTimeoutMs,
+    detailRetryAttempts,
+    detailRetryDelayMs,
     skipExistingDetails,
     skipFreshDetails,
     freshHours,
     refreshMode,
+    mode,
+    availHorizonDays,
+    availMaxCalendarMonths,
+    quoteWindowDays,
+    quoteSampleStepDays,
+    quoteNights,
+    quoteMaxQueries,
+    quoteAnchorDate,
+    quoteObservationRetryDelaysMs,
     logLevel: "default",
   };
 }
@@ -672,7 +926,12 @@ async function pullDetails<TDetail extends DetailRecordBase>(
   detailFetchConcurrency: number,
   detailFetchDelayMs: number,
   detailTimeoutMs: number,
+  detailRetryAttempts: number,
+  detailRetryDelayMs: number,
+  availabilityHorizonDays: number,
+  maxCalendarAdvanceMonths: number,
   refreshMode: ScraperRefreshMode,
+  mode: ScraperRunMode,
   existingArtifactsByUrl?: Map<string, ExistingDetailArtifact>,
 ): Promise<{
   detailRecords: TDetail[];
@@ -743,9 +1002,10 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       const fetchPromise = adapter.fetchDetail({
         browser,
         detailUrl,
-        availabilityHorizonDays: adapter.availabilityHorizonDays,
-        maxCalendarAdvanceMonths: adapter.maxCalendarAdvanceMonths,
+        availabilityHorizonDays,
+        maxCalendarAdvanceMonths,
         refreshMode,
+        mode,
         existingDetailJsonPath: existingArtifact?.jsonPath ?? null,
         reportDetailProgress: (message: string) => {
           progress.tick(message);
@@ -811,6 +1071,82 @@ async function pullDetails<TDetail extends DetailRecordBase>(
     detailRecords.push(detail);
   }
 
+  if (failedDetailUrls.length > 0 && detailRetryAttempts > 0) {
+    let pending = [...failedDetailUrls];
+    const recovered = new Set<string>();
+
+    for (
+      let attempt = 1;
+      attempt <= detailRetryAttempts && pending.length > 0;
+      attempt += 1
+    ) {
+      progress.phase(
+        `retrying failed details attempt=${attempt}/${detailRetryAttempts} pending=${pending.length}`,
+      );
+
+      const nextPending: string[] = [];
+      for (const detailUrl of pending) {
+        const existingArtifact = existingArtifactsByUrl?.get(detailUrl);
+        const fetchPromise = adapter.fetchDetail({
+          browser,
+          detailUrl,
+          availabilityHorizonDays,
+          maxCalendarAdvanceMonths,
+          refreshMode,
+          mode,
+          existingDetailJsonPath: existingArtifact?.jsonPath ?? null,
+          reportDetailProgress: (message: string) => {
+            progress.tick(message);
+          },
+        });
+
+        const timed = await runTimedDetailFetch(fetchPromise, detailTimeoutMs);
+        if (timed.timedOut || !timed.detail) {
+          nextPending.push(detailUrl);
+          progress.tick(
+            `retry detail failed attempt=${attempt} url=${detailUrl}`,
+          );
+        } else {
+          const detail = timed.detail;
+          const detailForStorage = {
+            ...detail,
+            html_path: toProjectRelativePath(detail.html_path, root),
+          };
+          const detailPath = resolve(
+            outputDetailsJsonDir,
+            `${detail.external_listing_id}.json`,
+          );
+          await writeTextFileDurable(
+            detailPath,
+            `${JSON.stringify(detailForStorage, null, 2)}\n`,
+          );
+          detailRecords.push(detail);
+          recovered.add(detailUrl);
+          progress.tick(
+            `retry detail recovered attempt=${attempt} url=${detailUrl}`,
+          );
+        }
+
+        if (detailRetryDelayMs > 0) {
+          await sleep(detailRetryDelayMs);
+        }
+      }
+
+      pending = nextPending;
+    }
+
+    if (recovered.size > 0) {
+      failedDetailUrls.splice(
+        0,
+        failedDetailUrls.length,
+        ...failedDetailUrls.filter((url) => !recovered.has(url)),
+      );
+      progress.info(
+        `detail retry summary: recovered=${recovered.size}, remaining_failed=${failedDetailUrls.length}`,
+      );
+    }
+  }
+
   return { detailRecords, failedDetailUrls };
 }
 
@@ -823,14 +1159,47 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
   const isRefreshOperation =
     options.refreshKnown || Boolean(options.detailUrlsFile);
   const detailFetchConcurrency =
-    options.detailFetchConcurrency ?? (isRefreshOperation ? 12 : 4);
+    options.detailFetchConcurrency ?? (isRefreshOperation ? 8 : 4);
   const detailFetchDelayMs =
     options.detailFetchDelayMs ?? adapter.detailFetchDelayMs;
+  const availabilityHorizonDays =
+    options.availHorizonDays ?? adapter.availabilityHorizonDays;
+  const maxCalendarAdvanceMonths =
+    options.availMaxCalendarMonths ?? adapter.maxCalendarAdvanceMonths;
 
   progress.phase("starting scraper engine run");
+  const targetScope = options.detailUrl
+    ? "single-detail-url"
+    : options.refreshKnown || options.detailUrlsFile
+      ? "refresh-known"
+      : options.discoverOnly
+        ? "discover-only"
+        : "collection-discovery";
   progress.info(
-    `mode=${options.detailUrl ? "direct-detail" : options.refreshKnown || options.detailUrlsFile ? "refresh-known" : options.discoverOnly ? "discover-only" : "full"}, refresh_mode=${options.refreshMode}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}, detail_timeout_ms=${options.detailTimeoutMs}, skip_existing_details=${options.skipExistingDetails}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}`,
+    `target_scope=${targetScope}, run_mode=${options.mode}, refresh_mode=${options.refreshMode}, avail_horizon_days=${availabilityHorizonDays}, avail_max_calendar_months=${maxCalendarAdvanceMonths}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}, detail_timeout_ms=${options.detailTimeoutMs}, detail_retry_attempts=${options.detailRetryAttempts}, detail_retry_delay_ms=${options.detailRetryDelayMs}, skip_existing_details=${options.skipExistingDetails}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}`,
   );
+
+  if (options.quoteWindowDays !== null) {
+    process.env.SCRAPER_QUOTE_WINDOW_DAYS = String(options.quoteWindowDays);
+  }
+  if (options.quoteSampleStepDays !== null) {
+    process.env.SCRAPER_QUOTE_SAMPLE_STEP_DAYS = String(
+      options.quoteSampleStepDays,
+    );
+  }
+  if (options.quoteNights !== null) {
+    process.env.SCRAPER_QUOTE_NIGHTS = String(options.quoteNights);
+  }
+  if (options.quoteMaxQueries !== null) {
+    process.env.SCRAPER_QUOTE_MAX_QUERIES = String(options.quoteMaxQueries);
+  }
+  if (options.quoteAnchorDate !== null) {
+    process.env.SCRAPER_QUOTE_ANCHOR_DATE = options.quoteAnchorDate;
+  }
+  if (options.quoteObservationRetryDelaysMs !== null) {
+    process.env.SCRAPER_QUOTE_OBSERVATION_RETRY_DELAYS_MS =
+      options.quoteObservationRetryDelaysMs;
+  }
 
   const root = process.cwd();
   const reportsDir = resolve(root, ".tmp", "reports");
@@ -862,15 +1231,23 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       }
       progress.info(`direct_detail_validated=${valid}`);
 
-      progress.phase("direct detail mode: pulling one listing detail page");
+      const existingArtifacts = await loadExistingDetailArtifacts(
+        root,
+        outputDetailsJsonDir,
+        adapter.isValidDetailUrl,
+      );
+      const existingArtifact = existingArtifacts.get(valid);
+
+      progress.phase("single-target pull: processing one listing");
       const timed = await runTimedDetailFetch(
         adapter.fetchDetail({
           browser,
           detailUrl: valid,
-          availabilityHorizonDays: adapter.availabilityHorizonDays,
-          maxCalendarAdvanceMonths: adapter.maxCalendarAdvanceMonths,
+          availabilityHorizonDays,
+          maxCalendarAdvanceMonths,
           refreshMode: options.refreshMode,
-          existingDetailJsonPath: null,
+          mode: options.mode,
+          existingDetailJsonPath: existingArtifact?.jsonPath ?? null,
           reportDetailProgress: (message: string) => {
             progress.tick(message);
           },
@@ -1041,7 +1418,12 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         detailFetchConcurrency,
         detailFetchDelayMs,
         options.detailTimeoutMs,
+        options.detailRetryAttempts,
+        options.detailRetryDelayMs,
+        availabilityHorizonDays,
+        maxCalendarAdvanceMonths,
         options.refreshMode,
+        options.mode,
         existingArtifacts,
       );
 
@@ -1193,7 +1575,12 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         detailFetchConcurrency,
         detailFetchDelayMs,
         options.detailTimeoutMs,
+        options.detailRetryAttempts,
+        options.detailRetryDelayMs,
+        availabilityHorizonDays,
+        maxCalendarAdvanceMonths,
         options.refreshMode,
+        options.mode,
       );
       detailRecords = pulled.detailRecords;
       failedDetailUrls = pulled.failedDetailUrls;

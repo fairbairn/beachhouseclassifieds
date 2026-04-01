@@ -1827,6 +1827,14 @@ async function fetchDetail(
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
   refreshMode: "full" | "dynamic" | "static",
+  mode:
+    | "detail"
+    | "avail"
+    | "quote"
+    | "detail,avail"
+    | "detail,quote"
+    | "avail,quote"
+    | "detail,avail,quote",
   existingDetailJsonPath?: string | null,
   reportDetailProgress?: (message: string) => void,
 ): Promise<EscapeDetailRecord | null> {
@@ -1856,9 +1864,10 @@ async function fetchDetail(
   let normalizedAvailability:
     | EscapeDetailRecord["normalized_availability"]
     | null = null;
+  const quoteOnlyMode = mode === "quote";
 
   try {
-    if (refreshMode === "dynamic" && existingDetailJsonPath) {
+    if (quoteOnlyMode && existingDetailJsonPath) {
       try {
         const existingRaw = await readFile(existingDetailJsonPath, "utf8");
         const existing = JSON.parse(existingRaw) as EscapeDetailRecord;
@@ -1906,7 +1915,7 @@ async function fetchDetail(
             captured_at: new Date().toISOString(),
           };
           reportDetailProgress?.(
-            `detail ${externalListingId} [mode=${refreshMode}] using existing detail/html artifacts`,
+            `detail ${externalListingId} [refresh=${refreshMode} run=${mode}] using existing detail/html artifacts`,
           );
         }
       } catch {
@@ -1915,6 +1924,12 @@ async function fetchDetail(
     }
 
     if (!extracted) {
+      if (quoteOnlyMode) {
+        throw new Error(
+          `mode=quote requires existing detail/html artifacts for ${externalListingId}`,
+        );
+      }
+
       page = await browser.newPage();
       await installEvaluateNameShim(page);
       const pageLoadStartedAt = Date.now();
@@ -2142,22 +2157,40 @@ async function fetchDetail(
 
     const quoteWindowDays = Math.max(
       168,
-      Number(process.env.ESCAPES30A_RATES_WINDOW_DAYS ?? "168") || 168,
+      Number(
+        process.env.SCRAPER_QUOTE_WINDOW_DAYS ??
+          process.env.ESCAPES30A_RATES_WINDOW_DAYS ??
+          "168",
+      ) || 168,
     );
     const quoteSampleStepDays = Math.max(
       7,
-      Number(process.env.ESCAPES30A_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
+      Number(
+        process.env.SCRAPER_QUOTE_SAMPLE_STEP_DAYS ??
+          process.env.ESCAPES30A_RATES_SAMPLE_STEP_DAYS ??
+          "7",
+      ) || 7,
     );
     const quoteNightsDefault = Math.max(
       7,
-      Number(process.env.ESCAPES30A_RATES_QUOTE_NIGHTS ?? "7") || 7,
+      Number(
+        process.env.SCRAPER_QUOTE_NIGHTS ??
+          process.env.ESCAPES30A_RATES_QUOTE_NIGHTS ??
+          "7",
+      ) || 7,
     );
     const quoteMaxQueries = Math.max(
       1,
-      Number(process.env.ESCAPES30A_RATES_MAX_QUERIES ?? "24") || 24,
+      Number(
+        process.env.SCRAPER_QUOTE_MAX_QUERIES ??
+          process.env.ESCAPES30A_RATES_MAX_QUERIES ??
+          "24",
+      ) || 24,
     );
     const requestedAnchorDateRaw =
-      process.env.ESCAPES30A_RATES_ANCHOR_DATE?.trim() ?? "";
+      process.env.SCRAPER_QUOTE_ANCHOR_DATE?.trim() ??
+      process.env.ESCAPES30A_RATES_ANCHOR_DATE?.trim() ??
+      "";
     const requestedAnchorDate =
       /^\d{4}-\d{2}-\d{2}$/.test(requestedAnchorDateRaw) &&
       isSaturdayIsoDate(requestedAnchorDateRaw)
@@ -2165,7 +2198,7 @@ async function fetchDetail(
         : null;
     if (requestedAnchorDateRaw && !requestedAnchorDate) {
       reportDetailProgress?.(
-        `detail ${externalListingId} [mode=${refreshMode}] invalid ESCAPES30A_RATES_ANCHOR_DATE=${requestedAnchorDateRaw}; expected Saturday YYYY-MM-DD`,
+        `detail ${externalListingId} [refresh=${refreshMode} run=${mode}] invalid quote anchor date=${requestedAnchorDateRaw}; expected Saturday YYYY-MM-DD`,
       );
     }
 
@@ -2218,8 +2251,7 @@ async function fetchDetail(
 
     const sampledNightlyByDate = new Map<string, number>();
     const quoteObservations: EscapeRateObservation[] = [];
-    const shouldCallQuoteApi =
-      refreshMode === "dynamic" || refreshMode === "full";
+    const shouldCallQuoteApi = mode.includes("quote");
 
     const existingNightlyValues = Array.from(existingRateByDate.values());
     const fallbackAnchorNightly =
@@ -2383,7 +2415,7 @@ async function fetchDetail(
     };
     if (shouldCallQuoteApi && extracted.propertyId && extracted.unitShortName) {
       reportDetailProgress?.(
-        `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] start sample_windows=${sampledDays.length}`,
+        `detail ${externalListingId} [refresh=${refreshMode} run=${mode}] [API_RATE_CALLS] start sample_windows=${sampledDays.length}`,
       );
       for (
         let sampleIndex = 0;
@@ -2395,11 +2427,13 @@ async function fetchDetail(
         const nights = quoteNightsDefault;
         const endDate = addDaysToIsoDate(day.date, nights);
         reportDetailProgress?.(
-          `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] window ${sampleIndex + 1}/${sampledDays.length} ${day.date} -> ${endDate}`,
+          `detail ${externalListingId} [refresh=${refreshMode} run=${mode}] [API_RATE_CALLS] window ${sampleIndex + 1}/${sampledDays.length} ${day.date} -> ${endDate}`,
         );
 
         const observationRetryDelaysMs = parseObservationRetryDelaysMs(
-          process.env.ESCAPES30A_QUOTE_OBSERVATION_RETRY_DELAYS_MS ?? "",
+          process.env.SCRAPER_QUOTE_OBSERVATION_RETRY_DELAYS_MS ??
+            process.env.ESCAPES30A_QUOTE_OBSERVATION_RETRY_DELAYS_MS ??
+            "",
         );
 
         let quote: Awaited<ReturnType<typeof fetchEscapesQuote>> | null = null;
@@ -2424,7 +2458,7 @@ async function fetchDetail(
               detailUrl,
               reportProgress: (message) => {
                 reportDetailProgress?.(
-                  `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] ${day.date}->${endDate}: ${message}`,
+                  `detail ${externalListingId} [refresh=${refreshMode} run=${mode}] [API_RATE_CALLS] ${day.date}->${endDate}: ${message}`,
                 );
               },
             });
@@ -2441,7 +2475,7 @@ async function fetchDetail(
               const nextDelay =
                 observationRetryDelaysMs[observationAttempt + 1] ?? 0;
               reportDetailProgress?.(
-                `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] observation retry ${observationAttempt + 1}/${observationRetryDelaysMs.length} ${day.date}->${endDate} reason=${attemptedQuote.unavailableReason ?? "unknown"} next_delay_ms=${nextDelay}`,
+                `detail ${externalListingId} [refresh=${refreshMode} run=${mode}] [API_RATE_CALLS] observation retry ${observationAttempt + 1}/${observationRetryDelaysMs.length} ${day.date}->${endDate} reason=${attemptedQuote.unavailableReason ?? "unknown"} next_delay_ms=${nextDelay}`,
               );
             }
           } catch {
@@ -2449,7 +2483,7 @@ async function fetchDetail(
               const nextDelay =
                 observationRetryDelaysMs[observationAttempt + 1] ?? 0;
               reportDetailProgress?.(
-                `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] observation retry ${observationAttempt + 1}/${observationRetryDelaysMs.length} ${day.date}->${endDate} reason=request_error next_delay_ms=${nextDelay}`,
+                `detail ${externalListingId} [refresh=${refreshMode} run=${mode}] [API_RATE_CALLS] observation retry ${observationAttempt + 1}/${observationRetryDelaysMs.length} ${day.date}->${endDate} reason=request_error next_delay_ms=${nextDelay}`,
               );
             }
           }
@@ -2541,7 +2575,7 @@ async function fetchDetail(
         }
       }
       reportDetailProgress?.(
-        `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] done observations=${quoteObservations.length} priced_days=${sampledNightlyByDate.size}`,
+        `detail ${externalListingId} [refresh=${refreshMode} run=${mode}] [API_RATE_CALLS] done observations=${quoteObservations.length} priced_days=${sampledNightlyByDate.size}`,
       );
     }
 
@@ -2892,6 +2926,7 @@ export function create30AEscapesAdapter(): ScraperAdapter<EscapeDetailRecord> {
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
         context.refreshMode,
+        context.mode,
         context.existingDetailJsonPath,
         context.reportDetailProgress,
       );

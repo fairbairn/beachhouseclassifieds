@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import { runLocalvr30aQuoteCli } from "./quotes/localvr30a";
 
 type LocalVrDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -1011,6 +1013,13 @@ export function createLocalVR30AAdapter(): ScraperAdapter<LocalVrDetailRecord> {
         context.detailUrl,
         context.availabilityHorizonDays,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "localvr30a",
+        argv,
+      );
+      await runLocalvr30aQuoteCli(normalizedArgs, progress);
     },
   };
 }
