@@ -1592,8 +1592,8 @@ function(){ } )
 <option value="r-100" >Rollin Tide Villas</option>
 <option value="r-53" >Sable Pointe West</option>
 <option value="r-54" >San Remo</option>
-<option value="r-88" >Sandcastles by the Sea</option>
 <option value="v-47" >SandCastles by the Sea</option>
+<option value="r-88" >Sandcastles by the Sea</option>
 <option value="v-48" >Sandtrap</option>
 <option value="r-55" >Sea Bluff</option>
 <option value="r-56" >Sea Cabins</option>
@@ -2089,15 +2089,25 @@ Calendar
 </button>
 <span class="calendar-number">5</span>
 </td>
-<td class="check-in" data-date="04/06/2026">
-<span class="property-rate">$203</span>
+<td class="booked" data-date="04/06/2026">
+<button class="btn btn-sm site-color-2-bg white pdp-availability-calendar-notify-btn" data-be-modal="pdp-cancellation-modal" data-toggle="tooltip" data-placement="top" title="Notify me about this date when it's canceled" aria-label="Cancellation Notification Bell">
+<svg class="icon">
+<title>Cancellation Notification Bell</title>
+<use href="#bell-solid"></use>
+</svg>
+</button>
 <span class="calendar-number">6</span>
 </td>
-<td class="available" data-date="04/07/2026">
-<span class="property-rate">$203</span>
+<td class="booked" data-date="04/07/2026">
+<button class="btn btn-sm site-color-2-bg white pdp-availability-calendar-notify-btn" data-be-modal="pdp-cancellation-modal" data-toggle="tooltip" data-placement="top" title="Notify me about this date when it's canceled" aria-label="Cancellation Notification Bell">
+<svg class="icon">
+<title>Cancellation Notification Bell</title>
+<use href="#bell-solid"></use>
+</svg>
+</button>
 <span class="calendar-number">7</span>
 </td>
-<td class="check-out" data-date="04/08/2026">
+<td class="booked" data-date="04/08/2026">
 <button class="btn btn-sm site-color-2-bg white pdp-availability-calendar-notify-btn" data-be-modal="pdp-cancellation-modal" data-toggle="tooltip" data-placement="top" title="Notify me about this date when it's canceled" aria-label="Cancellation Notification Bell">
 <svg class="icon">
 <title>Cancellation Notification Bell</title>
@@ -4983,7 +4993,7 @@ STR Certificate: STR23-001456
 <div class="pdp-sidebar-main">
 <div class="pdp-sidebar-main-content">
 <div class="pdp-dates-datepicker">
-<div id="pdpStoredDates" data-checkout-dates="04/03/2026,04/08/2026,04/16/2026,05/15/2026,05/27/2026,06/06/2026,06/30/2026,07/16/2026,09/24/2026,10/06/2026,10/18/2026,12/27/2026" data-checkin-dates="04/06/2026,04/14/2026,05/13/2026,05/26/2026,05/31/2026,06/13/2026,07/07/2026,07/19/2026,09/27/2026,10/17/2026,10/24/2026,01/02/2027" data-unavailable-dates="04/04/2026,04/05/2026,04/09/2026,04/10/2026,04/11/2026,04/12/2026,04/13/2026,04/17/2026,04/18/2026,04/19/2026,04/20/2026,04/21/2026,04/22/2026,04/23/2026,04/24/2026,04/25/2026,04/26/2026,04/27/2026,04/28/2026,04/29/2026,04/30/2026,05/01/2026,05/02/2026,05/03/2026,05/04/2026,05/05/2026,05/06/2026,05/07/2026,05/08/2026,05/09/2026,05/10/2026,05/11/2026,05/12/2026,05/16/2026,05/17/2026,05/18/2026,05/19/2026,05/20/2026,05/21/2026,05/22/2026,05/23/2026,05/24/2026,05/25/2026,05/28/2026,05/29/2026,05/30/2026,06/07/2026,06/08/2026,06/09/2026,06/10/2026,06/11/2026,06/12/2026,07/01/2026,07/02/2026,07/03/2026,07/04/2026,07/05/2026,07/06/2026,07/17/2026,07/18/2026,09/25/2026,09/26/2026,10/07/2026,10/08/2026,10/09/2026,10/10/2026,10/11/2026,10/12/2026,10/13/2026,10/14/2026,10/15/2026,10/16/2026,10/19/2026,10/20/2026,10/21/2026,10/22/2026,10/23/2026,12/28/2026,12/29/2026,12/30/2026,12/31/2026,01/01/2027" data-blackout-dates="" data-minimum="1"></div>
+<div id="pdpStoredDates" data-checkout-dates="04/03/2026,04/16/2026,05/15/2026,05/27/2026,06/06/2026,06/30/2026,07/16/2026,09/24/2026,10/06/2026,10/18/2026,12/27/2026" data-checkin-dates="04/14/2026,05/13/2026,05/26/2026,05/31/2026,06/13/2026,07/07/2026,07/19/2026,09/27/2026,10/17/2026,10/24/2026,01/02/2027" data-unavailable-dates="04/04/2026,04/05/2026,04/06/2026,04/07/2026,04/08/2026,04/09/2026,04/10/2026,04/11/2026,04/12/2026,04/13/2026,04/17/2026,04/18/2026,04/19/2026,04/20/2026,04/21/2026,04/22/2026,04/23/2026,04/24/2026,04/25/2026,04/26/2026,04/27/2026,04/28/2026,04/29/2026,04/30/2026,05/01/2026,05/02/2026,05/03/2026,05/04/2026,05/05/2026,05/06/2026,05/07/2026,05/08/2026,05/09/2026,05/10/2026,05/11/2026,05/12/2026,05/16/2026,05/17/2026,05/18/2026,05/19/2026,05/20/2026,05/21/2026,05/22/2026,05/23/2026,05/24/2026,05/25/2026,05/28/2026,05/29/2026,05/30/2026,06/07/2026,06/08/2026,06/09/2026,06/10/2026,06/11/2026,06/12/2026,07/01/2026,07/02/2026,07/03/2026,07/04/2026,07/05/2026,07/06/2026,07/17/2026,07/18/2026,09/25/2026,09/26/2026,10/07/2026,10/08/2026,10/09/2026,10/10/2026,10/11/2026,10/12/2026,10/13/2026,10/14/2026,10/15/2026,10/16/2026,10/19/2026,10/20/2026,10/21/2026,10/22/2026,10/23/2026,12/28/2026,12/29/2026,12/30/2026,12/31/2026,01/01/2027" data-blackout-dates="" data-minimum="1"></div>
 <div class="pdp-dates-wrap qs-open">
 <div class="pdp-dates-arrival">
 <svg class="icon">
@@ -5909,7 +5919,7 @@ STR Certificate: STR23-001456
 </svg>
 </div>
 <div class="d-block ml-1">
-<strong>50</strong> Visitors are considering this property
+<strong>51</strong> Visitors are considering this property
 </div>
 </div>
 </div>
@@ -7087,7 +7097,7 @@ We’ll absolutely be back at the Sheppard Cottage!!
 <input type="hidden" name="propertyName" value="Shepherd Cottage">
 <input type="hidden" name="propertyID" value="336">
 <input type="hidden" name="propertyPhoto" value="https://track-pm.s3.amazonaws.com/oceanreefresorts/image/7ff26b1d-142b-4b4a-b216-13f774bb458f">
-<input type="hidden" name="key" value="4db4a1d5-5cbf-4212-a5d4-abbb29a40da20">
+<input type="hidden" name="key" value="85f7d31d-7198-4507-821d-ca4619b3b2d20">
 <input type="hidden" name="hiddenstrcheckin" value="" id="hiddenstrcheckin">
 <input type="hidden" name="hiddenstrcheckout" value="" id="hiddenstrcheckout">
 <input type="hidden" name="camefrom" value="Request for More Info">

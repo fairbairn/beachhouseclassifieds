@@ -316,6 +316,8 @@ function parseUnavailableReason(html: string): string | null {
     "no availability",
     "cannot be booked",
     "no rates",
+    "available rate type was not found",
+    "rate type was not found",
   ];
 
   for (const signal of knownSignals) {
