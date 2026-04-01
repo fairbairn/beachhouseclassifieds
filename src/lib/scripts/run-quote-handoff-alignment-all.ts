@@ -1,7 +1,9 @@
 import chalk from "chalk";
 import { spawn } from "node:child_process";
-import { readdirSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  createValidatedAdapterOperationProxyByKey,
+  getKnownAdapterKeys,
+} from "@/lib/pricing/scraper-engine/adapter-registry";
 
 type CliOptions = {
   adapters: string[] | null;
@@ -95,26 +97,11 @@ function parseArgs(argv: string[]): CliOptions {
   };
 }
 
-function listAdaptersWithQuoteModules(root: string): string[] {
-  const quoteAdaptersDir = resolve(
-    root,
-    "src",
-    "lib",
-    "pricing",
-    "scraper-engine",
-    "adapters",
-    "quotes",
-  );
-
-  return readdirSync(quoteAdaptersDir, { withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isFile() &&
-        entry.name.endsWith(".ts") &&
-        !entry.name.startsWith("legacy-"),
-    )
-    .map((entry) => entry.name.replace(/\.ts$/i, ""))
-    .sort((left, right) => left.localeCompare(right));
+function listActiveQuoteAdapters(): string[] {
+  return getKnownAdapterKeys().filter((adapterKey) => {
+    const proxy = createValidatedAdapterOperationProxyByKey(adapterKey);
+    return proxy?.capabilities.quoteValidation === true;
+  });
 }
 
 function runAdapter(
@@ -158,7 +145,7 @@ function runAdapter(
 async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   const options = parseArgs(argv);
   const root = process.cwd();
-  const discovered = listAdaptersWithQuoteModules(root);
+  const discovered = listActiveQuoteAdapters();
 
   let selected = discovered;
   if (options.adapters) {

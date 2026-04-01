@@ -8,7 +8,6 @@ import { create30AEscapesAdapter } from "./adapters/30aescapes";
 import { create30ALuxuryAdapter } from "./adapters/30aluxury";
 import { createThirtyAVacayAdapter } from "./adapters/30avacay";
 import { create360BlueAdapter } from "./adapters/360blue";
-import { createBeachBlueAdapter } from "./adapters/beachblue";
 import { createBenchmark30AAdapter } from "./adapters/benchmark30a";
 import { createCoastProperties30AAdapter } from "./adapters/coastproperties30a";
 import { createDuneVR30AAdapter } from "./adapters/dunevr30a";
@@ -19,7 +18,6 @@ import { createGrayt30AAdapter } from "./adapters/grayt30a";
 import { createHomeownersCollection30AAdapter } from "./adapters/homeownerscollection30a";
 import { createKeyco30AAdapter } from "./adapters/keyco30a";
 import { createLocalVR30AAdapter } from "./adapters/localvr30a";
-import { createLuxe30AAdapter } from "./adapters/luxe30a";
 import { createOceanReef30AAdapter } from "./adapters/oceanreef30a";
 import { createOversee30AAdapter } from "./adapters/oversee30a";
 import { createPanhandle30AAdapter } from "./adapters/panhandle30a";
@@ -41,7 +39,6 @@ const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   "30aluxury": create30ALuxuryAdapter,
   "30avacay": createThirtyAVacayAdapter,
   "360blue": create360BlueAdapter,
-  beachblue: createBeachBlueAdapter,
   benchmark30a: createBenchmark30AAdapter,
   coastproperties30a: createCoastProperties30AAdapter,
   dunevr30a: createDuneVR30AAdapter,
@@ -52,7 +49,6 @@ const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   homeownerscollection30a: createHomeownersCollection30AAdapter,
   keyco30a: createKeyco30AAdapter,
   localvr30a: createLocalVR30AAdapter,
-  luxe30a: createLuxe30AAdapter,
   oceanreef30a: createOceanReef30AAdapter,
   oversee30a: createOversee30AAdapter,
   panhandle30a: createPanhandle30AAdapter,
