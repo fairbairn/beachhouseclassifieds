@@ -212,4 +212,15 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 700,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  oceanreef30a: {
+    adapterKey: "oceanreef30a",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.15,
+      avgTaxPct: 0.14,
+      avgAllInMultiplier: 1.29,
+    },
+    globalDefaultBaseNightly: 650,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
 };

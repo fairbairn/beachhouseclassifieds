@@ -9,9 +9,11 @@ import {
 
 type CliOptions = {
   adapters: string[] | "all";
+  mode: string[] | null;
   fullScrape: boolean;
   discoverNew: boolean;
   availabilityRefresh: boolean;
+  preferFullAvailabilityRefresh: boolean;
   pricingRefresh: boolean;
   quoteCapture: boolean;
   quotesValidate: boolean;
@@ -31,6 +33,7 @@ type CliOptions = {
 };
 
 type KnownDetailRecord = {
+  external_listing_id?: string;
   detail_url?: string;
 };
 
@@ -44,11 +47,21 @@ const runtimeProgress = createScrapeProgress({ script: "adapter-ops" });
 
 let wasCancelled = false;
 
+function parseModeTokens(rawModeValue: string): string[] {
+  return rawModeValue
+    .split(/[|,]/g)
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean)
+    .map((token) => (token === "price" ? "pricing" : token));
+}
+
 function parseArgs(argv: string[]): CliOptions {
   let adapters: string[] | "all" = "all";
+  let mode: string[] | null = null;
   let fullScrape = false;
   let discoverNew = false;
   let availabilityRefresh = false;
+  let preferFullAvailabilityRefresh = false;
   let pricingRefresh = false;
   let quoteCapture = false;
   let quotesValidate = false;
@@ -80,6 +93,17 @@ function parseArgs(argv: string[]): CliOptions {
           .filter(Boolean);
       }
       index += 1;
+      continue;
+    }
+
+    if (arg === "--mode" && value) {
+      mode = parseModeTokens(value);
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--mode=")) {
+      mode = parseModeTokens(arg.slice("--mode=".length));
       continue;
     }
 
@@ -214,11 +238,29 @@ function parseArgs(argv: string[]): CliOptions {
     pricingCache = true;
   }
 
+  if (mode !== null) {
+    const allowed = new Set(["detail", "avail", "quote", "pricing"]);
+    const unknown = mode.filter((token) => !allowed.has(token));
+    if (unknown.length > 0) {
+      throw new Error(
+        `Unknown mode value(s): ${unknown.join(", ")}. Allowed mode values: detail, avail, quote, pricing.`,
+      );
+    }
+
+    fullScrape = mode.includes("detail");
+    availabilityRefresh = mode.includes("avail");
+    preferFullAvailabilityRefresh = availabilityRefresh;
+    quoteCapture = mode.includes("quote");
+    pricingCache = mode.includes("pricing");
+  }
+
   return {
     adapters,
+    mode,
     fullScrape,
     discoverNew,
     availabilityRefresh,
+    preferFullAvailabilityRefresh,
     pricingRefresh,
     quoteCapture,
     quotesValidate,
@@ -419,6 +461,34 @@ async function loadKnownDetailUrls(adapterKey: string): Promise<Set<string>> {
   return known;
 }
 
+async function loadDetailUrlForListing(
+  adapterKey: string,
+  listingId: string,
+): Promise<string | null> {
+  const detailJsonPath = resolve(
+    ROOT,
+    "src",
+    "lib",
+    "data",
+    "external-sources",
+    adapterKey,
+    "details",
+    "json",
+    `${listingId}.json`,
+  );
+
+  try {
+    const raw = await readFile(detailJsonPath, "utf8");
+    const parsed = JSON.parse(raw) as KnownDetailRecord;
+    if (typeof parsed.detail_url === "string" && parsed.detail_url.trim()) {
+      return parsed.detail_url.trim();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadDiscoveredDetailUrls(adapterKey: string): Promise<string[]> {
   const listingsFilePath = resolve(
     ROOT,
@@ -499,13 +569,16 @@ async function runAdapterSteps(
   const progress = createScrapeProgress({ script: adapterKey });
   progress.phase("starting requested operations");
 
+  const scopedDetailUrl = options.quoteListingId
+    ? await loadDetailUrlForListing(adapterKey, options.quoteListingId)
+    : null;
+
   if (options.fullScrape) {
-    await runScrape(
-      adapterKey,
-      ["--refresh-mode", "full"],
-      options.dryRun,
-      progress,
-    );
+    const fullScrapeArgs =
+      scopedDetailUrl !== null
+        ? ["--detail-url", scopedDetailUrl, "--refresh-mode", "full"]
+        : ["--refresh-mode", "full"];
+    await runScrape(adapterKey, fullScrapeArgs, options.dryRun, progress);
   }
 
   if (options.discoverNew) {
@@ -518,21 +591,27 @@ async function runAdapterSteps(
   }
 
   if (options.availabilityRefresh) {
-    await runScrape(
-      adapterKey,
-      ["--refresh-known", "--refresh-mode", "static"],
-      options.dryRun,
-      progress,
-    );
+    if (options.fullScrape) {
+      progress.info(
+        `${adapterKey}: skipping avail step because detail mode/full-scrape already ran availability extraction.`,
+      );
+    } else {
+      const availabilityArgs =
+        scopedDetailUrl !== null
+          ? ["--detail-url", scopedDetailUrl, "--refresh-mode", "static"]
+          : options.preferFullAvailabilityRefresh
+            ? ["--refresh-mode", "full"]
+            : ["--refresh-known", "--refresh-mode", "static"];
+      await runScrape(adapterKey, availabilityArgs, options.dryRun, progress);
+    }
   }
 
   if (options.pricingRefresh) {
-    await runScrape(
-      adapterKey,
-      ["--refresh-known", "--refresh-mode", "dynamic"],
-      options.dryRun,
-      progress,
-    );
+    const pricingRefreshArgs =
+      scopedDetailUrl !== null
+        ? ["--detail-url", scopedDetailUrl, "--refresh-mode", "dynamic"]
+        : ["--refresh-known", "--refresh-mode", "dynamic"];
+    await runScrape(adapterKey, pricingRefreshArgs, options.dryRun, progress);
   }
 
   if (options.quoteCapture) {
@@ -567,9 +646,16 @@ async function runAdapterSteps(
   }
 
   if (options.pricingCache) {
+    const pricingScopeArgs: string[] = [];
+    if (options.quoteListingId) {
+      pricingScopeArgs.push("--listing-id", options.quoteListingId);
+    } else if (options.quoteMaxListings !== null) {
+      pricingScopeArgs.push("--max-listings", String(options.quoteMaxListings));
+    }
+
     await runPricingCache(
       adapterKey,
-      ["--weeks", String(options.pricingWeeks)],
+      ["--weeks", String(options.pricingWeeks), ...pricingScopeArgs],
       options.dryRun,
       progress,
     );
@@ -589,7 +675,7 @@ function ensureAnyStepEnabled(options: CliOptions): void {
     !options.pricingCache
   ) {
     throw new Error(
-      "No operation flags provided. Enable one or more: --full-scrape, --discover-new, --availability-refresh, --pricing-refresh, --quote-capture, --quotes-validate, --pricing-cache.",
+      "No operation flags provided. Enable one or more: --mode, --full-scrape, --discover-new, --availability-refresh, --pricing-refresh, --quote-capture, --quotes-validate, --pricing-cache.",
     );
   }
 }
@@ -600,7 +686,7 @@ async function main(): Promise<void> {
 
   runtimeProgress.phase("starting unified adapter runtime");
   runtimeProgress.info(
-    `adapters=${options.adapters === "all" ? "all" : options.adapters.join(",")} dry_run=${options.dryRun} quote_weeks=${options.quoteWeeks} quote_concurrency=${options.quoteConcurrency} quote_listing_concurrency=${options.quoteListingConcurrency} quote_listing_id=${options.quoteListingId ?? "n/a"} quote_max_listings=${options.quoteMaxListings ?? "n/a"} quote_all_listings=${options.quoteAllListings} quote_skip_existing=${options.quoteSkipExisting} pricing_weeks=${options.pricingWeeks}`,
+    `adapters=${options.adapters === "all" ? "all" : options.adapters.join(",")} mode=${options.mode?.join(",") ?? "n/a"} dry_run=${options.dryRun} quote_weeks=${options.quoteWeeks} quote_concurrency=${options.quoteConcurrency} quote_listing_concurrency=${options.quoteListingConcurrency} quote_listing_id=${options.quoteListingId ?? "n/a"} quote_max_listings=${options.quoteMaxListings ?? "n/a"} quote_all_listings=${options.quoteAllListings} quote_skip_existing=${options.quoteSkipExisting} pricing_weeks=${options.pricingWeeks}`,
   );
 
   process.on("SIGINT", () => {

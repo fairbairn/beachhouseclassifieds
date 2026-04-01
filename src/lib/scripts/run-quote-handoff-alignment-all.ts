@@ -10,6 +10,7 @@ type CliOptions = {
   maxAdapters: number | null;
   sampleListings: number;
   maxObservations: number;
+  minLeadDays: number;
   concurrency: number;
   tolerance: number;
 };
@@ -24,6 +25,7 @@ function parseArgs(argv: string[]): CliOptions {
   let maxAdapters: number | null = null;
   let sampleListings = 5;
   let maxObservations = 3;
+  let minLeadDays = 0;
   let concurrency = 3;
   let tolerance = 1;
 
@@ -68,6 +70,15 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--min-lead-days" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        minLeadDays = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
     if (arg === "--concurrency" && value) {
       const parsed = Number(value);
       if (Number.isFinite(parsed) && parsed > 0) {
@@ -92,6 +103,7 @@ function parseArgs(argv: string[]): CliOptions {
     maxAdapters,
     sampleListings,
     maxObservations,
+    minLeadDays,
     concurrency,
     tolerance,
   };
@@ -119,6 +131,8 @@ function runAdapter(
     String(options.sampleListings),
     "--max-observations",
     String(options.maxObservations),
+    "--min-lead-days",
+    String(options.minLeadDays),
     "--concurrency",
     String(options.concurrency),
     "--tolerance",
@@ -164,7 +178,7 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
 
   console.log(
     chalk.cyan(
-      `handoff_qa adapters=${selected.length} sample_listings=${options.sampleListings} max_observations=${options.maxObservations} tolerance=${options.tolerance.toFixed(2)}`,
+      `handoff_qa adapters=${selected.length} sample_listings=${options.sampleListings} max_observations=${options.maxObservations} min_lead_days=${options.minLeadDays} tolerance=${options.tolerance.toFixed(2)}`,
     ),
   );
 

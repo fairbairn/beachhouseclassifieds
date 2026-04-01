@@ -29,6 +29,7 @@ type CliOptions = {
   listingId: string | null;
   maxListings: number | null;
   maxObservations: number;
+  minLeadDays: number;
   concurrency: number;
   tolerance: number;
 };
@@ -88,6 +89,7 @@ function parseArgs(argv: string[]): CliOptions {
   let listingId: string | null = null;
   let maxListings: number | null = null;
   let maxObservations = DEFAULT_MAX_OBSERVATIONS;
+  let minLeadDays = 0;
   let concurrency = DEFAULT_CONCURRENCY;
   let tolerance = DEFAULT_TOLERANCE;
 
@@ -125,6 +127,15 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--min-lead-days" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        minLeadDays = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
     if (arg === "--concurrency" && value) {
       const parsed = Number(value);
       if (Number.isFinite(parsed) && parsed > 0) {
@@ -152,9 +163,50 @@ function parseArgs(argv: string[]): CliOptions {
     listingId,
     maxListings,
     maxObservations,
+    minLeadDays,
     concurrency,
     tolerance,
   };
+}
+
+function parseIsoDateToUtcStartMs(value: string): number | null {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return null;
+  }
+
+  return Date.UTC(year, month - 1, day);
+}
+
+function getUtcTodayStartMs(): number {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
+
+function getLeadDaysFromUtcToday(
+  startDateIso: string,
+  utcTodayStartMs: number,
+): number | null {
+  const startDateUtcMs = parseIsoDateToUtcStartMs(startDateIso);
+  if (startDateUtcMs === null) {
+    return null;
+  }
+  return Math.floor((startDateUtcMs - utcTodayStartMs) / (24 * 60 * 60 * 1000));
 }
 
 async function collectQuoteFiles(
@@ -825,7 +877,8 @@ async function tryExtractBeachblueCheckoutTotal(
       const reason =
         typeof record.errorMsg === "string" && record.errorMsg.trim().length > 0
           ? record.errorMsg.trim()
-          : typeof record.apiError === "string" && record.apiError.trim().length > 0
+          : typeof record.apiError === "string" &&
+              record.apiError.trim().length > 0
             ? record.apiError.trim()
             : "beachblue router reported unavailable status";
       return { kind: "status_error", message: reason };
@@ -932,7 +985,8 @@ async function tryExtractBeachblueCheckoutTotal(
         page.off("response", onResponse);
         return {
           kind: "status_error",
-          message: "beachblue checkout page returned pricing unavailable warning",
+          message:
+            "beachblue checkout page returned pricing unavailable warning",
         };
       }
 
@@ -1038,6 +1092,72 @@ function parseRealjoyPriceByLabel(html: string, label: string): number | null {
   const value = pattern.exec(html)?.[1] ?? "";
   const parsed = parseMoney(value);
   return parsed !== null && parsed >= 0 ? parsed : null;
+}
+
+function parseOceanreefPriceByLabel(
+  html: string,
+  label: string,
+): number | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `<span\\s+class=\"book-quote-item-text\">\\s*${escaped}\\s*<\\/span>[\\s\\S]*?<span\\s+class=\"book-quote-item-price\"[^>]*data-price=\"([^\"]+)\"`,
+    "i",
+  );
+  const value = pattern.exec(html)?.[1] ?? "";
+  const parsed = parseMoney(value);
+  return parsed !== null && parsed >= 0 ? parsed : null;
+}
+
+function parseOceanreefFeeLines(
+  html: string,
+): Array<{ name: string; amount: number }> {
+  const feeLines: Array<{ name: string; amount: number }> = [];
+  const feeSectionMatch = html.match(
+    /<ul\s+class=\"book-quote-item-toggle-list\">([\s\S]*?)<\/ul>/i,
+  );
+  if (!feeSectionMatch?.[1]) {
+    return feeLines;
+  }
+
+  const itemPattern =
+    /<span\s+class=\"book-quote-item-text\">\s*([^<]+?)\s*<\/span>[\s\S]*?<span\s+class=\"book-quote-item-price\"[^>]*data-price=\"([^\"]+)\"/gi;
+
+  let match: RegExpExecArray | null = itemPattern.exec(feeSectionMatch[1]);
+  while (match) {
+    const name = match[1]?.trim() ?? "";
+    const amount = parseMoney(match[2] ?? "");
+    if (name && amount !== null && amount >= 0) {
+      feeLines.push({ name, amount });
+    }
+    match = itemPattern.exec(feeSectionMatch[1]);
+  }
+
+  return feeLines;
+}
+
+function parseOceanreefTotalsFromHtml(html: string): {
+  total: number | null;
+  baseTotal: number | null;
+  taxesTotal: number | null;
+  feesTotal: number | null;
+} {
+  const total =
+    parseOceanreefPriceByLabel(html, "Total") ??
+    parseMoney(
+      html.match(
+        /id=\"hiddenTotal\"\)\.val\(\"([0-9,]+(?:\.[0-9]{2})?)\"\)/i,
+      )?.[1] ?? "",
+    );
+  const baseTotal = parseOceanreefPriceByLabel(html, "Rent");
+  const taxesTotal = parseOceanreefPriceByLabel(html, "Taxes");
+  const feeLines = parseOceanreefFeeLines(html);
+  const feeLinesTotal =
+    feeLines.length > 0
+      ? Math.round(feeLines.reduce((sum, line) => sum + line.amount, 0) * 100) /
+        100
+      : null;
+  const feesTotal = parseOceanreefPriceByLabel(html, "Fees") ?? feeLinesTotal;
+  return { total, baseTotal, taxesTotal, feesTotal };
 }
 
 function extractRealjoyPropertyName(detailHtml: string): string {
@@ -1155,6 +1275,116 @@ async function tryExtractRealjoyDirectTotal(
       total,
       baseTotal,
       taxesTotal,
+    };
+  } catch (error: unknown) {
+    return {
+      kind: "request_error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function tryExtractOceanreefDirectTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (!parsed.hostname.endsWith("oceanreefresorts.com")) {
+    return { kind: "unsupported" };
+  }
+
+  const propertyId =
+    parsed.searchParams.get("propertyID")?.trim() ??
+    parsed.searchParams.get("propertyId")?.trim() ??
+    candidate.listingId.trim();
+
+  const checkin = parsed.searchParams.get("checkin")?.trim() ?? "";
+  const checkout = parsed.searchParams.get("checkout")?.trim() ?? "";
+  if (!propertyId || !checkin || !checkout) {
+    return { kind: "unsupported" };
+  }
+
+  const adults = Math.max(1, Number(parsed.searchParams.get("adults") ?? "2"));
+  const children = Math.max(
+    0,
+    Number(parsed.searchParams.get("children") ?? "0"),
+  );
+  const pets = Math.max(0, Number(parsed.searchParams.get("pets") ?? "0"));
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const endpoint = `${parsed.origin}/ajax/pricesummary/`;
+  const body = new URLSearchParams();
+  body.set("propertyID", propertyId);
+  body.set("checkin", checkin);
+  body.set("checkout", checkout);
+  body.set("adults", String(adults));
+  body.set("children", String(children));
+  body.set("pets", String(pets));
+  body.set("leaseID", "");
+  body.set("optInFees", "");
+  body.set("optOutFees", "");
+  body.set("customQuoteID", "");
+  body.set("chargetemplateid", "");
+  body.set("travelInsuranceID", "");
+  body.set("promoCodeSubmitted", "0");
+  body.set("promocode", "");
+
+  try {
+    const responseResult = await fetchWithRetry({
+      url: endpoint,
+      init: {
+        method: "POST",
+        headers: {
+          accept: "text/html, */*; q=0.01",
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "x-requested-with": "XMLHttpRequest",
+          "user-agent": USER_AGENT,
+          referer: candidate.handoffUrl,
+          origin: parsed.origin,
+        },
+        body: body.toString(),
+      },
+      retryDelaysMs,
+      reportProgress,
+      retryLabel: "oceanreef pricesummary",
+    });
+
+    if (!responseResult.ok) {
+      return { kind: "request_error", message: responseResult.message };
+    }
+
+    const html = await responseResult.response.text();
+    const totals = parseOceanreefTotalsFromHtml(html);
+    if (totals.total === null || totals.total <= 0) {
+      const lowered = html.toLowerCase();
+      if (
+        lowered.includes("not available") ||
+        lowered.includes("dates unavailable") ||
+        lowered.includes("unavailable")
+      ) {
+        return {
+          kind: "status_error",
+          message: "Property not available for selected dates",
+        };
+      }
+
+      return {
+        kind: "request_error",
+        message: "oceanreef pricesummary payload missing total",
+      };
+    }
+
+    return {
+      kind: "success",
+      total: totals.total,
+      baseTotal: totals.baseTotal,
+      taxesTotal: totals.taxesTotal,
     };
   } catch (error: unknown) {
     return {
@@ -1620,6 +1850,105 @@ async function validateObservation(
     }
   }
 
+  if (candidate.adapterKey === "oceanreef30a") {
+    const oceanreefDirect = await tryExtractOceanreefDirectTotal(
+      candidate,
+      reportProgress,
+    );
+
+    if (oceanreefDirect.kind === "success") {
+      const diff = Math.abs(
+        oceanreefDirect.total - candidate.observedGrandTotal,
+      );
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from oceanreef ajax total=${oceanreefDirect.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: oceanreefDirect.total,
+        };
+      }
+
+      if (
+        candidate.observedBaseTotal !== null &&
+        Number.isFinite(candidate.observedBaseTotal) &&
+        oceanreefDirect.baseTotal !== null &&
+        Number.isFinite(oceanreefDirect.baseTotal)
+      ) {
+        const baseDiff = Math.abs(
+          candidate.observedBaseTotal - oceanreefDirect.baseTotal,
+        );
+        if (baseDiff > tolerance) {
+          return {
+            listingId: candidate.listingId,
+            startDate: candidate.startDate,
+            endDate: candidate.endDate,
+            observedGrandTotal: candidate.observedGrandTotal,
+            handoffUrl: candidate.handoffUrl,
+            code: "component_mismatch",
+            message: `Oceanreef base total mismatch observed=${candidate.observedBaseTotal.toFixed(2)} checkout_rent=${oceanreefDirect.baseTotal.toFixed(2)} (diff=${baseDiff.toFixed(2)})`,
+            extractedTotal: oceanreefDirect.total,
+          };
+        }
+      }
+
+      if (
+        candidate.observedTaxesTotal !== null &&
+        Number.isFinite(candidate.observedTaxesTotal) &&
+        oceanreefDirect.taxesTotal !== null &&
+        Number.isFinite(oceanreefDirect.taxesTotal)
+      ) {
+        const taxesDiff = Math.abs(
+          candidate.observedTaxesTotal - oceanreefDirect.taxesTotal,
+        );
+        if (taxesDiff > tolerance) {
+          return {
+            listingId: candidate.listingId,
+            startDate: candidate.startDate,
+            endDate: candidate.endDate,
+            observedGrandTotal: candidate.observedGrandTotal,
+            handoffUrl: candidate.handoffUrl,
+            code: "component_mismatch",
+            message: `Oceanreef taxes mismatch observed=${candidate.observedTaxesTotal.toFixed(2)} checkout_taxes=${oceanreefDirect.taxesTotal.toFixed(2)} (diff=${taxesDiff.toFixed(2)})`,
+            extractedTotal: oceanreefDirect.total,
+          };
+        }
+      }
+
+      return null;
+    }
+
+    if (oceanreefDirect.kind === "status_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "direct_status_error",
+        message: `oceanreef pricesummary returned availability/status error: ${oceanreefDirect.message}`,
+        extractedTotal: null,
+      };
+    }
+
+    if (oceanreefDirect.kind === "request_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "request_error",
+        message: `oceanreef pricesummary extraction failed: ${oceanreefDirect.message}`,
+        extractedTotal: null,
+      };
+    }
+  }
+
   const signedHandoff = await tryExtractSignedHandoffTotal(
     candidate,
     reportProgress,
@@ -1862,39 +2191,56 @@ async function validateObservation(
 function collectCandidates(
   sidecar: CanonicalQuotesSidecarRecord,
   maxObservations: number,
+  minLeadDays: number,
+  utcTodayStartMs: number,
 ): ObservationCandidate[] {
   const listingId = sidecar.external_listing_id || "unknown";
   const detailUrl = sidecar.detail_url;
 
-  return sidecar.observations
-    .filter(
-      (observation) =>
-        observation.quote_available === true &&
-        typeof observation.grand_total === "number" &&
-        Number.isFinite(observation.grand_total) &&
-        typeof observation.handoff_url === "string" &&
-        observation.handoff_url.length > 0,
-    )
-    .slice(0, maxObservations)
-    .map((observation) => ({
-      adapterKey: sidecar.adapter_key,
-      listingId,
-      detailUrl,
-      startDate: observation.start_date,
-      endDate: observation.end_date,
-      observedGrandTotal: observation.grand_total as number,
-      observedBaseTotal:
-        typeof observation.base_total === "number" &&
-        Number.isFinite(observation.base_total)
-          ? observation.base_total
-          : null,
-      observedTaxesTotal:
-        typeof observation.taxes_total === "number" &&
-        Number.isFinite(observation.taxes_total)
-          ? observation.taxes_total
-          : null,
-      handoffUrl: observation.handoff_url as string,
-    }));
+  const availableObservations = sidecar.observations.filter(
+    (observation) =>
+      observation.quote_available === true &&
+      typeof observation.grand_total === "number" &&
+      Number.isFinite(observation.grand_total) &&
+      typeof observation.handoff_url === "string" &&
+      observation.handoff_url.length > 0,
+  );
+
+  const leadFilteredObservations =
+    minLeadDays > 0
+      ? availableObservations.filter((observation) => {
+          const leadDays = getLeadDaysFromUtcToday(
+            observation.start_date,
+            utcTodayStartMs,
+          );
+          return leadDays !== null && leadDays >= minLeadDays;
+        })
+      : availableObservations;
+
+  const selectedObservations =
+    minLeadDays > 0 && leadFilteredObservations.length === 0
+      ? availableObservations
+      : leadFilteredObservations;
+
+  return selectedObservations.slice(0, maxObservations).map((observation) => ({
+    adapterKey: sidecar.adapter_key,
+    listingId,
+    detailUrl,
+    startDate: observation.start_date,
+    endDate: observation.end_date,
+    observedGrandTotal: observation.grand_total as number,
+    observedBaseTotal:
+      typeof observation.base_total === "number" &&
+      Number.isFinite(observation.base_total)
+        ? observation.base_total
+        : null,
+    observedTaxesTotal:
+      typeof observation.taxes_total === "number" &&
+      Number.isFinite(observation.taxes_total)
+        ? observation.taxes_total
+        : null,
+    handoffUrl: observation.handoff_url as string,
+  }));
 }
 
 function printFailures(failures: ValidationFailure[]): void {
@@ -1947,6 +2293,7 @@ export async function runValidateQuoteHandoffAlignmentCli(
   }
 
   const candidates: ObservationCandidate[] = [];
+  const utcTodayStartMs = getUtcTodayStartMs();
 
   for (const fileName of files) {
     const filePath = resolve(quotesDir, fileName);
@@ -1958,7 +2305,14 @@ export async function runValidateQuoteHandoffAlignmentCli(
       continue;
     }
 
-    candidates.push(...collectCandidates(sidecar, options.maxObservations));
+    candidates.push(
+      ...collectCandidates(
+        sidecar,
+        options.maxObservations,
+        options.minLeadDays,
+        utcTodayStartMs,
+      ),
+    );
   }
 
   if (candidates.length === 0) {
@@ -1969,7 +2323,7 @@ export async function runValidateQuoteHandoffAlignmentCli(
   }
 
   progress.phase(
-    `Running handoff alignment validation adapter=${options.adapterKey} observations=${candidates.length} tolerance=${options.tolerance.toFixed(2)}`,
+    `Running handoff alignment validation adapter=${options.adapterKey} observations=${candidates.length} min_lead_days=${options.minLeadDays} tolerance=${options.tolerance.toFixed(2)}`,
   );
 
   let completed = 0;
