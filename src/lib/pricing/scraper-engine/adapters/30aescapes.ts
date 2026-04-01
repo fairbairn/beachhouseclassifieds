@@ -162,7 +162,6 @@ const OUTPUT_ROOT = resolve(
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
-const PRICING_PROFILE_PATH = resolve(OUTPUT_ROOT, "pricing-profile.json");
 const PRICING_ASSUMPTIONS_PATH = resolve(
   OUTPUT_ROOT,
   "pricing-assumptions.json",
@@ -170,16 +169,6 @@ const PRICING_ASSUMPTIONS_PATH = resolve(
 const ESCAPES_QUOTES_ENDPOINT =
   "https://www.30aescapes.com/rentals/ajax/get-pdp-rates.cfm";
 const THIRTY_A_ESCAPES_QUOTE_MODULE_VERSION = "2026-03-31.checkout-anchored-v1";
-
-type EscapesProfile = {
-  quote_signature?: {
-    fixed_params?: {
-      formtype?: string;
-      page?: string;
-      redskyclient?: string;
-    };
-  };
-};
 
 type EscapesAssumptionsStore = {
   assumptions?: {
@@ -201,7 +190,6 @@ type EscapesAssumptionsSnapshot = {
 
 type EscapeQuotesSidecarRecord = CanonicalQuotesSidecarRecord;
 
-let cachedEscapesProfile: EscapesProfile | null = null;
 let cachedEscapesAssumptions: EscapesAssumptionsStore | null = null;
 let escapesQuoteHttpActive = 0;
 let escapesQuoteHttpLastStartMs = 0;
@@ -392,20 +380,8 @@ function parseUsdAmountFromText(value: string): number | null {
   if (!match?.[1]) {
     return null;
   }
-  const parsed = Number((match[1] ?? "").replace(/,/g, ""));
+  const parsed = Number(match[1].replace(/,/g, ""));
   return Number.isFinite(parsed) ? roundCurrency(parsed) : null;
-}
-
-function parseAllUsdAmountsFromText(value: string): number[] {
-  const matches = Array.from(value.matchAll(/\$([0-9][0-9,]*\.[0-9]{2})/g));
-  const amounts: number[] = [];
-  for (const match of matches) {
-    const parsed = Number((match[1] ?? "").replace(/,/g, ""));
-    if (Number.isFinite(parsed)) {
-      amounts.push(roundCurrency(parsed));
-    }
-  }
-  return amounts;
 }
 
 function extractScriptValueAmount(
@@ -742,19 +718,6 @@ function buildObservationAssumptionsSnapshot(
   };
 }
 
-async function readEscapesProfile(): Promise<EscapesProfile> {
-  if (cachedEscapesProfile) {
-    return cachedEscapesProfile;
-  }
-  try {
-    const raw = await readFile(PRICING_PROFILE_PATH, "utf8");
-    cachedEscapesProfile = JSON.parse(raw) as EscapesProfile;
-  } catch {
-    cachedEscapesProfile = {};
-  }
-  return cachedEscapesProfile;
-}
-
 async function readEscapesAssumptions(): Promise<EscapesAssumptionsStore> {
   if (cachedEscapesAssumptions) {
     return cachedEscapesAssumptions;
@@ -766,105 +729,6 @@ async function readEscapesAssumptions(): Promise<EscapesAssumptionsStore> {
     cachedEscapesAssumptions = {};
   }
   return cachedEscapesAssumptions;
-}
-
-function extractListItemAmount(html: string, label: string): number | null {
-  const regex = new RegExp(`<li[^>]*>\\s*${label}([\\s\\S]*?)<\\/li>`, "i");
-  const segment = html.match(regex)?.[1] ?? "";
-  return parseUsdAmountFromText(segment);
-}
-
-function extractListItemAmounts(html: string, label: string): number[] {
-  const regex = new RegExp(`<li[^>]*>\\s*${label}([\\s\\S]*?)<\\/li>`, "i");
-  const segment = html.match(regex)?.[1] ?? "";
-  return parseAllUsdAmountsFromText(segment);
-}
-
-function chooseBestRentAmount(
-  rentAmounts: number[],
-  total: number | null,
-  taxes: number | null,
-): number | null {
-  if (rentAmounts.length === 0) {
-    return null;
-  }
-
-  if (total !== null && taxes !== null) {
-    let best: { amount: number; diff: number } | null = null;
-    for (const amount of rentAmounts) {
-      const diff = Math.abs(amount + taxes - total);
-      if (!best || diff < best.diff) {
-        best = { amount, diff };
-      }
-    }
-    if (best) {
-      return best.amount;
-    }
-  }
-
-  return rentAmounts[rentAmounts.length - 1] ?? null;
-}
-
-function parseEscapesQuoteHtml(html: string): {
-  quoteAvailable: boolean;
-  unavailableReason: string | null;
-  baseTotal: number | null;
-  taxesTotal: number | null;
-  quotedTotal: number | null;
-  handoffUrl: string | null;
-  feeLines: Array<{ name: string; amount: number }>;
-} {
-  const bodyText = stripHtml(html).toLowerCase();
-  if (
-    bodyText.includes("property is not available") ||
-    bodyText.includes("unit has no availability")
-  ) {
-    return {
-      quoteAvailable: false,
-      unavailableReason: "unavailable",
-      baseTotal: null,
-      taxesTotal: null,
-      quotedTotal: null,
-      handoffUrl: null,
-      feeLines: [],
-    };
-  }
-
-  const rentAmounts = extractListItemAmounts(html, "Rent");
-  const taxesLineAmounts = extractListItemAmounts(html, "Taxes");
-  const summaryQuotedTotal = parseUsdAmountFromText(
-    html.match(/class="text-right\s+pdp-quote-total"[^>]*>([^<]+)</i)?.[1] ??
-      "",
-  );
-  const quotedTotal =
-    summaryQuotedTotal ?? extractScriptValueAmount(html, "BookingValue");
-  const taxesFromScript = extractScriptValueAmount(html, "TaxValue");
-  const handoffUrl =
-    html.match(/id="detailBookBtn"[^>]*href="([^"]+)"/i)?.[1] ?? null;
-
-  const normalizedTaxesTotal =
-    taxesLineAmounts[taxesLineAmounts.length - 1] ?? taxesFromScript;
-  const normalizedBaseTotal = chooseBestRentAmount(
-    rentAmounts,
-    quotedTotal,
-    normalizedTaxesTotal,
-  );
-
-  const quoteAvailable =
-    Number.isFinite(quotedTotal) &&
-    Number(quotedTotal) > 0 &&
-    (Number.isFinite(normalizedBaseTotal) ||
-      Number.isFinite(normalizedTaxesTotal));
-
-  return {
-    quoteAvailable,
-    unavailableReason: quoteAvailable ? null : "no_quote_totals",
-    baseTotal: normalizedBaseTotal,
-    taxesTotal: normalizedTaxesTotal,
-    quotedTotal,
-    handoffUrl,
-    feeLines: [],
-  };
 }
 
 async function fetchEscapesQuote(params: {
@@ -2321,21 +2185,6 @@ async function fetchDetail(
       avg_all_in_multiplier:
         Number(assumptionsStore.assumptions?.avg_all_in_multiplier ?? 0) || 0,
     };
-    const assumptionsFeePct = Math.max(
-      0,
-      assumptionsSnapshot.avg_fee_pct_of_base,
-    );
-    const assumptionsTaxPct = Math.max(
-      0,
-      assumptionsSnapshot.avg_tax_pct_of_base,
-    );
-    const assumptionsAllInMultiplier = Math.max(
-      1,
-      assumptionsSnapshot.avg_all_in_multiplier > 0
-        ? assumptionsSnapshot.avg_all_in_multiplier
-        : 1 + assumptionsFeePct + assumptionsTaxPct,
-    );
-
     const existingRateByDate = new Map<string, number>();
     if (existingDetailJsonPath) {
       try {
@@ -2532,13 +2381,6 @@ async function fetchDetail(
         source: "quote_api",
       };
     };
-    const fallbackNightlyDefault =
-      medianNumber(Array.from(existingRateByDate.values())) ??
-      roundCurrency(
-        Number(process.env.ESCAPES30A_RATES_DERIVED_NIGHTLY_DEFAULT ?? "650") ||
-          650,
-      );
-
     if (shouldCallQuoteApi && extracted.propertyId && extracted.unitShortName) {
       reportDetailProgress?.(
         `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] start sample_windows=${sampledDays.length}`,
@@ -2552,21 +2394,6 @@ async function fetchDetail(
         const capturedAt = new Date().toISOString();
         const nights = quoteNightsDefault;
         const endDate = addDaysToIsoDate(day.date, nights);
-        const fallbackNightly =
-          existingRateByDate.get(day.date) ?? fallbackNightlyDefault;
-        const fallbackBaseTotal = roundCurrency(fallbackNightly * nights);
-        const fallbackTaxesTotal = roundCurrency(
-          fallbackBaseTotal * assumptionsTaxPct,
-        );
-        const fallbackFeesTotal = roundCurrency(
-          fallbackBaseTotal * assumptionsFeePct,
-        );
-        const fallbackGrandTotal = roundCurrency(
-          Math.max(
-            fallbackBaseTotal + fallbackTaxesTotal + fallbackFeesTotal,
-            fallbackBaseTotal * assumptionsAllInMultiplier,
-          ),
-        );
         reportDetailProgress?.(
           `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] window ${sampleIndex + 1}/${sampledDays.length} ${day.date} -> ${endDate}`,
         );
@@ -2783,11 +2610,11 @@ async function fetchDetail(
                 const date = addDaysToIsoDate(anchorDate, index * 7);
                 return {
                   date,
-                  status_code: "U",
+                  status_code: "U" as const,
                   is_available: false,
                   is_available_for_checkin: false,
                   is_available_for_checkout: false,
-                  booking_day_state: "blocked",
+                  booking_day_state: "blocked" as const,
                   min_nights_required: quoteNightsDefault,
                 };
               });
@@ -2795,21 +2622,6 @@ async function fetchDetail(
           const capturedAt = new Date().toISOString();
           const nights = quoteNightsDefault;
           const endDate = addDaysToIsoDate(day.date, nights);
-          const fallbackNightly =
-            existingRateByDate.get(day.date) ?? fallbackNightlyDefault;
-          const fallbackBaseTotal = roundCurrency(fallbackNightly * nights);
-          const fallbackTaxesTotal = roundCurrency(
-            fallbackBaseTotal * assumptionsTaxPct,
-          );
-          const fallbackFeesTotal = roundCurrency(
-            fallbackBaseTotal * assumptionsFeePct,
-          );
-          const fallbackGrandTotal = roundCurrency(
-            Math.max(
-              fallbackBaseTotal + fallbackTaxesTotal + fallbackFeesTotal,
-              fallbackBaseTotal * assumptionsAllInMultiplier,
-            ),
-          );
 
           quoteObservations.push(
             completeObservation({

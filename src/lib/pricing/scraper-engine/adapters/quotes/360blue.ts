@@ -1,6 +1,6 @@
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
 
-import { runLegacyAdapterQuoteViaEngine } from "./legacy-adapter-quote-runner";
+import { runLegacyAdapterQuoteViaEngine } from "@/lib/pricing/quotes/shared/legacy-adapter-quote-runner";
 
 export async function run360BlueQuoteCli(
   argv: string[],

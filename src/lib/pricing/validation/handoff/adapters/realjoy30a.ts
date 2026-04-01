@@ -1,5 +1,5 @@
 export function parseMoney(value: string): number | null {
-  const parsed = Number(value.replace(/[^0-9.\-]+/g, "").trim());
+  const parsed = Number(value.replace(/[^0-9.-]+/g, "").trim());
   if (!Number.isFinite(parsed)) {
     return null;
   }

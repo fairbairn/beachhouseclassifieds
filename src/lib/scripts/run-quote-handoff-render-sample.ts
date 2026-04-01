@@ -5,6 +5,14 @@ import { chromium } from "playwright";
 
 import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
 import type { CanonicalQuotesSidecarRecord } from "@/lib/pricing/contracts/quote-observations-contract";
+import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
+import { parseRealjoyRenderedTotal } from "@/lib/pricing/validation/handoff/adapters/realjoy30a";
+import {
+  createPacedGate,
+  createPerfTracker,
+  parseRetryDelaysMs,
+  withRetries,
+} from "@/lib/pricing/validation/handoff/shared/execution";
 
 type CliOptions = {
   adapterKey: string;
@@ -13,6 +21,10 @@ type CliOptions = {
   maxObservations: number;
   tolerance: number;
   timeoutMs: number;
+  settleMs: number;
+  concurrency: number;
+  minGapMs: number;
+  retryDelaysMs: number[];
 };
 
 type Candidate = {
@@ -29,7 +41,11 @@ function parseArgs(argv: string[]): CliOptions {
   let maxListings: number | null = null;
   let maxObservations = 4;
   let tolerance = 1;
-  let timeoutMs = 30000;
+  let timeoutMs = 15000;
+  let settleMs = 1000;
+  let concurrency = 3;
+  let minGapMs = 120;
+  let retryDelaysRaw = "";
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -82,6 +98,39 @@ function parseArgs(argv: string[]): CliOptions {
       index += 1;
       continue;
     }
+
+    if (arg === "--settle-ms" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        settleMs = Math.max(0, Math.floor(parsed));
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--concurrency" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        concurrency = Math.max(1, Math.floor(parsed));
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--min-gap-ms" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        minGapMs = Math.max(0, Math.floor(parsed));
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--retry-delays-ms" && value) {
+      retryDelaysRaw = value;
+      index += 1;
+      continue;
+    }
   }
 
   return {
@@ -91,15 +140,29 @@ function parseArgs(argv: string[]): CliOptions {
     maxObservations,
     tolerance,
     timeoutMs,
+    settleMs,
+    concurrency,
+    minGapMs,
+    retryDelaysMs: parseRetryDelaysMs(retryDelaysRaw, [0, 700, 1800, 4000]),
   };
 }
 
 function parseMoney(value: string): number | null {
-  const parsed = Number(value.replace(/[^0-9.\-]+/g, "").trim());
+  const parsed = Number(value.replace(/[^0-9.-]+/g, "").trim());
   if (!Number.isFinite(parsed)) {
     return null;
   }
   return Math.round(parsed * 100) / 100;
+}
+
+function parseGenericRenderedTotal(html: string): number | null {
+  const match = html.match(
+    /\bTotal\b[^$]{0,120}\$\s*([0-9,]+(?:\.[0-9]{2})?)/i,
+  );
+  if (!match?.[1]) {
+    return null;
+  }
+  return parseMoney(match[1]);
 }
 
 async function collectQuoteFiles(
@@ -114,7 +177,7 @@ async function collectQuoteFiles(
     .sort();
 
   if (listingId) {
-    files = files.filter((fileName) => fileName === `${listingId}.json`);
+    files = files.filter((name) => name === `${listingId}.json`);
   }
 
   if (maxListings !== null) {
@@ -129,7 +192,6 @@ function collectCandidates(
   maxObservations: number,
 ): Candidate[] {
   const listingId = sidecar.external_listing_id;
-
   return sidecar.observations
     .filter(
       (observation) =>
@@ -149,98 +211,70 @@ function collectCandidates(
     }));
 }
 
-async function extractRenderedTotal(
-  handoffUrl: string,
-  timeoutMs: number,
-): Promise<number | null> {
-  const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage();
-    await page.addInitScript(() => {
-      (window as unknown as { __name?: (target: unknown) => unknown }).__name =
-        (target: unknown) => target;
-    });
-    await page.goto(handoffUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: timeoutMs,
-    });
+async function extractRenderedTotal(input: {
+  adapterKey: string;
+  handoffUrl: string;
+  timeoutMs: number;
+  settleMs: number;
+  retryDelaysMs: number[];
+  paced: ReturnType<typeof createPacedGate>;
+  onRetry?: (message: string) => void;
+}): Promise<number | null> {
+  return withRetries(
+    async () =>
+      input.paced.run(async () => {
+        const browser = await chromium.launch({ headless: true });
+        try {
+          const page = await browser.newPage();
+          await page.addInitScript(() => {
+            (
+              window as unknown as { __name?: (target: unknown) => unknown }
+            ).__name = (target: unknown) => target;
+          });
 
-    await page
-      .waitForLoadState("networkidle", { timeout: timeoutMs })
-      .catch(() => {
-        // Continue with best-effort extraction if network stays chatty.
-      });
+          await page.goto(input.handoffUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: input.timeoutMs,
+          });
 
-    await page.waitForTimeout(1500);
+          await page
+            .waitForLoadState("networkidle", { timeout: input.timeoutMs })
+            .catch(() => {
+              // Best-effort if page continues background activity.
+            });
 
-    const value = await page.evaluate(() => {
-      const parseMoneyInPage = (raw: string): number | null => {
-        const parsed = Number(raw.replace(/[^0-9.\-]+/g, "").trim());
-        if (!Number.isFinite(parsed)) {
-          return null;
+          if (input.settleMs > 0) {
+            await page.waitForTimeout(input.settleMs);
+          }
+
+          const html = await page.content();
+          const adapterTotal =
+            input.adapterKey === "realjoy30a"
+              ? parseRealjoyRenderedTotal(html)
+              : null;
+          const total = adapterTotal ?? parseGenericRenderedTotal(html);
+
+          if (total === null) {
+            throw new Error("rendered total not found");
+          }
+
+          return total;
+        } finally {
+          await browser.close();
         }
-        return Math.round(parsed * 100) / 100;
-      };
-
-      const labelNodes = Array.from(
-        document.querySelectorAll(
-          ".pdp-quote-item-text, .book-quote-item-text",
-        ),
-      ) as HTMLElement[];
-      for (const labelNode of labelNodes) {
-        const label = labelNode.textContent?.trim().toLowerCase() ?? "";
-        if (!label.includes("total")) {
-          continue;
-        }
-        const item =
-          labelNode.closest("li, .pdp-quote-item, .book-quote-item") ??
-          labelNode.parentElement;
-        const priceNode = item?.querySelector(
-          ".book-quote-item-price, .pdp-quote-item-price, [data-price]",
-        ) as HTMLElement | null;
-        const priceAttr = priceNode?.getAttribute("data-price") ?? "";
-        const priceText = priceNode?.textContent ?? "";
-        const parsed = parseMoneyInPage(priceAttr || priceText);
-        if (parsed !== null) {
-          return parsed;
-        }
-      }
-
-      // Fallback: find any quote price node carrying data-price and pair it with nearby total text.
-      const pricedNodes = Array.from(
-        document.querySelectorAll(
-          ".book-quote-item-price[data-price], .pdp-quote-item-price[data-price], [data-price]",
-        ),
-      ) as HTMLElement[];
-      for (const node of pricedNodes) {
-        const container =
-          node.closest("li, .book-quote-item, .pdp-quote-item") ??
-          node.parentElement;
-        const context = (container?.textContent ?? "").toLowerCase();
-        if (!context.includes("total")) {
-          continue;
-        }
-        const parsed = parseMoneyInPage(node.getAttribute("data-price") ?? "");
-        if (parsed !== null) {
-          return parsed;
-        }
-      }
-
-      const bodyText = document.body?.innerText ?? "";
-      const match = bodyText.match(
-        /\bTotal\b[^$]{0,80}\$\s*([0-9,]+(?:\.[0-9]{2})?)/i,
-      );
-      if (match?.[1]) {
-        return parseMoneyInPage(match[1]);
-      }
-
+      }),
+    {
+      retryDelaysMs: input.retryDelaysMs,
+      label: "handoff_render",
+      onRetry: input.onRetry,
+    },
+  ).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("rendered total not found")) {
       return null;
-    });
-
-    return typeof value === "number" && Number.isFinite(value) ? value : null;
-  } finally {
-    await browser.close();
-  }
+    }
+    throw error;
+  });
 }
 
 async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
@@ -266,7 +300,6 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
     options.listingId,
     options.maxListings,
   );
-
   if (files.length === 0) {
     progress.failure(
       `No quote sidecars found for adapter=${options.adapterKey}`,
@@ -276,8 +309,7 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
 
   const candidates: Candidate[] = [];
   for (const fileName of files) {
-    const filePath = resolve(quotesDir, fileName);
-    const raw = await readFile(filePath, "utf8");
+    const raw = await readFile(resolve(quotesDir, fileName), "utf8");
     const sidecar = JSON.parse(raw) as CanonicalQuotesSidecarRecord;
     candidates.push(...collectCandidates(sidecar, options.maxObservations));
   }
@@ -290,32 +322,66 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   }
 
   progress.phase(
-    `Running handoff render sample adapter=${options.adapterKey} observations=${candidates.length} tolerance=${options.tolerance.toFixed(2)}`,
+    `Running handoff render sample adapter=${options.adapterKey} observations=${candidates.length} tolerance=${options.tolerance.toFixed(2)} concurrency=${options.concurrency} min_gap_ms=${options.minGapMs}`,
   );
 
+  const paced = createPacedGate({
+    concurrency: options.concurrency,
+    minGapMs: options.minGapMs,
+  });
+  const perf = createPerfTracker();
+
   let failures = 0;
-  for (let index = 0; index < candidates.length; index += 1) {
-    const candidate = candidates[index]!;
-    const renderedTotal = await extractRenderedTotal(
-      candidate.handoffUrl,
-      options.timeoutMs,
-    );
+  const results = await runWithConcurrency(
+    candidates,
+    options.concurrency,
+    async (candidate) => {
+      const renderedTotal = await extractRenderedTotal({
+        adapterKey: options.adapterKey,
+        handoffUrl: candidate.handoffUrl,
+        timeoutMs: options.timeoutMs,
+        settleMs: options.settleMs,
+        retryDelaysMs: options.retryDelaysMs,
+        paced,
+        onRetry: (message) => {
+          progress.tick(
+            `listing=${candidate.listingId} window=${candidate.startDate}->${candidate.endDate} ${message}`,
+          );
+        },
+      });
+
+      const snapshot = perf.markDone();
+      const diff =
+        renderedTotal === null
+          ? null
+          : Math.abs(renderedTotal - candidate.observedGrandTotal);
+      const outcome =
+        renderedTotal === null
+          ? "total_not_found"
+          : diff !== null && diff <= options.tolerance
+            ? "match"
+            : "mismatch";
+
+      return { candidate, renderedTotal, diff, outcome, snapshot };
+    },
+  );
+
+  for (const result of results) {
+    const { candidate, renderedTotal, diff, outcome, snapshot } = result;
 
     if (renderedTotal === null) {
       failures += 1;
       progress.failure(
-        `listing=${candidate.listingId} window=${candidate.startDate}->${candidate.endDate} rendered_total=n/a observed=${candidate.observedGrandTotal.toFixed(2)} code=total_not_found`,
+        `listing=${candidate.listingId} window=${candidate.startDate}->${candidate.endDate} rendered_total=n/a observed=${candidate.observedGrandTotal.toFixed(2)} code=total_not_found elapsed_s=${snapshot.elapsedSeconds.toFixed(1)}`,
       );
       continue;
     }
 
-    const diff = Math.abs(renderedTotal - candidate.observedGrandTotal);
-    const outcome = diff <= options.tolerance ? "match" : "mismatch";
     progress.progress(
-      `${index + 1}/${candidates.length} listing=${candidate.listingId} window=${candidate.startDate}->${candidate.endDate} observed=${candidate.observedGrandTotal.toFixed(2)} rendered=${renderedTotal.toFixed(2)} diff=${diff.toFixed(2)} outcome=${outcome}`,
+      `${snapshot.completed}/${candidates.length} listing=${candidate.listingId} window=${candidate.startDate}->${candidate.endDate} observed=${candidate.observedGrandTotal.toFixed(2)} rendered=${renderedTotal.toFixed(2)} diff=${(diff ?? 0).toFixed(2)} outcome=${outcome} elapsed_s=${snapshot.elapsedSeconds.toFixed(1)} throughput_per_min=${snapshot.throughputPerMinute.toFixed(2)}`,
     );
 
-    if (diff > options.tolerance) {
+    if (diff !== null && diff > options.tolerance) {
       failures += 1;
     }
   }
