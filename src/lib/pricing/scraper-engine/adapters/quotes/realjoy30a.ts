@@ -48,6 +48,7 @@ const DEFAULT_WEEKS = 24;
 const DEFAULT_NIGHTS = 7;
 const DEFAULT_QUOTE_CONCURRENCY = 4;
 const DEFAULT_LISTING_CONCURRENCY = 2;
+const DEFAULT_QUOTE_RETRY_DELAYS_MS = [0, 1200, 3000, 6000];
 const GLOBAL_DEFAULT_BASE_NIGHTLY = 700;
 const DEFAULT_FALLBACK_TAX_PCT = 0.12;
 const DEFAULT_FALLBACK_FEE_PCT = 0.03;
@@ -313,12 +314,29 @@ function toFormBody(input: {
   return body;
 }
 
+function parseRetryDelaysMs(raw: string): number[] {
+  const parsed = raw
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .map((value) => Math.floor(value));
+  if (parsed.length >= 2) {
+    return parsed;
+  }
+  return DEFAULT_QUOTE_RETRY_DELAYS_MS;
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchQuoteHtml(input: {
   detailUrl: string;
   listingId: string;
   propertyName: string;
   checkInIso: string;
   checkOutIso: string;
+  reportProgress?: (message: string) => void;
 }): Promise<RawObservation> {
   const endpoint = `${BASE_HOST}/ajax/quote`;
   const fallbackHandoffUrl = buildFallbackHandoffUrl({
@@ -327,72 +345,122 @@ async function fetchQuoteHtml(input: {
     checkOutIso: input.checkOutIso,
   });
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      accept: "text/html, */*; q=0.01",
-      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-      "x-requested-with": "XMLHttpRequest",
-      "user-agent": USER_AGENT,
-      referer: input.detailUrl,
-      origin: BASE_HOST,
-    },
-    body: toFormBody({
-      listingId: input.listingId,
-      checkInIso: input.checkInIso,
-      checkOutIso: input.checkOutIso,
-      propertyName: input.propertyName,
-    }),
-  });
+  const retryDelaysMs = parseRetryDelaysMs(
+    process.env.REALJOY30A_QUOTE_RETRY_DELAYS_MS ?? "",
+  );
 
-  if (!response.ok) {
-    return {
-      startDate: input.checkInIso,
-      endDate: input.checkOutIso,
-      quoteAvailable: false,
-      quoteUnavailableReason: `Quote request failed with status ${response.status}`,
-      baseTotal: null,
-      taxesTotal: null,
-      feesTotal: null,
-      grandTotal: null,
-      currency: "USD",
-      handoffUrl: fallbackHandoffUrl,
-      feeLines: [],
-    };
+  let lastFailureReason = "Quote request failed";
+
+  for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+    const delayMs = retryDelaysMs[attempt] ?? 0;
+    if (delayMs > 0) {
+      await sleep(delayMs);
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          accept: "text/html, */*; q=0.01",
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "x-requested-with": "XMLHttpRequest",
+          "user-agent": USER_AGENT,
+          referer: input.detailUrl,
+          origin: BASE_HOST,
+        },
+        body: toFormBody({
+          listingId: input.listingId,
+          checkInIso: input.checkInIso,
+          checkOutIso: input.checkOutIso,
+          propertyName: input.propertyName,
+        }),
+      });
+
+      if (!response.ok) {
+        lastFailureReason = `Quote request failed with status ${response.status}`;
+        if (attempt < retryDelaysMs.length - 1) {
+          const nextDelayMs = retryDelaysMs[attempt + 1] ?? 0;
+          input.reportProgress?.(
+            `quote retry ${attempt + 1}/${retryDelaysMs.length} failed status=${response.status} next_delay_ms=${nextDelayMs}`,
+          );
+          continue;
+        }
+        break;
+      }
+
+      const html = await response.text();
+      const reason = parseUnavailableReason(html);
+
+      const baseTotal = parsePriceByLabel(html, "Rent");
+      const taxesTotal = parsePriceByLabel(html, "Taxes");
+      const feesTotalFromTopline = parsePriceByLabel(html, "Fees");
+      const grandTotal = parsePriceByLabel(html, "Total");
+      const feeLines = parseFeeLines(html);
+      const feeLinesTotal =
+        feeLines.length > 0
+          ? roundCurrency(feeLines.reduce((sum, line) => sum + line.amount, 0))
+          : null;
+      const feesTotal = feeLinesTotal ?? feesTotalFromTopline;
+      const handoffUrl = extractBookNowUrl(html) ?? fallbackHandoffUrl;
+
+      const quoteAvailable =
+        reason === null &&
+        baseTotal !== null &&
+        baseTotal > 0 &&
+        grandTotal !== null &&
+        grandTotal >= baseTotal;
+
+      if (
+        !quoteAvailable &&
+        reason === null &&
+        attempt < retryDelaysMs.length - 1
+      ) {
+        lastFailureReason = "Quote response missing totals";
+        const nextDelayMs = retryDelaysMs[attempt + 1] ?? 0;
+        input.reportProgress?.(
+          `quote retry ${attempt + 1}/${retryDelaysMs.length} missing totals next_delay_ms=${nextDelayMs}`,
+        );
+        continue;
+      }
+
+      return {
+        startDate: input.checkInIso,
+        endDate: input.checkOutIso,
+        quoteAvailable,
+        quoteUnavailableReason: reason,
+        baseTotal,
+        taxesTotal,
+        feesTotal,
+        grandTotal,
+        currency: "USD",
+        handoffUrl,
+        feeLines,
+      };
+    } catch (error: unknown) {
+      lastFailureReason =
+        error instanceof Error ? error.message : "Quote request threw";
+      if (attempt < retryDelaysMs.length - 1) {
+        const nextDelayMs = retryDelaysMs[attempt + 1] ?? 0;
+        input.reportProgress?.(
+          `quote retry ${attempt + 1}/${retryDelaysMs.length} request_error=${lastFailureReason} next_delay_ms=${nextDelayMs}`,
+        );
+        continue;
+      }
+    }
   }
-
-  const html = await response.text();
-  const reason = parseUnavailableReason(html);
-
-  const baseTotal = parsePriceByLabel(html, "Rent");
-  const taxesTotal = parsePriceByLabel(html, "Taxes");
-  const feesTotalFromTopline = parsePriceByLabel(html, "Fees");
-  const grandTotal = parsePriceByLabel(html, "Total");
-  const feeLines = parseFeeLines(html);
-  const feeLinesTotal =
-    feeLines.length > 0
-      ? roundCurrency(feeLines.reduce((sum, line) => sum + line.amount, 0))
-      : null;
-  const feesTotal = feeLinesTotal ?? feesTotalFromTopline;
-  const handoffUrl = extractBookNowUrl(html) ?? fallbackHandoffUrl;
 
   return {
     startDate: input.checkInIso,
     endDate: input.checkOutIso,
-    quoteAvailable:
-      reason === null &&
-      baseTotal !== null &&
-      baseTotal > 0 &&
-      grandTotal !== null &&
-      grandTotal >= baseTotal,
-    quoteUnavailableReason: reason,
-    baseTotal,
-    taxesTotal,
-    feesTotal,
-    grandTotal,
+    quoteAvailable: false,
+    quoteUnavailableReason: lastFailureReason,
+    baseTotal: null,
+    taxesTotal: null,
+    feesTotal: null,
+    grandTotal: null,
     currency: "USD",
-    handoffUrl,
-    feeLines,
+    handoffUrl: fallbackHandoffUrl,
+    feeLines: [],
   };
 }
 
@@ -409,6 +477,7 @@ async function buildSidecarForListing(input: {
   quotesDir: string;
   options: CliOptions;
   capturedAtIso: string;
+  progress?: QuoteProgress | null;
 }): Promise<{
   listingId: string;
   observations: number;
@@ -446,6 +515,11 @@ async function buildSidecarForListing(input: {
         propertyName,
         checkInIso: startDate,
         checkOutIso: endDate,
+        reportProgress: (message) => {
+          input.progress?.tick(
+            `listing=${detail.external_listing_id} window=${startDate}->${endDate} ${message}`,
+          );
+        },
       });
     },
   );
@@ -627,6 +701,9 @@ export async function runRealjoy30aQuoteCli(
   );
 
   const capturedAtIso = new Date().toISOString();
+  const startedAtMs = Date.now();
+  let completedListings = 0;
+
   const summaries: Array<{
     listingId: string;
     observations: number;
@@ -640,7 +717,20 @@ export async function runRealjoy30aQuoteCli(
         quotesDir,
         options,
         capturedAtIso,
+        progress,
       });
+
+      completedListings += 1;
+      const elapsedSeconds = (Date.now() - startedAtMs) / 1000;
+      const elapsedMinutes = elapsedSeconds > 0 ? elapsedSeconds / 60 : 0;
+      const throughput =
+        elapsedMinutes > 0
+          ? (completedListings / elapsedMinutes).toFixed(2)
+          : "0.00";
+
+      progress?.progress(
+        `adapter=${ADAPTER_KEY} ${completedListings}/${selected.length} listing=${summary.listingId} observations=${summary.observations} available=${summary.availableQuotes} elapsed_s=${elapsedSeconds.toFixed(1)} throughput_listings_per_min=${throughput}`,
+      );
 
       progress?.tick(
         `quoted listing=${summary.listingId} observations=${summary.observations} available=${summary.availableQuotes}`,

@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds plus pricing-record parity.
 
-Audit date: 2026-03-31T00:36:00Z
+Audit date: 2026-04-01T00:24:10Z
 
 Data source:
 
@@ -62,7 +62,7 @@ Preferred (non-blocking):
 | Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Rates | Pricing Records | Image URLs | Avg Img/List | API Avail | API Rates | API Quote | Ready | Notes                                                                                                                                                                                      |
 | ----------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ----: | --------------: | ---------: | -----------: | :-------: | :-------: | :-------: | :---: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 30abeach                |    17 |   17 |      17 |           17 |           17 |         17 |        17 |     17 |    17 |              17 |       1652 |        97.18 |    ✅     |    ✅     |    ✅     |  ✅   | <span style="white-space: nowrap;">Quote sidecar validator passing (17/17) with full pricing parity (`details/pricing/*.json` + `index.json`)</span>                                       |
-| 30aescapes              |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |   169 |             169 |       6282 |        37.17 |    ✅     |    ✅     |    ✅     |  ✅   | <span style="white-space: nowrap;">Quote sidecar validator passing (169/169) with full pricing parity (`details/pricing/*.json` + `index.json`)</span>                                     |
+| 30aescapes              |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |   169 |             169 |       6282 |        37.17 |    ✅     |    ✅     |    ✅     |  ✅   | <span style="white-space: nowrap;">Quote validator passing (169/169), handoff alignment revalidated for corrected windows, and pricing cache rebuilt (24 weeks, 169 listings)</span>         |
 | 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     0 |             105 |       5247 |        49.97 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">Quote sidecar validator passing (105/105) with full pricing parity (`details/pricing/*.json` + `index.json`)</span>                                     |
 | 30avacay                |   115 |  115 |     115 |          115 |          115 |        115 |       115 |    115 |     0 |             115 |       5329 |        46.34 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">Quote sidecar validator passing (115/115) with full pricing parity (`details/pricing/*.json` + `index.json`)</span>                                     |
 | 360blue                 |   592 |  592 |     592 |          592 |          592 |        592 |       592 |    592 |   592 |             592 |      29516 |        49.86 |    ✅     |    ❌     |    ✅     |  ✅   | <span style="white-space: nowrap;">Quote sidecar validator passing (592/592); pricing cache parity complete while direct exact per-day nightly endpoint remains unconfirmed</span>         |

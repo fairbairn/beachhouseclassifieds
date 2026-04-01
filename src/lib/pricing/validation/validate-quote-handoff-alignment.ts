@@ -541,6 +541,141 @@ function parse30AEscapesTotalsFromAjax(html: string): {
   };
 }
 
+function parseRealjoyPriceByLabel(html: string, label: string): number | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `<span\\s+class="pdp-quote-item-text">\\s*${escaped}\\s*<\\/span>[\\s\\S]*?<span\\s+class="pdp-quote-item-price"\\s+data-price="([^"]+)"`,
+    "i",
+  );
+  const value = pattern.exec(html)?.[1] ?? "";
+  const parsed = parseMoney(value);
+  return parsed !== null && parsed >= 0 ? parsed : null;
+}
+
+function extractRealjoyPropertyName(detailHtml: string): string {
+  const h1Match = detailHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (!h1Match?.[1]) {
+    return "";
+  }
+  return h1Match[1]
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toUsDateFromIso(isoDate: string): string {
+  const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return isoDate;
+  }
+  return `${match[2]}/${match[3]}/${match[1]}`;
+}
+
+async function tryExtractRealjoyDirectTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (!parsed.hostname.endsWith("realjoy.com")) {
+    return { kind: "unsupported" };
+  }
+
+  const propertyId =
+    parsed.searchParams.get("propertyID")?.trim() ??
+    parsed.searchParams.get("propertyId")?.trim() ??
+    candidate.listingId.trim();
+  if (!propertyId) {
+    return { kind: "unsupported" };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+
+  try {
+    const detailResult = await fetchWithRetry({
+      url: candidate.detailUrl,
+      init: {
+        headers: {
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "user-agent": USER_AGENT,
+          referer: candidate.handoffUrl,
+        },
+      },
+      retryDelaysMs,
+      reportProgress,
+      retryLabel: "realjoy detail page",
+    });
+
+    if (!detailResult.ok) {
+      return { kind: "request_error", message: detailResult.message };
+    }
+
+    const detailHtml = await detailResult.response.text();
+    const propertyName = extractRealjoyPropertyName(detailHtml);
+    const endpoint = `${parsed.origin}/ajax/quote`;
+    const body = new URLSearchParams();
+    body.set("checkin", toUsDateFromIso(candidate.startDate));
+    body.set("checkout", toUsDateFromIso(candidate.endDate));
+    body.set("propertyID", propertyId);
+    body.set("roomTypeID", "");
+    body.set("propertyName", propertyName);
+    body.set("hash", "");
+
+    const quoteResult = await fetchWithRetry({
+      url: endpoint,
+      init: {
+        method: "POST",
+        headers: {
+          accept: "text/html, */*; q=0.01",
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "x-requested-with": "XMLHttpRequest",
+          "user-agent": USER_AGENT,
+          referer: candidate.detailUrl,
+          origin: parsed.origin,
+        },
+        body: body.toString(),
+      },
+      retryDelaysMs,
+      reportProgress,
+      retryLabel: "realjoy ajax quote",
+    });
+
+    if (!quoteResult.ok) {
+      return { kind: "request_error", message: quoteResult.message };
+    }
+
+    const quoteHtml = await quoteResult.response.text();
+    const total = parseRealjoyPriceByLabel(quoteHtml, "Total");
+    const baseTotal = parseRealjoyPriceByLabel(quoteHtml, "Rent");
+    const taxesTotal = parseRealjoyPriceByLabel(quoteHtml, "Taxes");
+
+    if (total === null || total <= 0) {
+      return {
+        kind: "request_error",
+        message: "realjoy ajax quote payload missing total",
+      };
+    }
+
+    return {
+      kind: "success",
+      total,
+      baseTotal,
+      taxesTotal,
+    };
+  } catch (error: unknown) {
+    return {
+      kind: "request_error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function tryExtractDirectStreamlineTotal(
   candidate: ObservationCandidate,
   reportProgress?: ObservationProgressReporter,
@@ -958,6 +1093,43 @@ async function validateObservation(
     }
 
     return null;
+  }
+
+  if (candidate.adapterKey === "realjoy30a") {
+    const realjoyDirect = await tryExtractRealjoyDirectTotal(
+      candidate,
+      reportProgress,
+    );
+
+    if (realjoyDirect.kind === "success") {
+      const diff = Math.abs(realjoyDirect.total - candidate.observedGrandTotal);
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from realjoy ajax total=${realjoyDirect.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: realjoyDirect.total,
+        };
+      }
+      return null;
+    }
+
+    if (realjoyDirect.kind === "request_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "request_error",
+        message: `realjoy ajax quote extraction failed: ${realjoyDirect.message}`,
+        extractedTotal: null,
+      };
+    }
   }
 
   if (escapesDirect.kind === "status_error") {

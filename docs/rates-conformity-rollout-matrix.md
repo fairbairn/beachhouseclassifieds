@@ -1,6 +1,6 @@
 # Rates Conformity Rollout Matrix
 
-Last updated: 2026-03-31T01:50:00Z
+Last updated: 2026-04-01T00:24:10Z
 
 This matrix maps each adapter to the data needed to satisfy [rates-conformity-contract.md](./rates-conformity-contract.md).
 
@@ -29,7 +29,7 @@ This matrix maps each adapter to the data needed to satisfy [rates-conformity-co
 | 360blue                 | custom_hybrid   | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | pricing profile + assumptions + 24-week listing cache + direct API quote path validated; capture probe-backed handoff URL signature for full readiness                                             |
 | keyco30a                | custom_hybrid   | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | pricing cache + quote validators now passing (381/381); finalize handoff signature proof and increase assumptions sample depth                                                                     |
 | homeownerscollection30a | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | pricing profile + 24-week listing cache now at full nightly parity; expand canonical quote sidecar coverage and handoff signature proof                                                            |
-| 30aescapes              | track_bluetent  | yes              | yes                     | quote_window_avg  | quoted_url      | seeded      | [x]     | quote/pricing conformity passing (169/169); increase assumptions sample minimum and preserve runtime quote-output mapping stability                                                                |
+| 30aescapes              | track_bluetent  | yes              | yes                     | quote_window_avg  | quoted_url      | ready       | [x]     | quote validator passing (169/169), handoff alignment passing after targeted correction, and pricing cache rebuilt (169 listings, 24-week window)                                                    |
 | royaldestinations       | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | full quote + pricing runtime pass complete (143/143); finalize assumptions sample depth and handoff signature proof for `ready`                                                                    |
 | realjoy30a              | track_bluetent  | yes              | no                      | quote_window_avg  | template_url    | none        | [ ]     | run full-all-listings quote capture + validator + pricing cache; then record assumptions sample set                                                                                                |
 | benchmark30a            | track_bluetent  | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | full quote + pricing runtime pass complete (128/128); finalize assumptions sample depth and handoff signature proof for `ready`                                                                    |
