@@ -45,24 +45,50 @@ type RcapiResult = {
   prices?: RcapiPriceNode[];
 };
 
+type DetailedQuoteResponse = {
+  status?: unknown;
+  content?: unknown;
+  message?: unknown;
+};
+
+type ParsedLineItem = {
+  name: string;
+  amount: number;
+  optional: boolean;
+};
+
+type ParsedDetailedQuote = {
+  baseTotal: number | null;
+  taxesTotal: number | null;
+  feesTotal: number | null;
+  grandTotal: number | null;
+  feeLines: Array<{ name: string; amount: number }>;
+};
+
 type RawObservation = {
   startDate: string;
   endDate: string;
   quoteAvailable: boolean;
+  quoteUnavailableReason: string | null;
   baseTotal: number | null;
+  taxesTotal: number | null;
+  feesTotal: number | null;
+  grandTotal: number | null;
+  quotedTotal: number | null;
   currency: string;
   handoffUrl: string;
+  feeLines: Array<{ name: string; amount: number }>;
 };
 
 const ADAPTER_KEY = "30aluxury" as const;
 const BASE_HOST = "https://www.30aluxuryvacations.com";
+const RCAPI_ENDPOINT = `${BASE_HOST}/rcapi/item/avail/search`;
+const DETAILED_QUOTE_ENDPOINT = `${BASE_HOST}/rescms/ajax/item/pricing/quote`;
 const DEFAULT_LISTINGS = 10;
 const DEFAULT_WEEKS = 24;
 const DEFAULT_NIGHTS = 7;
 const DEFAULT_QUOTE_CONCURRENCY = 4;
 const DEFAULT_LISTING_CONCURRENCY = 2;
-const FIXED_TAX_RATE = 0.12;
-const FIXED_FEE_RATE = 0;
 const GLOBAL_DEFAULT_BASE_NIGHTLY = 700;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
@@ -146,6 +172,101 @@ function interpolateValue(
   }
 
   return null;
+}
+
+function parseMoney(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? roundCurrency(value) : null;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim().replace(/,/g, ""));
+    return Number.isFinite(parsed) ? roundCurrency(parsed) : null;
+  }
+  return null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function decodeBasicHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'");
+}
+
+function stripHtmlToText(value: string): string {
+  return decodeBasicHtmlEntities(value)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseClassSummaryAmount(
+  html: string,
+  className: "sub-total" | "tax" | "total",
+): number | null {
+  const escapedClass = className.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+  const regex = new RegExp(
+    `<tr[^>]*class="${escapedClass}[^"]*"[^>]*>\\s*<th>[^<]+<\\/th>\\s*<td class="amount">\\s*(?:<b>)?\\$([0-9,]+\\.[0-9]{2})(?:<\\/b>)?\\s*<\\/td>`,
+    "i",
+  );
+  const match = html.match(regex);
+  if (!match?.[1]) {
+    return null;
+  }
+  return parseMoney(match[1]);
+}
+
+function parseDetailedQuoteContent(contentHtml: string): ParsedDetailedQuote {
+  const lineItems: ParsedLineItem[] = [];
+  const rowRegex =
+    /<tr[^>]*class="line-item[^"]*"[^>]*>\s*<td>([\s\S]*?)<\/td>\s*<td class="amount">\$([0-9,]+\.[0-9]{2})<\/td>/gi;
+
+  for (const match of contentHtml.matchAll(rowRegex)) {
+    const name = stripHtmlToText(match[1] ?? "");
+    const amount = parseMoney(match[2]);
+    if (!name || amount === null) {
+      continue;
+    }
+    lineItems.push({
+      name,
+      amount,
+      optional: /\(optional\)/i.test(name),
+    });
+  }
+
+  const lodgingLine =
+    lineItems.find((item) => /^lodging\s*:/i.test(item.name)) ?? null;
+  const includedFeeLines = lineItems
+    .filter((item) => !/^lodging\s*:/i.test(item.name) && !item.optional)
+    .map((item) => ({ name: item.name, amount: item.amount }));
+
+  const subTotal = parseClassSummaryAmount(contentHtml, "sub-total");
+  const taxesTotal = parseClassSummaryAmount(contentHtml, "tax");
+  const total = parseClassSummaryAmount(contentHtml, "total");
+
+  const baseTotal = lodgingLine?.amount ?? null;
+  const feesFromLines = includedFeeLines.reduce(
+    (sum, item) => sum + item.amount,
+    0,
+  );
+  const feesTotal =
+    subTotal !== null && baseTotal !== null
+      ? roundCurrency(Math.max(0, subTotal - baseTotal))
+      : roundCurrency(feesFromLines);
+
+  return {
+    baseTotal,
+    taxesTotal,
+    feesTotal,
+    grandTotal: total,
+    feeLines: includedFeeLines,
+  };
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -329,7 +450,8 @@ function buildCheckoutUrlFromQuoteNode(
   params.set("rcav[adult]", adult);
   params.set("rcav[child]", child);
   params.set("rcav[eid]", eid);
-  params.append(`rcav[IDs][${idsKey}][]`, idsValue);
+  params.set("rcav[coupon]", "");
+  params.set(`rcav[IDs][${idsKey}][0]`, idsValue);
   params.set("eid", eid);
   return `${BASE_HOST}/rescms/item/${eid}/buy?${params.toString()}`;
 }
@@ -356,8 +478,7 @@ async function fetchRcapiQuote(input: {
   params.set("rcav[flex]", "");
   params.set("rcav[flex_type]", "d");
 
-  const url = `${BASE_HOST}/rcapi/item/avail/search?${params.toString()}`;
-  const response = await fetch(url, {
+  const response = await fetch(`${RCAPI_ENDPOINT}?${params.toString()}`, {
     headers: {
       accept: "application/json, text/plain, */*",
       "x-requested-with": "XMLHttpRequest",
@@ -389,6 +510,160 @@ async function fetchRcapiQuote(input: {
     baseTotal,
     currency: priceNode?.c?.trim() || "USD",
     quoteNode: priceNode,
+  };
+}
+
+async function fetchDetailedQuote(input: {
+  detailUrl: string;
+  checkInIso: string;
+  checkOutIso: string;
+  adults: number;
+  children: number;
+  entityId: number;
+  idsTuple: string;
+  rcType: string;
+}): Promise<{ parsed: ParsedDetailedQuote | null; reason: string | null }> {
+  const query = new URLSearchParams();
+  query.set("rcav[begin]", toUsDate(input.checkInIso));
+  query.set("rcav[end]", toUsDate(input.checkOutIso));
+  query.set("rcav[adult]", String(Math.max(1, input.adults)));
+  query.set("rcav[child]", String(Math.max(0, input.children)));
+  query.set("rcav[eid]", String(input.entityId));
+  query.set("rcav[coupon]", "");
+  query.set(`rcav[IDs][${input.rcType}][]`, input.idsTuple);
+  query.set("eid", String(input.entityId));
+  query.set("buy_text", "Book Now");
+
+  const response = await fetch(
+    `${DETAILED_QUOTE_ENDPOINT}?${query.toString()}`,
+    {
+      headers: {
+        accept: "application/json, text/plain, */*",
+        "user-agent": USER_AGENT,
+        referer: input.detailUrl,
+        origin: BASE_HOST,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      parsed: null,
+      reason: `Detailed quote HTTP ${response.status}`,
+    };
+  }
+
+  const payload = (await response.json()) as DetailedQuoteResponse;
+  const status =
+    typeof payload.status === "number"
+      ? payload.status
+      : Number(payload.status);
+  const content = typeof payload.content === "string" ? payload.content : "";
+  const message = asString(payload.message);
+
+  if (!Number.isFinite(status) || status !== 1 || content.length === 0) {
+    return {
+      parsed: null,
+      reason: message ?? "Detailed quote endpoint returned no pricing content",
+    };
+  }
+
+  return {
+    parsed: parseDetailedQuoteContent(content),
+    reason: null,
+  };
+}
+
+async function fetchQuoteWithTotals(input: {
+  detailUrl: string;
+  checkInIso: string;
+  checkOutIso: string;
+  adults: number;
+  children: number;
+  entityId: number;
+  idsTuple: string;
+  rcType: string;
+}): Promise<RawObservation> {
+  const base = await fetchRcapiQuote(input);
+  const handoffUrl = buildCheckoutUrlFromQuoteNode(
+    {
+      entityId: input.entityId,
+      checkInIso: input.checkInIso,
+      checkOutIso: input.checkOutIso,
+      adults: input.adults,
+      children: input.children,
+      idsTuple: input.idsTuple,
+      rcType: input.rcType,
+    },
+    base.quoteNode,
+  );
+
+  if (!base.quoteAvailable || base.baseTotal === null) {
+    return {
+      startDate: input.checkInIso,
+      endDate: input.checkOutIso,
+      quoteAvailable: false,
+      quoteUnavailableReason: "Dates unavailable for selected stay window",
+      baseTotal: null,
+      taxesTotal: null,
+      feesTotal: null,
+      grandTotal: null,
+      quotedTotal: null,
+      currency: base.currency,
+      handoffUrl,
+      feeLines: [],
+    };
+  }
+
+  const detailed = await fetchDetailedQuote(input);
+  if (!detailed.parsed) {
+    return {
+      startDate: input.checkInIso,
+      endDate: input.checkOutIso,
+      quoteAvailable: false,
+      quoteUnavailableReason:
+        detailed.reason ??
+        "Detailed quote unavailable for selected stay window",
+      baseTotal: base.baseTotal,
+      taxesTotal: null,
+      feesTotal: null,
+      grandTotal: null,
+      quotedTotal: base.baseTotal,
+      currency: base.currency,
+      handoffUrl,
+      feeLines: [],
+    };
+  }
+
+  const resolvedBase = detailed.parsed.baseTotal ?? base.baseTotal;
+  const resolvedTaxes = detailed.parsed.taxesTotal ?? 0;
+  const resolvedFees =
+    detailed.parsed.feesTotal ??
+    roundCurrency(
+      Math.max(
+        0,
+        (detailed.parsed.grandTotal ?? resolvedBase) -
+          resolvedBase -
+          resolvedTaxes,
+      ),
+    );
+  const resolvedGrand =
+    detailed.parsed.grandTotal ??
+    roundCurrency(resolvedBase + resolvedTaxes + resolvedFees);
+
+  return {
+    startDate: input.checkInIso,
+    endDate: input.checkOutIso,
+    quoteAvailable: true,
+    quoteUnavailableReason: null,
+    baseTotal: resolvedBase,
+    taxesTotal: resolvedTaxes,
+    feesTotal: resolvedFees,
+    grandTotal: resolvedGrand,
+    quotedTotal: resolvedGrand,
+    currency: base.currency,
+    handoffUrl,
+    feeLines: detailed.parsed.feeLines,
   };
 }
 
@@ -441,39 +716,21 @@ async function buildSidecarForListing(input: {
       const startDate = addDays(anchorDate, index * sampleStepDays);
       const endDate = addDays(startDate, input.options.nights);
 
-      const quote = await fetchRcapiQuote({
+      return fetchQuoteWithTotals({
         detailUrl: detail.detail_url,
         checkInIso: startDate,
         checkOutIso: endDate,
         adults: input.options.adults,
         children: input.options.children,
         entityId,
+        idsTuple,
+        rcType,
       });
-
-      return {
-        startDate,
-        endDate,
-        quoteAvailable: quote.quoteAvailable,
-        baseTotal: quote.baseTotal,
-        currency: quote.currency,
-        handoffUrl: buildCheckoutUrlFromQuoteNode(
-          {
-            entityId,
-            checkInIso: startDate,
-            checkOutIso: endDate,
-            adults: input.options.adults,
-            children: input.options.children,
-            idsTuple,
-            rcType,
-          },
-          quote.quoteNode,
-        ),
-      } satisfies RawObservation;
     },
   );
 
   const baseNightlySeries: Array<number | null> = rawObservations.map((obs) =>
-    obs.baseTotal !== null
+    obs.baseTotal !== null && obs.baseTotal > 0
       ? roundCurrency(obs.baseTotal / input.options.nights)
       : null,
   );
@@ -483,21 +740,63 @@ async function buildSidecarForListing(input: {
   const fallbackBaseNightly =
     median(availableNightlies) ?? GLOBAL_DEFAULT_BASE_NIGHTLY;
 
+  const observedTaxRates = rawObservations
+    .map((obs) => {
+      if (
+        obs.baseTotal === null ||
+        obs.baseTotal <= 0 ||
+        obs.taxesTotal === null ||
+        obs.taxesTotal < 0
+      ) {
+        return null;
+      }
+      return roundCurrency(obs.taxesTotal / obs.baseTotal);
+    })
+    .filter((value): value is number => value !== null);
+
+  const observedFeeRates = rawObservations
+    .map((obs) => {
+      if (
+        obs.baseTotal === null ||
+        obs.baseTotal <= 0 ||
+        obs.feesTotal === null ||
+        obs.feesTotal < 0
+      ) {
+        return null;
+      }
+      return roundCurrency(obs.feesTotal / obs.baseTotal);
+    })
+    .filter((value): value is number => value !== null);
+
+  const fallbackTaxRate = median(observedTaxRates) ?? 0.12;
+  const fallbackFeeRate = median(observedFeeRates) ?? 0;
+
   const observations: CanonicalQuoteObservation[] = rawObservations.map(
     (raw, index) => {
       const baseNightly =
         baseNightlySeries[index] ??
         interpolateValue(baseNightlySeries, index) ??
         fallbackBaseNightly;
+
       const baseTotal =
-        raw.baseTotal !== null
+        raw.baseTotal !== null && raw.baseTotal > 0
           ? raw.baseTotal
           : roundCurrency(baseNightly * input.options.nights);
 
-      const taxesTotal = roundCurrency(baseTotal * FIXED_TAX_RATE);
-      const feesTotal = roundCurrency(baseTotal * FIXED_FEE_RATE);
-      const grandTotal = roundCurrency(baseTotal + taxesTotal + feesTotal);
-      const allInNightly = roundCurrency(grandTotal / input.options.nights);
+      const taxesTotal =
+        raw.taxesTotal !== null && raw.taxesTotal >= 0
+          ? raw.taxesTotal
+          : roundCurrency(baseTotal * fallbackTaxRate);
+
+      const feesTotal =
+        raw.feesTotal !== null && raw.feesTotal >= 0
+          ? raw.feesTotal
+          : roundCurrency(baseTotal * fallbackFeeRate);
+
+      const grandTotal =
+        raw.grandTotal !== null && raw.grandTotal > 0
+          ? raw.grandTotal
+          : roundCurrency(baseTotal + taxesTotal + feesTotal);
 
       return {
         sampled_at: input.capturedAtIso,
@@ -510,18 +809,19 @@ async function buildSidecarForListing(input: {
         check_out_date: raw.endDate,
         nights: input.options.nights,
         base_nightly: roundCurrency(baseNightly),
-        all_in_nightly: allInNightly,
+        all_in_nightly: roundCurrency(grandTotal / input.options.nights),
         quote_available: raw.quoteAvailable,
         quote_unavailable_reason: raw.quoteAvailable
           ? null
-          : "Dates unavailable for selected stay window",
+          : (raw.quoteUnavailableReason ??
+            "Detailed quote unavailable for selected stay window"),
         base_total: baseTotal,
         taxes_total: taxesTotal,
         fees_total_excl_taxes: feesTotal,
-        fee_lines: [],
+        fee_lines: raw.feeLines,
         grand_total: grandTotal,
-        quoted_total: baseTotal,
-        fee_pct_of_base: 0,
+        quoted_total: raw.quotedTotal ?? grandTotal,
+        fee_pct_of_base: roundCurrency(feesTotal / Math.max(baseTotal, 1)),
         tax_pct_of_base: roundCurrency(taxesTotal / Math.max(baseTotal, 1)),
         non_base_pct_of_total: roundCurrency(
           (taxesTotal + feesTotal) / Math.max(baseTotal, 1),
@@ -546,7 +846,7 @@ async function buildSidecarForListing(input: {
     quote_sample_step_days: sampleStepDays,
     quote_nights: input.options.nights,
     quote_max_queries: observations.length,
-    endpoint_path: "/rcapi/item/avail/search",
+    endpoint_path: "/rescms/ajax/item/pricing/quote",
     observations,
   };
 
@@ -605,11 +905,7 @@ export async function runThirtyALuxuryQuoteCli(
   );
 
   const capturedAtIso = new Date().toISOString();
-  const summaries: Array<{
-    listingId: string;
-    observations: number;
-    availableQuotes: number;
-  }> = await runWithConcurrency(
+  const summaries = await runWithConcurrency(
     selected,
     options.listingConcurrency,
     async (fileName) => {

@@ -1,5 +1,5 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 
 import { buildEscapesAvailabilityFromHtml } from "@/lib/pricing/scraper-engine/adapters/30aescapes";
 
@@ -53,13 +53,18 @@ async function run(): Promise<void> {
           : "";
       const htmlPath =
         typeof parsed.html_path === "string" ? parsed.html_path : "";
+      const resolvedHtmlPath = htmlPath
+        ? isAbsolute(htmlPath)
+          ? htmlPath
+          : resolve(process.cwd(), htmlPath)
+        : "";
 
       if (!externalListingId || !htmlPath) {
         skipped += 1;
         continue;
       }
 
-      const html = await readFile(htmlPath, "utf8");
+      const html = await readFile(resolvedHtmlPath, "utf8");
       const normalizedAvailability = buildEscapesAvailabilityFromHtml({
         html,
         externalListingId,

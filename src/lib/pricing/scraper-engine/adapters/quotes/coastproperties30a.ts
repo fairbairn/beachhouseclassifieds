@@ -192,7 +192,9 @@ function toIsoFromUsDate(usDate: string): string {
   return `${match[3]}-${match[1]}-${match[2]}`;
 }
 
-function parseFeeArray(value: unknown): Array<{ name: string; amount: number }> {
+function parseFeeArray(
+  value: unknown,
+): Array<{ name: string; amount: number }> {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -205,8 +207,7 @@ function parseFeeArray(value: unknown): Array<{ name: string; amount: number }> 
         return null;
       }
 
-      const name =
-        (typeof line.name === "string" && line.name.trim()) || "Fee";
+      const name = (typeof line.name === "string" && line.name.trim()) || "Fee";
       return {
         name,
         amount,
@@ -436,6 +437,78 @@ async function fetchQuote(input: {
     }),
     feeLines: [],
   };
+
+  const availabilityPayload = {
+    methodName: "VerifyPropertyAvailability",
+    params: {
+      unit_id: Number(input.unitId),
+      startdate: input.startDateUs,
+      enddate: input.endDateUs,
+      occupants: String(Math.max(1, input.adults)),
+      occupants_small: String(Math.max(0, input.children)),
+      pets: "0",
+      use_room_type_logic: 0,
+      include_coupon_information: 1,
+    },
+  };
+
+  for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt += 1) {
+    const availabilityBody = new URLSearchParams();
+    availabilityBody.set("action", "streamlinecore-api-request");
+    availabilityBody.set("params", JSON.stringify(availabilityPayload));
+
+    const availabilityResponse = await fetch(AJAX_ENDPOINT, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/plain, */*",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "user-agent": USER_AGENT,
+        referer: input.detailUrl,
+        origin: BASE_HOST,
+      },
+      body: availabilityBody.toString(),
+    });
+
+    if (
+      availabilityResponse.status === 429 &&
+      attempt < MAX_RATE_LIMIT_RETRIES
+    ) {
+      await sleep(RATE_LIMIT_BACKOFF_MS * (attempt + 1));
+      continue;
+    }
+
+    if (!availabilityResponse.ok) {
+      return {
+        ...defaultUnavailable,
+        quoteUnavailableReason: `VerifyPropertyAvailability HTTP ${availabilityResponse.status}`,
+      };
+    }
+
+    let availabilityParsed: CoastQuoteResponse;
+    try {
+      availabilityParsed =
+        (await availabilityResponse.json()) as CoastQuoteResponse;
+    } catch {
+      return {
+        ...defaultUnavailable,
+        quoteUnavailableReason:
+          "VerifyPropertyAvailability returned invalid JSON",
+      };
+    }
+
+    const availabilityStatus = availabilityParsed.status;
+    if (availabilityStatus && typeof availabilityStatus === "object") {
+      const code = asString(availabilityStatus.code);
+      const reason =
+        asString(availabilityStatus.description) ?? "Dates unavailable";
+      return {
+        ...defaultUnavailable,
+        quoteUnavailableReason: code ? `${code}: ${reason}` : reason,
+      };
+    }
+
+    break;
+  }
 
   const requestPayload = {
     methodName: "GetPreReservationPrice",

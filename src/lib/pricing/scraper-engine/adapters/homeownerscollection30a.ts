@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
 import {
@@ -1630,6 +1630,9 @@ async function fetchDetail(
       } else {
         const htmlCandidates = [existing.html_path, existingDetailJsonPath]
           .filter((value): value is string => typeof value === "string")
+          .map((value) =>
+            isAbsolute(value) ? value : resolve(process.cwd(), value),
+          )
           .slice(0, 2);
 
         let entityId: number | null = null;

@@ -128,6 +128,9 @@ async function withPostgresTimeout<T>(operation: Promise<T>, label: string) {
         ),
       );
     }, timeoutMs);
+    if (typeof timeoutHandle.unref === "function") {
+      timeoutHandle.unref();
+    }
 
     void operation
       .then((value) => {

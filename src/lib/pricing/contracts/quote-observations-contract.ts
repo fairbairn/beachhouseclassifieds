@@ -41,6 +41,7 @@ export type CanonicalQuoteAssumptionsSnapshot = {
 
 export type CanonicalQuotesSidecarRecord = {
   adapter_key: string;
+  quote_module_version?: string;
   external_listing_id: string;
   detail_url: string;
   captured_at: string;

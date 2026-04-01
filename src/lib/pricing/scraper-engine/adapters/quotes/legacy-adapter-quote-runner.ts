@@ -22,6 +22,7 @@ type RunLegacyAdapterQuoteViaEngineInput = {
   nightsEnvVar?: string;
   maxQueriesEnvVar?: string;
   defaultMaxListings?: number;
+  minWeeks?: number;
 };
 
 const DEFAULT_MAX_LISTINGS = 10;
@@ -178,6 +179,10 @@ function runNpmScript(scriptRaw: string, args: string[]): Promise<void> {
   });
 }
 
+function hasFlag(args: string[], flag: string): boolean {
+  return args.includes(flag);
+}
+
 async function runWithEnv<T>(
   updates: Record<string, string>,
   callback: () => Promise<T>,
@@ -208,10 +213,11 @@ export async function runLegacyAdapterQuoteViaEngine(
     input.argv,
     Math.max(1, input.defaultMaxListings ?? DEFAULT_MAX_LISTINGS),
   );
-  const weeks = Math.max(1, options.weeks);
+  const minWeeks = Math.max(1, input.minWeeks ?? 1);
+  const weeks = Math.max(minWeeks, options.weeks);
   const nights = Math.max(1, options.nights);
-  const targetWindowDays = Math.max(7, weeks * 7);
-  const maxQueries = Math.max(1, weeks);
+  const targetWindowDays = Math.max(minWeeks * 7, weeks * 7);
+  const maxQueries = Math.max(minWeeks, weeks);
 
   const envUpdates: Record<string, string> = {};
   if (input.windowDaysEnvVar) {
@@ -244,6 +250,17 @@ export async function runLegacyAdapterQuoteViaEngine(
   }
 
   engineArgs.push(...options.passthroughArgs);
+
+  if (!hasFlag(engineArgs, "--detail-fetch-concurrency")) {
+    const fastConcurrency = Math.max(
+      1,
+      Number(process.env.QUOTE_CAPTURE_DETAIL_FETCH_CONCURRENCY ?? "16") || 16,
+    );
+    engineArgs.push("--detail-fetch-concurrency", String(fastConcurrency));
+  }
+  if (!hasFlag(engineArgs, "--detail-fetch-delay-ms")) {
+    engineArgs.push("--detail-fetch-delay-ms", "0");
+  }
 
   input.progress?.info(
     `[${input.adapterKey}] quote-capture refresh-mode=${options.refreshMode} weeks=${weeks} nights=${nights}`,

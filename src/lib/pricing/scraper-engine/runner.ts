@@ -1,5 +1,5 @@
 import { access, mkdir, open, readFile, readdir, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { Browser } from "playwright";
 
 import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
@@ -18,6 +18,29 @@ function sleep(ms: number): Promise<void> {
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
+}
+
+function toProjectRelativePath(pathValue: string, root: string): string {
+  const trimmed = pathValue.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const absolute = isAbsolute(trimmed) ? trimmed : resolve(root, trimmed);
+  const rel = relative(root, absolute);
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
+    return trimmed.replace(/\\/g, "/");
+  }
+
+  return rel.replace(/\\/g, "/");
+}
+
+function resolveFromProjectRoot(pathValue: string, root: string): string {
+  const trimmed = pathValue.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return isAbsolute(trimmed) ? trimmed : resolve(root, trimmed);
 }
 
 function buildUsageText(defaultAnchorUrl: string): string {
@@ -388,17 +411,30 @@ async function runTimedDetailFetch<TDetail extends DetailRecordBase>(
       throw error;
     },
   );
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
   const timeoutPromise = new Promise<{ kind: "timeout" }>((resolvePromise) => {
-    setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       resolvePromise({ kind: "timeout" });
     }, timeoutMs);
+    if (
+      timeoutHandle &&
+      typeof (timeoutHandle as { unref?: () => void }).unref === "function"
+    ) {
+      (timeoutHandle as { unref: () => void }).unref();
+    }
   });
 
-  const result = await Promise.race([settledFetchPromise, timeoutPromise]);
-  if (result.kind === "timeout") {
-    return { timedOut: true };
+  try {
+    const result = await Promise.race([settledFetchPromise, timeoutPromise]);
+    if (result.kind === "timeout") {
+      return { timedOut: true };
+    }
+    return { timedOut: false, detail: result.detail };
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
-  return { timedOut: false, detail: result.detail };
 }
 
 type ExistingDetailArtifact = {
@@ -409,6 +445,7 @@ type ExistingDetailArtifact = {
 };
 
 async function loadExistingDetailArtifacts(
+  root: string,
   outputDetailsJsonDir: string,
   validate: (value: string) => string | null,
 ): Promise<Map<string, ExistingDetailArtifact>> {
@@ -453,7 +490,7 @@ async function loadExistingDetailArtifacts(
       const htmlPath =
         typeof parsed.html_path === "string" &&
         parsed.html_path.trim().length > 0
-          ? parsed.html_path
+          ? resolveFromProjectRoot(parsed.html_path, root)
           : null;
       const externalListingId =
         typeof parsed.external_listing_id === "string"
@@ -532,8 +569,6 @@ async function loadDetailUrlsFromFile(
 }
 
 async function loadKnownDetailUrlsFromArtifacts(
-  reportsDir: string,
-  managerKey: string,
   outputRoot: string,
   outputDetailsJsonDir: string,
   validate: (value: string) => string | null,
@@ -541,9 +576,8 @@ async function loadKnownDetailUrlsFromArtifacts(
 ): Promise<string[]> {
   const urls: string[] = [];
 
+  // Known-set resolution should come from canonical adapter artifacts, not transient report files.
   const manifestPaths = [
-    resolve(reportsDir, `${managerKey}-details-manifest.json`),
-    resolve(reportsDir, `${managerKey}-details-manifest-subset.json`),
     resolve(outputRoot, "details", "index.json"),
     resolve(outputRoot, "details", "index-subset.json"),
   ];
@@ -574,7 +608,7 @@ async function loadKnownDetailUrlsFromArtifacts(
       );
     } catch {
       reportProgress?.(
-        `known-set: manifest missing/malformed, skipped ${manifestPath}`,
+        `known-set: canonical manifest missing/malformed, skipped ${manifestPath}`,
       );
     }
   }
@@ -629,6 +663,7 @@ async function loadKnownDetailUrlsFromArtifacts(
 }
 
 async function pullDetails<TDetail extends DetailRecordBase>(
+  root: string,
   browser: Browser,
   urls: string[],
   adapter: ScraperAdapter<TDetail>,
@@ -651,6 +686,8 @@ async function pullDetails<TDetail extends DetailRecordBase>(
   const detailRecords: TDetail[] = [];
 
   let nextIndex = 0;
+  let started = 0;
+  let inFlight = 0;
   let processed = 0;
   let liveFailures = 0;
   const pullStartedAtMs = Date.now();
@@ -668,23 +705,26 @@ async function pullDetails<TDetail extends DetailRecordBase>(
         : 0;
     const avgSecPerDetail =
       avgMsPerDetail > 0 ? Math.round((avgMsPerDetail / 1000) * 10) / 10 : 0;
-    const throughputPerMinute = Math.round((processed / elapsedSec) * 60);
+    const throughputCompletedPerMinute = Math.round(
+      (processed / elapsedSec) * 60,
+    );
+    const throughputStartedPerMinute = Math.round((started / elapsedSec) * 60);
     const remaining = Math.max(0, urls.length - processed);
     const etaMinutes =
-      throughputPerMinute > 0
-        ? Math.round((remaining / throughputPerMinute) * 10) / 10
+      throughputCompletedPerMinute > 0
+        ? Math.round((remaining / throughputCompletedPerMinute) * 10) / 10
         : null;
     const pct =
       urls.length > 0 ? Math.round((processed / urls.length) * 100) : 0;
 
-    return `${label}: processed=${processed}/${urls.length} (${pct}%), failures=${liveFailures}, elapsed_s=${elapsedSec}, avg_s_per_detail=${avgSecPerDetail || "n/a"}, throughput_per_min=${throughputPerMinute}, eta_min=${etaMinutes ?? "n/a"}`;
+    return `${label}: started=${started}/${urls.length}, in_flight=${inFlight}, processed=${processed}/${urls.length} (${pct}%), failures=${liveFailures}, elapsed_s=${elapsedSec}, avg_s_per_completed=${avgSecPerDetail || "n/a"}, throughput_completed_per_min=${throughputCompletedPerMinute}, throughput_started_per_min=${throughputStartedPerMinute}, eta_min=${etaMinutes ?? "n/a"}`;
   };
 
   const heartbeatInterval = setInterval(() => {
     if (processed >= urls.length) {
       return;
     }
-    progress.tick(buildProgressLine("details heartbeat"));
+    progress.progress(buildProgressLine("details heartbeat"));
   }, 15000);
 
   const worker = async (): Promise<void> => {
@@ -697,6 +737,8 @@ async function pullDetails<TDetail extends DetailRecordBase>(
 
       const detailUrl = urls[currentIndex] as string;
       const existingArtifact = existingArtifactsByUrl?.get(detailUrl);
+      started += 1;
+      inFlight += 1;
       const detailStartedAtMs = Date.now();
       const fetchPromise = adapter.fetchDetail({
         browser,
@@ -711,6 +753,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       });
       const timed = await runTimedDetailFetch(fetchPromise, detailTimeoutMs);
       detailDurationsMs.push(Date.now() - detailStartedAtMs);
+      inFlight = Math.max(0, inFlight - 1);
 
       let detail: TDetail | null = null;
       if (timed.timedOut) {
@@ -723,13 +766,17 @@ async function pullDetails<TDetail extends DetailRecordBase>(
 
       detailResults[currentIndex] = detail;
       if (detail) {
+        const detailForStorage = {
+          ...detail,
+          html_path: toProjectRelativePath(detail.html_path, root),
+        };
         const detailPath = resolve(
           outputDetailsJsonDir,
           `${detail.external_listing_id}.json`,
         );
         await writeTextFileDurable(
           detailPath,
-          `${JSON.stringify(detail, null, 2)}\n`,
+          `${JSON.stringify(detailForStorage, null, 2)}\n`,
         );
       }
       processed += 1;
@@ -737,7 +784,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
         liveFailures += 1;
       }
       if (processed <= 20 || processed % 5 === 0 || processed === urls.length) {
-        progress.tick(buildProgressLine("details progress"));
+        progress.progress(buildProgressLine("details progress"));
       }
 
       if (detailFetchDelayMs > 0) {
@@ -846,15 +893,21 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         outputDetailsJsonDir,
         `${detail.external_listing_id}.json`,
       );
+      const detailPathRel = toProjectRelativePath(detailPath, root);
+      const detailForStorage = {
+        ...detail,
+        html_path: toProjectRelativePath(detail.html_path, root),
+      };
       await writeTextFileDurable(
         detailPath,
-        `${JSON.stringify(detail, null, 2)}\n`,
+        `${JSON.stringify(detailForStorage, null, 2)}\n`,
       );
 
       const reportPath = resolve(
         reportsDir,
         `${adapter.managerKey}-direct-detail-report.json`,
       );
+      const reportPathRel = toProjectRelativePath(reportPath, root);
       await writeTextFileDurable(
         reportPath,
         `${JSON.stringify(
@@ -863,7 +916,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
             mode: "direct_detail",
             detail_url: detail.detail_url,
             external_listing_id: detail.external_listing_id,
-            detail_json: detailPath,
+            detail_json: detailPathRel,
           },
           null,
           2,
@@ -876,8 +929,8 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       console.log(`${adapter.scriptLabel} direct detail scrape complete.`);
       console.log(`- detail_url: ${detail.detail_url}`);
       console.log(`- external_listing_id: ${detail.external_listing_id}`);
-      console.log(`- detail_json: ${detailPath}`);
-      console.log(`- report_json: ${reportPath}`);
+      console.log(`- detail_json: ${detailPathRel}`);
+      console.log(`- report_json: ${reportPathRel}`);
       return;
     }
 
@@ -885,8 +938,6 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       progress.phase("acquiring known listing set for refresh");
       const knownUrls = options.refreshKnown
         ? await loadKnownDetailUrlsFromArtifacts(
-            reportsDir,
-            adapter.managerKey,
             outputRoot,
             outputDetailsJsonDir,
             adapter.isValidDetailUrl,
@@ -923,6 +974,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       );
 
       const existingArtifacts = await loadExistingDetailArtifacts(
+        root,
         outputDetailsJsonDir,
         adapter.isValidDetailUrl,
       );
@@ -980,6 +1032,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       const refreshPullStartedAt = Date.now();
 
       const { detailRecords, failedDetailUrls } = await pullDetails(
+        root,
         browser,
         urlsToPull,
         adapter,
@@ -1016,6 +1069,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         reportsDir,
         `${adapter.managerKey}-refresh-known-report.json`,
       );
+      const reportPathRel = toProjectRelativePath(reportPath, root);
       await writeTextFileDurable(
         reportPath,
         `${JSON.stringify(
@@ -1070,7 +1124,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       console.log(
         `- pull_avg_seconds_per_detail: ${avgSecondsPerPulled ?? "n/a"}`,
       );
-      console.log(`- report_json: ${reportPath}`);
+      console.log(`- report_json: ${reportPathRel}`);
       return;
     }
 
@@ -1130,6 +1184,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       );
 
       const pulled = await pullDetails(
+        root,
         browser,
         selectedUrls,
         adapter,
@@ -1166,17 +1221,23 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         ? `${adapter.managerKey}-playwright-links-subset.json`
         : `${adapter.managerKey}-playwright-links.json`,
     );
+    const reportPathRel = toProjectRelativePath(reportPath, root);
     const sourcePath = resolve(
       externalSourceDir,
       isSubsetMode
         ? `${adapter.managerKey}_listings_subset.json`
         : `${adapter.managerKey}_listings.json`,
     );
+    const sourcePathRel = toProjectRelativePath(sourcePath, root);
     const detailsManifestPath = resolve(
       reportsDir,
       isSubsetMode
         ? `${adapter.managerKey}-details-manifest-subset.json`
         : `${adapter.managerKey}-details-manifest.json`,
+    );
+    const detailsManifestPathRel = toProjectRelativePath(
+      detailsManifestPath,
+      root,
     );
 
     await writeTextFileDurable(
@@ -1210,10 +1271,15 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     console.log(`- subset_mode: ${isSubsetMode}`);
     console.log(`- detail_pages_pulled: ${detailRecords.length}`);
     console.log(`- detail_pages_failed: ${failedDetailUrls.length}`);
-    console.log(`- report_json: ${reportPath}`);
-    console.log(`- external_source_json: ${sourcePath}`);
-    console.log(`- details_manifest_json: ${detailsManifestPath}`);
+    console.log(`- report_json: ${reportPathRel}`);
+    console.log(`- external_source_json: ${sourcePathRel}`);
+    console.log(`- details_manifest_json: ${detailsManifestPathRel}`);
   } finally {
+    const closeStartedAt = Date.now();
+    progress.phase("finalizing browser shutdown");
     await browser.close();
+    progress.tick(
+      `browser shutdown complete elapsed_ms=${Date.now() - closeStartedAt}`,
+    );
   }
 }

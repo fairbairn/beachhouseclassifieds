@@ -294,13 +294,75 @@ function buildCheckoutUrl(input: {
 }): string {
   const origin = parseBaseOrigin(input.detailUrl);
   const params = new URLSearchParams();
-  params.set("book_unit", input.listingId);
-  params.set("book_start_date", toUsDate(input.checkInIso));
-  params.set("book_end_date", toUsDate(input.checkOutIso));
-  params.set("book_occupants", String(input.adults));
-  params.set("book_occupants_small", String(input.children));
-  params.set("book_pets", String(input.pets));
+  params.set("unit", input.listingId);
+  params.set("sd", input.checkInIso);
+  params.set("ed", input.checkOutIso);
+  params.set("oc", String(Math.max(1, input.adults)));
+  params.set("os", String(Math.max(0, input.children)));
   return `${origin}/checkout/?${params.toString()}`;
+}
+
+async function verifyPropertyAvailability(input: {
+  detailUrl: string;
+  listingId: string;
+  checkInIso: string;
+  checkOutIso: string;
+  adults: number;
+  children: number;
+  pets: number;
+}): Promise<{ available: boolean; reason: string | null }> {
+  const origin = parseBaseOrigin(input.detailUrl);
+  const endpoint = `${origin}/wp-admin/admin-ajax.php`;
+  const body = new URLSearchParams();
+  body.set("action", "streamlinecore-api-request");
+  body.set(
+    "params",
+    JSON.stringify({
+      methodName: "VerifyPropertyAvailability",
+      params: {
+        unit_id: Number(input.listingId),
+        startdate: toUsDate(input.checkInIso),
+        enddate: toUsDate(input.checkOutIso),
+        occupants: String(input.adults),
+        occupants_small: String(input.children),
+        pets: String(input.pets),
+        use_room_type_logic: 0,
+        include_coupon_information: 1,
+      },
+    }),
+  );
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      accept: "application/json,text/plain,*/*",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "user-agent": USER_AGENT,
+      referer: input.detailUrl,
+      origin,
+    },
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    return {
+      available: false,
+      reason: `VerifyPropertyAvailability failed with status ${response.status}`,
+    };
+  }
+
+  const payload = (await response.json()) as StreamlinePreReservationResponse;
+  if (payload.status?.code) {
+    return {
+      available: false,
+      reason: payload.status.description?.trim() || payload.status.code,
+    };
+  }
+
+  return {
+    available: true,
+    reason: null,
+  };
 }
 
 async function fetchPreReservationQuote(input: {
@@ -347,6 +409,23 @@ async function fetchPreReservationQuote(input: {
     children: input.children,
     pets: input.pets,
   });
+
+  const availability = await verifyPropertyAvailability(input);
+  if (!availability.available) {
+    return {
+      startDate: input.checkInIso,
+      endDate: input.checkOutIso,
+      quoteAvailable: false,
+      quoteUnavailableReason: availability.reason || "Dates unavailable",
+      baseTotal: null,
+      taxesTotal: null,
+      feesTotal: null,
+      grandTotal: null,
+      currency: "USD",
+      handoffUrl,
+      feeLines: [],
+    };
+  }
 
   if (!response.ok) {
     return {

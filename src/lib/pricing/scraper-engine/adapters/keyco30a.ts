@@ -1033,6 +1033,9 @@ async function fetchPricingContext(
     const timeoutHandle = setTimeout(() => {
       controller.abort();
     }, timeoutMs);
+    if (typeof timeoutHandle.unref === "function") {
+      timeoutHandle.unref();
+    }
 
     try {
       const response = await fetch(endpoint.toString(), {

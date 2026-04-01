@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
 import {
@@ -169,6 +169,7 @@ const PRICING_ASSUMPTIONS_PATH = resolve(
 );
 const ESCAPES_QUOTES_ENDPOINT =
   "https://www.30aescapes.com/rentals/ajax/get-pdp-rates.cfm";
+const THIRTY_A_ESCAPES_QUOTE_MODULE_VERSION = "2026-03-31.checkout-anchored-v1";
 
 type EscapesProfile = {
   quote_signature?: {
@@ -202,6 +203,61 @@ type EscapeQuotesSidecarRecord = CanonicalQuotesSidecarRecord;
 
 let cachedEscapesProfile: EscapesProfile | null = null;
 let cachedEscapesAssumptions: EscapesAssumptionsStore | null = null;
+let escapesQuoteHttpActive = 0;
+let escapesQuoteHttpLastStartMs = 0;
+const escapesQuoteHttpWaiters: Array<() => void> = [];
+
+function getEscapesQuoteHttpConcurrencyLimit(): number {
+  const parsed = Number(process.env.ESCAPES30A_QUOTE_HTTP_CONCURRENCY ?? "3");
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 3;
+  }
+  return Math.floor(parsed);
+}
+
+function getEscapesQuoteHttpMinGapMs(): number {
+  const parsed = Number(process.env.ESCAPES30A_QUOTE_HTTP_MIN_GAP_MS ?? "150");
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 150;
+  }
+  return Math.floor(parsed);
+}
+
+async function acquireEscapesQuoteHttpSlot(): Promise<void> {
+  while (true) {
+    if (escapesQuoteHttpActive < getEscapesQuoteHttpConcurrencyLimit()) {
+      escapesQuoteHttpActive += 1;
+      break;
+    }
+    await new Promise<void>((resolve) => {
+      escapesQuoteHttpWaiters.push(resolve);
+    });
+  }
+
+  const minGapMs = getEscapesQuoteHttpMinGapMs();
+  const waitMs = escapesQuoteHttpLastStartMs + minGapMs - Date.now();
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+  escapesQuoteHttpLastStartMs = Date.now();
+}
+
+function releaseEscapesQuoteHttpSlot(): void {
+  escapesQuoteHttpActive = Math.max(0, escapesQuoteHttpActive - 1);
+  const next = escapesQuoteHttpWaiters.shift();
+  next?.();
+}
+
+async function withEscapesQuoteHttpRateLimit<T>(
+  task: () => Promise<T>,
+): Promise<T> {
+  await acquireEscapesQuoteHttpSlot();
+  try {
+    return await task();
+  } finally {
+    releaseEscapesQuoteHttpSlot();
+  }
+}
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
@@ -340,6 +396,307 @@ function parseUsdAmountFromText(value: string): number | null {
   return Number.isFinite(parsed) ? roundCurrency(parsed) : null;
 }
 
+function parseAllUsdAmountsFromText(value: string): number[] {
+  const matches = Array.from(value.matchAll(/\$([0-9][0-9,]*\.[0-9]{2})/g));
+  const amounts: number[] = [];
+  for (const match of matches) {
+    const parsed = Number((match[1] ?? "").replace(/,/g, ""));
+    if (Number.isFinite(parsed)) {
+      amounts.push(roundCurrency(parsed));
+    }
+  }
+  return amounts;
+}
+
+function extractScriptValueAmount(
+  html: string,
+  fieldId: string,
+): number | null {
+  const escaped = fieldId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    String.raw`\$\(\s*['"]#${escaped}['"]\s*\)\.val\(\s*['"]([0-9,]+(?:\.[0-9]{2})?)['"]\s*\)`,
+    "i",
+  );
+  const value = html.match(pattern)?.[1] ?? null;
+  return value ? parseUsdAmountFromText(`$${value}`) : null;
+}
+
+function parseSetCookieHeader(setCookie: string): string[] {
+  if (!setCookie) {
+    return [];
+  }
+  return setCookie
+    .split(/,(?=\s*[A-Za-z0-9_.-]+=)/g)
+    .map((item) => item.trim());
+}
+
+function buildCookieHeader(setCookieValues: string[]): string {
+  const cookieMap = new Map<string, string>();
+  for (const cookie of setCookieValues) {
+    const firstPart = cookie.split(";")[0]?.trim();
+    if (!firstPart) {
+      continue;
+    }
+    const eqIndex = firstPart.indexOf("=");
+    if (eqIndex <= 0) {
+      continue;
+    }
+    const name = firstPart.slice(0, eqIndex).trim();
+    const value = firstPart.slice(eqIndex + 1).trim();
+    if (name) {
+      cookieMap.set(name, value);
+    }
+  }
+  return [...cookieMap.entries()]
+    .map(([name, value]) => `${name}=${value}`)
+    .join("; ");
+}
+
+function extractEscapesAjaxPath(html: string): string {
+  const match = html.match(/(["'])([^"']*get-booknow-rates\.cfm[^"']*)\1/i);
+  const extracted = match?.[2]?.trim();
+  if (!extracted) {
+    return "/rentals/ajax/get-booknow-rates.cfm";
+  }
+  if (extracted.startsWith("http://") || extracted.startsWith("https://")) {
+    try {
+      return new URL(extracted).pathname;
+    } catch {
+      return "/rentals/ajax/get-booknow-rates.cfm";
+    }
+  }
+  if (extracted.startsWith("/")) {
+    return extracted;
+  }
+  if (extracted.startsWith("ajax/")) {
+    return `/rentals/${extracted}`;
+  }
+  return "/rentals/ajax/get-booknow-rates.cfm";
+}
+
+function extractTableLabelAmount(html: string, label: string): number | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `<td[^>]*>\\s*${escaped}\\s*<\\/td>\\s*<td[^>]*>\\s*\\$\\s*([0-9,]+(?:\\.[0-9]{2})?)\\s*<\\/td>`,
+    "i",
+  );
+  const value = html.match(pattern)?.[1] ?? null;
+  return value ? parseUsdAmountFromText(`$${value}`) : null;
+}
+
+function parseRetryDelaysMs(raw: string): number[] {
+  const parsed = raw
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .map((value) => Math.floor(value));
+  if (parsed.length >= 2) {
+    return parsed;
+  }
+  // Slow upstream responses are common; default to a more patient backoff profile.
+  return [0, 1000, 2500, 5000, 9000];
+}
+
+function parseObservationRetryDelaysMs(raw: string): number[] {
+  const parsed = raw
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .map((value) => Math.floor(value));
+  if (parsed.length >= 2) {
+    return parsed;
+  }
+  // Retry the same observation window before moving on.
+  return [0, 2500, 7000];
+}
+
+async function fetchEscapesBookNowTotals(input: {
+  handoffUrl: string;
+  refererUrl?: string;
+  reportProgress?: (message: string) => void;
+}): Promise<{
+  quotedTotal: number | null;
+  baseTotal: number | null;
+  taxesTotal: number | null;
+  unavailable: boolean;
+}> {
+  let handoff: URL;
+  try {
+    handoff = new URL(input.handoffUrl, "https://www.30aescapes.com");
+  } catch {
+    return {
+      quotedTotal: null,
+      baseTotal: null,
+      taxesTotal: null,
+      unavailable: false,
+    };
+  }
+
+  const propertyid = handoff.searchParams.get("propertyid")?.trim() ?? "";
+  const strcheckin = handoff.searchParams.get("strcheckin")?.trim() ?? "";
+  const strcheckout = handoff.searchParams.get("strcheckout")?.trim() ?? "";
+  if (!propertyid || !strcheckin || !strcheckout) {
+    return {
+      quotedTotal: null,
+      baseTotal: null,
+      taxesTotal: null,
+      unavailable: false,
+    };
+  }
+
+  const parseAjaxPayload = (
+    ajaxHtml: string,
+  ): {
+    quotedTotal: number | null;
+    baseTotal: number | null;
+    taxesTotal: number | null;
+    unavailable: boolean;
+  } => {
+    const lowered = ajaxHtml.toLowerCase();
+    if (
+      lowered.includes("property is not available") ||
+      lowered.includes("unit has no availability")
+    ) {
+      return {
+        quotedTotal: null,
+        baseTotal: null,
+        taxesTotal: null,
+        unavailable: true,
+      };
+    }
+
+    const quotedTotal =
+      extractTableLabelAmount(ajaxHtml, "Total Amount") ??
+      extractScriptValueAmount(ajaxHtml, "BookingValue");
+    const taxesTotal =
+      extractTableLabelAmount(ajaxHtml, "Taxes") ??
+      extractScriptValueAmount(ajaxHtml, "TaxValue");
+    const baseTotal =
+      extractTableLabelAmount(ajaxHtml, "Rent") ??
+      (quotedTotal !== null && taxesTotal !== null
+        ? roundCurrency(quotedTotal - taxesTotal)
+        : null);
+
+    return {
+      quotedTotal,
+      baseTotal,
+      taxesTotal,
+      unavailable: false,
+    };
+  };
+
+  try {
+    const handoffResponse = await withEscapesQuoteHttpRateLimit(() =>
+      fetch(handoff.toString(), {
+        headers: {
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "user-agent": "Mozilla/5.0",
+          ...(input.refererUrl ? { referer: input.refererUrl } : {}),
+        },
+      }),
+    );
+
+    if (!handoffResponse.ok) {
+      return {
+        quotedTotal: null,
+        baseTotal: null,
+        taxesTotal: null,
+        unavailable: false,
+      };
+    }
+
+    const handoffHtml = await handoffResponse.text();
+    const cookieHeader = buildCookieHeader(
+      parseSetCookieHeader(handoffResponse.headers.get("set-cookie") ?? ""),
+    );
+
+    const ajaxPath = extractEscapesAjaxPath(handoffHtml);
+    const ajaxUrl = new URL(ajaxPath, handoff.origin);
+    ajaxUrl.searchParams.set("propertyid", propertyid);
+    ajaxUrl.searchParams.set("strcheckin", strcheckin);
+    ajaxUrl.searchParams.set("strcheckout", strcheckout);
+    ajaxUrl.searchParams.set("_", String(Date.now()));
+
+    const attemptDelaysMs = parseRetryDelaysMs(
+      process.env.ESCAPES30A_QUOTE_AJAX_RETRY_DELAYS_MS ?? "",
+    );
+    for (
+      let attemptIndex = 0;
+      attemptIndex < attemptDelaysMs.length;
+      attemptIndex += 1
+    ) {
+      const delayMs = attemptDelaysMs[attemptIndex] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      ajaxUrl.searchParams.set("_", String(Date.now()));
+      const ajaxResponse = await withEscapesQuoteHttpRateLimit(() =>
+        fetch(ajaxUrl.toString(), {
+          headers: {
+            accept: "text/html, */*;q=0.1",
+            "x-requested-with": "XMLHttpRequest",
+            "user-agent": "Mozilla/5.0",
+            referer: handoff.toString(),
+            ...(cookieHeader ? { cookie: cookieHeader } : {}),
+          },
+        }),
+      );
+
+      if (!ajaxResponse.ok) {
+        input.reportProgress?.(
+          `quote ajax retry ${attemptIndex + 1}/${attemptDelaysMs.length} failed status=${ajaxResponse.status}`,
+        );
+        if (attemptIndex < attemptDelaysMs.length - 1) {
+          continue;
+        }
+        return {
+          quotedTotal: null,
+          baseTotal: null,
+          taxesTotal: null,
+          unavailable: false,
+        };
+      }
+
+      const ajaxHtml = await ajaxResponse.text();
+      const parsed = parseAjaxPayload(ajaxHtml);
+      if (parsed.unavailable || parsed.quotedTotal !== null) {
+        return parsed;
+      }
+
+      input.reportProgress?.(
+        `quote ajax retry ${attemptIndex + 1}/${attemptDelaysMs.length} missing total amount`,
+      );
+
+      if (attemptIndex < attemptDelaysMs.length - 1) {
+        const nextDelayMs = attemptDelaysMs[attemptIndex + 1] ?? 0;
+        input.reportProgress?.(
+          `quote ajax awaiting next retry delay_ms=${nextDelayMs}`,
+        );
+      }
+    }
+
+    return {
+      quotedTotal: null,
+      baseTotal: null,
+      taxesTotal: null,
+      unavailable: false,
+    };
+  } catch {
+    return {
+      quotedTotal: null,
+      baseTotal: null,
+      taxesTotal: null,
+      unavailable: false,
+    };
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function medianNumber(values: number[]): number | null {
   if (values.length === 0) {
     return null;
@@ -417,6 +774,37 @@ function extractListItemAmount(html: string, label: string): number | null {
   return parseUsdAmountFromText(segment);
 }
 
+function extractListItemAmounts(html: string, label: string): number[] {
+  const regex = new RegExp(`<li[^>]*>\\s*${label}([\\s\\S]*?)<\\/li>`, "i");
+  const segment = html.match(regex)?.[1] ?? "";
+  return parseAllUsdAmountsFromText(segment);
+}
+
+function chooseBestRentAmount(
+  rentAmounts: number[],
+  total: number | null,
+  taxes: number | null,
+): number | null {
+  if (rentAmounts.length === 0) {
+    return null;
+  }
+
+  if (total !== null && taxes !== null) {
+    let best: { amount: number; diff: number } | null = null;
+    for (const amount of rentAmounts) {
+      const diff = Math.abs(amount + taxes - total);
+      if (!best || diff < best.diff) {
+        best = { amount, diff };
+      }
+    }
+    if (best) {
+      return best.amount;
+    }
+  }
+
+  return rentAmounts[rentAmounts.length - 1] ?? null;
+}
+
 function parseEscapesQuoteHtml(html: string): {
   quoteAvailable: boolean;
   unavailableReason: string | null;
@@ -442,25 +830,37 @@ function parseEscapesQuoteHtml(html: string): {
     };
   }
 
-  const baseTotal = extractListItemAmount(html, "Rent");
-  const taxesTotal = extractListItemAmount(html, "Taxes");
+  const rentAmounts = extractListItemAmounts(html, "Rent");
+  const taxesLineAmounts = extractListItemAmounts(html, "Taxes");
+  const summaryQuotedTotal = parseUsdAmountFromText(
+    html.match(/class="text-right\s+pdp-quote-total"[^>]*>([^<]+)</i)?.[1] ??
+      "",
+  );
   const quotedTotal =
-    parseUsdAmountFromText(
-      html.match(/class="text-right\s+pdp-quote-total"[^>]*>([^<]+)</i)?.[1] ??
-        "",
-    ) ?? parseUsdAmountFromText(html);
+    summaryQuotedTotal ?? extractScriptValueAmount(html, "BookingValue");
+  const taxesFromScript = extractScriptValueAmount(html, "TaxValue");
   const handoffUrl =
     html.match(/id="detailBookBtn"[^>]*href="([^"]+)"/i)?.[1] ?? null;
 
+  const normalizedTaxesTotal =
+    taxesLineAmounts[taxesLineAmounts.length - 1] ?? taxesFromScript;
+  const normalizedBaseTotal = chooseBestRentAmount(
+    rentAmounts,
+    quotedTotal,
+    normalizedTaxesTotal,
+  );
+
   const quoteAvailable =
-    Number.isFinite(baseTotal) &&
-    (Number.isFinite(quotedTotal) || Number.isFinite(taxesTotal));
+    Number.isFinite(quotedTotal) &&
+    Number(quotedTotal) > 0 &&
+    (Number.isFinite(normalizedBaseTotal) ||
+      Number.isFinite(normalizedTaxesTotal));
 
   return {
     quoteAvailable,
     unavailableReason: quoteAvailable ? null : "no_quote_totals",
-    baseTotal,
-    taxesTotal,
+    baseTotal: normalizedBaseTotal,
+    taxesTotal: normalizedTaxesTotal,
     quotedTotal,
     handoffUrl,
     feeLines: [],
@@ -472,6 +872,8 @@ async function fetchEscapesQuote(params: {
   unitShortName: string;
   checkInIso: string;
   checkOutIso: string;
+  detailUrl?: string;
+  reportProgress?: (message: string) => void;
 }): Promise<{
   quoteAvailable: boolean;
   unavailableReason: string | null;
@@ -481,30 +883,114 @@ async function fetchEscapesQuote(params: {
   handoffUrl: string | null;
   feeLines: Array<{ name: string; amount: number }>;
 }> {
-  const profile = await readEscapesProfile();
-  const fixed = profile.quote_signature?.fixed_params ?? {};
-  const form = new URLSearchParams({
-    formtype: fixed.formtype ?? "details-datepicker",
-    page: fixed.page ?? "0",
-    propertyid: params.propertyId,
-    unitshortname: params.unitShortName,
-    redskyclient: fixed.redskyclient ?? "no",
-    strcheckin: toUsDate(params.checkInIso),
-    strcheckout: toUsDate(params.checkOutIso),
-  });
+  const handoffUrl = `https://www.30aescapes.com/rentals/book-now.cfm?propertyid=${encodeURIComponent(params.propertyId)}&strcheckin=${encodeURIComponent(toUsDate(params.checkInIso))}&strcheckout=${encodeURIComponent(toUsDate(params.checkOutIso))}`;
 
-  const response = await fetch(ESCAPES_QUOTES_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-      accept: "text/html, */*;q=0.1",
-      "user-agent": "Mozilla/5.0",
-    },
-    body: form.toString(),
+  const checkoutFirst = await fetchEscapesBookNowTotals({
+    handoffUrl,
+    refererUrl: params.detailUrl,
+    reportProgress: params.reportProgress,
   });
+  if (checkoutFirst.unavailable) {
+    return {
+      quoteAvailable: false,
+      unavailableReason: "unavailable",
+      baseTotal: null,
+      taxesTotal: null,
+      quotedTotal: null,
+      handoffUrl: null,
+      feeLines: [],
+    };
+  }
+  if (checkoutFirst.quotedTotal !== null) {
+    const stabilityAttempts = Math.max(
+      1,
+      Math.floor(
+        Number(process.env.ESCAPES30A_QUOTE_STABILITY_ATTEMPTS ?? "3") || 3,
+      ),
+    );
+    const stabilityTolerance = Math.max(
+      0,
+      Number(process.env.ESCAPES30A_QUOTE_STABILITY_TOLERANCE ?? "1") || 1,
+    );
 
-  const html = await response.text();
-  return parseEscapesQuoteHtml(html);
+    const checkoutSamples: Array<{
+      quotedTotal: number;
+      baseTotal: number | null;
+      taxesTotal: number | null;
+    }> = [
+      {
+        quotedTotal: checkoutFirst.quotedTotal,
+        baseTotal: checkoutFirst.baseTotal,
+        taxesTotal: checkoutFirst.taxesTotal,
+      },
+    ];
+
+    for (let attempt = 1; attempt < stabilityAttempts; attempt += 1) {
+      const extra = await fetchEscapesBookNowTotals({
+        handoffUrl,
+        refererUrl: params.detailUrl,
+        reportProgress: params.reportProgress,
+      });
+      if (extra.unavailable || extra.quotedTotal === null) {
+        continue;
+      }
+      checkoutSamples.push({
+        quotedTotal: extra.quotedTotal,
+        baseTotal: extra.baseTotal,
+        taxesTotal: extra.taxesTotal,
+      });
+    }
+
+    let selectedSample = checkoutSamples[checkoutSamples.length - 1]!;
+    if (checkoutSamples.length >= 2) {
+      const totals = checkoutSamples
+        .map((sample) => sample.quotedTotal)
+        .sort((left, right) => left - right);
+      const minTotal = totals[0] ?? 0;
+      const maxTotal = totals[totals.length - 1] ?? 0;
+
+      if (maxTotal - minTotal > stabilityTolerance) {
+        const medianIndex = Math.floor(totals.length / 2);
+        const medianTotal = totals[medianIndex] ?? totals[totals.length - 1]!;
+        let closest = checkoutSamples[0]!;
+        let closestDiff = Math.abs(closest.quotedTotal - medianTotal);
+        for (const sample of checkoutSamples.slice(1)) {
+          const diff = Math.abs(sample.quotedTotal - medianTotal);
+          if (diff < closestDiff) {
+            closest = sample;
+            closestDiff = diff;
+          }
+        }
+        selectedSample = closest;
+        params.reportProgress?.(
+          `quote checkout totals inconsistent samples=${checkoutSamples.map((sample) => sample.quotedTotal.toFixed(2)).join(",")} selected=${selectedSample.quotedTotal.toFixed(2)}`,
+        );
+      }
+    }
+
+    return {
+      quoteAvailable: true,
+      unavailableReason: null,
+      baseTotal: selectedSample.baseTotal,
+      taxesTotal: selectedSample.taxesTotal,
+      quotedTotal: selectedSample.quotedTotal,
+      handoffUrl,
+      feeLines: [],
+    };
+  }
+
+  // Checkout totals are authoritative for 30aescapes parity.
+  // If they cannot be extracted, mark as unavailable instead of
+  // falling back to ambiguous PDP markup.
+  return {
+    quoteAvailable: false,
+    unavailableReason: "checkout_total_unavailable",
+    baseTotal: null,
+    taxesTotal: null,
+    quotedTotal: null,
+    handoffUrl,
+    feeLines: [],
+  };
 }
 
 function parseCityStateFromAddress(address: string): {
@@ -583,6 +1069,16 @@ function extractExternalListingId(detailUrl: string): string {
   } catch {
     return detailUrl;
   }
+}
+
+function extractInputValueFromHtml(html: string, inputName: string): string {
+  const escapedName = inputName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(
+    `<input[^>]*name=["']${escapedName}["'][^>]*value=["']([^"']+)["'][^>]*>`,
+    "i",
+  );
+  const match = html.match(regex);
+  return (match?.[1] ?? "").trim();
 }
 
 function parseRuleDateLabel(value: string): string {
@@ -1470,226 +1966,313 @@ async function fetchDetail(
   existingDetailJsonPath?: string | null,
   reportDetailProgress?: (message: string) => void,
 ): Promise<EscapeDetailRecord | null> {
-  const page = await browser.newPage();
-  await installEvaluateNameShim(page);
   const startedAt = Date.now();
+  const externalListingId = extractExternalListingId(detailUrl);
+
+  let page: Page | null = null;
+  let pageLoadMs = 0;
+  let extracted: {
+    title: string;
+    h1: string;
+    canonical: string;
+    metaDescription: string;
+    description: string;
+    descriptionExpanded: string;
+    bodyText: string;
+    infoPairs: Record<string, string>;
+    iconText: string;
+    unitId: string;
+    propertyId: string;
+    unitShortName: string;
+    amenitiesCategories: Record<string, string[]>;
+    galleryUrls: string[];
+    directionsAddress: string;
+    html: string;
+  } | null = null;
+  let normalizedAvailability:
+    | EscapeDetailRecord["normalized_availability"]
+    | null = null;
 
   try {
-    const pageLoadStartedAt = Date.now();
-    await page.goto(detailUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 120000,
-    });
-    await page.waitForTimeout(1200);
-
-    await page.evaluate(() => {
-      const clickables = Array.from(
-        document.querySelectorAll("button, a, [role='button']"),
-      );
-      for (const clickable of clickables) {
-        const el = clickable as HTMLElement;
-        const text = [
-          el.textContent ?? "",
-          el.getAttribute("aria-label") ?? "",
-          el.getAttribute("title") ?? "",
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        if (text.includes("read more") || text.includes("show more")) {
-          el.click();
+    if (refreshMode === "dynamic" && existingDetailJsonPath) {
+      try {
+        const existingRaw = await readFile(existingDetailJsonPath, "utf8");
+        const existing = JSON.parse(existingRaw) as EscapeDetailRecord;
+        const existingHtmlPath =
+          typeof existing.html_path === "string" ? existing.html_path : "";
+        const resolvedExistingHtmlPath = existingHtmlPath
+          ? isAbsolute(existingHtmlPath)
+            ? existingHtmlPath
+            : resolve(process.cwd(), existingHtmlPath)
+          : "";
+        const existingHtml = existingHtmlPath
+          ? await readFile(resolvedExistingHtmlPath, "utf8")
+          : "";
+        if (
+          existingHtml &&
+          existing.normalized_availability?.days &&
+          existing.normalized_availability.days.length > 0
+        ) {
+          extracted = {
+            title: existing.title ?? "",
+            h1: existing.h1 ?? "",
+            canonical: existing.canonical_url ?? detailUrl,
+            metaDescription: existing.meta_description ?? "",
+            description:
+              existing.normalized_matching_profile?.description ?? "",
+            descriptionExpanded: existing.description_expanded ?? "",
+            bodyText: "",
+            infoPairs: {
+              address: existing.location?.address ?? "",
+              location: existing.location?.location_label ?? "",
+            },
+            iconText: "",
+            unitId: existing.property_profile?.unit_id ?? externalListingId,
+            propertyId: extractInputValueFromHtml(existingHtml, "propertyid"),
+            unitShortName:
+              extractInputValueFromHtml(existingHtml, "unitshortname") ||
+              extractInputValueFromHtml(existingHtml, "unitcode"),
+            amenitiesCategories: existing.amenities?.categories ?? {},
+            galleryUrls: existing.media_gallery?.image_urls ?? [],
+            directionsAddress: existing.location?.address ?? "",
+            html: existingHtml,
+          };
+          normalizedAvailability = {
+            ...existing.normalized_availability,
+            captured_at: new Date().toISOString(),
+          };
+          reportDetailProgress?.(
+            `detail ${externalListingId} [mode=${refreshMode}] using existing detail/html artifacts`,
+          );
         }
+      } catch {
+        // Fall back to a browser refresh path below if reuse fails.
       }
+    }
 
-      const candidates = Array.from(
-        document.querySelectorAll(
-          "[style*='overflow'], .overflow-auto, .overflow-y-auto, .scroll, .scrollable",
-        ),
-      );
-      for (const candidate of candidates) {
-        if (!(candidate instanceof HTMLElement)) {
-          continue;
-        }
-        if (candidate.scrollHeight > candidate.clientHeight + 40) {
-          candidate.scrollTop = candidate.scrollHeight;
-        }
-      }
-    });
-    await page.waitForTimeout(450);
+    if (!extracted) {
+      page = await browser.newPage();
+      await installEvaluateNameShim(page);
+      const pageLoadStartedAt = Date.now();
+      await page.goto(detailUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 120000,
+      });
+      await page.waitForTimeout(1200);
 
-    const pageLoadMs = Date.now() - pageLoadStartedAt;
-    const extractionStartedAt = Date.now();
+      await page.evaluate(() => {
+        const clickables = Array.from(
+          document.querySelectorAll("button, a, [role='button']"),
+        );
+        for (const clickable of clickables) {
+          const el = clickable as HTMLElement;
+          const text = [
+            el.textContent ?? "",
+            el.getAttribute("aria-label") ?? "",
+            el.getAttribute("title") ?? "",
+          ]
+            .join(" ")
+            .toLowerCase();
 
-    const extracted = await page.evaluate(() => {
-      const canonical =
-        document
-          .querySelector('link[rel="canonical"]')
-          ?.getAttribute("href")
-          ?.trim() ?? "";
-      const metaDescription =
-        document
-          .querySelector('meta[name="description"]')
-          ?.getAttribute("content")
-          ?.trim() ?? "";
-
-      const descriptionCandidates = [
-        ".cmp-property-description__description",
-        ".property-description",
-        "[data-testid*='description']",
-        "[class*='description']",
-        "[id*='description']",
-        ".description",
-      ];
-
-      const descriptions: string[] = [];
-      for (const selector of descriptionCandidates) {
-        const nodes = Array.from(document.querySelectorAll(selector));
-        for (const node of nodes) {
-          const text = (node.textContent ?? "").trim();
-          if (text.length > 50) {
-            descriptions.push(text);
+          if (text.includes("read more") || text.includes("show more")) {
+            el.click();
           }
         }
-      }
 
-      const bodyText = document.body?.innerText ?? "";
-      const descriptionExpanded =
-        document
-          .querySelector("#description #descBlock")
-          ?.textContent?.trim() ??
-        document.querySelector("#descBlock")?.textContent?.trim() ??
-        "";
-
-      const infoPairs: Record<string, string> = {};
-      const infoNodes = Array.from(
-        document.querySelectorAll(".property-info .property-info-item"),
-      );
-      for (const node of infoNodes) {
-        const strong = node.querySelector("strong");
-        if (!strong) {
-          continue;
+        const candidates = Array.from(
+          document.querySelectorAll(
+            "[style*='overflow'], .overflow-auto, .overflow-y-auto, .scroll, .scrollable",
+          ),
+        );
+        for (const candidate of candidates) {
+          if (!(candidate instanceof HTMLElement)) {
+            continue;
+          }
+          if (candidate.scrollHeight > candidate.clientHeight + 40) {
+            candidate.scrollTop = candidate.scrollHeight;
+          }
         }
-        const label = (strong.textContent ?? "")
-          .replace(/\s+/g, " ")
-          .replace(/:\s*$/, "")
-          .trim()
-          .toLowerCase();
-        const clone = node.cloneNode(true) as HTMLElement;
-        const strongInClone = clone.querySelector("strong");
-        if (strongInClone) {
-          strongInClone.remove();
+      });
+      await page.waitForTimeout(450);
+
+      pageLoadMs = Date.now() - pageLoadStartedAt;
+
+      extracted = await page.evaluate(() => {
+        const canonical =
+          document
+            .querySelector('link[rel="canonical"]')
+            ?.getAttribute("href")
+            ?.trim() ?? "";
+        const metaDescription =
+          document
+            .querySelector('meta[name="description"]')
+            ?.getAttribute("content")
+            ?.trim() ?? "";
+
+        const descriptionCandidates = [
+          ".cmp-property-description__description",
+          ".property-description",
+          "[data-testid*='description']",
+          "[class*='description']",
+          "[id*='description']",
+          ".description",
+        ];
+
+        const descriptions: string[] = [];
+        for (const selector of descriptionCandidates) {
+          const nodes = Array.from(document.querySelectorAll(selector));
+          for (const node of nodes) {
+            const text = (node.textContent ?? "").trim();
+            if (text.length > 50) {
+              descriptions.push(text);
+            }
+          }
         }
-        const value = (clone.textContent ?? "").replace(/\s+/g, " ").trim();
-        if (label && value) {
-          infoPairs[label] = value;
-        }
-      }
 
-      const iconText =
-        document.querySelector(".property-info.property-info-icons")
-          ?.textContent ?? "";
+        const bodyText = document.body?.innerText ?? "";
+        const descriptionExpanded =
+          document
+            .querySelector("#description #descBlock")
+            ?.textContent?.trim() ??
+          document.querySelector("#descBlock")?.textContent?.trim() ??
+          "";
 
-      const propertyDetailsNode = document.querySelector("#propertyDetails");
-      const unitId =
-        propertyDetailsNode?.getAttribute("data-unitcode")?.trim() ??
-        document
-          .querySelector('input[name="unitcode"]')
-          ?.getAttribute("value")
-          ?.trim() ??
-        document
-          .querySelector('input[name="unitshortname"]')
-          ?.getAttribute("value")
-          ?.trim() ??
-        "";
-
-      const amenitiesCategories: Record<string, string[]> = {};
-      const amenitiesRoot = document.querySelector(
-        "#amenities .info-wrap-body",
-      );
-      if (amenitiesRoot) {
-        const blocks = Array.from(amenitiesRoot.querySelectorAll("p > b"));
-        for (const block of blocks) {
-          const category = (block.textContent ?? "")
+        const infoPairs: Record<string, string> = {};
+        const infoNodes = Array.from(
+          document.querySelectorAll(".property-info .property-info-item"),
+        );
+        for (const node of infoNodes) {
+          const strong = node.querySelector("strong");
+          if (!strong) {
+            continue;
+          }
+          const label = (strong.textContent ?? "")
             .replace(/\s+/g, " ")
-            .trim();
-          if (!category) {
-            continue;
+            .replace(/:\s*$/, "")
+            .trim()
+            .toLowerCase();
+          const clone = node.cloneNode(true) as HTMLElement;
+          const strongInClone = clone.querySelector("strong");
+          if (strongInClone) {
+            strongInClone.remove();
           }
-          const parent = block.parentElement;
-          const nextList = parent?.nextElementSibling;
-          if (!nextList || nextList.tagName.toLowerCase() !== "ul") {
-            continue;
-          }
-          const items = Array.from(nextList.querySelectorAll("li"))
-            .map((li) => (li.textContent ?? "").replace(/\s+/g, " ").trim())
-            .filter(Boolean);
-          if (items.length > 0) {
-            amenitiesCategories[category] = items;
+          const value = (clone.textContent ?? "").replace(/\s+/g, " ").trim();
+          if (label && value) {
+            infoPairs[label] = value;
           }
         }
-      }
 
-      const galleryUrls = Array.from(
-        document.querySelectorAll('#hiddenGallery a[rel="pdpGallery"][href]'),
-      )
-        .map((anchor) => (anchor as HTMLAnchorElement).href)
-        .filter(Boolean);
+        const iconText =
+          document.querySelector(".property-info.property-info-icons")
+            ?.textContent ?? "";
 
-      const directionsAddress =
-        infoPairs.address ??
-        document
-          .querySelector(".property-info-item strong")
-          ?.parentElement?.textContent?.replace(/\s+/g, " ")
-          .trim() ??
-        "";
+        const propertyDetailsNode = document.querySelector("#propertyDetails");
+        const unitId =
+          propertyDetailsNode?.getAttribute("data-unitcode")?.trim() ??
+          document
+            .querySelector('input[name="unitcode"]')
+            ?.getAttribute("value")
+            ?.trim() ??
+          document
+            .querySelector('input[name="unitshortname"]')
+            ?.getAttribute("value")
+            ?.trim() ??
+          "";
 
-      const propertyId =
-        document
-          .querySelector('input[name="propertyid"]')
-          ?.getAttribute("value")
-          ?.trim() ??
-        propertyDetailsNode?.getAttribute("data-propertyid")?.trim() ??
-        "";
-      const unitShortName =
-        document
-          .querySelector('input[name="unitshortname"]')
-          ?.getAttribute("value")
-          ?.trim() ??
-        document
-          .querySelector('input[name="unitcode"]')
-          ?.getAttribute("value")
-          ?.trim() ??
-        "";
+        const amenitiesCategories: Record<string, string[]> = {};
+        const amenitiesRoot = document.querySelector(
+          "#amenities .info-wrap-body",
+        );
+        if (amenitiesRoot) {
+          const blocks = Array.from(amenitiesRoot.querySelectorAll("p > b"));
+          for (const block of blocks) {
+            const category = (block.textContent ?? "")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (!category) {
+              continue;
+            }
+            const parent = block.parentElement;
+            const nextList = parent?.nextElementSibling;
+            if (!nextList || nextList.tagName.toLowerCase() !== "ul") {
+              continue;
+            }
+            const items = Array.from(nextList.querySelectorAll("li"))
+              .map((li) => (li.textContent ?? "").replace(/\s+/g, " ").trim())
+              .filter(Boolean);
+            if (items.length > 0) {
+              amenitiesCategories[category] = items;
+            }
+          }
+        }
 
-      const html = document.documentElement.outerHTML;
-      return {
-        title: document.title ?? "",
-        h1: document.querySelector("h1")?.textContent?.trim() ?? "",
-        canonical,
-        metaDescription,
-        description: descriptions.sort((a, b) => b.length - a.length)[0] ?? "",
-        descriptionExpanded,
-        bodyText,
-        infoPairs,
-        iconText,
-        unitId,
-        propertyId,
-        unitShortName,
-        amenitiesCategories,
-        galleryUrls,
-        directionsAddress,
-        html,
-      };
-    });
+        const galleryUrls = Array.from(
+          document.querySelectorAll('#hiddenGallery a[rel="pdpGallery"][href]'),
+        )
+          .map((anchor) => (anchor as HTMLAnchorElement).href)
+          .filter(Boolean);
 
-    const externalListingId = extractExternalListingId(detailUrl);
-    const normalizedAvailability = buildEscapesAvailabilityFromHtml({
-      html: extracted.html,
-      externalListingId,
-      availabilityHorizonDays,
-      maxCalendarAdvanceMonths,
-      capturedAt: new Date().toISOString(),
-    });
+        const directionsAddress =
+          infoPairs.address ??
+          document
+            .querySelector(".property-info-item strong")
+            ?.parentElement?.textContent?.replace(/\s+/g, " ")
+            .trim() ??
+          "";
+
+        const propertyId =
+          document
+            .querySelector('input[name="propertyid"]')
+            ?.getAttribute("value")
+            ?.trim() ??
+          propertyDetailsNode?.getAttribute("data-propertyid")?.trim() ??
+          "";
+        const unitShortName =
+          document
+            .querySelector('input[name="unitshortname"]')
+            ?.getAttribute("value")
+            ?.trim() ??
+          document
+            .querySelector('input[name="unitcode"]')
+            ?.getAttribute("value")
+            ?.trim() ??
+          "";
+
+        const html = document.documentElement.outerHTML;
+        return {
+          title: document.title ?? "",
+          h1: document.querySelector("h1")?.textContent?.trim() ?? "",
+          canonical,
+          metaDescription,
+          description:
+            descriptions.sort((a, b) => b.length - a.length)[0] ?? "",
+          descriptionExpanded,
+          bodyText,
+          infoPairs,
+          iconText,
+          unitId,
+          propertyId,
+          unitShortName,
+          amenitiesCategories,
+          galleryUrls,
+          directionsAddress,
+          html,
+        };
+      });
+
+      normalizedAvailability = buildEscapesAvailabilityFromHtml({
+        html: extracted.html,
+        externalListingId,
+        availabilityHorizonDays,
+        maxCalendarAdvanceMonths,
+        capturedAt: new Date().toISOString(),
+      });
+    }
+
+    if (!extracted || !normalizedAvailability) {
+      throw new Error("failed to extract detail payload");
+    }
+
     const calendarClicks = 0;
     const calendarIterations = normalizedAvailability.days.length > 0 ? 1 : 0;
 
@@ -1709,6 +2292,18 @@ async function fetchDetail(
       1,
       Number(process.env.ESCAPES30A_RATES_MAX_QUERIES ?? "24") || 24,
     );
+    const requestedAnchorDateRaw =
+      process.env.ESCAPES30A_RATES_ANCHOR_DATE?.trim() ?? "";
+    const requestedAnchorDate =
+      /^\d{4}-\d{2}-\d{2}$/.test(requestedAnchorDateRaw) &&
+      isSaturdayIsoDate(requestedAnchorDateRaw)
+        ? requestedAnchorDateRaw
+        : null;
+    if (requestedAnchorDateRaw && !requestedAnchorDate) {
+      reportDetailProgress?.(
+        `detail ${externalListingId} [mode=${refreshMode}] invalid ESCAPES30A_RATES_ANCHOR_DATE=${requestedAnchorDateRaw}; expected Saturday YYYY-MM-DD`,
+      );
+    }
 
     const assumptionsStore = await readEscapesAssumptions();
     const assumptionsSnapshot: EscapesAssumptionsSnapshot = {
@@ -1763,9 +2358,14 @@ async function fetchDetail(
     }
 
     const windowDays = normalizedAvailability.days.slice(0, quoteWindowDays);
-    const sampledDays = windowDays
-      .filter((day) => isSaturdayIsoDate(day.date))
-      .slice(0, quoteMaxQueries);
+    const sampledSaturdayDays = windowDays.filter((day) =>
+      isSaturdayIsoDate(day.date),
+    );
+    const sampledDays = (
+      requestedAnchorDate
+        ? sampledSaturdayDays.filter((day) => day.date >= requestedAnchorDate)
+        : sampledSaturdayDays
+    ).slice(0, quoteMaxQueries);
 
     const sampledNightlyByDate = new Map<string, number>();
     const quoteObservations: EscapeRateObservation[] = [];
@@ -1806,6 +2406,58 @@ async function fetchDetail(
       quotedTotal: number | null;
       handoffUrl: string | null;
     }): EscapeRateObservation => {
+      if (!input.quoteAvailable) {
+        const baseTotal = coerceMoney(input.baseTotal);
+        const taxesTotal = coerceMoney(input.taxesTotal);
+        const feesTotalExclTaxes = coerceMoney(input.feesTotalExclTaxes);
+        const grandTotal = coerceMoney(input.quotedTotal);
+        const feePctOfBase = safeRatio(feesTotalExclTaxes, baseTotal);
+        const taxPctOfBase = safeRatio(taxesTotal, baseTotal);
+        const nonBasePctOfTotal = safeRatio(
+          baseTotal !== null && grandTotal !== null
+            ? Math.max(0, grandTotal - baseTotal)
+            : null,
+          grandTotal,
+        );
+        const allInMultiplier = safeRatio(grandTotal, baseTotal);
+        const baseNightly =
+          input.nights > 0 && baseTotal !== null
+            ? roundCurrency(baseTotal / input.nights)
+            : null;
+        const allInNightly =
+          input.nights > 0 && grandTotal !== null
+            ? roundCurrency(grandTotal / input.nights)
+            : null;
+
+        return {
+          sampled_at: input.capturedAt,
+          captured_at: input.capturedAt,
+          source_listing_id: externalListingId,
+          currency: "USD",
+          start_date: input.day.date,
+          end_date: input.endDate,
+          check_in_date: input.day.date,
+          check_out_date: input.endDate,
+          nights: input.nights,
+          base_nightly: baseNightly,
+          all_in_nightly: allInNightly,
+          quote_available: false,
+          quote_unavailable_reason: input.quoteUnavailableReason,
+          base_total: baseTotal,
+          taxes_total: taxesTotal,
+          fees_total_excl_taxes: feesTotalExclTaxes,
+          fee_lines: input.feeLines,
+          grand_total: grandTotal,
+          quoted_total: grandTotal,
+          fee_pct_of_base: feePctOfBase,
+          tax_pct_of_base: taxPctOfBase,
+          non_base_pct_of_total: nonBasePctOfTotal,
+          all_in_multiplier: allInMultiplier,
+          handoff_url: input.handoffUrl,
+          source: "quote_api",
+        };
+      }
+
       const sampledNightlyMedian = medianNumber(
         Array.from(sampledNightlyByDate.values()),
       );
@@ -1891,7 +2543,12 @@ async function fetchDetail(
       reportDetailProgress?.(
         `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] start sample_windows=${sampledDays.length}`,
       );
-      for (const day of sampledDays) {
+      for (
+        let sampleIndex = 0;
+        sampleIndex < sampledDays.length;
+        sampleIndex += 1
+      ) {
+        const day = sampledDays[sampleIndex]!;
         const capturedAt = new Date().toISOString();
         const nights = quoteNightsDefault;
         const endDate = addDaysToIsoDate(day.date, nights);
@@ -1910,13 +2567,71 @@ async function fetchDetail(
             fallbackBaseTotal * assumptionsAllInMultiplier,
           ),
         );
+        reportDetailProgress?.(
+          `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] window ${sampleIndex + 1}/${sampledDays.length} ${day.date} -> ${endDate}`,
+        );
+
+        const observationRetryDelaysMs = parseObservationRetryDelaysMs(
+          process.env.ESCAPES30A_QUOTE_OBSERVATION_RETRY_DELAYS_MS ?? "",
+        );
+
+        let quote: Awaited<ReturnType<typeof fetchEscapesQuote>> | null = null;
+
+        for (
+          let observationAttempt = 0;
+          observationAttempt < observationRetryDelaysMs.length;
+          observationAttempt += 1
+        ) {
+          const observationDelayMs =
+            observationRetryDelaysMs[observationAttempt] ?? 0;
+          if (observationDelayMs > 0) {
+            await sleep(observationDelayMs);
+          }
+
+          try {
+            const attemptedQuote = await fetchEscapesQuote({
+              propertyId: extracted.propertyId,
+              unitShortName: extracted.unitShortName,
+              checkInIso: day.date,
+              checkOutIso: endDate,
+              detailUrl,
+              reportProgress: (message) => {
+                reportDetailProgress?.(
+                  `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] ${day.date}->${endDate}: ${message}`,
+                );
+              },
+            });
+
+            quote = attemptedQuote;
+            if (
+              attemptedQuote.quoteAvailable ||
+              attemptedQuote.unavailableReason === "unavailable"
+            ) {
+              break;
+            }
+
+            if (observationAttempt < observationRetryDelaysMs.length - 1) {
+              const nextDelay =
+                observationRetryDelaysMs[observationAttempt + 1] ?? 0;
+              reportDetailProgress?.(
+                `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] observation retry ${observationAttempt + 1}/${observationRetryDelaysMs.length} ${day.date}->${endDate} reason=${attemptedQuote.unavailableReason ?? "unknown"} next_delay_ms=${nextDelay}`,
+              );
+            }
+          } catch {
+            if (observationAttempt < observationRetryDelaysMs.length - 1) {
+              const nextDelay =
+                observationRetryDelaysMs[observationAttempt + 1] ?? 0;
+              reportDetailProgress?.(
+                `detail ${externalListingId} [mode=${refreshMode}] [API_RATE_CALLS] observation retry ${observationAttempt + 1}/${observationRetryDelaysMs.length} ${day.date}->${endDate} reason=request_error next_delay_ms=${nextDelay}`,
+              );
+            }
+          }
+        }
+
         try {
-          const quote = await fetchEscapesQuote({
-            propertyId: extracted.propertyId,
-            unitShortName: extracted.unitShortName,
-            checkInIso: day.date,
-            checkOutIso: endDate,
-          });
+          if (!quote) {
+            throw new Error("observation retries exhausted");
+          }
 
           day.is_available = quote.quoteAvailable;
           day.is_available_for_checkin = quote.quoteAvailable;
@@ -1937,14 +2652,10 @@ async function fetchDetail(
               ? roundCurrency(quote.quotedTotal ?? 0)
               : null;
 
-          const baseTotal =
-            quoteBaseTotal ??
-            (quoteGrandTotal !== null
-              ? roundCurrency(quoteGrandTotal / assumptionsAllInMultiplier)
-              : fallbackBaseTotal);
-          const taxesTotal =
-            quoteTaxesTotal ?? roundCurrency(baseTotal * assumptionsTaxPct);
+          const baseTotal = quote.quoteAvailable ? quoteBaseTotal : null;
+          const taxesTotal = quote.quoteAvailable ? quoteTaxesTotal : null;
           const feesTotalExclTaxes =
+            quote.quoteAvailable &&
             quoteGrandTotal !== null &&
             quoteBaseTotal !== null &&
             quoteTaxesTotal !== null
@@ -1954,15 +2665,14 @@ async function fetchDetail(
                     quoteGrandTotal - quoteBaseTotal - quoteTaxesTotal,
                   ),
                 )
-              : roundCurrency(baseTotal * assumptionsFeePct);
-          const grandTotal =
-            quoteGrandTotal ??
-            roundCurrency(baseTotal + taxesTotal + feesTotalExclTaxes);
-          const nightly = roundCurrency(baseTotal / nights);
+              : null;
+          const grandTotal = quote.quoteAvailable ? quoteGrandTotal : null;
+          const nightly =
+            quote.quoteAvailable && baseTotal !== null
+              ? roundCurrency(baseTotal / nights)
+              : null;
 
-          // Only use successful quote windows as interpolation anchors.
-          // Unavailable responses still produce observations, but do not seed rates.
-          if (quote.quoteAvailable && nightly > 0) {
+          if (nightly !== null && nightly > 0) {
             sampledNightlyByDate.set(day.date, nightly);
           }
 
@@ -1975,8 +2685,7 @@ async function fetchDetail(
               quoteAvailable: quote.quoteAvailable,
               quoteUnavailableReason: quote.quoteAvailable
                 ? quote.unavailableReason
-                : (quote.unavailableReason ??
-                  "quote_unavailable_fallback_estimated"),
+                : (quote.unavailableReason ?? "quote_request_failed"),
               baseTotal,
               taxesTotal,
               feesTotalExclTaxes,
@@ -1993,12 +2702,12 @@ async function fetchDetail(
               endDate,
               nights,
               quoteAvailable: false,
-              quoteUnavailableReason: "quote_request_failed_fallback_estimated",
-              baseTotal: fallbackBaseTotal,
-              taxesTotal: fallbackTaxesTotal,
-              feesTotalExclTaxes: fallbackFeesTotal,
+              quoteUnavailableReason: "quote_request_failed",
+              baseTotal: null,
+              taxesTotal: null,
+              feesTotalExclTaxes: null,
               feeLines: [],
-              quotedTotal: fallbackGrandTotal,
+              quotedTotal: null,
               handoffUrl: null,
             }),
           );
@@ -2069,7 +2778,8 @@ async function fetchDetail(
             ? sampledDays.slice(0, quoteMaxQueries)
             : Array.from({ length: quoteMaxQueries }, (_, index) => {
                 const captureDate = new Date().toISOString().slice(0, 10);
-                const anchorDate = firstSaturdayOnOrAfter(captureDate);
+                const anchorDate =
+                  requestedAnchorDate ?? firstSaturdayOnOrAfter(captureDate);
                 const date = addDaysToIsoDate(anchorDate, index * 7);
                 return {
                   date,
@@ -2110,11 +2820,11 @@ async function fetchDetail(
               quoteAvailable: false,
               quoteUnavailableReason:
                 "quote_unavailable_fallback_estimated_no_api_windows",
-              baseTotal: fallbackBaseTotal,
-              taxesTotal: fallbackTaxesTotal,
-              feesTotalExclTaxes: fallbackFeesTotal,
+              baseTotal: null,
+              taxesTotal: null,
+              feesTotalExclTaxes: null,
               feeLines: [],
-              quotedTotal: fallbackGrandTotal,
+              quotedTotal: null,
               handoffUrl: null,
             }),
           );
@@ -2123,9 +2833,11 @@ async function fetchDetail(
 
       const sidecarCapturedAt = new Date().toISOString();
       const sidecarCaptureDate = sidecarCapturedAt.slice(0, 10);
-      const sidecarAnchorDate = firstSaturdayOnOrAfter(sidecarCaptureDate);
+      const sidecarAnchorDate =
+        requestedAnchorDate ?? firstSaturdayOnOrAfter(sidecarCaptureDate);
       const quoteSidecarRecord: EscapeQuotesSidecarRecord = {
         adapter_key: "30aescapes",
+        quote_module_version: THIRTY_A_ESCAPES_QUOTE_MODULE_VERSION,
         external_listing_id: externalListingId,
         detail_url: detailUrl,
         captured_at: sidecarCapturedAt,
@@ -2272,7 +2984,7 @@ async function fetchDetail(
     );
     await writeFile(htmlPath, `${extracted.html}\n`, "utf8");
 
-    const extractionMs = Date.now() - extractionStartedAt;
+    const extractionMs = Math.max(0, Date.now() - startedAt - pageLoadMs);
     const totalMs = Date.now() - startedAt;
 
     return {
@@ -2309,7 +3021,9 @@ async function fetchDetail(
     );
     return null;
   } finally {
-    await page.close();
+    if (page) {
+      await page.close();
+    }
   }
 }
 
