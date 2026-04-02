@@ -209,7 +209,8 @@ function extractQuoteContextFromHtml(html: string): {
     }
 
     const eidRaw = Number(match[1]);
-    const eid = Number.isFinite(eidRaw) && eidRaw > 0 ? Math.floor(eidRaw) : null;
+    const eid =
+      Number.isFinite(eidRaw) && eidRaw > 0 ? Math.floor(eidRaw) : null;
     const inventoryId = String(match[2]).trim();
     const typeId = String(match[3]).trim();
 

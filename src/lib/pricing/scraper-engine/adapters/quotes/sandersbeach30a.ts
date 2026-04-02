@@ -750,7 +750,9 @@ export async function runSandersBeach30AQuoteCli(
   progress?.info(
     `listings_selected=${selected.length} weeks=${options.weeks} nights=${options.nights} quote_concurrency=${options.quoteConcurrency} listing_concurrency=${options.listingConcurrency}`,
   );
-  progress?.info(`details_with_explicit_eid=${explicitEidCount}/${details.length}`);
+  progress?.info(
+    `details_with_explicit_eid=${explicitEidCount}/${details.length}`,
+  );
 
   const eidIndex = await buildEidIndex({ details, options, progress });
 
