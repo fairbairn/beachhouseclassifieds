@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
+import { runSandpiper30AQuoteCli } from "./quotes/sandpiper30a";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
@@ -104,7 +106,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://sandpipervacationrentals.com/vacation_rentals/";
+  "https://sandpipervacationrentals.com/vacation_rentals?post_type=vacation_rental&s=&action=&unit_code=&start_date=&end_date=&min_bedrooms=3&guests=&filter%5B%5D=&name=";
 const EXPECTED_LISTING_COUNT = 106;
 const DETAIL_PATH_PREFIXES = ["/vacation_rentals/", "/vacation-rentals/"];
 const OUTPUT_ROOT = resolve(
@@ -1736,6 +1738,13 @@ export function createSandpiper30AAdapter(): ScraperAdapter<LuxuryDetailRecord> 
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "sandpiper30a",
+        argv,
+      );
+      await runSandpiper30AQuoteCli(normalizedArgs, progress);
     },
   };
 }
