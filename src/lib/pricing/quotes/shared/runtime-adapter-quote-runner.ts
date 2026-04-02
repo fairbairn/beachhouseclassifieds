@@ -6,11 +6,13 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
-import { execute360BlueSingleQuote } from "@/lib/pricing/quote-runtime/adapters/360blue";
-import type { QuoteExecutionRequest } from "@/lib/pricing/quote-runtime/types";
-import { createQuoteCaptureProgressTracker } from "@/lib/pricing/quotes/shared/quote-capture-progress";
+import type {
+  QuoteExecutionRequest,
+  QuoteExecutionResult,
+} from "@/lib/pricing/quote-runtime/types";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import { createQuoteCaptureProgressTracker } from "./quote-capture-progress";
 
 type CliOptions = {
   maxListings: number;
@@ -50,7 +52,30 @@ type EstimatedPricing = {
   allInMultiplier: number;
 };
 
-const ADAPTER_KEY = "360blue";
+type QuoteWindow = {
+  startDate: string;
+  endDate: string;
+};
+
+export type RuntimeAdapterQuoteRunnerConfig = {
+  adapterKey: string;
+  executeSingleQuote: (
+    request: QuoteExecutionRequest,
+  ) => Promise<QuoteExecutionResult>;
+  maxAttemptsEnvVar?: string;
+  defaultMaxListings?: number;
+  defaultWeeks?: number;
+  defaultNights?: number;
+  defaultListingConcurrency?: number;
+  defaultQuoteConcurrency?: number;
+  defaultQuoteTimeoutMs?: number;
+  defaultQuoteMaxAttempts?: number;
+  defaultEndpointPath?: string;
+  defaultCartCreateEndpoint?: string;
+  defaultTaxPct?: number;
+  defaultBaseNightly?: number;
+};
+
 const DEFAULT_MAX_LISTINGS = 10;
 const DEFAULT_WEEKS = 24;
 const DEFAULT_NIGHTS = 7;
@@ -64,20 +89,26 @@ const DEFAULT_CART_CREATE_ENDPOINT =
 const DEFAULT_TAX_PCT = 0.12;
 const DEFAULT_BASE_NIGHTLY = 500;
 
-function parseArgs(argv: string[]): CliOptions {
-  let maxListings = DEFAULT_MAX_LISTINGS;
+function parseArgs(
+  argv: string[],
+  defaults: {
+    maxListings: number;
+    weeks: number;
+    nights: number;
+    listingConcurrency: number;
+    quoteConcurrency: number;
+    timeoutMs: number;
+    maxAttempts: number;
+  },
+): CliOptions {
+  let maxListings = defaults.maxListings;
   let listingId: string | null = null;
-  let weeks = DEFAULT_WEEKS;
-  let nights = DEFAULT_NIGHTS;
-  let listingConcurrency = DEFAULT_LISTING_CONCURRENCY;
-  let quoteConcurrency = DEFAULT_QUOTE_CONCURRENCY;
-  let timeoutMs = DEFAULT_QUOTE_TIMEOUT_MS;
-  let maxAttempts = Math.max(
-    1,
-    Number(
-      process.env.BLUE360_RATE_QUOTE_MAX_ATTEMPTS ?? DEFAULT_QUOTE_MAX_ATTEMPTS,
-    ) || DEFAULT_QUOTE_MAX_ATTEMPTS,
-  );
+  let weeks = defaults.weeks;
+  let nights = defaults.nights;
+  let listingConcurrency = defaults.listingConcurrency;
+  let quoteConcurrency = defaults.quoteConcurrency;
+  let timeoutMs = defaults.timeoutMs;
+  let maxAttempts = defaults.maxAttempts;
   let allowDetailBackfill =
     process.env.QUOTE_CAPTURE_ALLOW_DETAIL_BACKFILL === "1" ||
     process.env.QUOTE_CAPTURE_ALLOW_DETAIL_BACKFILL === "true";
@@ -254,6 +285,7 @@ function buildHandoffUrlFromContext(input: {
   quoteContext: Record<string, unknown> | null;
   checkInIso: string;
   checkOutIso: string;
+  defaultCartCreateEndpoint: string;
 }): string | null {
   const context = input.quoteContext;
   if (!context) {
@@ -274,7 +306,7 @@ function buildHandoffUrlFromContext(input: {
       ? context.cart_create_endpoint.trim()
       : "";
   const cartCreateEndpoint =
-    cartCreateEndpointRaw || DEFAULT_CART_CREATE_ENDPOINT;
+    cartCreateEndpointRaw || input.defaultCartCreateEndpoint;
 
   const payload = {
     unitId: Math.floor(unitId),
@@ -333,6 +365,7 @@ function createEstimatedPricing(input: {
 }
 
 async function loadDetailQuoteContext(
+  adapterKey: string,
   externalListingId: string,
 ): Promise<Record<string, unknown> | null> {
   const detailPath = resolve(
@@ -341,7 +374,7 @@ async function loadDetailQuoteContext(
     "lib",
     "data",
     "external-sources",
-    ADAPTER_KEY,
+    adapterKey,
     "details",
     "json",
     `${externalListingId}.json`,
@@ -357,6 +390,7 @@ async function loadDetailQuoteContext(
 }
 
 async function loadListingSeeds(
+  adapterKey: string,
   options: CliOptions,
   progress?: QuoteProgress,
 ): Promise<ListingSeed[]> {
@@ -366,14 +400,14 @@ async function loadListingSeeds(
     "lib",
     "data",
     "external-sources",
-    ADAPTER_KEY,
+    adapterKey,
     "details",
     "index.json",
   );
   const raw = await readFile(indexPath, "utf8");
   const parsed = JSON.parse(raw) as CanonicalIndexEntry[];
   if (!Array.isArray(parsed)) {
-    throw new Error(`Malformed canonical index for ${ADAPTER_KEY}`);
+    throw new Error(`Malformed canonical index for ${adapterKey}`);
   }
 
   progress?.phase(`loading canonical listings entries=${parsed.length}`);
@@ -414,7 +448,10 @@ async function loadListingSeeds(
 
     let quoteContext = asObject(entry.quote_context);
     if (!quoteContext && options.allowDetailBackfill) {
-      quoteContext = await loadDetailQuoteContext(externalListingId);
+      quoteContext = await loadDetailQuoteContext(
+        adapterKey,
+        externalListingId,
+      );
       if (quoteContext) {
         entry.quote_context = quoteContext;
         backfilled += 1;
@@ -444,7 +481,7 @@ async function loadListingSeeds(
 
   if (missingQuoteContextEntries > 0 && !options.allowDetailBackfill) {
     progress?.tick(
-      `quote_context backfill disabled; proceeding with canonical index only`,
+      "quote_context backfill disabled; proceeding with canonical index only",
     );
   }
 
@@ -468,11 +505,6 @@ async function loadListingSeeds(
   return selected;
 }
 
-type QuoteWindow = {
-  startDate: string;
-  endDate: string;
-};
-
 function buildQuoteWindows(weeks: number, nights: number): QuoteWindow[] {
   const todayIso = new Date().toISOString().slice(0, 10);
   const anchor = firstSaturdayOnOrAfter(todayIso);
@@ -490,14 +522,17 @@ function buildQuoteWindows(weeks: number, nights: number): QuoteWindow[] {
 async function executeWithRetries(
   request: QuoteExecutionRequest,
   maxAttempts: number,
-): Promise<Awaited<ReturnType<typeof execute360BlueSingleQuote>>> {
-  let lastResult = await execute360BlueSingleQuote(request);
+  executeSingleQuote: (
+    request: QuoteExecutionRequest,
+  ) => Promise<QuoteExecutionResult>,
+): Promise<QuoteExecutionResult> {
+  let lastResult = await executeSingleQuote(request);
   if (lastResult.success || !lastResult.error.retryable || maxAttempts <= 1) {
     return lastResult;
   }
 
   for (let attempt = 2; attempt <= maxAttempts; attempt += 1) {
-    lastResult = await execute360BlueSingleQuote(request);
+    lastResult = await executeSingleQuote(request);
     if (lastResult.success || !lastResult.error.retryable) {
       return lastResult;
     }
@@ -509,7 +544,7 @@ async function executeWithRetries(
 function createSuccessObservation(input: {
   listingId: string;
   nights: number;
-  result: Awaited<ReturnType<typeof execute360BlueSingleQuote>>;
+  result: QuoteExecutionResult;
 }): CanonicalQuoteObservation {
   const observation = input.result.success
     ? input.result.observation
@@ -620,9 +655,9 @@ function createUnavailableObservation(input: {
 }
 
 async function buildSidecarForListing(input: {
+  config: RuntimeAdapterQuoteRunnerConfig;
   listing: ListingSeed;
   options: CliOptions;
-  maxAttempts: number;
   progress?: QuoteProgress;
   onWindowResult?: (result: { quoteAvailable: boolean }) => void;
   onListingComplete?: (result: {
@@ -631,7 +666,7 @@ async function buildSidecarForListing(input: {
     available: number;
   }) => void;
 }): Promise<CanonicalQuotesSidecarRecord> {
-  const { listing, options, maxAttempts } = input;
+  const { config, listing, options } = input;
   const windows = buildQuoteWindows(options.weeks, options.nights);
 
   const runtimeResults = await runWithConcurrency(
@@ -650,7 +685,11 @@ async function buildSidecarForListing(input: {
         },
       };
 
-      const result = await executeWithRetries(request, maxAttempts);
+      const result = await executeWithRetries(
+        request,
+        options.maxAttempts,
+        config.executeSingleQuote,
+      );
       return {
         window,
         result,
@@ -658,42 +697,41 @@ async function buildSidecarForListing(input: {
     },
   );
 
-  const successful = runtimeResults.filter((entry) => entry.result.success);
-  const successBaseNightlies = successful
+  const successBaseNightlies = runtimeResults
     .map((entry) => {
-      const observation = entry.result.success
-        ? entry.result.observation
-        : null;
-      if (
-        !observation ||
-        options.nights <= 0 ||
-        observation.baseTotal === null
-      ) {
+      if (!entry.result.success || options.nights <= 0) {
         return null;
       }
-      return Math.round((observation.baseTotal / options.nights) * 100) / 100;
+      if (entry.result.observation.baseTotal === null) {
+        return null;
+      }
+      return (
+        Math.round(
+          (entry.result.observation.baseTotal / options.nights) * 100,
+        ) / 100
+      );
     })
     .filter((value): value is number => value !== null && value > 0);
-  const successTaxPcts = successful
+
+  const successTaxPcts = runtimeResults
     .map((entry) => {
-      const observation = entry.result.success
-        ? entry.result.observation
-        : null;
-      if (
-        !observation ||
-        observation.baseTotal === null ||
-        observation.baseTotal <= 0 ||
-        observation.taxesTotal === null
-      ) {
+      if (!entry.result.success) {
         return null;
       }
-      return observation.taxesTotal / observation.baseTotal;
+      const { baseTotal, taxesTotal } = entry.result.observation;
+      if (baseTotal === null || taxesTotal === null || baseTotal <= 0) {
+        return null;
+      }
+      return taxesTotal / baseTotal;
     })
     .filter((value): value is number => value !== null && value >= 0);
 
   const fallbackBaseNightly =
-    median(successBaseNightlies) ?? DEFAULT_BASE_NIGHTLY;
-  const fallbackTaxPct = median(successTaxPcts) ?? DEFAULT_TAX_PCT;
+    median(successBaseNightlies) ??
+    config.defaultBaseNightly ??
+    DEFAULT_BASE_NIGHTLY;
+  const fallbackTaxPct =
+    median(successTaxPcts) ?? config.defaultTaxPct ?? DEFAULT_TAX_PCT;
 
   const observations: CanonicalQuoteObservation[] = runtimeResults.map(
     (entry) => {
@@ -724,6 +762,8 @@ async function buildSidecarForListing(input: {
           quoteContext: listing.quoteContext,
           checkInIso: entry.window.startDate,
           checkOutIso: entry.window.endDate,
+          defaultCartCreateEndpoint:
+            config.defaultCartCreateEndpoint ?? DEFAULT_CART_CREATE_ENDPOINT,
         }),
       });
     },
@@ -735,10 +775,10 @@ async function buildSidecarForListing(input: {
       : "";
   const endpointPath = endpointPathRaw.startsWith("/")
     ? endpointPathRaw
-    : DEFAULT_ENDPOINT_PATH;
+    : (config.defaultEndpointPath ?? DEFAULT_ENDPOINT_PATH);
 
   const sidecar: CanonicalQuotesSidecarRecord = {
-    adapter_key: ADAPTER_KEY,
+    adapter_key: config.adapterKey,
     external_listing_id: listing.externalListingId,
     detail_url: listing.detailUrl,
     captured_at: new Date().toISOString(),
@@ -768,11 +808,33 @@ async function buildSidecarForListing(input: {
   return sidecar;
 }
 
-export async function run360BlueQuoteCli(
+export async function runRuntimeAdapterQuoteCli(
+  config: RuntimeAdapterQuoteRunnerConfig,
   argv: string[],
   progress?: QuoteProgress,
 ): Promise<void> {
-  const options = parseArgs(argv);
+  const defaults = {
+    maxListings: config.defaultMaxListings ?? DEFAULT_MAX_LISTINGS,
+    weeks: config.defaultWeeks ?? DEFAULT_WEEKS,
+    nights: config.defaultNights ?? DEFAULT_NIGHTS,
+    listingConcurrency:
+      config.defaultListingConcurrency ?? DEFAULT_LISTING_CONCURRENCY,
+    quoteConcurrency:
+      config.defaultQuoteConcurrency ?? DEFAULT_QUOTE_CONCURRENCY,
+    timeoutMs: config.defaultQuoteTimeoutMs ?? DEFAULT_QUOTE_TIMEOUT_MS,
+    maxAttempts: Math.max(
+      1,
+      Number(
+        process.env[config.maxAttemptsEnvVar ?? ""] ??
+          config.defaultQuoteMaxAttempts ??
+          DEFAULT_QUOTE_MAX_ATTEMPTS,
+      ) ||
+        config.defaultQuoteMaxAttempts ||
+        DEFAULT_QUOTE_MAX_ATTEMPTS,
+    ),
+  };
+
+  const options = parseArgs(argv, defaults);
 
   progress?.info(
     [
@@ -788,11 +850,10 @@ export async function run360BlueQuoteCli(
     ].join(" "),
   );
 
-  const listings = await loadListingSeeds(options, progress);
-  const totalListings = listings.length;
+  const listings = await loadListingSeeds(config.adapterKey, options, progress);
   const tracker = createQuoteCaptureProgressTracker({
     progress,
-    totalListings,
+    totalListings: listings.length,
     windowsPerListing: options.weeks,
     modeLabel: "quote",
     heartbeatMs: Math.max(
@@ -800,13 +861,14 @@ export async function run360BlueQuoteCli(
       Number(process.env.QUOTE_CAPTURE_HEARTBEAT_MS ?? "15000") || 15000,
     ),
   });
+
   const quotesDir = resolve(
     process.cwd(),
     "src",
     "lib",
     "data",
     "external-sources",
-    ADAPTER_KEY,
+    config.adapterKey,
     "details",
     "quotes",
   );
@@ -817,9 +879,9 @@ export async function run360BlueQuoteCli(
     options.listingConcurrency,
     async (listing) => {
       const sidecar = await buildSidecarForListing({
+        config,
         listing,
         options,
-        maxAttempts: options.maxAttempts,
         progress,
         onWindowResult: ({ quoteAvailable }) => {
           tracker.onWindowResult(quoteAvailable);

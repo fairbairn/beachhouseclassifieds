@@ -8,10 +8,11 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
+import { execute360BlueSingleQuote } from "@/lib/pricing/quote-runtime/adapters/360blue";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { run360BlueQuoteCli } from "./quotes/360blue";
 
 type BookingDayState = "bookable" | "blocked" | "unknown";
 
@@ -2266,7 +2267,22 @@ export function create360BlueAdapter(): ScraperAdapter<DetailRecord360Blue> {
         "360blue",
         argv,
       );
-      await run360BlueQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "360blue",
+          executeSingleQuote: execute360BlueSingleQuote,
+          maxAttemptsEnvVar: "BLUE360_RATE_QUOTE_MAX_ATTEMPTS",
+          defaultQuoteTimeoutMs: 12000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/api/nrbe/reservation-quotes.json",
+          defaultCartCreateEndpoint:
+            "https://www.callistavacations.com/api/nrbe/carts/create.json",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 500,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
   };
 }
