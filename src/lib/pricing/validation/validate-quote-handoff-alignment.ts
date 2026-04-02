@@ -1,11 +1,12 @@
 import { Chalk } from "chalk";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
 import type { CanonicalQuotesSidecarRecord } from "@/lib/pricing/contracts/quote-observations-contract";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
+import { selectCanonicalArtifactFiles } from "@/lib/pricing/shared/canonical-index-listings";
 
 const chalk = new Chalk({ level: 1 });
 
@@ -210,26 +211,21 @@ function getLeadDaysFromUtcToday(
 }
 
 async function collectQuoteFiles(
+  adapterKey: string,
   quotesDir: string,
   listingId: string | null,
   maxListings: number | null,
-): Promise<string[]> {
-  const entries = await readdir(quotesDir, { withFileTypes: true });
-  const jsonFiles = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => entry.name)
-    .sort();
-
-  let selected = jsonFiles;
-  if (listingId) {
-    selected = selected.filter((name) => name === `${listingId}.json`);
-  }
-
-  if (maxListings !== null) {
-    selected = selected.slice(0, maxListings);
-  }
-
-  return selected;
+): Promise<{
+  listingIds: string[];
+  fileNames: string[];
+  missingListingIds: string[];
+}> {
+  return selectCanonicalArtifactFiles({
+    adapterKey,
+    listingId,
+    maxListings,
+    artifactDir: quotesDir,
+  });
 }
 
 function parseMoney(value: string): number | null {
@@ -2802,14 +2798,22 @@ export async function runValidateQuoteHandoffAlignmentCli(
   );
 
   const files = await collectQuoteFiles(
+    options.adapterKey,
     quotesDir,
     options.listingId,
     options.maxListings,
   );
 
-  if (files.length === 0) {
+  if (files.listingIds.length === 0) {
     progress.failure(
-      `No quote sidecar files selected for adapter=${options.adapterKey}.`,
+      `No active listings selected from canonical index for adapter=${options.adapterKey}.`,
+    );
+    return 1;
+  }
+
+  if (files.missingListingIds.length > 0) {
+    progress.failure(
+      `Missing quote sidecars for active listings adapter=${options.adapterKey} missing=${files.missingListingIds.length} first=${files.missingListingIds.slice(0, 5).join(",")}`,
     );
     return 1;
   }
@@ -2817,7 +2821,7 @@ export async function runValidateQuoteHandoffAlignmentCli(
   const candidates: ObservationCandidate[] = [];
   const utcTodayStartMs = getUtcTodayStartMs();
 
-  for (const fileName of files) {
+  for (const fileName of files.fileNames) {
     const filePath = resolve(quotesDir, fileName);
     const raw = await readFile(filePath, "utf8");
     let sidecar: CanonicalQuotesSidecarRecord;

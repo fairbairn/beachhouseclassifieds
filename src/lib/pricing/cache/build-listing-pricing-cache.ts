@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
@@ -7,6 +7,7 @@ import {
   type ListingPricingCacheRecord,
   type ListingPricingDayRecord,
 } from "@/lib/pricing/contracts/listing-pricing-cache-contract";
+import { selectCanonicalListings } from "@/lib/pricing/shared/canonical-index-listings";
 
 type AvailabilityDay = {
   date: string;
@@ -318,20 +319,12 @@ export async function buildListingPricingCacheForAdapter(
       globalDefaultBaseNightly * assumptionsAnchorFallbackMultiplier,
     );
 
-  const entries = await readdir(detailsJsonDir, { withFileTypes: true });
-  const detailFiles = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => entry.name)
-    .sort();
-
-  let selected = detailFiles;
-  if (input.options.listingId) {
-    const targetFile = `${input.options.listingId}.json`;
-    selected = detailFiles.filter((fileName) => fileName === targetFile);
-  }
-  if (input.options.maxListings !== null) {
-    selected = selected.slice(0, input.options.maxListings);
-  }
+  const selectedListings = await selectCanonicalListings({
+    adapterKey: input.adapterKey,
+    listingId: input.options.listingId,
+    maxListings: input.options.maxListings,
+    rootDir: root,
+  });
 
   const horizonDays = input.options.weeks * 7;
   const dates = Array.from({ length: horizonDays }, (_, index) =>
@@ -350,10 +343,19 @@ export async function buildListingPricingCacheForAdapter(
     await mkdir(pricingDir, { recursive: true });
   }
 
-  for (const fileName of selected) {
-    const detailPath = resolve(detailsJsonDir, fileName);
-    const raw = await readFile(detailPath, "utf8");
-    const detail = readJson<DetailRecord>(raw);
+  for (const listing of selectedListings) {
+    const detailPath = resolve(
+      detailsJsonDir,
+      `${listing.externalListingId}.json`,
+    );
+    let detail: DetailRecord;
+    try {
+      const raw = await readFile(detailPath, "utf8");
+      detail = readJson<DetailRecord>(raw);
+    } catch {
+      // Active listing may not have a detail artifact yet; skip until scraped.
+      continue;
+    }
 
     let quoteAnchorsByDate = new Map<string, number>();
     try {

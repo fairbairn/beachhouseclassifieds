@@ -1,5 +1,5 @@
 import { Chalk } from "chalk";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -7,6 +7,7 @@ import {
   assertListingPricingCacheRecord,
   type ListingPricingCacheRecord,
 } from "@/lib/pricing/contracts/listing-pricing-cache-contract";
+import { selectCanonicalArtifactFiles } from "@/lib/pricing/shared/canonical-index-listings";
 
 const chalk = new Chalk({ level: 1 });
 
@@ -33,6 +34,7 @@ type ListingValidationIssue = {
   code:
     | "invalid_json"
     | "contract_validation_failed"
+    | "pricing_missing"
     | "detail_missing"
     | "availability_mismatch"
     | "missing_availability_day";
@@ -106,31 +108,21 @@ function parseArgs(argv: string[]): CliOptions {
 }
 
 async function collectPricingFiles(
+  adapterKey: string,
   pricingDir: string,
   listingId: string | null,
   maxListings: number | null,
-): Promise<string[]> {
-  const entries = await readdir(pricingDir, { withFileTypes: true });
-  const jsonFiles = entries
-    .filter(
-      (entry) =>
-        entry.isFile() &&
-        entry.name.endsWith(".json") &&
-        entry.name.toLowerCase() !== "index.json",
-    )
-    .map((entry) => entry.name)
-    .sort();
-
-  let selected = jsonFiles;
-  if (listingId) {
-    selected = jsonFiles.filter((name) => name === `${listingId}.json`);
-  }
-
-  if (maxListings !== null) {
-    selected = selected.slice(0, maxListings);
-  }
-
-  return selected;
+): Promise<{
+  listingIds: string[];
+  fileNames: string[];
+  missingListingIds: string[];
+}> {
+  return selectCanonicalArtifactFiles({
+    adapterKey,
+    listingId,
+    maxListings,
+    artifactDir: pricingDir,
+  });
 }
 
 function printFailureSummary(failures: ListingValidationFailure[]): void {
@@ -176,6 +168,7 @@ export async function runValidatePricingCacheAlignmentCli(
   let files: string[];
   try {
     files = await collectPricingFiles(
+      options.adapterKey,
       pricingDir,
       options.listingId,
       options.maxListings,
@@ -187,19 +180,32 @@ export async function runValidatePricingCacheAlignmentCli(
     return 1;
   }
 
-  if (files.length === 0) {
+  if (files.listingIds.length === 0) {
     console.error(
-      `No pricing files selected for adapter=${options.adapterKey}.`,
+      `No active listings selected from canonical index for adapter=${options.adapterKey}.`,
     );
     return 1;
   }
 
-  let validated = 0;
-  let failed = 0;
+  let validated = files.listingIds.length;
+  let failed = files.missingListingIds.length;
   const failures: ListingValidationFailure[] = [];
   const currentUtcDateYmd = getCurrentUtcDateYmd();
 
-  for (const fileName of files) {
+  for (const missingListingId of files.missingListingIds) {
+    failures.push({
+      listingId: missingListingId,
+      fileName: `${missingListingId}.json`,
+      issues: [
+        {
+          code: "pricing_missing",
+          message: `missing pricing cache for active listing ${missingListingId}`,
+        },
+      ],
+    });
+  }
+
+  for (const fileName of files.fileNames) {
     const listingId = fileName.replace(/\.json$/i, "");
     const filePath = resolve(pricingDir, fileName);
     const issues: ListingValidationIssue[] = [];
@@ -284,7 +290,6 @@ export async function runValidatePricingCacheAlignmentCli(
       }
     }
 
-    validated += 1;
     if (issues.length > 0) {
       failed += 1;
       failures.push({

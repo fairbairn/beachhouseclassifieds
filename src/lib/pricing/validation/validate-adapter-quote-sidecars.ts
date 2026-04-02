@@ -1,11 +1,12 @@
 import { Chalk } from "chalk";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const chalk = new Chalk({ level: 1 });
 
 import type { CanonicalQuotesSidecarRecord } from "@/lib/pricing/contracts/quote-observations-contract";
+import { selectCanonicalArtifactFiles } from "@/lib/pricing/shared/canonical-index-listings";
 import {
   validateCanonicalQuoteSidecar,
   type QuoteValidationIssue,
@@ -69,27 +70,21 @@ function parseArgs(argv: string[]): CliOptions {
 }
 
 async function collectQuoteFiles(
+  adapterKey: string,
   quotesDir: string,
   listingId: string | null,
   maxListings: number | null,
-): Promise<string[]> {
-  const entries = await readdir(quotesDir, { withFileTypes: true });
-  const jsonFiles = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => entry.name)
-    .sort();
-
-  let selected = jsonFiles;
-  if (listingId) {
-    const byFileName = `${listingId}.json`;
-    selected = jsonFiles.filter((name) => name === byFileName);
-  }
-
-  if (maxListings !== null) {
-    selected = selected.slice(0, maxListings);
-  }
-
-  return selected;
+): Promise<{
+  listingIds: string[];
+  fileNames: string[];
+  missingListingIds: string[];
+}> {
+  return selectCanonicalArtifactFiles({
+    adapterKey,
+    listingId,
+    maxListings,
+    artifactDir: quotesDir,
+  });
 }
 
 function printFailureSummary(failures: ListingValidationFailure[]): void {
@@ -133,23 +128,37 @@ export async function runValidateAdapterQuoteSidecarsCli(
   );
 
   const files = await collectQuoteFiles(
+    options.adapterKey,
     quotesDir,
     options.listingId,
     options.maxListings,
   );
 
-  if (files.length === 0) {
+  if (files.listingIds.length === 0) {
     console.error(
-      `No quote sidecar files selected for adapter=${options.adapterKey}.`,
+      `No active listings selected from canonical index for adapter=${options.adapterKey}.`,
     );
     return 1;
   }
 
-  let validated = 0;
-  let failed = 0;
+  let validated = files.listingIds.length;
+  let failed = files.missingListingIds.length;
   const failures: ListingValidationFailure[] = [];
 
-  for (const fileName of files) {
+  for (const missingListingId of files.missingListingIds) {
+    failures.push({
+      listingId: missingListingId,
+      fileName: `${missingListingId}.json`,
+      issues: [
+        {
+          code: "missing_sidecar",
+          message: `missing quote sidecar for active listing '${missingListingId}'`,
+        },
+      ],
+    });
+  }
+
+  for (const fileName of files.fileNames) {
     const filePath = resolve(quotesDir, fileName);
     const raw = await readFile(filePath, "utf8");
 
@@ -176,7 +185,6 @@ export async function runValidateAdapterQuoteSidecarsCli(
       requireNonNullPricingFields: !options.allowNullPricingFields,
     });
 
-    validated += 1;
     if (issues.length > 0) {
       failed += 1;
       failures.push({

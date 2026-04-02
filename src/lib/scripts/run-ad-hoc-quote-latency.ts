@@ -2,6 +2,7 @@ import {
   getKnownQuoteRuntimeAdapterKeys,
   getQuoteRuntimeExecutor,
 } from "@/lib/pricing/quote-runtime/registry";
+import { selectCanonicalListings } from "@/lib/pricing/shared/canonical-index-listings";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -389,12 +390,18 @@ async function listAdaptersWithQuotes(): Promise<string[]> {
   for (const adapterKey of adapters) {
     const quotesDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "quotes");
     try {
+      const activeListings = await selectCanonicalListings({
+        adapterKey,
+        maxListings: null,
+      });
       const quoteEntries = await readdir(quotesDir, { withFileTypes: true });
-      const hasQuoteFiles = quoteEntries.some(
-        (entry) =>
-          entry.isFile() &&
-          entry.name.endsWith(".json") &&
-          entry.name !== "index.json",
+      const quoteFiles = new Set(
+        quoteEntries
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+          .map((entry) => entry.name),
+      );
+      const hasQuoteFiles = activeListings.some((listing) =>
+        quoteFiles.has(`${listing.externalListingId}.json`),
       );
       if (hasQuoteFiles) {
         withQuotes.push(adapterKey);
@@ -413,23 +420,23 @@ async function collectListingSamplesForAdapter(
 ): Promise<ListingSample[]> {
   const quotesDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "quotes");
   const detailsJsonDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "json");
-  const quoteEntries = await readdir(quotesDir, { withFileTypes: true });
-  const quoteFiles = quoteEntries
-    .filter(
-      (entry) =>
-        entry.isFile() &&
-        entry.name.endsWith(".json") &&
-        entry.name !== "index.json",
-    )
-    .map((entry) => entry.name)
-    .sort();
+  const activeListings = await selectCanonicalListings({
+    adapterKey,
+    maxListings: null,
+  });
 
   const candidates: ListingSample[] = [];
 
-  for (const fileName of quoteFiles) {
+  for (const listing of activeListings) {
+    const fileName = `${listing.externalListingId}.json`;
     const sidecarPath = resolve(quotesDir, fileName);
-    const sidecarRaw = await readFile(sidecarPath, "utf8");
-    const sidecar = JSON.parse(sidecarRaw) as QuotesSidecar;
+    let sidecar: QuotesSidecar;
+    try {
+      const sidecarRaw = await readFile(sidecarPath, "utf8");
+      sidecar = JSON.parse(sidecarRaw) as QuotesSidecar;
+    } catch {
+      continue;
+    }
 
     const listingId = sidecar.external_listing_id?.trim() ?? "";
     const detailUrl = sidecar.detail_url?.trim() ?? "";

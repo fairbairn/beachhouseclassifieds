@@ -833,9 +833,18 @@ export async function run360BlueQuoteCli(
         },
       });
 
-      const outputPath = resolve(quotesDir, `${sidecar.external_listing_id}.json`);
-      await writeFile(outputPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
-      progress?.tick(`quote sidecar flushed listing=${sidecar.external_listing_id}`);
+      const outputPath = resolve(
+        quotesDir,
+        `${sidecar.external_listing_id}.json`,
+      );
+      await writeFile(
+        outputPath,
+        `${JSON.stringify(sidecar, null, 2)}\n`,
+        "utf8",
+      );
+      progress?.tick(
+        `quote sidecar flushed listing=${sidecar.external_listing_id}`,
+      );
 
       return sidecar;
     },
