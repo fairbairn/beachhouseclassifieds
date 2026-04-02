@@ -2983,5 +2983,78 @@ export function create30AEscapesAdapter(): ScraperAdapter<EscapeDetailRecord> {
       );
       await runThirtyAEscapesQuoteCli(normalizedArgs, progress);
     },
+    async runSingleQuoteObservation(input) {
+      const propertyId = (() => {
+        if (input.handoffUrl) {
+          try {
+            const parsed = new URL(input.handoffUrl);
+            const value = parsed.searchParams.get("propertyid")?.trim() ?? "";
+            if (value) {
+              return value;
+            }
+          } catch {
+            // Fall back to listing id if handoff URL parsing fails.
+          }
+        }
+        return input.listingId.trim();
+      })();
+
+      if (!propertyId) {
+        return {
+          elapsedMs: 0,
+          observation: {
+            startDate: input.checkInIso,
+            endDate: input.checkOutIso,
+            quoteAvailable: false,
+            currency: null,
+            baseTotal: null,
+            taxesTotal: null,
+            feesTotalExclTaxes: null,
+            grandTotal: null,
+            quotedTotal: null,
+            handoffUrl: input.handoffUrl ?? null,
+            reason: "missing_property_id",
+          },
+        };
+      }
+
+      const startedAtMs = Date.now();
+      const quote = await fetchEscapesQuote({
+        propertyId,
+        unitShortName: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        detailUrl: input.detailUrl,
+      });
+      const elapsedMs = Date.now() - startedAtMs;
+
+      const feesTotalExclTaxes =
+        quote.quotedTotal !== null &&
+        quote.baseTotal !== null &&
+        quote.taxesTotal !== null
+          ? roundCurrency(
+              quote.quotedTotal - quote.baseTotal - quote.taxesTotal,
+            )
+          : null;
+
+      return {
+        elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: quote.quoteAvailable,
+          currency: quote.quoteAvailable ? "USD" : null,
+          baseTotal: quote.baseTotal,
+          taxesTotal: quote.taxesTotal,
+          feesTotalExclTaxes,
+          grandTotal: quote.quotedTotal,
+          quotedTotal: quote.quotedTotal,
+          handoffUrl: quote.handoffUrl ?? input.handoffUrl ?? null,
+          reason: quote.quoteAvailable
+            ? null
+            : (quote.unavailableReason ?? "quote_unavailable"),
+        },
+      };
+    },
   };
 }

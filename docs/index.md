@@ -15,6 +15,7 @@ Welcome to the docs site scaffold.
 - Use [Pricing and Conformance System Reference](./pricing-system-reference.md) as the hub for scrape, quote, cache, validation, and readiness workflows.
 - Use [Adapter Scrape and Extraction](./adapter-scrape-and-extraction.md) for how primary adapters discover, fetch, and normalize listing detail payloads.
 - Use [Quote Modules and Platform Strategy](./quote-modules-platform-strategy.md) for quote-sidecar behavior and stack-specific extraction strategy.
+- Use [Quote Runtime Isolation Evolution](./quote-runtime-isolation-evolution.md) for the runtime portability boundary, migration phases, and adapter task tracker.
 - Use [Pricing Cache Builder](./pricing-cache-builder.md) for cache inputs, interpolation policy, and parity outputs.
 - Use [Quote Validator](./quote-validator.md) for sidecar enforcement rules and failure classes.
 - Use [Handoff Validator](./handoff-validator.md) for checkout parity validation paths, pacing, and retry behavior.

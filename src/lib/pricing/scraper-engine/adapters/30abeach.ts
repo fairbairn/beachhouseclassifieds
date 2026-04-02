@@ -9,7 +9,10 @@ import {
 } from "../adapter-foundation";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { runThirtyABeachQuoteCli } from "./quotes/30abeach";
+import {
+  runThirtyABeachQuoteCli,
+  runThirtyABeachSingleQuoteObservation,
+} from "./quotes/30abeach";
 
 type ThirtyABeachListingRow = {
   id: string;
@@ -1715,6 +1718,9 @@ export function create30ABeachAdapter(): ScraperAdapter<ThirtyABeachDetailRecord
         argv,
       );
       await runThirtyABeachQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runThirtyABeachSingleQuoteObservation(input);
     },
   };
 }

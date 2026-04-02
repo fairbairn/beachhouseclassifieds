@@ -8,6 +8,10 @@ import {
 } from "@/lib/pricing/contracts/quote-observations-contract";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import type {
+  SingleQuoteObservationInput,
+  SingleQuoteObservationResult,
+} from "@/lib/pricing/scraper-engine/types";
 
 type CliOptions = {
   maxListings: number;
@@ -1039,4 +1043,80 @@ export async function runFunVacay30AQuoteCli(
   progress?.success(
     `funvacay30a quote sampling complete listings_selected=${totalSelected} processed=${summaries.length} skipped_existing=${skippedExisting}`,
   );
+}
+
+export async function runFunVacay30ASingleQuoteObservation(
+  input: SingleQuoteObservationInput,
+): Promise<SingleQuoteObservationResult> {
+  const rcavIdentityFromHandoff = (() => {
+    if (!input.handoffUrl) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(input.handoffUrl);
+      const itemEid = parsed.searchParams.get("rcav[eid]")?.trim() ?? "";
+      let typeId = "";
+      let inventoryId = "";
+      for (const [key, value] of parsed.searchParams.entries()) {
+        const match = key.match(/^rcav\[IDs\]\[(\d+)\]\[(?:\d+)?\]$/);
+        if (match && value.trim()) {
+          typeId = match[1] ?? "";
+          inventoryId = value.trim();
+          break;
+        }
+      }
+
+      if (itemEid && typeId && inventoryId) {
+        return { itemEid, typeId, inventoryId };
+      }
+    } catch {
+      // Fall back to legacy identity extraction.
+    }
+
+    return null;
+  })();
+
+  const detail: FunVacay30ADetailRecord = {
+    external_listing_id: input.listingId,
+    detail_url: input.detailUrl,
+    description_expanded: input.descriptionExpanded ?? undefined,
+  };
+  const rcavIdentity = rcavIdentityFromHandoff ?? extractRcavIdentity(detail);
+
+  const startedAt = performance.now();
+  const raw = await fetchQuoteWithTotals({
+    detailUrl: input.detailUrl,
+    itemEid: rcavIdentity.itemEid,
+    typeId: rcavIdentity.typeId,
+    inventoryId: rcavIdentity.inventoryId,
+    startDate: input.checkInIso,
+    endDate: input.checkOutIso,
+    adults: Math.max(1, Math.floor(input.adults)),
+    children: Math.max(0, Math.floor(input.children)),
+    promoCode: "",
+  });
+
+  const feesTotalExclTaxes = raw.feesTotal;
+  const quotedTotal = raw.grandTotal;
+  const reason = raw.quoteAvailable
+    ? null
+    : (raw.quoteUnavailableReason ?? "Quote unavailable");
+
+  return {
+    elapsedMs: performance.now() - startedAt,
+    observation: {
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      quoteAvailable: raw.quoteAvailable,
+      currency: raw.currency || null,
+      baseTotal: raw.baseTotal,
+      taxesTotal: raw.taxesTotal,
+      feesTotalExclTaxes,
+      grandTotal: raw.grandTotal,
+      quotedTotal,
+      handoffUrl: raw.handoffUrl,
+      reason,
+    },
+  };
 }

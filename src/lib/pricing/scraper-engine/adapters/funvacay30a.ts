@@ -6,7 +6,10 @@ import type { Browser, Page } from "playwright";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { runFunVacay30AQuoteCli } from "./quotes/funvacay30a";
+import {
+  runFunVacay30AQuoteCli,
+  runFunVacay30ASingleQuoteObservation,
+} from "./quotes/funvacay30a";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -2439,6 +2442,9 @@ export function createFunVacay30AAdapter(): ScraperAdapter<LuxuryDetailRecord> {
         argv,
       );
       await runFunVacay30AQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runFunVacay30ASingleQuoteObservation(input);
     },
   };
 }

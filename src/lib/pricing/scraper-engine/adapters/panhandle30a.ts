@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
-import { runPanhandle30aQuoteCli } from "./quotes/panhandle30a";
+import {
+  runPanhandle30aQuoteCli,
+  runPanhandle30aSingleQuoteObservation,
+} from "./quotes/panhandle30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -40,6 +43,11 @@ type LuxuryDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "detail_hidden_inputs";
+    property_id: string;
+    property_name: string;
   };
   normalized_matching_profile: {
     source: "pm_panhandle30a";
@@ -192,6 +200,32 @@ function normalizeListingName(value: string): string {
     .trim();
 
   return cleaned.slice(0, 240);
+}
+
+function extractQuoteContextFromHtml(input: {
+  html: string;
+  fallbackListingId: string;
+  fallbackName: string;
+}): LuxuryDetailRecord["quote_context"] {
+  const propertyIdMatch = input.html.match(
+    /<input[^>]*name="propertyID"[^>]*value="(\d+)"[^>]*>/i,
+  );
+  const propertyNameMatch = input.html.match(
+    /<input[^>]*name="propertyName"[^>]*value="([^"]*)"[^>]*>/i,
+  );
+
+  const propertyId =
+    propertyIdMatch?.[1]?.trim() || input.fallbackListingId.trim();
+  const propertyName =
+    propertyNameMatch?.[1]?.replace(/&amp;/g, "&").trim() ||
+    input.fallbackName.trim() ||
+    input.fallbackListingId.trim();
+
+  return {
+    source: "detail_hidden_inputs",
+    property_id: propertyId,
+    property_name: propertyName,
+  };
 }
 
 function dedupePreserveOrder(values: string[]): string[] {
@@ -1402,6 +1436,11 @@ async function fetchDetail(
         ),
       },
     };
+    const quoteContext = extractQuoteContextFromHtml({
+      html,
+      fallbackListingId: externalListingId,
+      fallbackName: listingName,
+    });
 
     const extractionMs = Date.now() - beforeLoad - pageLoadMs;
     const totalMs = Date.now() - startedAt;
@@ -1419,6 +1458,7 @@ async function fetchDetail(
       location,
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
+      quote_context: quoteContext,
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_panhandle30a",
@@ -1546,6 +1586,9 @@ export function createPanhandle30AAdapter(): ScraperAdapter<LuxuryDetailRecord> 
         argv,
       );
       await runPanhandle30aQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runPanhandle30aSingleQuoteObservation(input);
     },
   };
 }

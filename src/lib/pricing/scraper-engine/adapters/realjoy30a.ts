@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { runRealjoy30aQuoteCli } from "./quotes/realjoy30a";
+import {
+  runRealjoy30aQuoteCli,
+  runRealjoy30aSingleQuoteObservation,
+} from "./quotes/realjoy30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -1128,6 +1131,9 @@ export function createRealJoy30AAdapter(): ScraperAdapter<RealJoyDetailRecord> {
         argv,
       );
       await runRealjoy30aQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runRealjoy30aSingleQuoteObservation(input);
     },
   };
 }

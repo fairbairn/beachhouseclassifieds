@@ -8,6 +8,10 @@ import {
 } from "@/lib/pricing/contracts/quote-observations-contract";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import type {
+  SingleQuoteObservationInput,
+  SingleQuoteObservationResult,
+} from "@/lib/pricing/scraper-engine/types";
 
 type CliOptions = {
   maxListings: number;
@@ -854,4 +858,43 @@ export async function runFiveStar30aQuoteCli(
   progress?.success(
     `fivestar30a quote sampling complete listings_selected=${totalSelected} processed=${summaries.length} skipped_existing=${skippedExisting}`,
   );
+}
+
+export async function runFiveStar30aSingleQuoteObservation(
+  input: SingleQuoteObservationInput,
+): Promise<SingleQuoteObservationResult> {
+  const startedAt = performance.now();
+  const raw = await fetchRouterQuote({
+    detailUrl: input.detailUrl,
+    unitId: input.listingId,
+    locationId: DEFAULT_HANDOFF_LOCATION_ID,
+    startDate: input.checkInIso,
+    endDate: input.checkOutIso,
+    adults: Math.max(1, Math.floor(input.adults)),
+    children: Math.max(0, Math.floor(input.children)),
+    promoCode: "",
+  });
+
+  const feesTotalExclTaxes = raw.feesTotal;
+  const quotedTotal = raw.grandTotal;
+  const reason = raw.quoteAvailable
+    ? null
+    : (raw.quoteUnavailableReason ?? "Quote unavailable");
+
+  return {
+    elapsedMs: performance.now() - startedAt,
+    observation: {
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      quoteAvailable: raw.quoteAvailable,
+      currency: raw.currency || null,
+      baseTotal: raw.baseTotal,
+      taxesTotal: raw.taxesTotal,
+      feesTotalExclTaxes,
+      grandTotal: raw.grandTotal,
+      quotedTotal,
+      handoffUrl: raw.handoffUrl,
+      reason,
+    },
+  };
 }

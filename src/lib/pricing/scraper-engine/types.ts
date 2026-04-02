@@ -77,6 +77,35 @@ export type FetchDetailContext = {
   reportDetailProgress?: (message: string) => void;
 };
 
+export type SingleQuoteObservationInput = {
+  listingId: string;
+  detailUrl: string;
+  checkInIso: string;
+  checkOutIso: string;
+  adults: number;
+  children: number;
+  endpointPath?: string;
+  handoffUrl?: string;
+  quoteContext?: Record<string, unknown>;
+};
+
+export type SingleQuoteObservationResult = {
+  elapsedMs: number;
+  observation: {
+    startDate: string;
+    endDate: string;
+    quoteAvailable: boolean;
+    currency: string | null;
+    baseTotal: number | null;
+    taxesTotal: number | null;
+    feesTotalExclTaxes: number | null;
+    grandTotal: number | null;
+    quotedTotal: number | null;
+    handoffUrl: string | null;
+    reason: string | null;
+  };
+};
+
 export type ScraperAdapter<TDetail extends DetailRecordBase> = {
   managerKey: string;
   scriptLabel: string;
@@ -89,4 +118,8 @@ export type ScraperAdapter<TDetail extends DetailRecordBase> = {
   discoverListings(context: DiscoverContext): Promise<ScrapedLink[]>;
   fetchDetail(context: FetchDetailContext): Promise<TDetail | null>;
   runQuoteCapture?(argv: string[], progress: QuoteProgress): Promise<void>;
+  runSingleQuoteObservation?(
+    input: SingleQuoteObservationInput,
+    progress: QuoteProgress,
+  ): Promise<SingleQuoteObservationResult>;
 };

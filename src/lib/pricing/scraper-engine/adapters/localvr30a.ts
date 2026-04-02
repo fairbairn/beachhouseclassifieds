@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { runLocalvr30aQuoteCli } from "./quotes/localvr30a";
+import {
+  runLocalvr30aQuoteCli,
+  runLocalvr30aSingleQuoteObservation,
+} from "./quotes/localvr30a";
 
 type LocalVrDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -1020,6 +1023,9 @@ export function createLocalVR30AAdapter(): ScraperAdapter<LocalVrDetailRecord> {
         argv,
       );
       await runLocalvr30aQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runLocalvr30aSingleQuoteObservation(input);
     },
   };
 }

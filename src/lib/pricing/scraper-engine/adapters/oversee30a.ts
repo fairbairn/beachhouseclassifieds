@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { runOversee30aQuoteCli } from "./quotes/oversee30a";
+import {
+  runOversee30aQuoteCli,
+  runOversee30aSingleQuoteObservation,
+} from "./quotes/oversee30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -1077,6 +1080,9 @@ export function createOversee30AAdapter(): ScraperAdapter<OverseeDetailRecord> {
         argv,
       );
       await runOversee30aQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runOversee30aSingleQuoteObservation(input);
     },
   };
 }

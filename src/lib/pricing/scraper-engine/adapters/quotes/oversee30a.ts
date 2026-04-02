@@ -8,6 +8,10 @@ import {
 } from "@/lib/pricing/contracts/quote-observations-contract";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import type {
+  SingleQuoteObservationInput,
+  SingleQuoteObservationResult,
+} from "@/lib/pricing/scraper-engine/types";
 
 type CliOptions = {
   maxListings: number;
@@ -749,4 +753,54 @@ export async function runOversee30aQuoteCli(
     console.log(`- available: ${totalAvailable}`);
     console.log(`- captured_at: ${capturedAtIso}`);
   }
+}
+
+export async function runOversee30aSingleQuoteObservation(
+  input: SingleQuoteObservationInput,
+): Promise<SingleQuoteObservationResult> {
+  const startedAt = performance.now();
+  const raw = await fetchQuoteObservation({
+    detail: {
+      external_listing_id: input.listingId,
+      detail_url: input.detailUrl,
+    },
+    startDate: input.checkInIso,
+    endDate: input.checkOutIso,
+    options: {
+      maxListings: DEFAULT_LISTINGS,
+      listingId: input.listingId,
+      weeks: DEFAULT_WEEKS,
+      anchorDate: null,
+      nights: DEFAULT_NIGHTS,
+      adults: Math.max(1, Math.floor(input.adults)),
+      children: Math.max(0, Math.floor(input.children)),
+      infants: DEFAULT_INFANTS,
+      pets: DEFAULT_PETS,
+      quoteConcurrency: DEFAULT_QUOTE_CONCURRENCY,
+      listingConcurrency: DEFAULT_LISTING_CONCURRENCY,
+    },
+  });
+
+  const feesTotalExclTaxes = raw.feesTotal;
+  const quotedTotal = raw.grandTotal;
+  const reason = raw.quoteAvailable
+    ? null
+    : (raw.quoteUnavailableReason ?? "Quote unavailable");
+
+  return {
+    elapsedMs: performance.now() - startedAt,
+    observation: {
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      quoteAvailable: raw.quoteAvailable,
+      currency: raw.currency || null,
+      baseTotal: raw.baseTotal,
+      taxesTotal: raw.taxesTotal,
+      feesTotalExclTaxes,
+      grandTotal: raw.grandTotal,
+      quotedTotal,
+      handoffUrl: raw.handoffUrl,
+      reason,
+    },
+  };
 }

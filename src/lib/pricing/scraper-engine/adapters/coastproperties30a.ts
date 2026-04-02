@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { runCoastProperties30AQuoteCli } from "./quotes/coastproperties30a";
+import {
+  runCoastProperties30AQuoteCli,
+  runCoastProperties30ASingleQuoteObservation,
+} from "./quotes/coastproperties30a";
 
 type CoastDetailRecord = DetailRecordBase & {
   title: string;
@@ -1099,6 +1102,9 @@ export function createCoastProperties30AAdapter(): ScraperAdapter<CoastDetailRec
         argv,
       );
       await runCoastProperties30AQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runCoastProperties30ASingleQuoteObservation(input);
     },
   };
 }

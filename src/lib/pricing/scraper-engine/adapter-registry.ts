@@ -29,7 +29,13 @@ import { createScenicStays30AAdapter } from "./adapters/scenicstays30a";
 import { createStayAt30AAdapter } from "./adapters/stayat30a";
 import { createStayOn30AAdapter } from "./adapters/stayon30a";
 import { runScraperEngine } from "./runner";
-import type { DetailRecordBase, ScraperAdapter } from "./types";
+import { runFallbackSingleQuoteObservation } from "./single-quote-observation-fallback";
+import type {
+  DetailRecordBase,
+  ScraperAdapter,
+  SingleQuoteObservationInput,
+  SingleQuoteObservationResult,
+} from "./types";
 
 type AdapterFactory = () => ScraperAdapter<DetailRecordBase>;
 
@@ -69,11 +75,16 @@ export type AdapterOperationProxy = {
   adapterKey: string;
   capabilities: {
     quoteCapture: boolean;
+    singleQuoteObservation: boolean;
     quoteValidation: boolean;
     pricingCache: boolean;
   };
   runScrape(argv: string[]): Promise<void>;
   runQuoteCapture(argv: string[], progress?: QuoteProgress): Promise<void>;
+  runSingleQuoteObservation(
+    input: SingleQuoteObservationInput,
+    progress?: QuoteProgress,
+  ): Promise<SingleQuoteObservationResult>;
   runQuoteValidation(argv?: string[]): Promise<void>;
   runPricingCache(argv: string[]): Promise<void>;
 };
@@ -98,6 +109,12 @@ export function validateAdapterOperationProxy(
   if (!isBoolean(proxy.capabilities.quoteCapture)) {
     throw new Error(
       `Invalid adapter proxy '${proxy.adapterKey}': capabilities.quoteCapture must be boolean.`,
+    );
+  }
+
+  if (!isBoolean(proxy.capabilities.singleQuoteObservation)) {
+    throw new Error(
+      `Invalid adapter proxy '${proxy.adapterKey}': capabilities.singleQuoteObservation must be boolean.`,
     );
   }
 
@@ -170,6 +187,7 @@ export function createAdapterOperationProxyByKey(
   }
 
   const quoteCapture = typeof adapter.runQuoteCapture === "function";
+  const singleQuoteObservation = quoteCapture;
   const quoteValidation = quoteCapture;
   const pricingCache = CACHE_CAPABLE.has(normalized);
 
@@ -177,6 +195,7 @@ export function createAdapterOperationProxyByKey(
     adapterKey: normalized,
     capabilities: {
       quoteCapture,
+      singleQuoteObservation,
       quoteValidation,
       pricingCache,
     },
@@ -200,6 +219,22 @@ export function createAdapterOperationProxyByKey(
       const quoteProgress =
         progress ?? createScrapeProgress({ script: normalized });
       await adapter.runQuoteCapture(argv, quoteProgress);
+    },
+    async runSingleQuoteObservation(
+      input: SingleQuoteObservationInput,
+      progress?: QuoteProgress,
+    ): Promise<SingleQuoteObservationResult> {
+      if (!singleQuoteObservation) {
+        throw new Error("adapter does not implement single quote observation");
+      }
+
+      if (adapter.runSingleQuoteObservation) {
+        const quoteProgress =
+          progress ?? createScrapeProgress({ script: normalized });
+        return adapter.runSingleQuoteObservation(input, quoteProgress);
+      }
+
+      return runFallbackSingleQuoteObservation(input);
     },
     async runQuoteValidation(argv: string[] = []): Promise<void> {
       if (!quoteValidation) {

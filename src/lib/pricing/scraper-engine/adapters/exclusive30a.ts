@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { runExclusive30aQuoteCli } from "./quotes/exclusive30a";
+import {
+  runExclusive30aQuoteCli,
+  runExclusive30aSingleQuoteObservation,
+} from "./quotes/exclusive30a";
 
 type ExclusiveBookedDay = {
   d?: string;
@@ -997,6 +1000,9 @@ export function createExclusive30AAdapter(): ScraperAdapter<ExclusiveDetailRecor
         argv,
       );
       await runExclusive30aQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runExclusive30aSingleQuoteObservation(input);
     },
   };
 }

@@ -8,6 +8,10 @@ import {
 } from "@/lib/pricing/contracts/quote-observations-contract";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import type {
+  SingleQuoteObservationInput,
+  SingleQuoteObservationResult,
+} from "@/lib/pricing/scraper-engine/types";
 
 type CliOptions = {
   maxListings: number;
@@ -415,6 +419,19 @@ async function fetchQuote(input: {
   children: number;
   promoCode: string;
 }): Promise<RawObservation> {
+  const result = await fetchQuoteWithQuoteFetchLatency(input);
+  return result.observation;
+}
+
+async function fetchQuoteWithQuoteFetchLatency(input: {
+  detailUrl: string;
+  unitId: string;
+  startDateUs: string;
+  endDateUs: string;
+  adults: number;
+  children: number;
+  promoCode: string;
+}): Promise<{ observation: RawObservation; quoteFetchElapsedMs: number }> {
   const startDateIso = toIsoFromUsDate(input.startDateUs);
   const endDateIso = toIsoFromUsDate(input.endDateUs);
 
@@ -437,6 +454,8 @@ async function fetchQuote(input: {
     }),
     feeLines: [],
   };
+
+  let quoteFetchElapsedMs = 0;
 
   const availabilityPayload = {
     methodName: "VerifyPropertyAvailability",
@@ -479,8 +498,11 @@ async function fetchQuote(input: {
 
     if (!availabilityResponse.ok) {
       return {
-        ...defaultUnavailable,
-        quoteUnavailableReason: `VerifyPropertyAvailability HTTP ${availabilityResponse.status}`,
+        observation: {
+          ...defaultUnavailable,
+          quoteUnavailableReason: `VerifyPropertyAvailability HTTP ${availabilityResponse.status}`,
+        },
+        quoteFetchElapsedMs,
       };
     }
 
@@ -490,9 +512,12 @@ async function fetchQuote(input: {
         (await availabilityResponse.json()) as CoastQuoteResponse;
     } catch {
       return {
-        ...defaultUnavailable,
-        quoteUnavailableReason:
-          "VerifyPropertyAvailability returned invalid JSON",
+        observation: {
+          ...defaultUnavailable,
+          quoteUnavailableReason:
+            "VerifyPropertyAvailability returned invalid JSON",
+        },
+        quoteFetchElapsedMs,
       };
     }
 
@@ -502,8 +527,11 @@ async function fetchQuote(input: {
       const reason =
         asString(availabilityStatus.description) ?? "Dates unavailable";
       return {
-        ...defaultUnavailable,
-        quoteUnavailableReason: code ? `${code}: ${reason}` : reason,
+        observation: {
+          ...defaultUnavailable,
+          quoteUnavailableReason: code ? `${code}: ${reason}` : reason,
+        },
+        quoteFetchElapsedMs,
       };
     }
 
@@ -531,6 +559,7 @@ async function fetchQuote(input: {
     body.set("action", "streamlinecore-api-request");
     body.set("params", JSON.stringify(requestPayload));
 
+    const quoteStartedAt = performance.now();
     const response = await fetch(AJAX_ENDPOINT, {
       method: "POST",
       headers: {
@@ -542,6 +571,7 @@ async function fetchQuote(input: {
       },
       body: body.toString(),
     });
+    quoteFetchElapsedMs = performance.now() - quoteStartedAt;
 
     if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
       await sleep(RATE_LIMIT_BACKOFF_MS * (attempt + 1));
@@ -550,18 +580,26 @@ async function fetchQuote(input: {
 
     if (!response.ok) {
       return {
-        ...defaultUnavailable,
-        quoteUnavailableReason: `Quote HTTP ${response.status}`,
+        observation: {
+          ...defaultUnavailable,
+          quoteUnavailableReason: `Quote HTTP ${response.status}`,
+        },
+        quoteFetchElapsedMs,
       };
     }
 
     let parsed: CoastQuoteResponse;
     try {
+      const parseStartedAt = performance.now();
       parsed = (await response.json()) as CoastQuoteResponse;
+      quoteFetchElapsedMs += performance.now() - parseStartedAt;
     } catch {
       return {
-        ...defaultUnavailable,
-        quoteUnavailableReason: "Quote endpoint returned invalid JSON",
+        observation: {
+          ...defaultUnavailable,
+          quoteUnavailableReason: "Quote endpoint returned invalid JSON",
+        },
+        quoteFetchElapsedMs,
       };
     }
 
@@ -570,8 +608,11 @@ async function fetchQuote(input: {
       const code = asString(status.code);
       const reason = asString(status.description) ?? "Dates unavailable";
       return {
-        ...defaultUnavailable,
-        quoteUnavailableReason: code ? `${code}: ${reason}` : reason,
+        observation: {
+          ...defaultUnavailable,
+          quoteUnavailableReason: code ? `${code}: ${reason}` : reason,
+        },
+        quoteFetchElapsedMs,
       };
     }
 
@@ -596,27 +637,36 @@ async function fetchQuote(input: {
 
     if (baseTotal === null || grandTotal === null) {
       return {
-        ...defaultUnavailable,
-        quoteUnavailableReason: "Quote payload missing total fields",
+        observation: {
+          ...defaultUnavailable,
+          quoteUnavailableReason: "Quote payload missing total fields",
+        },
+        quoteFetchElapsedMs,
       };
     }
 
     return {
-      ...defaultUnavailable,
-      quoteAvailable: true,
-      quoteUnavailableReason: null,
-      baseTotal,
-      taxesTotal,
-      feesTotal,
-      grandTotal,
-      currency,
-      feeLines,
+      observation: {
+        ...defaultUnavailable,
+        quoteAvailable: true,
+        quoteUnavailableReason: null,
+        baseTotal,
+        taxesTotal,
+        feesTotal,
+        grandTotal,
+        currency,
+        feeLines,
+      },
+      quoteFetchElapsedMs,
     };
   }
 
   return {
-    ...defaultUnavailable,
-    quoteUnavailableReason: "Too many requests after retry attempts",
+    observation: {
+      ...defaultUnavailable,
+      quoteUnavailableReason: "Too many requests after retry attempts",
+    },
+    quoteFetchElapsedMs,
   };
 }
 
@@ -922,4 +972,42 @@ export async function runCoastProperties30AQuoteCli(
   progress?.success(
     `coastproperties30a quote sampling complete listings_selected=${totalSelected} processed=${summaries.length} skipped_existing=${skippedExisting}`,
   );
+}
+
+export async function runCoastProperties30ASingleQuoteObservation(
+  input: SingleQuoteObservationInput,
+): Promise<SingleQuoteObservationResult> {
+  const result = await fetchQuoteWithQuoteFetchLatency({
+    detailUrl: input.detailUrl,
+    unitId: input.listingId,
+    startDateUs: isoToUsDate(input.checkInIso),
+    endDateUs: isoToUsDate(input.checkOutIso),
+    adults: Math.max(1, Math.floor(input.adults)),
+    children: Math.max(0, Math.floor(input.children)),
+    promoCode: "",
+  });
+  const raw = result.observation;
+
+  const feesTotalExclTaxes = raw.feesTotal;
+  const quotedTotal = raw.grandTotal;
+  const reason = raw.quoteAvailable
+    ? null
+    : (raw.quoteUnavailableReason ?? "Quote unavailable");
+
+  return {
+    elapsedMs: result.quoteFetchElapsedMs,
+    observation: {
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      quoteAvailable: raw.quoteAvailable,
+      currency: raw.currency || null,
+      baseTotal: raw.baseTotal,
+      taxesTotal: raw.taxesTotal,
+      feesTotalExclTaxes,
+      grandTotal: raw.grandTotal,
+      quotedTotal,
+      handoffUrl: raw.handoffUrl,
+      reason,
+    },
+  };
 }

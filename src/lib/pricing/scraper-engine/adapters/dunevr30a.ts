@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Page } from "playwright";
-import { runDunevr30aQuoteCli } from "./quotes/dunevr30a";
+import {
+  runDunevr30aQuoteCli,
+  runDunevr30aSingleQuoteObservation,
+} from "./quotes/dunevr30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -1482,6 +1485,9 @@ export function createDuneVR30AAdapter(): ScraperAdapter<DuneDetailRecord> {
         argv,
       );
       await runDunevr30aQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runDunevr30aSingleQuoteObservation(input);
     },
   };
 }

@@ -8,6 +8,10 @@ import {
 } from "@/lib/pricing/contracts/quote-observations-contract";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import type {
+  SingleQuoteObservationInput,
+  SingleQuoteObservationResult,
+} from "@/lib/pricing/scraper-engine/types";
 
 type CliOptions = {
   maxListings: number;
@@ -374,6 +378,19 @@ async function fetchPreReservationQuote(input: {
   children: number;
   pets: number;
 }): Promise<RawObservation> {
+  const result = await fetchPreReservationQuoteWithQuoteFetchLatency(input);
+  return result.observation;
+}
+
+async function fetchPreReservationQuoteWithQuoteFetchLatency(input: {
+  detailUrl: string;
+  listingId: string;
+  checkInIso: string;
+  checkOutIso: string;
+  adults: number;
+  children: number;
+  pets: number;
+}): Promise<{ observation: RawObservation; quoteFetchElapsedMs: number }> {
   const origin = parseBaseOrigin(input.detailUrl);
   const queryParams = new URLSearchParams({
     action: "streamlinecore-api-request",
@@ -391,6 +408,7 @@ async function fetchPreReservationQuote(input: {
   });
 
   const endpoint = `${origin}/wp-admin/admin-ajax.php?${queryParams.toString()}`;
+  const quoteStartedAt = performance.now();
   const response = await fetch(endpoint, {
     method: "GET",
     headers: {
@@ -399,6 +417,7 @@ async function fetchPreReservationQuote(input: {
       referer: input.detailUrl,
     },
   });
+  let quoteFetchElapsedMs = performance.now() - quoteStartedAt;
 
   const handoffUrl = buildCheckoutUrl({
     detailUrl: input.detailUrl,
@@ -413,51 +432,62 @@ async function fetchPreReservationQuote(input: {
   const availability = await verifyPropertyAvailability(input);
   if (!availability.available) {
     return {
-      startDate: input.checkInIso,
-      endDate: input.checkOutIso,
-      quoteAvailable: false,
-      quoteUnavailableReason: availability.reason || "Dates unavailable",
-      baseTotal: null,
-      taxesTotal: null,
-      feesTotal: null,
-      grandTotal: null,
-      currency: "USD",
-      handoffUrl,
-      feeLines: [],
+      observation: {
+        startDate: input.checkInIso,
+        endDate: input.checkOutIso,
+        quoteAvailable: false,
+        quoteUnavailableReason: availability.reason || "Dates unavailable",
+        baseTotal: null,
+        taxesTotal: null,
+        feesTotal: null,
+        grandTotal: null,
+        currency: "USD",
+        handoffUrl,
+        feeLines: [],
+      },
+      quoteFetchElapsedMs,
     };
   }
 
   if (!response.ok) {
     return {
-      startDate: input.checkInIso,
-      endDate: input.checkOutIso,
-      quoteAvailable: false,
-      quoteUnavailableReason: `Quote request failed with status ${response.status}`,
-      baseTotal: null,
-      taxesTotal: null,
-      feesTotal: null,
-      grandTotal: null,
-      currency: "USD",
-      handoffUrl,
-      feeLines: [],
+      observation: {
+        startDate: input.checkInIso,
+        endDate: input.checkOutIso,
+        quoteAvailable: false,
+        quoteUnavailableReason: `Quote request failed with status ${response.status}`,
+        baseTotal: null,
+        taxesTotal: null,
+        feesTotal: null,
+        grandTotal: null,
+        currency: "USD",
+        handoffUrl,
+        feeLines: [],
+      },
+      quoteFetchElapsedMs,
     };
   }
 
+  const parseStartedAt = performance.now();
   const payload = (await response.json()) as StreamlinePreReservationResponse;
+  quoteFetchElapsedMs += performance.now() - parseStartedAt;
   if (payload.status?.code) {
     return {
-      startDate: input.checkInIso,
-      endDate: input.checkOutIso,
-      quoteAvailable: false,
-      quoteUnavailableReason:
-        payload.status.description?.trim() || payload.status.code,
-      baseTotal: null,
-      taxesTotal: null,
-      feesTotal: null,
-      grandTotal: null,
-      currency: "USD",
-      handoffUrl,
-      feeLines: [],
+      observation: {
+        startDate: input.checkInIso,
+        endDate: input.checkOutIso,
+        quoteAvailable: false,
+        quoteUnavailableReason:
+          payload.status.description?.trim() || payload.status.code,
+        baseTotal: null,
+        taxesTotal: null,
+        feesTotal: null,
+        grandTotal: null,
+        currency: "USD",
+        handoffUrl,
+        feeLines: [],
+      },
+      quoteFetchElapsedMs,
     };
   }
 
@@ -514,21 +544,24 @@ async function fetchPreReservationQuote(input: {
   }
 
   return {
-    startDate: input.checkInIso,
-    endDate: input.checkOutIso,
-    quoteAvailable:
-      baseTotal !== null &&
-      baseTotal > 0 &&
-      grandTotal !== null &&
-      grandTotal >= baseTotal,
-    quoteUnavailableReason: null,
-    baseTotal,
-    taxesTotal,
-    feesTotal,
-    grandTotal,
-    currency: data?.currency?.trim() || "USD",
-    handoffUrl,
-    feeLines,
+    observation: {
+      startDate: input.checkInIso,
+      endDate: input.checkOutIso,
+      quoteAvailable:
+        baseTotal !== null &&
+        baseTotal > 0 &&
+        grandTotal !== null &&
+        grandTotal >= baseTotal,
+      quoteUnavailableReason: null,
+      baseTotal,
+      taxesTotal,
+      feesTotal,
+      grandTotal,
+      currency: data?.currency?.trim() || "USD",
+      handoffUrl,
+      feeLines,
+    },
+    quoteFetchElapsedMs,
   };
 }
 
@@ -797,4 +830,42 @@ export async function runDunevr30aQuoteCli(
   progress?.success(
     `dunevr30a quote sampling complete listings=${summaries.length}`,
   );
+}
+
+export async function runDunevr30aSingleQuoteObservation(
+  input: SingleQuoteObservationInput,
+): Promise<SingleQuoteObservationResult> {
+  const result = await fetchPreReservationQuoteWithQuoteFetchLatency({
+    detailUrl: input.detailUrl,
+    listingId: input.listingId,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+    adults: Math.max(1, Math.floor(input.adults)),
+    children: Math.max(0, Math.floor(input.children)),
+    pets: 0,
+  });
+  const raw = result.observation;
+
+  const feesTotalExclTaxes = raw.feesTotal;
+  const quotedTotal = raw.grandTotal;
+  const reason = raw.quoteAvailable
+    ? null
+    : (raw.quoteUnavailableReason ?? "Quote unavailable");
+
+  return {
+    elapsedMs: result.quoteFetchElapsedMs,
+    observation: {
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      quoteAvailable: raw.quoteAvailable,
+      currency: raw.currency || null,
+      baseTotal: raw.baseTotal,
+      taxesTotal: raw.taxesTotal,
+      feesTotalExclTaxes,
+      grandTotal: raw.grandTotal,
+      quotedTotal,
+      handoffUrl: raw.handoffUrl,
+      reason,
+    },
+  };
 }

@@ -5,7 +5,10 @@ import { resolve } from "node:path";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { runFiveStar30aQuoteCli } from "./quotes/fivestar30a";
+import {
+  runFiveStar30aQuoteCli,
+  runFiveStar30aSingleQuoteObservation,
+} from "./quotes/fivestar30a";
 
 type FiveStarDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -1498,6 +1501,9 @@ export function createFiveStar30AAdapter(): ScraperAdapter<FiveStarDetailRecord>
         argv,
       );
       await runFiveStar30aQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input) {
+      return runFiveStar30aSingleQuoteObservation(input);
     },
   };
 }

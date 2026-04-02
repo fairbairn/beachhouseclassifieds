@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { runOceanreef30aQuoteCli } from "./quotes/oceanreef30a";
+import {
+  runOceanreef30aQuoteCli,
+  runOceanreef30aSingleQuoteObservation,
+} from "./quotes/oceanreef30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -944,6 +947,9 @@ export function createOceanReef30AAdapter(): ScraperAdapter<OceanReefDetailRecor
         argv,
       );
       await runOceanreef30aQuoteCli(normalizedArgs, progress);
+    },
+    async runSingleQuoteObservation(input, progress) {
+      return runOceanreef30aSingleQuoteObservation(input, progress);
     },
   };
 }

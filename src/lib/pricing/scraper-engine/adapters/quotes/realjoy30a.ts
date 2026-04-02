@@ -8,6 +8,10 @@ import {
 } from "@/lib/pricing/contracts/quote-observations-contract";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import type {
+  SingleQuoteObservationInput,
+  SingleQuoteObservationResult,
+} from "@/lib/pricing/scraper-engine/types";
 
 type CliOptions = {
   maxListings: number;
@@ -754,4 +758,43 @@ export async function runRealjoy30aQuoteCli(
   progress?.success(
     `realjoy30a quote sampling complete listings=${summaries.length}`,
   );
+}
+
+export async function runRealjoy30aSingleQuoteObservation(
+  input: SingleQuoteObservationInput,
+): Promise<SingleQuoteObservationResult> {
+  const propertyName =
+    input.title || input.listingId || new URL(input.detailUrl).pathname;
+
+  const startedAt = performance.now();
+  const raw = await fetchQuoteHtml({
+    detailUrl: input.detailUrl,
+    listingId: input.listingId,
+    propertyName,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+  });
+
+  const feesTotalExclTaxes = raw.feesTotal;
+  const quotedTotal = raw.grandTotal;
+  const reason = raw.quoteAvailable
+    ? null
+    : (raw.quoteUnavailableReason ?? "Quote unavailable");
+
+  return {
+    elapsedMs: performance.now() - startedAt,
+    observation: {
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      quoteAvailable: raw.quoteAvailable,
+      currency: raw.currency || null,
+      baseTotal: raw.baseTotal,
+      taxesTotal: raw.taxesTotal,
+      feesTotalExclTaxes,
+      grandTotal: raw.grandTotal,
+      quotedTotal,
+      handoffUrl: raw.handoffUrl,
+      reason,
+    },
+  };
 }

@@ -8,6 +8,10 @@ import {
 } from "@/lib/pricing/contracts/quote-observations-contract";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import type {
+  SingleQuoteObservationInput,
+  SingleQuoteObservationResult,
+} from "@/lib/pricing/scraper-engine/types";
 
 type CliOptions = {
   maxListings: number;
@@ -760,4 +764,48 @@ export async function runLocalvr30aQuoteCli(
   progress?.info(
     `listings=${summaries.length} observations=${totalObservations} available=${totalAvailable}`,
   );
+}
+
+export async function runLocalvr30aSingleQuoteObservation(
+  input: SingleQuoteObservationInput,
+): Promise<SingleQuoteObservationResult> {
+  const nextAction =
+    process.env.LOCALVR30A_NEXT_ACTION?.trim() || DEFAULT_NEXT_ACTION;
+
+  const startedAt = performance.now();
+  const raw = await fetchQuoteObservation({
+    detail: {
+      external_listing_id: input.listingId,
+      detail_url: input.detailUrl,
+    },
+    startDate: input.checkInIso,
+    endDate: input.checkOutIso,
+    adults: Math.max(1, Math.floor(input.adults)),
+    children: Math.max(0, Math.floor(input.children)),
+    infants: 0,
+    nextAction,
+  });
+
+  const feesTotalExclTaxes = raw.feesTotal;
+  const quotedTotal = raw.grandTotal;
+  const reason = raw.quoteAvailable
+    ? null
+    : (raw.quoteUnavailableReason ?? "Quote unavailable");
+
+  return {
+    elapsedMs: performance.now() - startedAt,
+    observation: {
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      quoteAvailable: raw.quoteAvailable,
+      currency: raw.currency || null,
+      baseTotal: raw.baseTotal,
+      taxesTotal: raw.taxesTotal,
+      feesTotalExclTaxes,
+      grandTotal: raw.grandTotal,
+      quotedTotal,
+      handoffUrl: raw.handoffUrl,
+      reason,
+    },
+  };
 }

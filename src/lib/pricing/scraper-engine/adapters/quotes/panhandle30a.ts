@@ -6,8 +6,13 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
+import { executePanhandle30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/panhandle30a";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import type {
+  SingleQuoteObservationInput,
+  SingleQuoteObservationResult,
+} from "@/lib/pricing/scraper-engine/types";
 
 type CliOptions = {
   maxListings: number;
@@ -23,6 +28,10 @@ type PanhandleDetailRecord = {
   detail_url: string;
   html_path?: string;
   h1?: string;
+  quote_context?: {
+    property_id?: string;
+    property_name?: string;
+  };
   normalized_matching_profile?: {
     name?: string;
   };
@@ -306,6 +315,16 @@ function extractQuoteRequestContext(
   detailHtml: string,
   detail: PanhandleDetailRecord,
 ): QuoteRequestContext | null {
+  const persistedPropertyId = detail.quote_context?.property_id?.trim() ?? "";
+  const persistedPropertyName =
+    detail.quote_context?.property_name?.trim() ?? "";
+  if (persistedPropertyId) {
+    return {
+      propertyId: persistedPropertyId,
+      propertyName: persistedPropertyName || persistedPropertyId,
+    };
+  }
+
   const propertyIdMatch = detailHtml.match(
     /<input[^>]*name="propertyID"[^>]*value="(\d+)"[^>]*>/i,
   );
@@ -802,4 +821,53 @@ export async function runPanhandle30aQuoteCli(
   progress?.success(
     `panhandle30a quote sampling complete listings=${summaries.length}`,
   );
+}
+
+export async function runPanhandle30aSingleQuoteObservation(
+  input: SingleQuoteObservationInput,
+): Promise<SingleQuoteObservationResult> {
+  const result = await executePanhandle30aSingleQuote({
+    listingId: input.listingId,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+    adults: input.adults,
+    children: input.children,
+    quoteContext: input.quoteContext ?? null,
+  });
+
+  if (!result.success) {
+    return {
+      elapsedMs: result.elapsedMs,
+      observation: {
+        startDate: input.checkInIso,
+        endDate: input.checkOutIso,
+        quoteAvailable: false,
+        currency: null,
+        baseTotal: null,
+        taxesTotal: null,
+        feesTotalExclTaxes: null,
+        grandTotal: null,
+        quotedTotal: null,
+        handoffUrl: null,
+        reason: `${result.error.code}: ${result.error.message}`,
+      },
+    };
+  }
+
+  return {
+    elapsedMs: result.elapsedMs,
+    observation: {
+      startDate: result.observation.startDate,
+      endDate: result.observation.endDate,
+      quoteAvailable: result.observation.quoteAvailable,
+      currency: result.observation.currency,
+      baseTotal: result.observation.baseTotal,
+      taxesTotal: result.observation.taxesTotal,
+      feesTotalExclTaxes: result.observation.feesTotalExclTaxes,
+      grandTotal: result.observation.grandTotal,
+      quotedTotal: result.observation.quotedTotal,
+      handoffUrl: result.observation.handoffUrl,
+      reason: null,
+    },
+  };
 }
