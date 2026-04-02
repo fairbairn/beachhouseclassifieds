@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
@@ -103,8 +103,16 @@ function parseArgs(
   };
 }
 
-async function countAdapterDetailJson(adapterKey: string): Promise<number> {
-  const detailsDir = resolve(
+type CanonicalIndexEntry = {
+  detail_url?: unknown;
+  external_listing_id?: unknown;
+  quote_context?: unknown;
+};
+
+async function loadCanonicalIndex(
+  adapterKey: string,
+): Promise<CanonicalIndexEntry[]> {
+  const indexPath = resolve(
     process.cwd(),
     "src",
     "lib",
@@ -112,12 +120,27 @@ async function countAdapterDetailJson(adapterKey: string): Promise<number> {
     "external-sources",
     adapterKey,
     "details",
-    "json",
+    "index.json",
   );
 
-  const entries = await readdir(detailsDir, { withFileTypes: true });
+  const raw = await readFile(indexPath, "utf8");
+  const parsed = JSON.parse(raw) as CanonicalIndexEntry[];
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      `Canonical manifest is malformed for adapter '${adapterKey}' at ${indexPath}.`,
+    );
+  }
+  return parsed;
+}
+
+async function countAdapterCanonicalListings(
+  adapterKey: string,
+): Promise<number> {
+  const entries = await loadCanonicalIndex(adapterKey);
   return entries.filter(
-    (entry) => entry.isFile() && entry.name.endsWith(".json"),
+    (entry) =>
+      typeof entry.detail_url === "string" &&
+      entry.detail_url.trim().length > 0,
   ).length;
 }
 
@@ -125,26 +148,26 @@ async function resolveDetailUrlByListingId(
   adapterKey: string,
   listingId: string,
 ): Promise<string> {
-  const detailPath = resolve(
-    process.cwd(),
-    "src",
-    "lib",
-    "data",
-    "external-sources",
-    adapterKey,
-    "details",
-    "json",
-    `${listingId}.json`,
+  const canonicalEntries = await loadCanonicalIndex(adapterKey);
+  const canonicalEntry = canonicalEntries.find(
+    (entry) =>
+      typeof entry.external_listing_id === "string" &&
+      entry.external_listing_id.trim() === listingId,
   );
+  if (!canonicalEntry) {
+    throw new Error(
+      `Listing '${listingId}' is not present in canonical manifest for adapter '${adapterKey}'.`,
+    );
+  }
 
-  const detailRaw = await readFile(detailPath, "utf8");
-  const detail = JSON.parse(detailRaw) as { detail_url?: unknown };
   const detailUrl =
-    typeof detail.detail_url === "string" ? detail.detail_url.trim() : "";
+    typeof canonicalEntry.detail_url === "string"
+      ? canonicalEntry.detail_url.trim()
+      : "";
 
   if (!detailUrl) {
     throw new Error(
-      `Missing detail_url in ${adapterKey} detail json for listing '${listingId}'.`,
+      `Missing detail_url in canonical manifest for adapter '${adapterKey}' listing '${listingId}'.`,
     );
   }
 
@@ -181,6 +204,14 @@ function runNpmScript(scriptRaw: string, args: string[]): Promise<void> {
 
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag) || args.some((arg) => arg.startsWith(`${flag}=`));
+}
+
+function resolveFreshHoursDefault(): number {
+  const raw = Number(process.env.QUOTE_CAPTURE_FRESH_HOURS ?? "24");
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 24;
+  }
+  return Math.floor(raw);
 }
 
 async function runWithEnv<T>(
@@ -248,7 +279,7 @@ export async function runLegacyAdapterQuoteViaEngine(
 
     let maxListings = options.maxListings;
     if (!Number.isFinite(maxListings)) {
-      maxListings = await countAdapterDetailJson(input.adapterKey);
+      maxListings = await countAdapterCanonicalListings(input.adapterKey);
     }
     if (maxListings > 0) {
       engineArgs.push("--max-listings", String(Math.floor(maxListings)));
@@ -266,6 +297,17 @@ export async function runLegacyAdapterQuoteViaEngine(
   }
   if (!hasFlag(engineArgs, "--detail-fetch-delay-ms")) {
     engineArgs.push("--detail-fetch-delay-ms", "0");
+  }
+
+  // In quote mode, avoid re-pulling recently refreshed detail artifacts unless caller overrides.
+  if (
+    !hasFlag(engineArgs, "--skip-fresh-details") &&
+    !hasFlag(engineArgs, "--skip-existing-details")
+  ) {
+    engineArgs.push("--skip-fresh-details");
+    if (!hasFlag(engineArgs, "--fresh-hours")) {
+      engineArgs.push("--fresh-hours", String(resolveFreshHoursDefault()));
+    }
   }
 
   input.progress?.info(

@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const QUOTE_SCOPED_ADAPTERS = new Set([
@@ -22,8 +22,10 @@ function hasFlag(args: string[], flagName: string): boolean {
   return args.some((arg) => arg === flagName || arg.startsWith(`${flagName}=`));
 }
 
-async function countAdapterDetailJson(adapterKey: string): Promise<number> {
-  const detailsDir = resolve(
+async function countAdapterCanonicalListings(
+  adapterKey: string,
+): Promise<number> {
+  const indexPath = resolve(
     process.cwd(),
     "src",
     "lib",
@@ -31,12 +33,18 @@ async function countAdapterDetailJson(adapterKey: string): Promise<number> {
     "external-sources",
     adapterKey,
     "details",
-    "json",
+    "index.json",
   );
+  const raw = await readFile(indexPath, "utf8");
+  const parsed = JSON.parse(raw) as Array<{ detail_url?: unknown }>;
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      `Canonical manifest is malformed for adapter '${adapterKey}' at ${indexPath}.`,
+    );
+  }
 
-  const entries = await readdir(detailsDir, { withFileTypes: true });
-  return entries.filter(
-    (entry) => entry.isFile() && entry.name.endsWith(".json"),
+  return parsed.filter(
+    (entry) => typeof entry?.detail_url === "string" && entry.detail_url.trim(),
   ).length;
 }
 
@@ -76,10 +84,10 @@ export async function normalizeAdapterQuoteScopeArgs(
     return filteredArgs;
   }
 
-  const totalListings = await countAdapterDetailJson(normalizedAdapter);
+  const totalListings = await countAdapterCanonicalListings(normalizedAdapter);
   if (totalListings <= 0) {
     throw new Error(
-      `No detail json files found for adapter '${normalizedAdapter}', cannot expand --all-listings.`,
+      `No entries found in canonical manifest for adapter '${normalizedAdapter}', cannot expand --all-listings. Run a full inventory scan first.`,
     );
   }
 

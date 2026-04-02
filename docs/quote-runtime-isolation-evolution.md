@@ -225,3 +225,30 @@ Definition of done:
 - Treat quote modules as callable execution units (RPC-like behavior).
 - Keep orchestration concerns out of runtime executors.
 - Prefer explicit required context over fallback inference.
+- Exclusion governance should be data-driven via `exclusions.lifecycle.json`; avoid hard-coded fallback exclusion IDs in adapter source.
+- `360blue` hard-coded exclusion fallback list removed; same cleanup should be applied adapter-by-adapter.
+
+## Rapid Iteration Log
+
+### 2026-04-02 (360blue focus)
+
+- Canonical manifest strategy tightened:
+  - `details/index.json` is treated as single source for listing scope and now carries `quote_context` alongside `detail_url` and `external_listing_id`.
+  - Canonical index writer preserves/merges `quote_context` from pulled detail records, existing canonical rows, and existing detail JSON artifacts.
+- Listing resolution for quote runs now prefers canonical manifest lookups (listing id -> detail url) instead of re-reading per-listing detail files for routing.
+- Quote execution path for `360blue` was migrated from legacy engine-refresh coupling to index/runtime sidecar generation in `scraper-engine/adapters/quotes/360blue.ts`:
+  - reads listing set from canonical index,
+  - executes quote windows via quote-runtime executor,
+  - writes quote sidecars directly,
+  - avoids detail-page pulls during quote capture.
+- Operator control/visibility parity added to new `360blue` quote path:
+  - logs effective params at run start (`listing_concurrency`, `quote_concurrency`, `timeout_ms`, `max_attempts`, selection scope),
+  - supports compatibility aliases used in primary runner flows (`--detail-fetch-concurrency`, `--detail-timeout-ms`, `--all-listings`).
+- Quote-only dependency boundary tightened for `360blue`:
+  - canonical index is now the default/primary runtime input for quote capture,
+  - detail-json quote_context backfill is opt-in only (`--backfill-quote-context-from-details` or `QUOTE_CAPTURE_ALLOW_DETAIL_BACKFILL=1`),
+  - quote runs no longer implicitly depend on `details/json/*.json` existing.
+- Progress semantics were DRY’d into shared quote infra:
+  - added `src/lib/pricing/quotes/shared/quote-capture-progress.ts`,
+  - emits standardized window/listing progress + throughput ticks,
+  - `360blue` now consumes shared tracker instead of adapter-local progress logic.

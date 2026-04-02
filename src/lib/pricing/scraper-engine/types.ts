@@ -2,6 +2,7 @@ import type { QuoteProgress } from "@/lib/pricing/quotes/types";
 import type { Browser, Page } from "playwright";
 
 export type ScraperRefreshMode = "full" | "dynamic" | "static";
+export type ScraperInventoryMode = "full-scan" | "refresh-known";
 export type ScraperLogLevel = "default" | "debug";
 export type ScraperRunMode =
   | "detail"
@@ -20,6 +21,7 @@ export type ScrapedLink = {
 
 export type RunOptions = {
   anchorUrl: string;
+  inventoryMode: ScraperInventoryMode;
   maxListings: number | null;
   startIndex: number;
   discoverOnly: boolean;

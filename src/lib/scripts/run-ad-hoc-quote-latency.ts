@@ -35,6 +35,9 @@ type QuotesSidecar = {
 
 type DetailRecordForLatency = {
   quote_context?: Record<string, unknown>;
+  property_profile?: {
+    unit_id?: string;
+  };
 };
 
 type ListingSample = {
@@ -484,6 +487,14 @@ async function collectListingSamplesForAdapter(
         !Array.isArray(detail.quote_context)
       ) {
         quoteContext = detail.quote_context;
+      } else if (adapterKey === "360blue") {
+        const unitId = detail.property_profile?.unit_id?.trim() ?? "";
+        if (unitId) {
+          quoteContext = {
+            unit_id: unitId,
+            endpoint_path: sidecar.endpoint_path ?? null,
+          };
+        }
       }
     } catch {
       // Detail JSON may be missing or malformed for older captures.

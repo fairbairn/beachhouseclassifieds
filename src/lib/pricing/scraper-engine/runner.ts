@@ -9,6 +9,7 @@ import type {
   RunOptions,
   ScrapedLink,
   ScraperAdapter,
+  ScraperInventoryMode,
   ScraperRefreshMode,
   ScraperRunMode,
 } from "./types";
@@ -45,6 +46,27 @@ function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
 }
 
+function externalListingIdFromDetailUrl(detailUrl: string): string {
+  try {
+    const url = new URL(detailUrl);
+    const segments = url.pathname.split("/").filter(Boolean);
+    return segments[segments.length - 1] ?? "";
+  } catch {
+    const normalized = normalizeLink(detailUrl);
+    const segments = normalized.split("/").filter(Boolean);
+    return segments[segments.length - 1] ?? "";
+  }
+}
+
+function extractCanonicalQuoteContext(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
 function toProjectRelativePath(pathValue: string, root: string): string {
   const trimmed = pathValue.trim();
   if (!trimmed) {
@@ -77,6 +99,8 @@ function buildUsageText(defaultAnchorUrl: string): string {
     "",
     "Options:",
     "  --target-detail-url <url>          Scrape one detail URL and exit",
+    "  --inventory-mode <full-scan|refresh-known>",
+    "                                   Select full site discovery vs known-set refresh",
     "  --target-detail-urls-file <path>   Refresh URLs listed in file (one URL per line)",
     "  --target-refresh-known              Refresh known URLs from existing artifacts",
     "  --run-discover-only                 Discover links only (no detail pulls)",
@@ -142,12 +166,15 @@ async function loadPlaywright(): Promise<{
 
 function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
   let anchorUrl = defaultAnchorUrl;
+  let inventoryMode: ScraperInventoryMode = "full-scan";
+  let inventoryModeExplicit = false;
   let maxListings: number | null = null;
   let startIndex = 0;
   let discoverOnly = false;
   let detailUrl: string | null = null;
   let detailUrlsFile: string | null = null;
   let refreshKnown = false;
+  let refreshKnownExplicit = false;
   let maxScrollSteps = 80;
   let scrollPauseMs = 900;
   let networkIdleWaitMs = 800;
@@ -304,6 +331,24 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
 
     if (arg === "--refresh-known" || arg === "--target-refresh-known") {
       refreshKnown = true;
+      refreshKnownExplicit = true;
+      continue;
+    }
+
+    if (arg === "--inventory-mode") {
+      const value = requireValue(argv, index, arg);
+      if (value) {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === "full-scan" || normalized === "refresh-known") {
+          inventoryMode = normalized as ScraperInventoryMode;
+          inventoryModeExplicit = true;
+        } else {
+          errors.push(
+            `${arg} must be one of: full-scan, refresh-known. Received: ${value}`,
+          );
+        }
+      }
+      index += 1;
       continue;
     }
 
@@ -579,6 +624,26 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
     );
   }
 
+  if (inventoryModeExplicit && inventoryMode === "full-scan") {
+    if (refreshKnownExplicit || detailUrlsFile) {
+      errors.push(
+        "--inventory-mode full-scan cannot be combined with --target-refresh-known or --target-detail-urls-file.",
+      );
+    }
+  }
+
+  if (inventoryModeExplicit && inventoryMode === "refresh-known") {
+    refreshKnown = true;
+  }
+
+  if (!inventoryModeExplicit) {
+    if (refreshKnown || detailUrlsFile) {
+      inventoryMode = "refresh-known";
+    } else {
+      inventoryMode = "full-scan";
+    }
+  }
+
   if (quoteAnchorDate && !/^\d{4}-\d{2}-\d{2}$/.test(quoteAnchorDate)) {
     errors.push(
       `--quote-anchor-date must be YYYY-MM-DD. Received: ${quoteAnchorDate}`,
@@ -616,6 +681,7 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
 
   return {
     anchorUrl,
+    inventoryMode,
     maxListings,
     startIndex,
     discoverOnly,
@@ -696,6 +762,7 @@ type ExistingDetailArtifact = {
   fetchedAt: Date;
   jsonPath: string;
   htmlPath: string | null;
+  quoteContext?: Record<string, unknown>;
 };
 
 async function loadExistingDetailArtifacts(
@@ -754,11 +821,16 @@ async function loadExistingDetailArtifacts(
         continue;
       }
 
+      const quoteContext = extractCanonicalQuoteContext(
+        (parsed as { quote_context?: unknown }).quote_context,
+      );
+
       byUrl.set(detailUrl, {
         detailUrl,
         fetchedAt,
         jsonPath,
         htmlPath,
+        quoteContext,
       });
     } catch {
       // Ignore malformed detail files.
@@ -828,91 +900,36 @@ async function loadKnownDetailUrlsFromArtifacts(
   validate: (value: string) => string | null,
   reportProgress?: (message: string) => void,
 ): Promise<string[]> {
-  const urls: string[] = [];
+  const manifestPath = resolve(outputRoot, "details", "index.json");
+  reportProgress?.(`known-set: reading canonical manifest ${manifestPath}`);
 
-  // Known-set resolution should come from canonical adapter artifacts, not transient report files.
-  const manifestPaths = [
-    resolve(outputRoot, "details", "index.json"),
-    resolve(outputRoot, "details", "index-subset.json"),
-  ];
-
-  for (const manifestPath of manifestPaths) {
-    const before = urls.length;
-    reportProgress?.(`known-set: reading manifest ${manifestPath}`);
-    try {
-      const raw = await readFile(manifestPath, "utf8");
-      const parsed = JSON.parse(raw) as Array<{ detail_url?: unknown }>;
-      if (!Array.isArray(parsed)) {
-        reportProgress?.(
-          `known-set: manifest not array, skipped ${manifestPath}`,
-        );
-        continue;
-      }
-
-      for (const row of parsed) {
-        const detailUrl =
-          typeof row?.detail_url === "string" ? row.detail_url : "";
-        const valid = validate(detailUrl);
-        if (valid) {
-          urls.push(valid);
-        }
-      }
-      reportProgress?.(
-        `known-set: manifest added ${urls.length - before} urls (${urls.length} cumulative)`,
-      );
-    } catch {
-      reportProgress?.(
-        `known-set: canonical manifest missing/malformed, skipped ${manifestPath}`,
-      );
-    }
+  let parsed: Array<{ detail_url?: unknown }>;
+  try {
+    const raw = await readFile(manifestPath, "utf8");
+    parsed = JSON.parse(raw) as Array<{ detail_url?: unknown }>;
+  } catch {
+    throw new Error(
+      `Missing canonical manifest at ${manifestPath}. Run a full inventory scan first (for example: --inventory-mode full-scan).`,
+    );
   }
 
-  try {
-    reportProgress?.("known-set: scanning existing detail json artifacts");
-    const entries = await readdir(outputDetailsJsonDir, {
-      withFileTypes: true,
-    });
-    let scanned = 0;
-    let parsedCount = 0;
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".json")) {
-        continue;
-      }
-
-      scanned += 1;
-      const filePath = resolve(outputDetailsJsonDir, entry.name);
-      try {
-        const raw = await readFile(filePath, "utf8");
-        const parsed = JSON.parse(raw) as { detail_url?: unknown };
-        const detailUrl =
-          parsed && typeof parsed.detail_url === "string"
-            ? parsed.detail_url
-            : "";
-        const valid = validate(detailUrl);
-        if (valid) {
-          urls.push(valid);
-        }
-        parsedCount += 1;
-        if (scanned % 50 === 0) {
-          reportProgress?.(
-            `known-set: scanned ${scanned} detail json files, parsed=${parsedCount}, urls=${urls.length}`,
-          );
-        }
-      } catch {
-        // Ignore malformed detail files.
-      }
-    }
-    reportProgress?.(
-      `known-set: detail json scan complete scanned=${scanned}, parsed=${parsedCount}, urls=${urls.length}`,
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      `Canonical manifest is malformed at ${manifestPath}. Expected a JSON array of { detail_url } entries.`,
     );
-  } catch {
-    reportProgress?.("known-set: details json directory missing, skipped scan");
+  }
+
+  const urls: string[] = [];
+  for (const row of parsed) {
+    const detailUrl = typeof row?.detail_url === "string" ? row.detail_url : "";
+    const valid = validate(detailUrl);
+    if (valid) {
+      urls.push(valid);
+    }
   }
 
   const deduped = Array.from(new Set(urls));
-  reportProgress?.(
-    `known-set: final unique urls=${deduped.length} (raw=${urls.length})`,
-  );
+  reportProgress?.(`known-set: canonical urls=${deduped.length}`);
   return deduped;
 }
 
@@ -1157,7 +1174,9 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
   const progress = createScrapeProgress({ script: adapter.scriptLabel });
   const options = parseRunOptions(argv, adapter.defaultAnchorUrl);
   const isRefreshOperation =
-    options.refreshKnown || Boolean(options.detailUrlsFile);
+    options.inventoryMode === "refresh-known" ||
+    options.refreshKnown ||
+    Boolean(options.detailUrlsFile);
   const detailFetchConcurrency =
     options.detailFetchConcurrency ?? (isRefreshOperation ? 8 : 4);
   const detailFetchDelayMs =
@@ -1170,13 +1189,15 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
   progress.phase("starting scraper engine run");
   const targetScope = options.detailUrl
     ? "single-detail-url"
-    : options.refreshKnown || options.detailUrlsFile
+    : options.inventoryMode === "refresh-known" ||
+        options.refreshKnown ||
+        options.detailUrlsFile
       ? "refresh-known"
       : options.discoverOnly
         ? "discover-only"
         : "collection-discovery";
   progress.info(
-    `target_scope=${targetScope}, run_mode=${options.mode}, refresh_mode=${options.refreshMode}, avail_horizon_days=${availabilityHorizonDays}, avail_max_calendar_months=${maxCalendarAdvanceMonths}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}, detail_timeout_ms=${options.detailTimeoutMs}, detail_retry_attempts=${options.detailRetryAttempts}, detail_retry_delay_ms=${options.detailRetryDelayMs}, skip_existing_details=${options.skipExistingDetails}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}`,
+    `target_scope=${targetScope}, inventory_mode=${options.inventoryMode}, run_mode=${options.mode}, refresh_mode=${options.refreshMode}, avail_horizon_days=${availabilityHorizonDays}, avail_max_calendar_months=${maxCalendarAdvanceMonths}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}, detail_timeout_ms=${options.detailTimeoutMs}, detail_retry_attempts=${options.detailRetryAttempts}, detail_retry_delay_ms=${options.detailRetryDelayMs}, skip_existing_details=${options.skipExistingDetails}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}`,
   );
 
   if (options.quoteWindowDays !== null) {
@@ -1311,7 +1332,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       return;
     }
 
-    if (options.refreshKnown || options.detailUrlsFile) {
+    if (options.inventoryMode === "refresh-known" || options.detailUrlsFile) {
       progress.phase("acquiring known listing set for refresh");
       const knownUrls = options.refreshKnown
         ? await loadKnownDetailUrlsFromArtifacts(
@@ -1639,6 +1660,78 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       detailsManifestPath,
       `${JSON.stringify(detailRecords, null, 2)}\n`,
     );
+
+    if (!isSubsetMode) {
+      const canonicalIndexPath = resolve(outputRoot, "details", "index.json");
+      const existingDetailArtifacts = await loadExistingDetailArtifacts(
+        root,
+        outputDetailsJsonDir,
+        adapter.isValidDetailUrl,
+      );
+      const existingCanonicalByUrl = new Map<string, Record<string, unknown>>();
+      try {
+        const existingRaw = await readFile(canonicalIndexPath, "utf8");
+        const existingParsed = JSON.parse(existingRaw) as Array<{
+          detail_url?: unknown;
+          quote_context?: unknown;
+        }>;
+        if (Array.isArray(existingParsed)) {
+          for (const entry of existingParsed) {
+            const detailUrl =
+              typeof entry?.detail_url === "string"
+                ? normalizeLink(entry.detail_url)
+                : "";
+            const quoteContext = extractCanonicalQuoteContext(
+              entry?.quote_context,
+            );
+            if (!detailUrl || !quoteContext) {
+              continue;
+            }
+            existingCanonicalByUrl.set(detailUrl, quoteContext);
+          }
+        }
+      } catch {
+        // Canonical index may not exist yet on first full scan.
+      }
+
+      const pulledQuoteContextByUrl = new Map<
+        string,
+        Record<string, unknown>
+      >();
+      for (const detail of detailRecords) {
+        const detailUrl = normalizeLink(detail.detail_url);
+        if (!detailUrl) {
+          continue;
+        }
+        const quoteContext = extractCanonicalQuoteContext(
+          (detail as Record<string, unknown>).quote_context,
+        );
+        if (quoteContext) {
+          pulledQuoteContextByUrl.set(detailUrl, quoteContext);
+        }
+      }
+
+      const canonicalIndex = rows.map((row) => {
+        const detailUrl = normalizeLink(row.link);
+        const quoteContext =
+          pulledQuoteContextByUrl.get(detailUrl) ??
+          existingDetailArtifacts.get(detailUrl)?.quoteContext ??
+          existingCanonicalByUrl.get(detailUrl);
+
+        return {
+          detail_url: detailUrl,
+          external_listing_id: externalListingIdFromDetailUrl(detailUrl),
+          ...(quoteContext ? { quote_context: quoteContext } : {}),
+        };
+      });
+      await writeTextFileDurable(
+        canonicalIndexPath,
+        `${JSON.stringify(canonicalIndex, null, 2)}\n`,
+      );
+      progress.info(
+        `canonical index updated: ${toProjectRelativePath(canonicalIndexPath, root)} entries=${canonicalIndex.length}`,
+      );
+    }
 
     progress.success(
       options.discoverOnly
