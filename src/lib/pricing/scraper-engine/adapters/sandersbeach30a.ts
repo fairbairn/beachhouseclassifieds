@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
+import { runSandersBeach30AQuoteCli } from "./quotes/sandersbeach30a";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
@@ -38,6 +40,12 @@ type LuxuryDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "detail_riot_payload";
+    eid: number | null;
+    inventory_id: string;
+    type_id: string;
   };
   normalized_matching_profile: {
     source: "pm_sandersbeach30a";
@@ -182,6 +190,43 @@ function normalizeListingName(value: string): string {
     .trim();
 
   return cleaned.slice(0, 240);
+}
+
+function extractQuoteContextFromHtml(html: string): {
+  eid: number | null;
+  inventoryId: string;
+  typeId: string;
+} {
+  const patterns = [
+    /['"]entity['"]\s*:\s*\{[\s\S]*?['"]eid['"]\s*:\s*['"]?(\d+)['"]?[\s\S]*?['"]id['"]\s*:\s*['"]?(\d+)['"]?[\s\S]*?['"]type['"]\s*:\s*['"]?(\d+)['"]?/i,
+    /['"]eid['"]\s*:\s*['"]?(\d+)['"]?[\s\S]*?['"]id['"]\s*:\s*['"]?(\d+)['"]?[\s\S]*?['"]type['"]\s*:\s*['"]?(\d+)['"]?/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (!match?.[1] || !match?.[2] || !match?.[3]) {
+      continue;
+    }
+
+    const eidRaw = Number(match[1]);
+    const eid = Number.isFinite(eidRaw) && eidRaw > 0 ? Math.floor(eidRaw) : null;
+    const inventoryId = String(match[2]).trim();
+    const typeId = String(match[3]).trim();
+
+    if (inventoryId && typeId) {
+      return {
+        eid,
+        inventoryId,
+        typeId,
+      };
+    }
+  }
+
+  return {
+    eid: null,
+    inventoryId: "",
+    typeId: "",
+  };
 }
 
 function dedupePreserveOrder(values: string[]): string[] {
@@ -1167,6 +1212,7 @@ async function fetchDetail(
     );
     const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
+    const quoteContext = extractQuoteContextFromHtml(html);
 
     const locationPayload = extractFieldLocationFromHtml(html);
 
@@ -1286,6 +1332,12 @@ async function fetchDetail(
       location,
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
+      quote_context: {
+        source: "detail_riot_payload",
+        eid: quoteContext.eid,
+        inventory_id: quoteContext.inventoryId,
+        type_id: quoteContext.typeId,
+      },
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_sandersbeach30a",
@@ -1401,6 +1453,13 @@ export function createSandersBeach30AAdapter(): ScraperAdapter<LuxuryDetailRecor
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "sandersbeach30a",
+        argv,
+      );
+      await runSandersBeach30AQuoteCli(normalizedArgs, progress);
     },
   };
 }

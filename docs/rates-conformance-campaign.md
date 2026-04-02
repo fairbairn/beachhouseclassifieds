@@ -26,7 +26,7 @@ Prepare all adapters for upcoming rates-required conformance by closing normaliz
 |   12 | 30aluxury               |   105 |     0 | 105 | needs_rates | no               | no                      | no               | custom_hybrid   | Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics. |
 |   13 | dunevr30a               |    85 |    85 |   0 | complete    | yes              | yes                     | yes              | streamline      | Probe wp-admin streamline methods first (GetPropertyRates or GetPropertyRatesRawData), then map response days to normalized_rates.          |
 |   14 | stayon30a               |    78 |     0 |  78 | needs_rates | no               | yes                     | no               | streamline      | Probe wp-admin streamline methods first (GetPropertyRates or GetPropertyRatesRawData), then map response days to normalized_rates.          |
-|   15 | sandersbeach30a         |    73 |     0 |  73 | needs_rates | no               | no                      | no               | track_bluetent  | Probe Track/Bluetent router and booking endpoints for daily or season rates; fallback to DOM rates table if API unavailable.                |
+|   15 | sandersbeach30a         |    73 |     0 |  73 | needs_rates | no               | no                      | yes              | streamline      | Reuse RCAPI quote pathway (`/rcapi/item/avail/search`) and detail Riot `entity.eid/id/type` extraction; probe Streamline methods for listing-level rates. |
 |   16 | oversee30a              |    67 |     0 |  67 | needs_rates | no               | yes                     | no               | custom_hybrid   | Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics. |
 |   17 | fivestar30a             |    62 |    62 |   0 | complete    | no               | no                      | no               | custom_hybrid   | Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics. |
 |   18 | panhandle30a            |    51 |     0 |  51 | needs_rates | no               | no                      | yes              | track_bluetent  | Probe Track/Bluetent router and booking endpoints for daily or season rates; fallback to DOM rates table if API unavailable.                |
@@ -51,7 +51,7 @@ Prepare all adapters for upcoming rates-required conformance by closing normaliz
 7. sandpiper30a (106 files, gap 106) - Probe Track/Bluetent router and booking endpoints for daily or season rates; fallback to DOM rates table if API unavailable.
 8. 30aluxury (105 files, gap 105) - Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics.
 9. stayon30a (78 files, gap 78) - Probe wp-admin streamline methods first (GetPropertyRates or GetPropertyRatesRawData), then map response days to normalized_rates.
-10. sandersbeach30a (73 files, gap 73) - Probe Track/Bluetent router and booking endpoints for daily or season rates; fallback to DOM rates table if API unavailable.
+10. sandersbeach30a (73 files, gap 73) - Reuse RCAPI quote pathway (`/rcapi/item/avail/search`) and detail Riot `entity.eid/id/type` extraction; probe Streamline methods for listing-level rates.
 
 ## Campaign Summary
 

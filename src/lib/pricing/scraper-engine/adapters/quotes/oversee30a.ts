@@ -331,10 +331,7 @@ function buildCheckAvailabilityUrl(input: {
   url.searchParams.set("obj[Arrival]", formatOverseeDate(input.startDate));
   url.searchParams.set("obj[Departure]", formatOverseeDate(input.endDate));
   url.searchParams.set("search[Adults]", String(Math.max(1, input.adults)));
-  url.searchParams.set(
-    "search[Children]",
-    String(Math.max(0, input.children)),
-  );
+  url.searchParams.set("search[Children]", String(Math.max(0, input.children)));
   url.searchParams.set("search[Infants]", String(Math.max(0, input.infants)));
 
   const petsLabel = buildPetsLabel(input.pets);
@@ -358,10 +355,7 @@ function buildHandoffUrl(input: {
   url.searchParams.set("obj[Arrival]", formatOverseeDate(input.startDate));
   url.searchParams.set("obj[Departure]", formatOverseeDate(input.endDate));
   url.searchParams.set("search[Adults]", String(Math.max(1, input.adults)));
-  url.searchParams.set(
-    "search[Children]",
-    String(Math.max(0, input.children)),
-  );
+  url.searchParams.set("search[Children]", String(Math.max(0, input.children)));
   url.searchParams.set("search[Infants]", String(Math.max(0, input.infants)));
 
   const petsLabel = buildPetsLabel(input.pets);
@@ -599,7 +593,9 @@ async function buildSidecarForListing(input: {
       const nonBasePctOfTotal = roundCurrency(
         (taxesTotal + feesTotal) / Math.max(grandTotal, 1),
       );
-      const allInMultiplier = roundCurrency(grandTotal / Math.max(baseTotal, 1));
+      const allInMultiplier = roundCurrency(
+        grandTotal / Math.max(baseTotal, 1),
+      );
 
       return {
         sampled_at: input.capturedAtIso,

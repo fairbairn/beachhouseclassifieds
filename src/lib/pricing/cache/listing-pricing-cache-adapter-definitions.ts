@@ -245,4 +245,15 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 700,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  sandersbeach30a: {
+    adapterKey: "sandersbeach30a",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.12,
+    },
+    globalDefaultBaseNightly: 700,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
 };

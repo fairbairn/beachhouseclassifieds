@@ -1183,14 +1183,16 @@ function parsePanhandleTotalsFromHtml(html: string): {
   const total =
     parsePanhandlePriceByLabelContains(html, "Total") ??
     parseMoney(
-      html.match(/\$\('#hiddenTotal'\)\.val\("([0-9,]+(?:\.[0-9]+)?)"\)/i)?.[1] ??
-        "",
+      html.match(
+        /\$\('#hiddenTotal'\)\.val\("([0-9,]+(?:\.[0-9]+)?)"\)/i,
+      )?.[1] ?? "",
     );
   const baseTotal = parsePanhandlePriceByLabelContains(html, "Rent");
   const taxesTotal = parsePanhandlePriceByLabelContains(html, "Taxes");
   const dueToday = parseMoney(
-    html.match(/\$\('#hiddenPaidToday'\)\.val\("([0-9,]+(?:\.[0-9]+)?)"\)/i)?.[1] ??
-      "",
+    html.match(
+      /\$\('#hiddenPaidToday'\)\.val\("([0-9,]+(?:\.[0-9]+)?)"\)/i,
+    )?.[1] ?? "",
   );
 
   return {
@@ -1262,8 +1264,7 @@ function buildPanhandleBookFormData(handoffHtml: string): URLSearchParams {
     params.append(name, value);
   }
 
-  const textareaPattern =
-    /<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/gi;
+  const textareaPattern = /<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/gi;
   for (const match of formHtml.matchAll(textareaPattern)) {
     const attrs = match[1] ?? "";
     const name = extractHtmlAttr(attrs, "name");
@@ -1690,7 +1691,8 @@ async function tryExtractPanhandleDirectTotal(
             method: "POST",
             headers: {
               accept: "text/html, */*; q=0.01",
-              "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+              "content-type":
+                "application/x-www-form-urlencoded; charset=UTF-8",
               "x-requested-with": "XMLHttpRequest",
               "user-agent": USER_AGENT,
               referer: candidate.detailUrl,
