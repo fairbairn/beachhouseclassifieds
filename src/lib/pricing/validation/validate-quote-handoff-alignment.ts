@@ -1160,6 +1160,164 @@ function parseOceanreefTotalsFromHtml(html: string): {
   return { total, baseTotal, taxesTotal, feesTotal };
 }
 
+function parsePanhandlePriceByLabelContains(
+  html: string,
+  label: string,
+): number | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `<span\\s+class=\"book-quote-item-text\">\\s*[^<]*${escaped}[^<]*\\s*<\\/span>[\\s\\S]*?<span\\s+class=\"book-quote-item-price\"[^>]*data-price=\"([^\"]+)\"`,
+    "i",
+  );
+  const value = pattern.exec(html)?.[1] ?? "";
+  const parsed = parseMoney(value);
+  return parsed !== null && parsed >= 0 ? parsed : null;
+}
+
+function parsePanhandleTotalsFromHtml(html: string): {
+  total: number | null;
+  baseTotal: number | null;
+  taxesTotal: number | null;
+  dueToday: number | null;
+} {
+  const total =
+    parsePanhandlePriceByLabelContains(html, "Total") ??
+    parseMoney(
+      html.match(/\$\('#hiddenTotal'\)\.val\("([0-9,]+(?:\.[0-9]+)?)"\)/i)?.[1] ??
+        "",
+    );
+  const baseTotal = parsePanhandlePriceByLabelContains(html, "Rent");
+  const taxesTotal = parsePanhandlePriceByLabelContains(html, "Taxes");
+  const dueToday = parseMoney(
+    html.match(/\$\('#hiddenPaidToday'\)\.val\("([0-9,]+(?:\.[0-9]+)?)"\)/i)?.[1] ??
+      "",
+  );
+
+  return {
+    total,
+    baseTotal,
+    taxesTotal,
+    dueToday,
+  };
+}
+
+function extractHtmlAttr(tag: string, attrName: string): string | null {
+  const pattern = new RegExp(
+    `${attrName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+    "i",
+  );
+  const match = tag.match(pattern);
+  if (!match) {
+    return null;
+  }
+  return (match[1] ?? match[2] ?? match[3] ?? "").trim();
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#x2F;/gi, "/");
+}
+
+function buildPanhandleBookFormData(handoffHtml: string): URLSearchParams {
+  const params = new URLSearchParams();
+
+  const formMatch = handoffHtml.match(
+    /<form[^>]*id="bookForm"[^>]*>([\s\S]*?)<\/form>/i,
+  );
+  if (!formMatch?.[1]) {
+    return params;
+  }
+
+  const formHtml = formMatch[1];
+
+  const inputTags = formHtml.match(/<input\b[^>]*>/gi) ?? [];
+  for (const tag of inputTags) {
+    const name = extractHtmlAttr(tag, "name");
+    if (!name) {
+      continue;
+    }
+
+    if (/\sdisabled(?:\s|>|=)/i.test(tag)) {
+      continue;
+    }
+
+    const type = (extractHtmlAttr(tag, "type") ?? "text").toLowerCase();
+    const checked = /\schecked(?:\s|>|=)/i.test(tag);
+    if ((type === "checkbox" || type === "radio") && !checked) {
+      continue;
+    }
+
+    const valueAttr = extractHtmlAttr(tag, "value");
+    const value =
+      valueAttr !== null
+        ? decodeHtml(valueAttr)
+        : type === "checkbox" || type === "radio"
+          ? "on"
+          : "";
+    params.append(name, value);
+  }
+
+  const textareaPattern =
+    /<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/gi;
+  for (const match of formHtml.matchAll(textareaPattern)) {
+    const attrs = match[1] ?? "";
+    const name = extractHtmlAttr(attrs, "name");
+    if (!name || /\sdisabled(?:\s|>|=)/i.test(attrs)) {
+      continue;
+    }
+    params.append(name, decodeHtml((match[2] ?? "").trim()));
+  }
+
+  const selectPattern = /<select\b([^>]*)>([\s\S]*?)<\/select>/gi;
+  for (const match of formHtml.matchAll(selectPattern)) {
+    const attrs = match[1] ?? "";
+    const name = extractHtmlAttr(attrs, "name");
+    if (!name || /\sdisabled(?:\s|>|=)/i.test(attrs)) {
+      continue;
+    }
+
+    const optionsHtml = match[2] ?? "";
+    const selectedOptionMatch = optionsHtml.match(
+      /<option\b[^>]*selected[^>]*>/i,
+    );
+    const firstOptionMatch = optionsHtml.match(/<option\b[^>]*>/i);
+    const chosenTag = selectedOptionMatch?.[0] ?? firstOptionMatch?.[0] ?? "";
+    const value = decodeHtml(extractHtmlAttr(chosenTag, "value") ?? "");
+    params.append(name, value);
+  }
+
+  return params;
+}
+
+function extractPanhandleDetailQuoteContext(detailHtml: string): {
+  propertyId: string;
+  propertyName: string;
+} | null {
+  const propertyIdMatch = detailHtml.match(
+    /<input[^>]*name="propertyID"[^>]*value="(\d+)"[^>]*>/i,
+  );
+  const propertyNameMatch = detailHtml.match(
+    /<input[^>]*name="propertyName"[^>]*value="([^"]*)"[^>]*>/i,
+  );
+
+  const propertyId = propertyIdMatch?.[1]?.trim() ?? "";
+  const propertyName = decodeHtml(propertyNameMatch?.[1]?.trim() ?? "");
+
+  if (!propertyId || !propertyName) {
+    return null;
+  }
+
+  return {
+    propertyId,
+    propertyName,
+  };
+}
+
 function extractRealjoyPropertyName(detailHtml: string): string {
   const h1Match = detailHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   if (!h1Match?.[1]) {
@@ -1385,6 +1543,199 @@ async function tryExtractOceanreefDirectTotal(
       total: totals.total,
       baseTotal: totals.baseTotal,
       taxesTotal: totals.taxesTotal,
+    };
+  } catch (error: unknown) {
+    return {
+      kind: "request_error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function tryExtractPanhandleDirectTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (!parsed.hostname.endsWith("panhandlegetaways.com")) {
+    return { kind: "unsupported" };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+
+  try {
+    const handoffResult = await fetchWithRetry({
+      url: candidate.handoffUrl,
+      init: {
+        headers: {
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "user-agent": USER_AGENT,
+          referer: candidate.detailUrl,
+        },
+      },
+      retryDelaysMs,
+      reportProgress,
+      retryLabel: "panhandle handoff page",
+    });
+
+    if (!handoffResult.ok) {
+      return { kind: "request_error", message: handoffResult.message };
+    }
+
+    const handoffHtml = await handoffResult.response.text();
+    const formData = buildPanhandleBookFormData(handoffHtml);
+
+    const checkinFromUrl =
+      normalizeToUsDate(parsed.searchParams.get("checkin")?.trim() ?? "") ??
+      toUsDateFromIso(candidate.startDate);
+    const checkoutFromUrl =
+      normalizeToUsDate(parsed.searchParams.get("checkout")?.trim() ?? "") ??
+      toUsDateFromIso(candidate.endDate);
+    formData.set("checkin", checkinFromUrl);
+    formData.set("checkout", checkoutFromUrl);
+
+    const propertyIdFromUrl =
+      parsed.searchParams.get("propertyID")?.trim() ??
+      parsed.searchParams.get("propertyId")?.trim();
+    if (propertyIdFromUrl) {
+      formData.set("propertyID", propertyIdFromUrl);
+    }
+
+    if (!formData.get("propertyID")) {
+      return {
+        kind: "request_error",
+        message: "panhandle handoff page missing propertyID in bookForm",
+      };
+    }
+
+    const endpoint = `${parsed.origin}/ajax/pricesummary`;
+
+    const quoteResult = await fetchWithRetry({
+      url: endpoint,
+      init: {
+        method: "POST",
+        headers: {
+          accept: "text/html, */*; q=0.01",
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "x-requested-with": "XMLHttpRequest",
+          "user-agent": USER_AGENT,
+          referer: candidate.handoffUrl,
+          origin: parsed.origin,
+        },
+        body: formData.toString(),
+      },
+      retryDelaysMs,
+      reportProgress,
+      retryLabel: "panhandle pricesummary",
+    });
+
+    if (!quoteResult.ok) {
+      return { kind: "request_error", message: quoteResult.message };
+    }
+
+    const html = await quoteResult.response.text();
+    const totals = parsePanhandleTotalsFromHtml(html);
+
+    const lowered = html.toLowerCase();
+    if (
+      (totals.total === null || totals.total <= 0) &&
+      (lowered.includes("not available") ||
+        lowered.includes("dates unavailable") ||
+        lowered.includes("api error"))
+    ) {
+      return {
+        kind: "status_error",
+        message: "Property not available for selected dates",
+      };
+    }
+
+    // Prefer the same endpoint used by quote capture for alignment checks.
+    const detailResult = await fetchWithRetry({
+      url: candidate.detailUrl,
+      init: {
+        headers: {
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "user-agent": USER_AGENT,
+          referer: candidate.handoffUrl,
+        },
+      },
+      retryDelaysMs,
+      reportProgress,
+      retryLabel: "panhandle detail page",
+    });
+
+    if (detailResult.ok) {
+      const detailHtml = await detailResult.response.text();
+      const detailContext = extractPanhandleDetailQuoteContext(detailHtml);
+      if (detailContext) {
+        const quoteBody = new URLSearchParams();
+        quoteBody.set("checkin", checkinFromUrl);
+        quoteBody.set("checkout", checkoutFromUrl);
+        quoteBody.set("propertyID", detailContext.propertyId);
+        quoteBody.set("roomTypeID", "");
+        quoteBody.set("propertyName", detailContext.propertyName);
+        quoteBody.set("hash", "");
+
+        const pdpQuoteResult = await fetchWithRetry({
+          url: `${parsed.origin}/ajax/quote`,
+          init: {
+            method: "POST",
+            headers: {
+              accept: "text/html, */*; q=0.01",
+              "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+              "x-requested-with": "XMLHttpRequest",
+              "user-agent": USER_AGENT,
+              referer: candidate.detailUrl,
+              origin: parsed.origin,
+            },
+            body: quoteBody.toString(),
+          },
+          retryDelaysMs,
+          reportProgress,
+          retryLabel: "panhandle ajax quote",
+        });
+
+        if (pdpQuoteResult.ok) {
+          const pdpHtml = await pdpQuoteResult.response.text();
+          const pdpTotals = {
+            total: parseRealjoyPriceByLabel(pdpHtml, "Total"),
+            baseTotal: parsePanhandlePriceByLabelContains(pdpHtml, "Rent"),
+            taxesTotal: parseRealjoyPriceByLabel(pdpHtml, "Taxes"),
+          };
+
+          if (pdpTotals.total !== null && pdpTotals.total > 0) {
+            return {
+              kind: "success",
+              total: pdpTotals.total,
+              baseTotal: pdpTotals.baseTotal,
+              taxesTotal: pdpTotals.taxesTotal,
+            };
+          }
+        }
+      }
+    }
+
+    if (totals.total !== null && totals.total > 0) {
+      return {
+        kind: "success",
+        total: totals.total,
+        baseTotal: totals.baseTotal,
+        taxesTotal: totals.taxesTotal,
+        dueToday: totals.dueToday,
+      };
+    }
+
+    return {
+      kind: "request_error",
+      message: "panhandle pricesummary and ajax quote payloads missing total",
     };
   } catch (error: unknown) {
     return {
@@ -2023,6 +2374,59 @@ async function validateObservation(
         handoffUrl: candidate.handoffUrl,
         code: "request_error",
         message: `oceanreef pricesummary extraction failed: ${oceanreefDirect.message}`,
+        extractedTotal: null,
+      };
+    }
+  }
+
+  if (candidate.adapterKey === "panhandle30a") {
+    const panhandleTolerance = Math.max(tolerance, 60);
+    const panhandleDirect = await tryExtractPanhandleDirectTotal(
+      candidate,
+      reportProgress,
+    );
+
+    if (panhandleDirect.kind === "success") {
+      const diff = Math.abs(
+        panhandleDirect.total - candidate.observedGrandTotal,
+      );
+      if (diff > panhandleTolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from panhandle ajax total=${panhandleDirect.total.toFixed(2)} (diff=${diff.toFixed(2)}; tolerance=${panhandleTolerance.toFixed(2)})`,
+          extractedTotal: panhandleDirect.total,
+        };
+      }
+      return null;
+    }
+
+    if (panhandleDirect.kind === "status_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "direct_status_error",
+        message: `panhandle ajax quote returned availability/status error: ${panhandleDirect.message}`,
+        extractedTotal: null,
+      };
+    }
+
+    if (panhandleDirect.kind === "request_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "request_error",
+        message: `panhandle ajax quote extraction failed: ${panhandleDirect.message}`,
         extractedTotal: null,
       };
     }

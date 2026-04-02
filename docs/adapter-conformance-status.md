@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds plus pricing-record parity.
 
-Audit date: 2026-04-01T23:16:00Z
+Audit date: 2026-04-02T11:40:00Z
 
 Data source:
 
@@ -77,7 +77,7 @@ Preferred (non-blocking):
 | localvr30a              |    42 |   42 |      42 |           42 |           42 |         42 |        42 |     42 |     0 |              42 |       1774 |        42.24 |    ❌     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">Quote sidecar validator passing (42/42) with full pricing parity (`details/pricing/*.json` + `index.json`)</span>                                                                            |
 | oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |     0 |             112 |       8314 |        74.23 |    ❌     |    ❌     |    ✅     |  ✅   | <span style="white-space: nowrap;">Quote sidecar generation complete (112 listings), pricing cache rebuilt (24 weeks, 112 listings), and handoff alignment passing (405/405)</span>                                             |
 | oversee30a              |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     0 |             105 |       6812 |        64.88 |    ✅     |    ❌     |    ❌     |  ✅   | <span style="white-space: nowrap;">Quote validator passing (105/105), pricing alignment validator passing (105/105), and handoff alignment passing in staged rollout (1/1, 10/10, 105/105)</span>                              |
-| panhandle30a            |    51 |   51 |      51 |           51 |           51 |         51 |        51 |     51 |     0 |               0 |       2641 |        51.78 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                                                                  |
+| panhandle30a            |    51 |   51 |      51 |           51 |           51 |         51 |        51 |     51 |     0 |              51 |       2641 |        51.78 |    ❌     |    ❌     |    ✅     |  ✅   | <span style="white-space: nowrap;">Full quote run complete (51 listings), quote validator passing (51/51), pricing cache rebuilt (51 records), and handoff alignment passing (204/204)</span>                                 |
 | realjoy30a              |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |     0 |             140 |      16334 |       116.67 |    ❌     |    ❌     |    ✅     |  ✅   | <span style="white-space: nowrap;">Quote sidecars + handoff alignment validated; pricing record parity confirmed on disk (140/140, excluding `details/pricing/index.json`)</span>                                               |
 | royaldestinations       |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |     0 |             143 |       6677 |        46.69 |    ✅     |    ❌     |    ✅     |  ✅   | <span style="white-space: nowrap;">Quote sidecar validator passing (143/143) with full pricing parity (`details/pricing/*.json` + `index.json`)</span>                                                                          |
 | sandersbeach30a         |    73 |   73 |      73 |           73 |           73 |         73 |        73 |     73 |     0 |               0 |       3633 |        49.77 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                                                                  |
@@ -85,19 +85,19 @@ Preferred (non-blocking):
 | scenicstays30a          |    44 |   44 |      44 |           44 |           44 |         44 |        44 |     44 |    44 |               0 |       2490 |        56.59 |    ✅     |    ✅     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                                                                  |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |     0 |               0 |       2418 |        65.35 |    ❌     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                                                                  |
 | stayon30a               |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |     0 |               0 |      11150 |       142.95 |    ✅     |    ❌     |    ❌     |  ❌   | <span style="white-space: nowrap;">none</span>                                                                                                                                                                                  |
-| **TOTAL**               |  3032 | 3032 |    3032 |         3032 |         3032 |       3032 |      3032 |   3032 |  1588 |            2631 |     186365 |        61.47 |     —     |     —     |     —     |   —   | <span style="white-space: nowrap;">19/25 Ready</span>                                                                                                                                                                           |
+| **TOTAL**               |  3032 | 3032 |    3032 |         3032 |         3032 |       3032 |      3032 |   3032 |  1588 |            2682 |     186365 |        61.47 |     —     |     —     |     —     |   —   | <span style="white-space: nowrap;">20/25 Ready</span>                                                                                                                                                                           |
 
 ## Current Snapshot Summary
 
 - 25 adapters audited.
 - All 25 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 19 / 25.
+- Combined-ready adapters (Ready = ✅): 20 / 25.
 - Rates coverage signal: 1588 / 3032 files currently include normalized_rates.days.
-- Pricing-records coverage signal: 2631 / 3032 files currently have per-listing pricing JSON records.
+- Pricing-records coverage signal: 2682 / 3032 files currently have per-listing pricing JSON records.
 - API capability signal:
   - Availability API present: 13 / 25 adapters.
   - Rates API present: 6 / 25 adapters.
-  - Pre-reservation API present: 13 / 25 adapters.
+  - Pre-reservation API present: 14 / 25 adapters.
 - Geo location minimum (required): 25 / 25 adapters currently have 100% numeric lat/lng coverage.
 - Preferred horizon (>=730d) remains non-blocking and is tracked in probe metrics, not failure notes.
 

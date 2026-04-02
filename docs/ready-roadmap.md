@@ -49,6 +49,10 @@ For each adapter promoted:
 4. Build/verify pricing cache parity.
 5. Update status docs with counts and rationale.
 
+## Latest Promotion
+
+- `panhandle30a` is now Ready after full quote pull (51 listings), quote validation pass (51/51), pricing cache parity (51/51), and full handoff alignment pass (204/204).
+
 ## Operating Principle
 
 Prefer targeted remediation and modular hardening over large reruns whenever failures are isolated.

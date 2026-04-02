@@ -1,6 +1,6 @@
 # Rates Conformity Rollout Matrix
 
-Last updated: 2026-04-01T12:42:21Z
+Last updated: 2026-04-02T11:40:00Z
 
 This matrix maps each adapter to the data needed to satisfy [rates-conformity-contract.md](./rates-conformity-contract.md).
 
@@ -43,7 +43,7 @@ This matrix maps each adapter to the data needed to satisfy [rates-conformity-co
 | sandersbeach30a         | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint + handoff URL template                                                                                                                                                       |
 | oversee30a              | custom_hybrid   | no               | yes                     | assumptions_only  | detail_fallback | none        | [ ]     | identify quote-capable endpoint and normalization rules                                                                                                                                              |
 | fivestar30a             | custom_hybrid   | yes              | yes                     | quote_window_avg  | template_url    | seeded      | [x]     | full quote + pricing runtime pass complete (62/62); deterministic daily-rates (`getBatchPricing`) and checkout handoff signature (`locid`) are now verified; next tighten assumptions sample depth   |
-| panhandle30a            | track_bluetent  | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | discover quote endpoint and URL signature                                                                                                                                                            |
+| panhandle30a            | track_bluetent  | yes              | no                      | quote_window_avg  | quoted_url      | ready       | [x]     | full quote + pricing runtime pass complete (51/51), quote validator passing (51/51), and handoff alignment passing (204/204)                                                                    |
 | scenicstays30a          | streamline      | no               | yes                     | listing_daily     | template_url    | none        | [ ]     | add explicit quote fallback policy and assumptions refresh                                                                                                                                           |
 | localvr30a              | guesty          | no               | no                      | assumptions_only  | detail_fallback | none        | [ ]     | probe Guesty quote endpoints + handoff signature mapping                                                                                                                                             |
 | funvacay30a             | track_bluetent  | yes              | no                      | quote_window_avg  | template_url    | ready       | [x]     | full adapter requote complete (40 listings), quote validator passing (40/40), pricing cache rebuilt (40 records), and handoff alignment passing (521/521); keep assumptions blending tuned over time |
