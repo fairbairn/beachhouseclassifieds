@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
+import { runPanhandle30aQuoteCli } from "./quotes/panhandle30a";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
@@ -1537,6 +1539,13 @@ export function createPanhandle30AAdapter(): ScraperAdapter<LuxuryDetailRecord> 
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "panhandle30a",
+        argv,
+      );
+      await runPanhandle30aQuoteCli(normalizedArgs, progress);
     },
   };
 }
