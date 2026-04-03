@@ -8,7 +8,9 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
-import { runHomeownerscollection30aQuoteCli } from "./quotes/homeownerscollection30a";
+import { executeHomeownerscollection30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/homeownerscollection30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
@@ -71,6 +73,13 @@ type LuxuryDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "detail_html_and_rcapi";
+    entity_id: number | null;
+    detail_url: string;
+    endpoint_path: "/rcapi/item/avail/search";
+    quote_coupon: string;
   };
   normalized_matching_profile: {
     source: "pm_homeownerscollection30a";
@@ -2272,6 +2281,15 @@ async function fetchDetail(
       location,
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
+      quote_context: {
+        source: "detail_html_and_rcapi",
+        entity_id: entityId ?? null,
+        detail_url: detailUrl,
+        endpoint_path: HOMEOWNERS_RCAPI_PATH,
+        quote_coupon:
+          process.env.HOMEOWNERSCOLLECTION30A_RATES_QUOTE_COUPON ??
+          "INVALIDCODE",
+      },
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_homeownerscollection30a",
@@ -2386,12 +2404,23 @@ export function createHomeownersCollection30AAdapter(): ScraperAdapter<LuxuryDet
       );
     },
     async runQuoteCapture(argv, progress) {
-      const exitCode = await runHomeownerscollection30aQuoteCli(argv, progress);
-      if (exitCode !== 0) {
-        throw new Error(
-          `homeownerscollection30a quote failed with exit code ${exitCode}`,
-        );
-      }
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "homeownerscollection30a",
+        argv,
+      );
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "homeownerscollection30a",
+          executeSingleQuote: executeHomeownerscollection30aSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: HOMEOWNERS_RCAPI_PATH,
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 650,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
   };
 }
