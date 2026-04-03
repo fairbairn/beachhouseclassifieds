@@ -67,10 +67,10 @@ Per-manager details:
 - `src/lib/data/external-sources/<managerKey>/details/html/`
 - `src/lib/data/external-sources/<managerKey>/details/json/`
 
-Listing link snapshots (flat files written by runner):
+Listing link snapshots (adapter-local working files written by runner):
 
-- `src/lib/data/external-sources/<managerKey>_listings.json`
-- `src/lib/data/external-sources/<managerKey>_listings_subset.json`
+- `src/lib/data/external-sources/<managerKey>/working/listings.json`
+- `src/lib/data/external-sources/<managerKey>/working/listings_subset.json`
 
 ### Run Reports
 
@@ -261,7 +261,7 @@ There is no centralized `external-sources/history` directory in the current runn
 Run history is currently represented by:
 
 - Report artifacts under `.tmp/reports/`
-- Listing snapshots under `src/lib/data/external-sources/*_listings*.json`
+- Listing snapshots under `src/lib/data/external-sources/<managerKey>/working/listings*.json`
 - Detail JSON files under each manager folder
 
 If we later add a dedicated history ledger, keep this document updated and keep legacy artifacts backward-compatible.

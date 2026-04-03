@@ -57,7 +57,7 @@ For calendars that are hidden until user interaction:
 
 ## Storage + Naming Conventions
 
-- Listing snapshots: external-sources root with `<managerKey>_listings*.json`
+- Listing snapshots: adapter-local working files at `external-sources/<managerKey>/working/listings*.json`
 - Per-listing detail files: manager folder under external-sources with `details/json` and `details/html`
 - Run reports + manifests: `.tmp/reports`
 - Manager key must be reused consistently across:
@@ -69,34 +69,25 @@ For calendars that are hidden until user interaction:
 ## Progress + Coverage Notes
 
 - Multiple managers are already on the shared engine.
-- RealJoy has a dedicated adapter and script; expected listing target currently tracked as `140`.
-- Recent RealJoy artifacts indicate subset/direct-detail reports exist; full-set history confirmation was still being verified when context was requested.
-- LocalVR is the next adapter target.
+- RealJoy runtime migration is complete and validated (quote validator, pricing alignment, scrape filename checks, and latency smoke).
+- Listing discovery manifests are now adapter-local under `working/` folders.
+- Benchmark is the next runtime migration target.
 
-## Next Adapter Focus: localvr30a
+## Next Adapter Focus: benchmark30a
 
 Input assumptions for upcoming implementation:
 
-- Base URL provided for discovery.
-- Discovery likely needs scrolling to load all listings.
-- Expected listing count target: `42`.
-- Detail pages include a Summary section with a Read More expansion.
-- Calendar appears only after clicking check-in date field.
-- Calendar uses popup with month navigation arrows and must be paginated to capture availability horizon.
+- Adapter already has quote API support but still requires quote-runtime migration completion.
+- Existing detail and pricing sidecar corpus is already at parity and can be used for runtime validation.
+- Migration target is to switch scraper quote flow to shared runtime quote execution and remove legacy adapter-specific quote module usage.
 
 ## Immediate Next Steps
 
-1. Build `localvr30a` adapter using shared runner contract.
-2. Implement robust scroll-based listing discovery and de-duplication.
-3. Implement detail extraction with:
-   - Read More expansion
-   - check-in click to reveal calendar
-   - month-by-month calendar pagination
-4. Emit normalized matching + availability blocks in the standard schema.
-5. Run a full pull and validate:
-   - discovered listings vs expected `42`
-   - reports/manifests/details are written to standard locations.
-6. Add/update docs if any convention changes during implementation.
+1. Migrate `benchmark30a` quote capture to runtime executor path.
+2. Remove legacy quote-module dependency from scraper adapter flow.
+3. Run quote refresh at `--weeks 24` to satisfy validator thresholds.
+4. Validate quote sidecars, pricing alignment, scrape filename contract, and latency smoke.
+5. Update conformance status docs and runtime migration ledger.
 
 ## Working Rules for New Sessions
 
@@ -109,11 +100,10 @@ Input assumptions for upcoming implementation:
 
 Start from the existing shared scraper engine and continue implementing manager adapters with strict schema and folder consistency.
 
-Current priority: implement `localvr30a` adapter with scroll-based listing discovery and click-to-open calendar extraction from detail pages.
+Current priority: complete `benchmark30a` runtime quote migration and validation loop.
 
 Expected outcomes:
 
-- manager key and filenames follow current conventions
-- normalized matching and availability blocks match existing manager structure
-- artifacts written to standard external-sources and `.tmp/reports` locations
-- run validation against expected listing count (`42`) and report any gap with diagnostics
+- runtime quote executor is wired and legacy quote module path is removed
+- artifacts are written using adapter-local `external-sources/<managerKey>/working/listings*.json`
+- quote/pricing/scrape validators pass at full sampling horizon
