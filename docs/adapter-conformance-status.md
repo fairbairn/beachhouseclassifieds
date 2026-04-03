@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-04-03T16:20:00Z
+Audit date: 2026-04-03T21:40:00Z
 
 Data source:
 
@@ -78,7 +78,7 @@ Preferred (non-blocking):
 | homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |   208 |             208 |      10762 |        51.74 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   | <span style="white-space: nowrap;">Runtime executor + shared quote runner migration complete; full scrape/quote/pricing pass complete (208 listings), quote validator passing (208/208), pricing alignment validator passing (208/208), and latency benchmark passing</span>                               |
 | keyco30a                |   381 |  381 |     381 |          381 |          381 |        381 |       381 |    381 |   381 |             381 |      27564 |        72.35 |    ✅     |    ❌     |    ✅     |      ✅       |  ✅   | <span style="white-space: nowrap;">Runtime executor + shared runner migration complete; quote validator passing (381/381) and pricing alignment passing (381/381); current handoff sampling still returns `total_not_found` on checkout extraction</span>                                                  |
 | localvr30a              |    42 |   42 |      42 |           42 |           42 |         42 |        42 |     42 |     0 |              42 |       1774 |        42.24 |    ❌     |    ❌     |    ✅     |      ❌       |  ❌   | <span style="white-space: nowrap;">Quote sidecar validator passing (42/42) with full pricing parity (`details/pricing/*.json` + `index.json`)</span>                                                                                                                                                       |
-| oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |     0 |             112 |       8314 |        74.23 |    ❌     |    ❌     |    ✅     |      ❌       |  ❌   | <span style="white-space: nowrap;">Quote sidecar generation complete (112 listings), pricing cache rebuilt (24 weeks, 112 listings), and handoff alignment passing (405/405)</span>                                                                                                                        |
+| oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |     0 |             112 |       8314 |        74.23 |    ❌     |    ❌     |    ✅     |      ✅       |  ✅   | <span style="white-space: nowrap;">Runtime executor + shared runner migration complete; quote_context/legacy-coexistence compliance gate passing; quote sidecar generation complete (112 listings), pricing cache rebuilt (24 weeks, 112 listings), and handoff alignment passing (405/405)</span>         |
 | oversee30a              |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     0 |             105 |       6812 |        64.88 |    ✅     |    ❌     |    ✅     |      ❌       |  ❌   | <span style="white-space: nowrap;">Quote validator passing (105/105), pricing alignment validator passing (105/105), and handoff alignment passing in staged rollout (1/1, 10/10, 105/105)</span>                                                                                                          |
 | panhandle30a            |    51 |   51 |      51 |           51 |           51 |         51 |        51 |     51 |     0 |              51 |       2641 |        51.78 |    ❌     |    ❌     |    ✅     |      ✅       |  ✅   | <span style="white-space: nowrap;">Full quote run complete (51 listings), quote validator passing (51/51), pricing cache rebuilt (51 records), and handoff alignment passing (204/204)</span>                                                                                                              |
 | realjoy30a              |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |     0 |             140 |      16334 |       116.67 |    ❌     |    ❌     |    ✅     |      ✅       |  ✅   | <span style="white-space: nowrap;">Runtime executor + shared runner migration complete; full quote refresh complete (24 weeks, 140 listings), quote validator passing (140/140), pricing alignment validator passing (140/140), scrape filename validator passing, and latency benchmark passing</span>    |
@@ -94,7 +94,7 @@ Preferred (non-blocking):
 
 - 25 adapters audited.
 - All 25 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 9 / 25.
+- Combined-ready adapters (Ready = ✅): 10 / 25.
 - Rates coverage signal: 1588 / 3033 files currently include normalized_rates.days.
 - Pricing-records coverage signal: 2862 / 3033 files currently have per-listing pricing JSON records.
 - API capability signal:
@@ -118,7 +118,7 @@ This queue defines migration order for adapters that already have direct quote A
 |     6 | realjoy30a              |   140 |    ✅     |      ✅       | complete |
 |     7 | benchmark30a            |   128 |    ✅     |      ✅       | complete |
 |     8 | 30avacay                |   115 |    ✅     |      ✅       | complete |
-|     9 | oceanreef30a            |   112 |    ✅     |      ❌       | pending  |
+|     9 | oceanreef30a            |   112 |    ✅     |      ✅       | complete |
 |    10 | exclusive30a            |   106 |    ✅     |      ❌       | pending  |
 |    11 | sandpiper30a            |   106 |    ✅     |      ❌       | pending  |
 |    12 | 30aluxury               |   105 |    ✅     |      ❌       | pending  |
@@ -133,7 +133,7 @@ This queue defines migration order for adapters that already have direct quote A
 |    21 | coastproperties30a      |    30 |    ✅     |      ❌       | pending  |
 |    22 | 30abeach                |    17 |    ✅     |      ❌       | pending  |
 
-Active next runtime migration target: `oceanreef30a` (highest-volume pending adapter with `API Quote = ✅`).
+Active next runtime migration target: `exclusive30a` (highest-volume pending adapter with `API Quote = ✅`).
 
 ## Quote Pricing Validation Snapshot (2026-04-01)
 

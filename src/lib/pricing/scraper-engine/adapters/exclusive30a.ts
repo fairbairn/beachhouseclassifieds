@@ -2,12 +2,10 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { executeExclusive30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/exclusive30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import {
-  runExclusive30aQuoteCli,
-  runExclusive30aSingleQuoteObservation,
-} from "./quotes/exclusive30a";
 
 type ExclusiveBookedDay = {
   d?: string;
@@ -15,6 +13,10 @@ type ExclusiveBookedDay = {
 };
 
 type ExclusiveDetailRecord = DetailRecordBase & {
+  quote_context: {
+    property_id: string;
+    detail_url: string;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -402,7 +404,7 @@ function parseBookedDaysFromHtml(html: string): ExclusiveBookedDay[] {
   }
 }
 
-function extractListingIdFromHtml(html: string, detailUrl: string): string {
+function extractPropertyIdFromHtml(html: string): string {
   const unitDataId = html.match(
     /var\s+unitData\s*=\s*\{[\s\S]*?unitID['"]?\s*:\s*(\d+)/i,
   )?.[1];
@@ -422,6 +424,10 @@ function extractListingIdFromHtml(html: string, detailUrl: string): string {
     return ecommerceItemId;
   }
 
+  return "";
+}
+
+function extractListingSlugFromDetailUrl(detailUrl: string): string {
   const normalized = normalizeDetailUrl(detailUrl);
   if (!normalized) {
     return "unknown";
@@ -626,7 +632,8 @@ async function fetchDetail(
     }
 
     const html = await response.text();
-    const listingId = extractListingIdFromHtml(html, normalizedDetailUrl);
+    const listingSlug = extractListingSlugFromDetailUrl(normalizedDetailUrl);
+    const propertyId = extractPropertyIdFromHtml(html);
 
     const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
       0,
@@ -649,7 +656,7 @@ async function fetchDetail(
         html,
       ).slice(0, 2000);
 
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${listingId}.html`);
+    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${listingSlug}.html`);
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
     const schemaObjects = parseJsonLdObjects(html);
@@ -871,8 +878,12 @@ async function fetchDetail(
     );
 
     return {
-      external_listing_id: listingId,
+      external_listing_id: listingSlug,
       detail_url: normalizedDetailUrl,
+      quote_context: {
+        property_id: propertyId,
+        detail_url: normalizedDetailUrl,
+      },
       fetched_at: new Date().toISOString(),
       title,
       h1,
@@ -896,7 +907,7 @@ async function fetchDetail(
         image_urls: imageUrls,
       },
       property_profile: {
-        unit_id: listingId,
+        unit_id: propertyId || listingSlug,
         area: "30A",
         location: locationLabel,
         beds: bedsFromSchema,
@@ -907,7 +918,7 @@ async function fetchDetail(
       },
       normalized_matching_profile: {
         source: "pm_exclusive30a",
-        external_listing_id: listingId,
+        external_listing_id: listingSlug,
         name,
         description,
         match_signals: {
@@ -917,7 +928,7 @@ async function fetchDetail(
           title_sha256: titleHash,
           listing_composite_key: [
             "pm_exclusive30a",
-            listingId,
+            listingSlug,
             descriptionHash,
             titleHash,
           ].join("::"),
@@ -925,7 +936,7 @@ async function fetchDetail(
       },
       normalized_availability: {
         source: "pm_exclusive30a",
-        external_listing_id: listingId,
+        external_listing_id: listingSlug,
         captured_at: new Date().toISOString(),
         window_start: normalizedDays[0]?.date ?? "",
         window_end: normalizedDays[normalizedDays.length - 1]?.date ?? "",
@@ -999,10 +1010,61 @@ export function createExclusive30AAdapter(): ScraperAdapter<ExclusiveDetailRecor
         "exclusive30a",
         argv,
       );
-      await runExclusive30aQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "exclusive30a",
+          executeSingleQuote: executeExclusive30aSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/quote",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runExclusive30aSingleQuoteObservation(input);
+      const result = await executeExclusive30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? null,
+        options: {
+          timeoutMs: Number(process.env.QUOTE_CAPTURE_TIMEOUT_MS ?? "20000"),
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            ...result.observation,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "quote_unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: input.handoffUrl ?? null,
+          reason: result.error.code,
+        },
+      };
     },
   };
 }

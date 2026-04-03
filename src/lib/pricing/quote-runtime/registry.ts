@@ -2,6 +2,7 @@ import { execute30AEscapesSingleQuote } from "./adapters/30aescapes";
 import { execute30AvacaySingleQuote } from "./adapters/30avacay";
 import { execute360BlueSingleQuote } from "./adapters/360blue";
 import { executeBenchmark30aSingleQuote } from "./adapters/benchmark30a";
+import { executeExclusive30aSingleQuote } from "./adapters/exclusive30a";
 import { executeHomeownerscollection30aSingleQuote } from "./adapters/homeownerscollection30a";
 import { executeKeyco30aSingleQuote } from "./adapters/keyco30a";
 import { executeOceanreef30aSingleQuote } from "./adapters/oceanreef30a";
@@ -19,6 +20,7 @@ const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   "30aescapes": execute30AEscapesSingleQuote,
   "360blue": execute360BlueSingleQuote,
   benchmark30a: executeBenchmark30aSingleQuote,
+  exclusive30a: executeExclusive30aSingleQuote,
   homeownerscollection30a: executeHomeownerscollection30aSingleQuote,
   keyco30a: executeKeyco30aSingleQuote,
   oceanreef30a: executeOceanreef30aSingleQuote,

@@ -25,6 +25,17 @@ The system is designed to:
 5. Build pricing cache from observed and derived rates.
 6. Update conformance docs and rollout status.
 
+## Runtime Compliance Guardrails
+
+Runtime-migrated adapters must satisfy the following policy checks before moving to the next adapter:
+
+- Every adapter with a file under `src/lib/pricing/quote-runtime/adapters` must have `details/index.json` and include a `quote_context` object on every entry.
+- `quote_context` may be an empty object (`{}`) when the runtime adapter does not require context fields.
+- No runtime adapter key may also keep a legacy file under `src/lib/pricing/scraper-engine/adapters/quotes/<adapter>.ts`.
+- `quote_context` scalar values must not echo `external_listing_id` anywhere (red-flag isolation check).
+
+These checks are enforced by `npm run pricing:audit:quote-isolation` and are the migration gate for selecting the next adapter.
+
 ## Reference Map
 
 - [Adapter Scrape and Extraction](./adapter-scrape-and-extraction.md)
