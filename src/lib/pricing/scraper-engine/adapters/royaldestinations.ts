@@ -1,7 +1,8 @@
+import { executeRoyaldestinationsSingleQuote } from "@/lib/pricing/quote-runtime/adapters/royaldestinations";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { runRoyaldestinationsQuoteCli } from "./quotes/royaldestinations";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -49,6 +50,13 @@ type RoyalDestinationsDetailRecord = DetailRecordBase & {
   media_gallery: {
     image_count: number;
     image_urls: string[];
+  };
+  quote_context: {
+    source: "detail_html";
+    entity_id: number | null;
+    ids_tuple: string | null;
+    detail_url: string;
+    endpoint_path: string;
   };
   normalized_matching_profile: {
     source: "pm_royaldestinations";
@@ -139,6 +147,7 @@ const OUTPUT_ROOT = resolve(
   "royaldestinations",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+const ROYALDESTINATIONS_RCAPI_PATH = "/rcapi/item/avail/search";
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
@@ -602,28 +611,56 @@ function scoreDetailUrl(value: string): number {
   }
 }
 
-function extractExternalListingId(detailUrl: string, html: string): string {
-  const fromHtml = html.match(/["']unit_id["']\s*:\s*["']?(\d+)["']?/i)?.[1];
-  if (fromHtml) {
-    return fromHtml;
-  }
-
+function extractExternalListingId(detailUrl: string): string {
   try {
     const parsed = new URL(detailUrl);
-    const idFromRcav =
-      parsed.searchParams.get("rcav[IDs][8][0]") ??
-      parsed.searchParams.get("rcav%5BIDs%5D%5B8%5D%5B0%5D") ??
-      "";
-    const idMatch = idFromRcav.match(/(?:\d+-)?(\d+)$/);
-    if (idMatch?.[1]) {
-      return idMatch[1];
-    }
-
-    const parts = parsed.pathname.split("/").filter(Boolean);
+    const parts = parsed.pathname
+      .replace(/\/+$/, "")
+      .split("/")
+      .filter(Boolean);
     return parts[parts.length - 1] || detailUrl;
   } catch {
     return detailUrl;
   }
+}
+
+function parseEntityIdFromHtml(html: string): number | null {
+  const patterns = [
+    /rcItemAvailForm[\s\S]*?"eid":"(\d+)"/i,
+    /rc-eid-(\d+)/i,
+    /"eid":"(\d+)"/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const parsed = Number(match[1]);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function parseIdsTuple(detailUrl: string, html: string): string | null {
+  try {
+    const parsed = new URL(detailUrl);
+    const tuple =
+      parsed.searchParams.get("rcav[IDs][8][0]") ??
+      parsed.searchParams.get("rcav%5BIDs%5D%5B8%5D%5B0%5D");
+    if (tuple && tuple.trim()) {
+      return tuple.trim();
+    }
+  } catch {
+    // Ignore parse failures and fall back to html extraction.
+  }
+
+  const htmlMatch = html.match(/"id":"(\d+-\d+)"/i);
+  return htmlMatch?.[1]?.trim() ?? null;
 }
 
 function readJsonObjectAfterKey<T extends object>(
@@ -1122,7 +1159,7 @@ async function fetchDetail(
     }
 
     const html = await response.text();
-    const externalListingId = extractExternalListingId(detailUrl, html);
+    const externalListingId = extractExternalListingId(normalizedDetailUrl);
 
     const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
       0,
@@ -1166,6 +1203,8 @@ async function fetchDetail(
     const locationMetadata = parseLocationMetadataFromHtml(html);
     const galleryImageUrls = parseGalleryImageUrlsFromHtml(html);
     const parsedCalendarDays = parseAvailabilityDaysFromHtml(html);
+    const quoteEntityId = parseEntityIdFromHtml(html);
+    const quoteIdsTuple = parseIdsTuple(normalizedDetailUrl, html);
 
     const bedsFromHtml = extractFirstNumber(
       /rc-lodging-beds[^>]*>\s*(\d+)\s*Bedrooms/i,
@@ -1378,6 +1417,13 @@ async function fetchDetail(
         image_count: galleryImageUrls.length,
         image_urls: galleryImageUrls,
       },
+      quote_context: {
+        source: "detail_html",
+        entity_id: quoteEntityId,
+        ids_tuple: quoteIdsTuple,
+        detail_url: normalizedDetailUrl,
+        endpoint_path: ROYALDESTINATIONS_RCAPI_PATH,
+      },
       normalized_matching_profile: {
         source: "pm_royaldestinations",
         external_listing_id: externalListingId,
@@ -1507,7 +1553,19 @@ export function createRoyalDestinationsAdapter(): ScraperAdapter<RoyalDestinatio
         "royaldestinations",
         argv,
       );
-      await runRoyaldestinationsQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "royaldestinations",
+          executeSingleQuote: executeRoyaldestinationsSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: ROYALDESTINATIONS_RCAPI_PATH,
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 650,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
   };
 }

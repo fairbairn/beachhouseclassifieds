@@ -14,6 +14,10 @@ type CliOptions = {
   minAvailableObservations: number;
   adults: number;
   children: number;
+  singleListingId: string | null;
+  singleStartDate: string | null;
+  singleEndDate: string | null;
+  randomSingle: boolean;
   includeBookingFetch: boolean;
   continueOnError: boolean;
   summaryOnly: boolean;
@@ -38,12 +42,14 @@ type DetailRecordForLatency = {
   quote_context?: Record<string, unknown>;
   property_profile?: {
     unit_id?: string;
+    beds?: number;
   };
 };
 
 type ListingSample = {
   adapterKey: string;
   listingId: string;
+  detailUrl: string;
   quoteContext: Record<string, unknown> | null;
   startDate: string;
   endDate: string;
@@ -143,6 +149,8 @@ const ANSI_ESCAPE_REGEX = new RegExp(
   "g",
 );
 
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
 function paint(text: string, color: string): string {
   return `${color}${text}${COLOR.reset}`;
 }
@@ -153,6 +161,73 @@ function fmtMs(value: number | null): string {
 
 function fmtMsCompact(value: number | null): string {
   return value === null ? "n/a" : `${value.toFixed(1)}ms`;
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function fmtCurrency(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  const normalized = Math.abs(value) < 0.005 ? 0 : roundCurrency(value);
+  return normalized.toFixed(2);
+}
+
+function shellEscapeSingleQuotes(value: string): string {
+  return value.replace(/'/g, `'"'"'`);
+}
+
+function parsePostStyleHandoffUrl(input: string): {
+  endpoint: string;
+  method: string;
+  contentType: string;
+  payloadRaw: string;
+  payloadPretty: string;
+  curlCommand: string;
+} | null {
+  try {
+    const parsed = new URL(input);
+    const hash = parsed.hash.startsWith("#")
+      ? parsed.hash.slice(1)
+      : parsed.hash;
+    if (!hash) {
+      return null;
+    }
+
+    const params = new URLSearchParams(hash);
+    const method = (params.get("method") ?? "").trim().toUpperCase();
+    const contentType = (params.get("contentType") ?? "").trim();
+    const payloadRaw = params.get("payload") ?? "";
+
+    if (method !== "POST" || !contentType || !payloadRaw) {
+      return null;
+    }
+
+    let payloadPretty = payloadRaw;
+    try {
+      const parsedPayload = JSON.parse(payloadRaw) as unknown;
+      payloadPretty = JSON.stringify(parsedPayload, null, 2);
+    } catch {
+      // Keep raw payload when not valid JSON.
+    }
+
+    const endpoint = `${parsed.origin}${parsed.pathname}${parsed.search}`;
+    const curlCommand = `curl -X POST '${shellEscapeSingleQuotes(endpoint)}' -H 'content-type: ${shellEscapeSingleQuotes(contentType)}' --data '${shellEscapeSingleQuotes(payloadRaw)}'`;
+
+    return {
+      endpoint,
+      method,
+      contentType,
+      payloadRaw,
+      payloadPretty,
+      curlCommand,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function mean(values: number[]): number {
@@ -194,6 +269,10 @@ function parseArgs(argv: string[]): CliOptions {
   let minAvailableObservations = DEFAULT_MIN_AVAILABLE_OBSERVATIONS;
   let adults = DEFAULT_ADULTS;
   let children = DEFAULT_CHILDREN;
+  let singleListingId: string | null = null;
+  let singleStartDate: string | null = null;
+  let singleEndDate: string | null = null;
+  let randomSingle = false;
   let includeBookingFetch = false;
   let continueOnError = true;
   let summaryOnly = false;
@@ -259,6 +338,29 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--listing-id" && value) {
+      singleListingId = value.trim();
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--start-date" && value) {
+      singleStartDate = value.trim();
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--end-date" && value) {
+      singleEndDate = value.trim();
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--random-single") {
+      randomSingle = true;
+      continue;
+    }
+
     if (arg === "--include-booking-fetch") {
       includeBookingFetch = true;
       continue;
@@ -282,10 +384,46 @@ function parseArgs(argv: string[]): CliOptions {
     minAvailableObservations,
     adults,
     children,
+    singleListingId,
+    singleStartDate,
+    singleEndDate,
+    randomSingle,
     includeBookingFetch,
     continueOnError,
     summaryOnly,
   };
+}
+
+function isIsoDate(value: string): boolean {
+  if (!ISO_DATE_REGEX.test(value)) {
+    return false;
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  );
+}
+
+function pickRandom<T>(items: T[]): T {
+  const index = Math.floor(Math.random() * items.length);
+  return items[index]!;
+}
+
+function readDetailUrlFromQuoteContext(
+  quoteContext: Record<string, unknown> | null,
+): string | null {
+  if (!quoteContext) {
+    return null;
+  }
+
+  const value = quoteContext.detail_url;
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function pad(value: string, width: number): string {
@@ -417,6 +555,8 @@ async function listAdaptersWithQuotes(): Promise<string[]> {
 async function collectListingSamplesForAdapter(
   adapterKey: string,
   options: CliOptions,
+  maxSamplesOverride?: number | null,
+  minBedrooms = 0,
 ): Promise<ListingSample[]> {
   const quotesDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "quotes");
   const detailsJsonDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "json");
@@ -488,6 +628,14 @@ async function collectListingSamplesForAdapter(
     try {
       const detailRaw = await readFile(detailPath, "utf8");
       const detail = JSON.parse(detailRaw) as DetailRecordForLatency;
+      const beds =
+        typeof detail.property_profile?.beds === "number"
+          ? detail.property_profile.beds
+          : Number(detail.property_profile?.beds ?? NaN);
+      if (Number.isFinite(beds) && beds < minBedrooms) {
+        continue;
+      }
+
       if (
         detail.quote_context &&
         typeof detail.quote_context === "object" &&
@@ -510,6 +658,7 @@ async function collectListingSamplesForAdapter(
     candidates.push({
       adapterKey,
       listingId,
+      detailUrl,
       quoteContext,
       startDate: selectedObservation.startDate,
       endDate: selectedObservation.endDate,
@@ -526,7 +675,247 @@ async function collectListingSamplesForAdapter(
     return left.listingId.localeCompare(right.listingId);
   });
 
-  return candidates.slice(0, options.sampleListings);
+  const maxSamples =
+    maxSamplesOverride === undefined
+      ? options.sampleListings
+      : maxSamplesOverride;
+
+  if (maxSamples === null) {
+    return candidates;
+  }
+
+  return candidates.slice(0, maxSamples);
+}
+
+async function loadDetailQuoteContext(
+  adapterKey: string,
+  listingId: string,
+): Promise<Record<string, unknown> | null> {
+  const detailPath = resolve(
+    BASE_DATA_ROOT,
+    adapterKey,
+    "details",
+    "json",
+    `${listingId}.json`,
+  );
+
+  try {
+    const detailRaw = await readFile(detailPath, "utf8");
+    const detail = JSON.parse(detailRaw) as DetailRecordForLatency;
+    if (
+      detail.quote_context &&
+      typeof detail.quote_context === "object" &&
+      !Array.isArray(detail.quote_context)
+    ) {
+      return detail.quote_context;
+    }
+  } catch {
+    // Keep null context for adapters that do not require it.
+  }
+
+  return null;
+}
+
+async function loadQuotesSidecar(
+  adapterKey: string,
+  listingId: string,
+): Promise<QuotesSidecar | null> {
+  const sidecarPath = resolve(
+    BASE_DATA_ROOT,
+    adapterKey,
+    "details",
+    "quotes",
+    `${listingId}.json`,
+  );
+
+  try {
+    const raw = await readFile(sidecarPath, "utf8");
+    return JSON.parse(raw) as QuotesSidecar;
+  } catch {
+    return null;
+  }
+}
+
+async function buildExplicitSingleSample(input: {
+  adapterKey: string;
+  listingId: string;
+  startDate: string;
+  endDate: string;
+}): Promise<ListingSample> {
+  const quoteContext = await loadDetailQuoteContext(
+    input.adapterKey,
+    input.listingId,
+  );
+  const sidecar = await loadQuotesSidecar(input.adapterKey, input.listingId);
+
+  const observations = sidecar?.observations ?? [];
+  const availableObservations = observations.filter(
+    (observation) => observation.quote_available === true,
+  );
+  const matchingObservation = observations.find(
+    (observation) =>
+      observation.start_date === input.startDate &&
+      observation.end_date === input.endDate &&
+      typeof observation.handoff_url === "string",
+  );
+
+  return {
+    adapterKey: input.adapterKey,
+    listingId: input.listingId,
+    detailUrl:
+      sidecar?.detail_url?.trim() ||
+      readDetailUrlFromQuoteContext(quoteContext) ||
+      "n/a",
+    quoteContext,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    handoffUrl: matchingObservation?.handoff_url ?? "",
+    availableObservations: availableObservations.length,
+    fallbackWindows: [],
+  };
+}
+
+function printSingleQuoteReport(input: {
+  adapterKey: string;
+  sample: ListingSample;
+  result: RequestResult;
+  adults: number;
+  children: number;
+}): void {
+  const { adapterKey, sample, result, adults, children } = input;
+  const successColor = result.success ? COLOR.green : COLOR.red;
+  const runtimeHandoff =
+    result.observationSample.handoffUrl?.trim() ||
+    (typeof result.runtimeError?.details?.handoff_url === "string"
+      ? result.runtimeError.details.handoff_url.trim()
+      : "") ||
+    "n/a";
+
+  console.log(`\n${paint("Single Quote Result", COLOR.bold)}`);
+
+  const requestRows = [
+    [paint("Adapter", COLOR.cyan), paint(adapterKey, COLOR.blue)],
+    [paint("Listing", COLOR.cyan), paint(sample.listingId, COLOR.blue)],
+    [paint("Stay", COLOR.cyan), `${sample.startDate} -> ${sample.endDate}`],
+    [paint("Guests", COLOR.cyan), `${adults}/${children} (adults/children)`],
+    [
+      paint("Status", COLOR.cyan),
+      paint(result.success ? "success" : "failed", successColor),
+    ],
+    [
+      paint("Latency", COLOR.cyan),
+      paint(fmtMs(result.elapsedMs), successColor),
+    ],
+  ];
+
+  console.log(
+    renderTable(
+      [paint("Field", COLOR.cyan), paint("Value", COLOR.cyan)],
+      requestRows,
+    ),
+  );
+
+  const baseTotal = result.observationSample.baseTotal;
+  const feesTotal = result.observationSample.feesTotalExclTaxes;
+  const subTotal =
+    typeof baseTotal === "number" && typeof feesTotal === "number"
+      ? roundCurrency(baseTotal + feesTotal)
+      : null;
+
+  const pricingRows = [
+    [paint("Currency", COLOR.cyan), result.observationSample.currency ?? "n/a"],
+    [paint("Base Total", COLOR.cyan), fmtCurrency(baseTotal)],
+    [paint("Fees", COLOR.cyan), fmtCurrency(feesTotal)],
+    [paint("Sub-Total", COLOR.cyan), fmtCurrency(subTotal)],
+    [
+      paint("Taxes", COLOR.cyan),
+      fmtCurrency(result.observationSample.taxesTotal),
+    ],
+    [
+      paint("Grand Total", COLOR.cyan),
+      fmtCurrency(result.observationSample.grandTotal),
+    ],
+  ];
+
+  console.log(`\n${paint("Pricing Breakdown", COLOR.bold)}`);
+  console.log(
+    renderTable(
+      [paint("Metric", COLOR.cyan), paint("Value", COLOR.cyan)],
+      pricingRows,
+      ["left", "right"],
+    ),
+  );
+
+  const urlRows = [
+    [paint("Detail", COLOR.cyan), sample.detailUrl || "n/a"],
+    [paint("Checkout (handoff_url)", COLOR.cyan), runtimeHandoff],
+  ];
+
+  console.log(`\n${paint("URLs", COLOR.bold)}`);
+  console.log(
+    renderTable(
+      [paint("Source", COLOR.cyan), paint("URL", COLOR.cyan)],
+      urlRows,
+    ),
+  );
+
+  const postStyle = parsePostStyleHandoffUrl(runtimeHandoff);
+  if (postStyle) {
+    console.log(`\n${paint("Manual Checkout Test", COLOR.bold)}`);
+    console.log(
+      renderTable(
+        [paint("Field", COLOR.cyan), paint("Value", COLOR.cyan)],
+        [
+          [paint("Method", COLOR.cyan), postStyle.method],
+          [paint("Endpoint", COLOR.cyan), postStyle.endpoint],
+          [paint("Content-Type", COLOR.cyan), postStyle.contentType],
+        ],
+      ),
+    );
+    console.log(`${paint("Payload", COLOR.cyan)}:`);
+    console.log(postStyle.payloadPretty);
+    console.log(`${paint("cURL", COLOR.cyan)}:`);
+    console.log(postStyle.curlCommand);
+  }
+
+  if (!result.success && result.reason) {
+    console.log(`\n${paint("Failure Reason", COLOR.bold)}`);
+    console.log(paint(result.reason, COLOR.red));
+  }
+}
+
+function validateSingleModeInput(options: CliOptions): void {
+  const explicitMode =
+    options.singleListingId !== null ||
+    options.singleStartDate !== null ||
+    options.singleEndDate !== null;
+
+  if (!explicitMode) {
+    return;
+  }
+
+  if (
+    options.singleListingId === null ||
+    options.singleStartDate === null ||
+    options.singleEndDate === null
+  ) {
+    throw new Error(
+      "Single quote mode requires --listing-id, --start-date, and --end-date together.",
+    );
+  }
+
+  if (
+    !isIsoDate(options.singleStartDate) ||
+    !isIsoDate(options.singleEndDate)
+  ) {
+    throw new Error(
+      "--start-date and --end-date must be ISO dates (YYYY-MM-DD).",
+    );
+  }
+
+  if (options.singleEndDate <= options.singleStartDate) {
+    throw new Error("--end-date must be later than --start-date.");
+  }
 }
 
 async function runSingleQuoteRequestOnce(
@@ -550,6 +939,11 @@ async function runSingleQuoteRequestOnce(
       });
 
       if (!result.success) {
+        const runtimeHandoffUrl =
+          typeof result.error.details?.handoff_url === "string"
+            ? result.error.details.handoff_url
+            : null;
+
         return {
           adapterKey: sample.adapterKey,
           listingId: sample.listingId,
@@ -568,7 +962,7 @@ async function runSingleQuoteRequestOnce(
             feesTotalExclTaxes: null,
             grandTotal: null,
             quotedTotal: null,
-            handoffUrl: sample.handoffUrl,
+            handoffUrl: runtimeHandoffUrl,
           },
         };
       }
@@ -618,7 +1012,7 @@ async function runSingleQuoteRequestOnce(
           feesTotalExclTaxes: null,
           grandTotal: null,
           quotedTotal: null,
-          handoffUrl: sample.handoffUrl,
+          handoffUrl: null,
         },
       };
     }
@@ -646,7 +1040,7 @@ async function runSingleQuoteRequestOnce(
       feesTotalExclTaxes: null,
       grandTotal: null,
       quotedTotal: null,
-      handoffUrl: sample.handoffUrl,
+      handoffUrl: null,
     },
   };
 }
@@ -686,7 +1080,7 @@ async function runSingleQuoteRequestOnceWithTimeout(
           feesTotalExclTaxes: null,
           grandTotal: null,
           quotedTotal: null,
-          handoffUrl: sample.handoffUrl,
+          handoffUrl: null,
         },
       });
     }, timeoutMs);
@@ -730,7 +1124,7 @@ async function runSingleQuoteRequestOnceWithTimeout(
             feesTotalExclTaxes: null,
             grandTotal: null,
             quotedTotal: null,
-            handoffUrl: sample.handoffUrl,
+            handoffUrl: null,
           },
         });
       });
@@ -801,7 +1195,7 @@ async function runSingleQuoteRequest(
       feesTotalExclTaxes: null,
       grandTotal: null,
       quotedTotal: null,
-      handoffUrl: sample.handoffUrl,
+      handoffUrl: null,
     },
   };
 }
@@ -1154,6 +1548,8 @@ function printPerAdapterListingLatencyTable(result: AdapterRunResult): void {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
+  validateSingleModeInput(options);
+
   if (options.adapters.length === 0) {
     throw new Error(
       "Missing required adapter selection. Pass --adapters <key[,key...]> or --adapters all.",
@@ -1163,6 +1559,86 @@ async function main(): Promise<void> {
 
   if (adapters.length === 0) {
     throw new Error("No adapters selected.");
+  }
+
+  const explicitSingleMode =
+    options.singleListingId !== null &&
+    options.singleStartDate !== null &&
+    options.singleEndDate !== null;
+  const runSingleMode = options.randomSingle || explicitSingleMode;
+
+  if (runSingleMode) {
+    if (adapters.length !== 1) {
+      throw new Error(
+        "Single quote mode requires exactly one adapter. Use --adapter-key <adapter>.",
+      );
+    }
+
+    const adapterKey = adapters[0]!;
+    let sample: ListingSample;
+
+    if (options.randomSingle) {
+      const candidates = await collectListingSamplesForAdapter(
+        adapterKey,
+        options,
+        null,
+        3,
+      );
+      if (candidates.length === 0) {
+        throw new Error(
+          "No random single-quote candidates found with >=3 bedrooms and available observations.",
+        );
+      }
+
+      const chosenListing = pickRandom(candidates);
+      const windows =
+        chosenListing.fallbackWindows.length > 0
+          ? chosenListing.fallbackWindows
+          : [
+              {
+                startDate: chosenListing.startDate,
+                endDate: chosenListing.endDate,
+                handoffUrl: chosenListing.handoffUrl,
+              },
+            ];
+      const chosenWindow = pickRandom(windows);
+
+      sample = {
+        ...chosenListing,
+        startDate: chosenWindow.startDate,
+        endDate: chosenWindow.endDate,
+        handoffUrl: chosenWindow.handoffUrl,
+        fallbackWindows: [],
+      };
+    } else {
+      sample = await buildExplicitSingleSample({
+        adapterKey,
+        listingId: options.singleListingId!,
+        startDate: options.singleStartDate!,
+        endDate: options.singleEndDate!,
+      });
+    }
+
+    console.log(paint("Ad-hoc Single Quote Latency Analyzer", COLOR.bold));
+    console.log(
+      paint(
+        `mode=single adapter=${adapterKey} listing=${sample.listingId} start=${sample.startDate} end=${sample.endDate} random_single=${options.randomSingle}`,
+        COLOR.dim,
+      ),
+    );
+
+    const result = await runSingleQuoteRequestOnceWithTimeout(sample, options);
+    printSingleQuoteReport({
+      adapterKey,
+      sample,
+      result,
+      adults: options.adults,
+      children: options.children,
+    });
+    if (!result.success) {
+      process.exitCode = 1;
+    }
+    return;
   }
 
   console.log(paint("Ad-hoc Single Quote Latency Analyzer", COLOR.bold));

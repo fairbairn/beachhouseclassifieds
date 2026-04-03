@@ -9,6 +9,7 @@ type CanonicalIndexEntry = {
 export type CanonicalListing = {
   externalListingId: string;
   detailUrl: string;
+  detailFileBaseName: string;
 };
 
 export type CanonicalListingSelectionInput = {
@@ -28,6 +29,10 @@ export type CanonicalArtifactSelection = {
   missingListingIds: string[];
 };
 
+function normalizeListingKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 function normalizeDetailUrl(value: string): string {
   return value.split("#")[0]?.replace(/\/$/, "") ?? value;
 }
@@ -41,6 +46,21 @@ function listingIdFromDetailUrl(detailUrl: string): string {
     const parts = normalizeDetailUrl(detailUrl).split("/").filter(Boolean);
     return parts[parts.length - 1] ?? "";
   }
+}
+
+function matchesListingKey(
+  listing: CanonicalListing,
+  requestedId: string,
+): boolean {
+  const requested = normalizeListingKey(requestedId);
+  if (!requested) {
+    return false;
+  }
+
+  return (
+    normalizeListingKey(listing.externalListingId) === requested ||
+    normalizeListingKey(listing.detailFileBaseName) === requested
+  );
 }
 
 export async function loadCanonicalListings(
@@ -73,19 +93,20 @@ export async function loadCanonicalListings(
     }
 
     const detailUrl = normalizeDetailUrl(detailUrlRaw);
+    const detailFileBaseName = listingIdFromDetailUrl(detailUrl);
     const externalListingIdRaw =
       typeof entry.external_listing_id === "string"
         ? entry.external_listing_id.trim()
         : "";
-    const externalListingId =
-      externalListingIdRaw || listingIdFromDetailUrl(detailUrl);
-    if (!externalListingId) {
+    const externalListingId = externalListingIdRaw || detailFileBaseName;
+    if (!externalListingId || !detailFileBaseName) {
       continue;
     }
 
     listings.push({
       externalListingId,
       detailUrl,
+      detailFileBaseName,
     });
   }
 
@@ -99,8 +120,8 @@ export async function selectCanonicalListings(
   const listingId = input.listingId?.trim() ?? "";
 
   if (listingId) {
-    const selected = all.filter(
-      (listing) => listing.externalListingId === listingId,
+    const selected = all.filter((listing) =>
+      matchesListingKey(listing, listingId),
     );
     if (selected.length === 0) {
       throw new Error(
@@ -138,12 +159,19 @@ export async function selectCanonicalArtifactFiles(
 
   const fileNames: string[] = [];
   const missingListingIds: string[] = [];
-  for (const listingId of listingIds) {
-    const fileName = `${listingId}.json`;
-    if (existingFileNames.has(fileName)) {
-      fileNames.push(fileName);
+  for (const listing of listings) {
+    const candidates = [
+      `${listing.externalListingId}.json`,
+      `${listing.detailFileBaseName}.json`,
+    ];
+    const resolvedFileName = candidates.find((candidate) =>
+      existingFileNames.has(candidate),
+    );
+
+    if (resolvedFileName) {
+      fileNames.push(resolvedFileName);
     } else {
-      missingListingIds.push(listingId);
+      missingListingIds.push(listing.externalListingId);
     }
   }
 

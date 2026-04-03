@@ -52,6 +52,15 @@ function normalizeLink(url: string): string {
 function externalListingIdFromDetailUrl(detailUrl: string): string {
   try {
     const url = new URL(detailUrl);
+    const idsTuple =
+      url.searchParams.get("rcav[IDs][8][0]") ??
+      url.searchParams.get("rcav%5BIDs%5D%5B8%5D%5B0%5D") ??
+      "";
+    const tupleIdMatch = idsTuple.match(/(?:\d+-)?(\d+)$/);
+    if (tupleIdMatch?.[1]) {
+      return tupleIdMatch[1];
+    }
+
     const segments = url.pathname.split("/").filter(Boolean);
     return segments[segments.length - 1] ?? "";
   } catch {
@@ -762,6 +771,7 @@ async function runTimedDetailFetch<TDetail extends DetailRecordBase>(
 
 type ExistingDetailArtifact = {
   detailUrl: string;
+  externalListingId: string;
   fetchedAt: Date;
   jsonPath: string;
   htmlPath: string | null;
@@ -830,6 +840,7 @@ async function loadExistingDetailArtifacts(
 
       byUrl.set(detailUrl, {
         detailUrl,
+        externalListingId,
         fetchedAt,
         jsonPath,
         htmlPath,
@@ -1739,11 +1750,24 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         string,
         Record<string, unknown>
       >();
+      const pulledExternalListingIdByUrl = new Map<string, string>();
       for (const detail of detailRecords) {
         const detailUrl = normalizeLink(detail.detail_url);
         if (!detailUrl) {
           continue;
         }
+
+        const pulledExternalListingIdRaw =
+          typeof detail.external_listing_id === "string"
+            ? detail.external_listing_id.trim()
+            : "";
+        if (pulledExternalListingIdRaw) {
+          pulledExternalListingIdByUrl.set(
+            detailUrl,
+            pulledExternalListingIdRaw,
+          );
+        }
+
         const quoteContext = extractCanonicalQuoteContext(
           (detail as Record<string, unknown>).quote_context,
         );
@@ -1754,6 +1778,10 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
 
       const canonicalIndex = rows.map((row) => {
         const detailUrl = normalizeLink(row.link);
+        const externalListingId =
+          pulledExternalListingIdByUrl.get(detailUrl) ??
+          existingDetailArtifacts.get(detailUrl)?.externalListingId ??
+          externalListingIdFromDetailUrl(detailUrl);
         const quoteContext =
           pulledQuoteContextByUrl.get(detailUrl) ??
           existingDetailArtifacts.get(detailUrl)?.quoteContext ??
@@ -1761,7 +1789,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
 
         return {
           detail_url: detailUrl,
-          external_listing_id: externalListingIdFromDetailUrl(detailUrl),
+          external_listing_id: externalListingId,
           ...(quoteContext ? { quote_context: quoteContext } : {}),
         };
       });

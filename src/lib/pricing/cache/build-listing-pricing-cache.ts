@@ -344,15 +344,21 @@ export async function buildListingPricingCacheForAdapter(
   }
 
   for (const listing of selectedListings) {
-    const detailPath = resolve(
-      detailsJsonDir,
-      `${listing.externalListingId}.json`,
-    );
-    let detail: DetailRecord;
-    try {
-      const raw = await readFile(detailPath, "utf8");
-      detail = readJson<DetailRecord>(raw);
-    } catch {
+    const detailPathCandidates = [
+      resolve(detailsJsonDir, `${listing.detailFileBaseName}.json`),
+      resolve(detailsJsonDir, `${listing.externalListingId}.json`),
+    ];
+    let detail: DetailRecord | null = null;
+    for (const detailPath of detailPathCandidates) {
+      try {
+        const raw = await readFile(detailPath, "utf8");
+        detail = readJson<DetailRecord>(raw);
+        break;
+      } catch {
+        // Try next candidate.
+      }
+    }
+    if (!detail) {
       // Active listing may not have a detail artifact yet; skip until scraped.
       continue;
     }
