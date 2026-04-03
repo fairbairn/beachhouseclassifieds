@@ -17,12 +17,46 @@ type RuntimeAuditRecord = {
   hasDiskApiUsage: boolean;
 };
 
+type RunnerAuditRecord = {
+  filePath: string;
+  referencesIndexJson: boolean;
+  referencesDetailsJson: boolean;
+  referencesBackfillFlags: boolean;
+};
+
+type QuoteContextCoverageRecord = {
+  adapterKey: string;
+  total: number;
+  withQuoteContext: number;
+  missing: number;
+};
+
+type QuoteContextExternalIdEchoRecord = {
+  adapterKey: string;
+  totalWithQuoteContext: number;
+  echoed: number;
+  examples: Array<{ externalListingId: string; fieldPath: string }>;
+};
+
 const projectRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const adapterRoots = [
   join(projectRoot, "src/lib/pricing/scraper-engine/adapters"),
   join(projectRoot, "src/lib/pricing/scraper-engine/adapters/quotes"),
 ];
 const quoteRuntimeRoot = join(projectRoot, "src/lib/pricing/quote-runtime");
+const runnerFiles = [
+  join(projectRoot, "src/lib/scripts/run-ad-hoc-quote-latency.ts"),
+  join(
+    projectRoot,
+    "src/lib/pricing/quotes/shared/runtime-adapter-quote-runner.ts",
+  ),
+];
+const requiredQuoteContextAdapters = [
+  "30avacay",
+  "benchmark30a",
+  "oceanreef30a",
+];
+const externalSourcesRoot = join(projectRoot, "src/lib/data/external-sources");
 
 const singleObservationPattern =
   /runSingleQuoteObservation\s*\(|run[A-Za-z0-9_]*SingleQuoteObservation\s*\(/;
@@ -73,6 +107,184 @@ function auditRuntimeFile(
   };
 }
 
+function auditRunnerFile(filePath: string, source: string): RunnerAuditRecord {
+  return {
+    filePath,
+    referencesIndexJson:
+      source.includes("details/index.json") ||
+      source.includes('"index.json"') ||
+      source.includes("selectCanonicalListings("),
+    referencesDetailsJson:
+      source.includes("details/json") ||
+      /["']json["']\s*,\s*`\$\{/.test(source),
+    referencesBackfillFlags:
+      source.includes("QUOTE_CAPTURE_ALLOW_DETAIL_BACKFILL") ||
+      source.includes("--backfill-quote-context-from-details") ||
+      source.includes("backfill"),
+  };
+}
+
+async function auditQuoteContextCoverage(
+  adapterKey: string,
+): Promise<QuoteContextCoverageRecord> {
+  const indexPath = join(
+    projectRoot,
+    "src/lib/data/external-sources",
+    adapterKey,
+    "details",
+    "index.json",
+  );
+
+  const raw = await readFile(indexPath, "utf8");
+  const parsed = JSON.parse(raw) as Array<{ quote_context?: unknown }>;
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Malformed canonical index for ${adapterKey}`);
+  }
+
+  const withQuoteContext = parsed.filter((entry) => {
+    return (
+      !!entry.quote_context &&
+      typeof entry.quote_context === "object" &&
+      !Array.isArray(entry.quote_context)
+    );
+  }).length;
+
+  return {
+    adapterKey,
+    total: parsed.length,
+    withQuoteContext,
+    missing: parsed.length - withQuoteContext,
+  };
+}
+
+function collectScalarPaths(
+  value: unknown,
+  currentPath: string,
+): Array<{ path: string; value: string }> {
+  if (typeof value === "string") {
+    return [{ path: currentPath, value: value.trim() }];
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return [{ path: currentPath, value: String(value) }];
+  }
+
+  if (Array.isArray(value)) {
+    const out: Array<{ path: string; value: string }> = [];
+    for (let index = 0; index < value.length; index += 1) {
+      out.push(...collectScalarPaths(value[index], `${currentPath}[${index}]`));
+    }
+    return out;
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const out: Array<{ path: string; value: string }> = [];
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const nextPath = currentPath ? `${currentPath}.${key}` : key;
+    out.push(...collectScalarPaths(child, nextPath));
+  }
+  return out;
+}
+
+async function listAdapterKeysWithCanonicalIndex(): Promise<string[]> {
+  const entries = await readdir(externalSourcesRoot, { withFileTypes: true });
+  const out: string[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const adapterKey = entry.name;
+    const indexPath = join(
+      externalSourcesRoot,
+      adapterKey,
+      "details",
+      "index.json",
+    );
+
+    try {
+      await readFile(indexPath, "utf8");
+      out.push(adapterKey);
+    } catch {
+      // Skip adapters without canonical index.
+    }
+  }
+
+  return out.sort((left, right) => left.localeCompare(right));
+}
+
+async function auditQuoteContextExternalIdEcho(
+  adapterKey: string,
+): Promise<QuoteContextExternalIdEchoRecord> {
+  const indexPath = join(
+    externalSourcesRoot,
+    adapterKey,
+    "details",
+    "index.json",
+  );
+
+  const raw = await readFile(indexPath, "utf8");
+  const parsed = JSON.parse(raw) as Array<{
+    external_listing_id?: unknown;
+    quote_context?: unknown;
+  }>;
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Malformed canonical index for ${adapterKey}`);
+  }
+
+  let totalWithQuoteContext = 0;
+  let echoed = 0;
+  const examples: Array<{ externalListingId: string; fieldPath: string }> = [];
+
+  for (const entry of parsed) {
+    const externalListingId =
+      typeof entry.external_listing_id === "string"
+        ? entry.external_listing_id.trim()
+        : "";
+
+    const quoteContext =
+      entry.quote_context &&
+      typeof entry.quote_context === "object" &&
+      !Array.isArray(entry.quote_context)
+        ? entry.quote_context
+        : null;
+
+    if (!externalListingId || !quoteContext) {
+      continue;
+    }
+
+    totalWithQuoteContext += 1;
+    const scalarPaths = collectScalarPaths(quoteContext, "quote_context");
+    const echoedField = scalarPaths.find(
+      (item) => item.value === externalListingId,
+    );
+
+    if (!echoedField) {
+      continue;
+    }
+
+    echoed += 1;
+    if (examples.length < 5) {
+      examples.push({
+        externalListingId,
+        fieldPath: echoedField.path,
+      });
+    }
+  }
+
+  return {
+    adapterKey,
+    totalWithQuoteContext,
+    echoed,
+    examples,
+  };
+}
+
 async function run(): Promise<number> {
   const allFiles = (
     await Promise.all(adapterRoots.map((root) => listTsFiles(root)))
@@ -82,6 +294,9 @@ async function run(): Promise<number> {
   const uniqueFiles = Array.from(new Set(allFiles));
   const records: AuditRecord[] = [];
   const runtimeRecords: RuntimeAuditRecord[] = [];
+  const runnerRecords: RunnerAuditRecord[] = [];
+  const coverageRecords: QuoteContextCoverageRecord[] = [];
+  const quoteContextEchoRecords: QuoteContextExternalIdEchoRecord[] = [];
 
   for (const filePath of uniqueFiles) {
     const source = await readFile(filePath, "utf8");
@@ -96,6 +311,23 @@ async function run(): Promise<number> {
     runtimeRecords.push(auditRuntimeFile(filePath, source));
   }
 
+  for (const filePath of runnerFiles) {
+    const source = await readFile(filePath, "utf8");
+    runnerRecords.push(auditRunnerFile(filePath, source));
+  }
+
+  for (const adapterKey of requiredQuoteContextAdapters) {
+    coverageRecords.push(await auditQuoteContextCoverage(adapterKey));
+  }
+
+  const adapterKeysWithCanonicalIndex =
+    await listAdapterKeysWithCanonicalIndex();
+  for (const adapterKey of adapterKeysWithCanonicalIndex) {
+    quoteContextEchoRecords.push(
+      await auditQuoteContextExternalIdEcho(adapterKey),
+    );
+  }
+
   const violating = records.filter(
     (record) =>
       record.hasFsImport ||
@@ -105,6 +337,18 @@ async function run(): Promise<number> {
   );
   const runtimeViolating = runtimeRecords.filter(
     (record) => record.hasFsImport || record.hasDiskApiUsage,
+  );
+  const runnerViolating = runnerRecords.filter(
+    (record) =>
+      !record.referencesIndexJson ||
+      record.referencesDetailsJson ||
+      record.referencesBackfillFlags,
+  );
+  const coverageViolating = coverageRecords.filter(
+    (record) => record.missing > 0,
+  );
+  const quoteContextEchoViolating = quoteContextEchoRecords.filter(
+    (record) => record.echoed > 0,
   );
 
   console.log("Quote module isolation audit (single-observation handlers)");
@@ -137,11 +381,68 @@ async function run(): Promise<number> {
   }
 
   console.log("");
+  console.log("Quote runner source-of-truth audit");
   console.log(
-    `Summary: total_handlers=${records.length} handler_violations=${violating.length} runtime_files=${runtimeRecords.length} runtime_violations=${runtimeViolating.length}`,
+    "Rules: runners must source canonical quote context from index.json only; no details/json lookup or backfill flags.",
+  );
+  console.log("");
+
+  for (const record of runnerRecords) {
+    console.log(`- ${relative(projectRoot, record.filePath)}`);
+    console.log(
+      `  references_index_json: ${toFlag(record.referencesIndexJson)}`,
+    );
+    console.log(
+      `  references_details_json: ${toFlag(record.referencesDetailsJson)}`,
+    );
+    console.log(
+      `  references_backfill_flags: ${toFlag(record.referencesBackfillFlags)}`,
+    );
+  }
+
+  console.log("");
+  console.log("Required Quote Context Coverage");
+  console.log(
+    "Rules: migrated runtime adapters must have quote_context on every canonical index entry.",
+  );
+  console.log("");
+
+  for (const record of coverageRecords) {
+    console.log(
+      `- ${record.adapterKey} total=${record.total} with_quote_context=${record.withQuoteContext} missing=${record.missing}`,
+    );
+  }
+
+  console.log("");
+  console.log("Quote Context External ID Echo Red Flags");
+  console.log(
+    "Rules: quote_context values matching external_listing_id are red flags and should be corrected.",
+  );
+  console.log("");
+
+  for (const record of quoteContextEchoRecords) {
+    console.log(
+      `- ${record.adapterKey} with_quote_context=${record.totalWithQuoteContext} echoed_external_listing_id=${record.echoed}`,
+    );
+    for (const example of record.examples) {
+      console.log(
+        `  example external_listing_id=${example.externalListingId} field=${example.fieldPath}`,
+      );
+    }
+  }
+
+  console.log("");
+  console.log(
+    `Summary: total_handlers=${records.length} handler_violations=${violating.length} runtime_files=${runtimeRecords.length} runtime_violations=${runtimeViolating.length} runner_files=${runnerRecords.length} runner_violations=${runnerViolating.length} quote_context_adapters=${coverageRecords.length} quote_context_violations=${coverageViolating.length} red_flag_adapters=${quoteContextEchoRecords.length} red_flag_violations=${quoteContextEchoViolating.length}`,
   );
 
-  if (violating.length > 0 || runtimeViolating.length > 0) {
+  if (
+    violating.length > 0 ||
+    runtimeViolating.length > 0 ||
+    runnerViolating.length > 0 ||
+    coverageViolating.length > 0 ||
+    quoteContextEchoViolating.length > 0
+  ) {
     console.error(
       "Isolation audit failed. Resolve violations before proceeding.",
     );

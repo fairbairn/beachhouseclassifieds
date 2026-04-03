@@ -1543,6 +1543,29 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         )}\n`,
       );
 
+      const canonicalArtifacts = await loadExistingDetailArtifacts(
+        root,
+        outputDetailsJsonDir,
+        adapter.isValidDetailUrl,
+      );
+      const canonicalIndexPath = resolve(outputRoot, "details", "index.json");
+      const canonicalIndex = Array.from(canonicalArtifacts.values())
+        .map((artifact) => ({
+          detail_url: artifact.detailUrl,
+          external_listing_id: artifact.externalListingId,
+          ...(artifact.quoteContext
+            ? { quote_context: artifact.quoteContext }
+            : {}),
+        }))
+        .sort((left, right) => left.detail_url.localeCompare(right.detail_url));
+      await writeTextFileDurable(
+        canonicalIndexPath,
+        `${JSON.stringify(canonicalIndex, null, 2)}\n`,
+      );
+      progress.info(
+        `canonical index updated: ${toProjectRelativePath(canonicalIndexPath, root)} entries=${canonicalIndex.length}`,
+      );
+
       progress.success(
         `refresh scrape complete (selected=${selectedUrls.length}, pulled=${detailRecords.length}, skipped_existing=${skippedExistingUrls.length}, skipped_fresh=${skippedFreshUrls.length}, failed=${failedDetailUrls.length}, refresh_mode=${options.refreshMode})`,
       );

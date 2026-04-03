@@ -12,6 +12,10 @@ type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
+  quote_context?: {
+    unit_id: string;
+    detail_url: string;
+  };
   h1: string;
   canonical_url: string;
   meta_description: string;
@@ -404,6 +408,39 @@ function extractUnitIdFromHtml(html: string): string {
   }
 
   return "";
+}
+
+function sanitizeUnitId(value: string): string {
+  return value
+    .replace(/\\\//g, "/")
+    .replace(/^['"\s]+|['"\s]+$/g, "")
+    .trim()
+    .slice(0, 140);
+}
+
+function isHexUnitId(value: string): boolean {
+  return /^[a-f0-9]{24}$/i.test(value);
+}
+
+function resolveRequiredHexUnitId(input: {
+  extractedUnitId: string;
+  html: string;
+  detailUrl: string;
+}): string {
+  const candidates = [
+    sanitizeUnitId(input.extractedUnitId),
+    sanitizeUnitId(extractUnitIdFromHtml(input.html)),
+  ];
+
+  for (const candidate of candidates) {
+    if (isHexUnitId(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    `Missing required hex unit_id for 30avacay detail: ${input.detailUrl}`,
+  );
 }
 
 function parseJsonLdSignals(html: string): {
@@ -1708,23 +1745,36 @@ async function fetchDetail(
             ?.textContent?.trim() ?? "",
         unitId:
           document
-            .querySelector(
-              '[name="entity_id"][content], [data-entity-id], .be-property-widget[data-id]',
-            )
+            .querySelector('[name="entity_id"][content], [data-entity-id]')
             ?.getAttribute("content")
             ?.trim() ??
           document
-            .querySelector("[data-item-id], [data-id]")
+            .querySelector("[data-item-id]")
             ?.getAttribute("data-item-id")
             ?.trim() ??
           document
             .querySelector(".be-property-widget[data-id]")
             ?.getAttribute("data-id")
             ?.trim() ??
+          Array.from(document.querySelectorAll("[data-unit-id], [data-unitid]"))
+            .map(
+              (node) =>
+                node.getAttribute("data-unit-id") ??
+                node.getAttribute("data-unitid") ??
+                "",
+            )
+            .find((value) => value.trim().length > 0)
+            ?.trim() ??
           Array.from(document.querySelectorAll("script"))
             .map((script) => script.textContent ?? "")
             .join("\n")
-            .match(/\bunitId\s*:\s*['"]([^'"]+)['"]/i)?.[1]
+            .match(
+              /\bunitId\s*:\s*['"]([^'"]+)['"]|"unitId"\s*:\s*"([^"]+)"|"unit_id"\s*:\s*"([^"]+)"/i,
+            )
+            ?.slice(1)
+            .find(
+              (value) => typeof value === "string" && value.trim().length > 0,
+            )
             ?.trim() ??
           "",
         amenitiesCategories: (() => {
@@ -2112,9 +2162,15 @@ async function fetchDetail(
 
     const jsonLdSignals = parseJsonLdSignals(html);
     const locationPayload = extractFieldLocationFromHtml(html);
-    const extractedUnitId =
-      stripHtml(extracted.unitId).trim() || extractUnitIdFromHtml(html);
-    const unitCardSignals = extractUnitCardSignals(html, extractedUnitId);
+    const extractedUnitId = sanitizeUnitId(
+      stripHtml(extracted.unitId).trim() || extractUnitIdFromHtml(html),
+    );
+    const requiredUnitId = resolveRequiredHexUnitId({
+      extractedUnitId,
+      html,
+      detailUrl,
+    });
+    const unitCardSignals = extractUnitCardSignals(html, requiredUnitId);
     const primaryUnitType = extractPrimaryUnitTypeFromHtml(html);
 
     const beds =
@@ -2152,7 +2208,7 @@ async function fetchDetail(
       cityStateFromAddress.state || stripHtml(jsonLdSignals.state).slice(0, 20);
 
     const propertyProfile: LuxuryDetailRecord["property_profile"] = {
-      unit_id: stripHtml(extractedUnitId || externalListingId).slice(0, 140),
+      unit_id: requiredUnitId,
       unit_type: stripHtml(primaryUnitType || unitCardSignals.unitType).slice(
         0,
         80,
@@ -2206,10 +2262,7 @@ async function fetchDetail(
           if (!url.includes("/unitimages/")) {
             return true;
           }
-          if (!extractedUnitId) {
-            return true;
-          }
-          return url.includes(`/${extractedUnitId}/`);
+          return url.includes(`/${requiredUnitId}/`);
         })
         .filter(
           (url) =>
@@ -2281,6 +2334,10 @@ async function fetchDetail(
     return {
       external_listing_id: externalListingId,
       detail_url: detailUrl,
+      quote_context: {
+        unit_id: propertyProfile.unit_id,
+        detail_url: detailUrl,
+      },
       fetched_at: new Date().toISOString(),
       title: normalizeListingName(extracted.title || extracted.h1 || ""),
       h1: listingName,

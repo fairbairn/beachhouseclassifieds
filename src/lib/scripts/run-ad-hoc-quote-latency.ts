@@ -38,14 +38,6 @@ type QuotesSidecar = {
   observations?: QuoteObservation[];
 };
 
-type DetailRecordForLatency = {
-  quote_context?: Record<string, unknown>;
-  property_profile?: {
-    unit_id?: string;
-    beds?: number;
-  };
-};
-
 type ListingSample = {
   adapterKey: string;
   listingId: string;
@@ -556,10 +548,8 @@ async function collectListingSamplesForAdapter(
   adapterKey: string,
   options: CliOptions,
   maxSamplesOverride?: number | null,
-  minBedrooms = 0,
 ): Promise<ListingSample[]> {
   const quotesDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "quotes");
-  const detailsJsonDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "json");
   const activeListings = await selectCanonicalListings({
     adapterKey,
     maxListings: null,
@@ -623,37 +613,10 @@ async function collectListingSamplesForAdapter(
       continue;
     }
 
-    let quoteContext: Record<string, unknown> | null = null;
-    const detailPath = resolve(detailsJsonDir, `${listingId}.json`);
-    try {
-      const detailRaw = await readFile(detailPath, "utf8");
-      const detail = JSON.parse(detailRaw) as DetailRecordForLatency;
-      const beds =
-        typeof detail.property_profile?.beds === "number"
-          ? detail.property_profile.beds
-          : Number(detail.property_profile?.beds ?? NaN);
-      if (Number.isFinite(beds) && beds < minBedrooms) {
-        continue;
-      }
-
-      if (
-        detail.quote_context &&
-        typeof detail.quote_context === "object" &&
-        !Array.isArray(detail.quote_context)
-      ) {
-        quoteContext = detail.quote_context;
-      } else if (adapterKey === "360blue") {
-        const unitId = detail.property_profile?.unit_id?.trim() ?? "";
-        if (unitId) {
-          quoteContext = {
-            unit_id: unitId,
-            endpoint_path: sidecar.endpoint_path ?? null,
-          };
-        }
-      }
-    } catch {
-      // Detail JSON may be missing or malformed for older captures.
-    }
+    const canonicalEntry = activeListings.find(
+      (entry) => entry.externalListingId === listingId,
+    );
+    const quoteContext = canonicalEntry?.quoteContext ?? null;
 
     candidates.push({
       adapterKey,
@@ -691,29 +654,14 @@ async function loadDetailQuoteContext(
   adapterKey: string,
   listingId: string,
 ): Promise<Record<string, unknown> | null> {
-  const detailPath = resolve(
-    BASE_DATA_ROOT,
+  const activeListings = await selectCanonicalListings({
     adapterKey,
-    "details",
-    "json",
-    `${listingId}.json`,
+    maxListings: null,
+  });
+  const listing = activeListings.find(
+    (entry) => entry.externalListingId === listingId,
   );
-
-  try {
-    const detailRaw = await readFile(detailPath, "utf8");
-    const detail = JSON.parse(detailRaw) as DetailRecordForLatency;
-    if (
-      detail.quote_context &&
-      typeof detail.quote_context === "object" &&
-      !Array.isArray(detail.quote_context)
-    ) {
-      return detail.quote_context;
-    }
-  } catch {
-    // Keep null context for adapters that do not require it.
-  }
-
-  return null;
+  return listing?.quoteContext ?? null;
 }
 
 async function loadQuotesSidecar(
@@ -1582,7 +1530,6 @@ async function main(): Promise<void> {
         adapterKey,
         options,
         null,
-        3,
       );
       if (candidates.length === 0) {
         throw new Error(

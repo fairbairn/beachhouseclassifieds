@@ -42,6 +42,11 @@ type EmbeddedRcItemForm = {
 };
 
 type BenchmarkDetailRecord = DetailRecordBase & {
+  quote_context?: {
+    entity_id: number;
+    ids_tuple: string;
+    detail_url: string;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -242,6 +247,43 @@ function extractExternalListingId(detailUrl: string): string {
   } catch {
     return detailUrl;
   }
+}
+
+function extractBenchmarkQuoteContext(
+  html: string,
+  detailUrl: string,
+): { entity_id: number; ids_tuple: string; detail_url: string } | null {
+  const eidMatch = html.match(/"eid":"(\d+)"/i) ?? html.match(/rc-eid-(\d+)/i);
+  const entityIdRaw = eidMatch?.[1] ? Number(eidMatch[1]) : Number.NaN;
+  const entityId =
+    Number.isFinite(entityIdRaw) && entityIdRaw > 0
+      ? Math.floor(entityIdRaw)
+      : null;
+
+  let idsTuple = "";
+  try {
+    const parsed = new URL(detailUrl);
+    idsTuple =
+      parsed.searchParams.get("rcav[IDs][8][0]")?.trim() ??
+      parsed.searchParams.get("rcav%5BIDs%5D%5B8%5D%5B0%5D")?.trim() ??
+      "";
+  } catch {
+    // Keep empty and fall back to html parsing below.
+  }
+
+  if (!idsTuple) {
+    idsTuple = html.match(/"id":"(\d+-\d+)"/i)?.[1]?.trim() ?? "";
+  }
+
+  if (!entityId || !idsTuple) {
+    return null;
+  }
+
+  return {
+    entity_id: entityId,
+    ids_tuple: idsTuple,
+    detail_url: detailUrl,
+  };
 }
 
 function parseIsoDate(value: string): Date | null {
@@ -1294,6 +1336,7 @@ async function fetchDetail(
     const horizonIso = horizon.toISOString().slice(0, 10);
 
     const html = await page.content();
+    const quoteContext = extractBenchmarkQuoteContext(html, detailUrl);
     const embeddedAvailability = extractEmbeddedAvailability(
       html,
       todayIso,
@@ -1474,6 +1517,7 @@ async function fetchDetail(
     return {
       external_listing_id: externalListingId,
       detail_url: detailUrl,
+      ...(quoteContext ? { quote_context: quoteContext } : {}),
       fetched_at: new Date().toISOString(),
       title: stripHtml(extracted.title).slice(0, 240),
       h1: stripHtml(extracted.h1).slice(0, 240),

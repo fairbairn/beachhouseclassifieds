@@ -23,7 +23,6 @@ type CliOptions = {
   quoteConcurrency: number;
   timeoutMs: number;
   maxAttempts: number;
-  allowDetailBackfill: boolean;
   skipFreshQuotes: boolean;
   freshHours: number;
 };
@@ -112,9 +111,6 @@ function parseArgs(
   let quoteConcurrency = defaults.quoteConcurrency;
   let timeoutMs = defaults.timeoutMs;
   let maxAttempts = defaults.maxAttempts;
-  let allowDetailBackfill =
-    process.env.QUOTE_CAPTURE_ALLOW_DETAIL_BACKFILL === "1" ||
-    process.env.QUOTE_CAPTURE_ALLOW_DETAIL_BACKFILL === "true";
   let skipFreshQuotes =
     process.env.QUOTE_CAPTURE_SKIP_FRESH_QUOTES === "1" ||
     process.env.QUOTE_CAPTURE_SKIP_FRESH_QUOTES === "true";
@@ -220,11 +216,6 @@ function parseArgs(
       continue;
     }
 
-    if (arg === "--backfill-quote-context-from-details") {
-      allowDetailBackfill = true;
-      continue;
-    }
-
     if (arg === "--skip-fresh-quotes") {
       skipFreshQuotes = true;
       continue;
@@ -249,7 +240,6 @@ function parseArgs(
     quoteConcurrency: Math.max(1, quoteConcurrency),
     timeoutMs: Math.max(1000, timeoutMs),
     maxAttempts: Math.max(1, maxAttempts),
-    allowDetailBackfill,
     skipFreshQuotes,
     freshHours: Math.max(1, freshHours),
   };
@@ -421,31 +411,6 @@ function createEstimatedPricing(input: {
   };
 }
 
-async function loadDetailQuoteContext(
-  adapterKey: string,
-  externalListingId: string,
-): Promise<Record<string, unknown> | null> {
-  const detailPath = resolve(
-    process.cwd(),
-    "src",
-    "lib",
-    "data",
-    "external-sources",
-    adapterKey,
-    "details",
-    "json",
-    `${externalListingId}.json`,
-  );
-
-  try {
-    const raw = await readFile(detailPath, "utf8");
-    const parsed = JSON.parse(raw) as { quote_context?: unknown };
-    return asObject(parsed.quote_context);
-  } catch {
-    return null;
-  }
-}
-
 async function loadListingSeeds(
   adapterKey: string,
   options: CliOptions,
@@ -475,14 +440,11 @@ async function loadListingSeeds(
   }).length;
   if (missingQuoteContextEntries > 0) {
     progress?.tick(
-      options.allowDetailBackfill
-        ? `canonical index entries missing quote_context=${missingQuoteContextEntries}; attempting detail-json backfill`
-        : `canonical index entries missing quote_context=${missingQuoteContextEntries}; backfill disabled (index-only mode)`,
+      `canonical index entries missing quote_context=${missingQuoteContextEntries}; index-only mode`,
     );
   }
 
   const seeds: ListingSeed[] = [];
-  let backfilled = 0;
   let scanned = 0;
   for (const entry of parsed) {
     const detailUrl =
@@ -503,17 +465,7 @@ async function loadListingSeeds(
       continue;
     }
 
-    let quoteContext = asObject(entry.quote_context);
-    if (!quoteContext && options.allowDetailBackfill) {
-      quoteContext = await loadDetailQuoteContext(
-        adapterKey,
-        externalListingId,
-      );
-      if (quoteContext) {
-        entry.quote_context = quoteContext;
-        backfilled += 1;
-      }
-    }
+    const quoteContext = asObject(entry.quote_context);
 
     seeds.push({
       externalListingId,
@@ -524,22 +476,9 @@ async function loadListingSeeds(
     scanned += 1;
     if (scanned <= 20 || scanned % 200 === 0 || scanned === parsed.length) {
       progress?.tick(
-        `canonical seed scan progress ${scanned}/${parsed.length} selected=${seeds.length} backfilled=${backfilled}`,
+        `canonical seed scan progress ${scanned}/${parsed.length} selected=${seeds.length}`,
       );
     }
-  }
-
-  if (backfilled > 0) {
-    await writeFile(indexPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
-    progress?.tick(
-      `canonical index quote_context backfilled entries=${backfilled}`,
-    );
-  }
-
-  if (missingQuoteContextEntries > 0 && !options.allowDetailBackfill) {
-    progress?.tick(
-      "quote_context backfill disabled; proceeding with canonical index only",
-    );
   }
 
   let selected = seeds;
@@ -902,7 +841,6 @@ export async function runRuntimeAdapterQuoteCli(
       `quote_concurrency=${options.quoteConcurrency}`,
       `timeout_ms=${options.timeoutMs}`,
       `max_attempts=${options.maxAttempts}`,
-      `allow_detail_backfill=${options.allowDetailBackfill}`,
       `skip_fresh_quotes=${options.skipFreshQuotes}`,
       `fresh_hours=${options.freshHours}`,
       `selection=${options.listingId ? `listing:${options.listingId}` : `max-listings:${options.maxListings}`}`,

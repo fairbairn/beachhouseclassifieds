@@ -12,6 +12,10 @@ import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 type OceanReefDayCode = "A" | "U" | "I" | "O" | "X";
 
 type OceanReefDetailRecord = DetailRecordBase & {
+  quote_context?: {
+    unit_id: string;
+    detail_url: string;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -546,7 +550,7 @@ async function discoverListings(
     }));
 }
 
-function extractExternalListingId(html: string, detailUrl: string): string {
+function extractPropertyUnitId(html: string): string | null {
   const inputPropertyId = html.match(
     /<input[^>]+name=["']propertyID["'][^>]+value=["'](\d+)["'][^>]*>/i,
   )?.[1];
@@ -559,6 +563,10 @@ function extractExternalListingId(html: string, detailUrl: string): string {
     return widgetUnitCode;
   }
 
+  return null;
+}
+
+function extractExternalListingId(detailUrl: string): string {
   const normalized = normalizeDetailUrl(detailUrl);
   if (!normalized) {
     return "unknown";
@@ -761,10 +769,8 @@ async function fetchDetail(
 
     const mediaUrls = collectMediaUrls(html);
 
-    const externalListingId = extractExternalListingId(
-      html,
-      normalizedDetailUrl,
-    );
+    const externalListingId = extractExternalListingId(normalizedDetailUrl);
+    const unitId = extractPropertyUnitId(html);
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
@@ -802,6 +808,14 @@ async function fetchDetail(
     return {
       external_listing_id: externalListingId,
       detail_url: normalizedDetailUrl,
+      ...(unitId
+        ? {
+            quote_context: {
+              unit_id: unitId,
+              detail_url: normalizedDetailUrl,
+            },
+          }
+        : {}),
       fetched_at: new Date().toISOString(),
       title,
       h1,
@@ -832,7 +846,7 @@ async function fetchDetail(
         image_urls: mediaUrls,
       },
       property_profile: {
-        unit_id: externalListingId,
+        unit_id: unitId ?? externalListingId,
         area: locationLabel,
         location: locationLabel,
         beds,

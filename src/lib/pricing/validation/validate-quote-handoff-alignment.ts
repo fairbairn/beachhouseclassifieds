@@ -24,6 +24,8 @@ const BEACHBLUE_NAVIGATION_TIMEOUT_MS = 8_000;
 const BEACHBLUE_AJAX_WAIT_TIMEOUT_MS = 15_000;
 const KEYCO_NAVIGATION_TIMEOUT_MS = 20_000;
 const KEYCO_RENDER_WAIT_MS = 1_500;
+const THIRTYA_VACAY_NAVIGATION_TIMEOUT_MS = 20_000;
+const THIRTYA_VACAY_RENDER_WAIT_MS = 2_000;
 
 let validationHttpActive = 0;
 let validationHttpLastStartMs = 0;
@@ -1192,6 +1194,112 @@ async function tryExtractKeycoCheckoutTotal(
   return {
     kind: "request_error",
     message: "keyco checkout total not rendered after retries",
+  };
+}
+
+async function tryExtract30AVacayRenderedCheckoutTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (
+    !parsed.hostname.endsWith("30a-vacay.com") ||
+    !parsed.pathname.includes("/vacation-rentals/checkout/")
+  ) {
+    return { kind: "unsupported" };
+  }
+
+  const playwrightModule = await import("playwright").catch(() => null);
+  if (!playwrightModule?.chromium) {
+    return {
+      kind: "request_error",
+      message:
+        "playwright chromium unavailable for 30avacay checkout validation",
+    };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const browser = await playwrightModule.chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ userAgent: USER_AGENT });
+    const page = await context.newPage();
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      try {
+        await page.goto(candidate.handoffUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: THIRTYA_VACAY_NAVIGATION_TIMEOUT_MS,
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        reportProgress?.(
+          `30avacay checkout retry ${attempt + 1}/${retryDelaysMs.length} navigation_error=${message}`,
+        );
+        continue;
+      }
+
+      await page
+        .waitForLoadState("networkidle", { timeout: 8_000 })
+        .catch(() => null);
+      await page.waitForTimeout(THIRTYA_VACAY_RENDER_WAIT_MS);
+
+      const bodyText = await page
+        .locator("body")
+        .innerText()
+        .catch(() => "");
+
+      if (/unauthorized access|access denied|forbidden/i.test(bodyText)) {
+        return {
+          kind: "status_error",
+          message: "30avacay checkout page denied access while rendering total",
+        };
+      }
+
+      const selectorTexts = await page
+        .locator(
+          "[id*='total' i], [class*='total' i], [data-testid*='total' i]",
+        )
+        .allInnerTexts()
+        .catch(() => []);
+      const selectorTotals = selectorTexts
+        .map((text) => parseMoney(text))
+        .filter(
+          (value): value is number => typeof value === "number" && value > 0,
+        );
+
+      const bodyTotals = extractCandidateTotals(bodyText);
+      const allTotals = [...selectorTotals, ...bodyTotals];
+      const best = pickClosestTotal(allTotals, candidate.observedGrandTotal);
+      if (best) {
+        return {
+          kind: "success",
+          total: best.total,
+        };
+      }
+
+      reportProgress?.(
+        `30avacay checkout retry ${attempt + 1}/${retryDelaysMs.length} total_not_rendered`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    kind: "request_error",
+    message:
+      "30avacay checkout total not rendered from visible DOM after retries",
   };
 }
 
@@ -2729,6 +2837,67 @@ async function validateObservation(
         extractedTotal: null,
       };
     }
+  }
+
+  if (candidate.adapterKey === "30avacay") {
+    const vacayCheckout = await tryExtract30AVacayRenderedCheckoutTotal(
+      candidate,
+      reportProgress,
+    );
+
+    if (vacayCheckout.kind === "success") {
+      const diff = Math.abs(vacayCheckout.total - candidate.observedGrandTotal);
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from rendered checkout total=${vacayCheckout.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: vacayCheckout.total,
+        };
+      }
+      return null;
+    }
+
+    if (vacayCheckout.kind === "status_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "direct_status_error",
+        message: `30avacay rendered checkout reported unavailable/status error: ${vacayCheckout.message}`,
+        extractedTotal: null,
+      };
+    }
+
+    if (vacayCheckout.kind === "request_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "request_error",
+        message: `30avacay rendered checkout extraction failed: ${vacayCheckout.message}`,
+        extractedTotal: null,
+      };
+    }
+
+    return {
+      listingId: candidate.listingId,
+      startDate: candidate.startDate,
+      endDate: candidate.endDate,
+      observedGrandTotal: candidate.observedGrandTotal,
+      handoffUrl: candidate.handoffUrl,
+      code: "total_not_found",
+      message: "Could not extract rendered checkout total for 30avacay",
+      extractedTotal: null,
+    };
   }
 
   const signedHandoff = await tryExtractSignedHandoffTotal(

@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type BenchmarkQuoteContext = {
@@ -25,8 +22,6 @@ const FIXED_TAX_RATE = 0.12;
 const FIXED_FEE_RATE = 0;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-
-const contextCache = new Map<string, BenchmarkQuoteContext>();
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -64,95 +59,6 @@ function parseNonEmptyString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function defaultDetailUrlForListing(listingId: string): string {
-  return `${BASE_HOST}/emerald-coast-vacation-rentals/${listingId}`;
-}
-
-function parseEntityIdFromHtml(html: string): number | null {
-  const patterns = [/"eid":"(\d+)"/i, /rc-eid-(\d+)/i];
-
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (!match?.[1]) {
-      continue;
-    }
-
-    const parsed = Number(match[1]);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed;
-    }
-  }
-
-  return null;
-}
-
-function parseIdsTuple(detailUrl: string, html: string): string | null {
-  try {
-    const parsed = new URL(detailUrl);
-    const tuple =
-      parsed.searchParams.get("rcav[IDs][8][0]") ??
-      parsed.searchParams.get("rcav%5BIDs%5D%5B8%5D%5B0%5D");
-    if (tuple && tuple.trim()) {
-      return tuple.trim();
-    }
-  } catch {
-    // Ignore parse failures and fall back to html extraction.
-  }
-
-  const htmlMatch = html.match(/"id":"(\d+-\d+)"/i);
-  return htmlMatch?.[1]?.trim() ?? null;
-}
-
-async function readCachedDetailHtml(listingId: string): Promise<string | null> {
-  const htmlPath = resolve(
-    process.cwd(),
-    "src",
-    "lib",
-    "data",
-    "external-sources",
-    ADAPTER_KEY,
-    "details",
-    "html",
-    `${listingId}.html`,
-  );
-
-  try {
-    return await readFile(htmlPath, "utf8");
-  } catch {
-    return null;
-  }
-}
-
-async function fetchDetailHtml(
-  detailUrl: string,
-  timeoutMs: number,
-): Promise<string | null> {
-  const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(detailUrl, {
-      headers: {
-        accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "user-agent": USER_AGENT,
-      },
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      return null;
-    }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.includes("text/html")) {
-      return null;
-    }
-
-    return await response.text();
-  } finally {
-    clearTimeout(timeoutHandle);
-  }
-}
-
 function toError(input: {
   code: string;
   message: string;
@@ -176,73 +82,44 @@ function toError(input: {
   };
 }
 
-async function resolveQuoteContext(input: {
-  request: QuoteExecutionRequest;
-  timeoutMs: number;
-}): Promise<BenchmarkQuoteContext> {
-  const cached = contextCache.get(input.request.listingId);
-  if (cached) {
-    return cached;
-  }
-
+function resolveQuoteContext(
+  request: QuoteExecutionRequest,
+): BenchmarkQuoteContext {
   const quoteContext =
-    input.request.quoteContext &&
-    typeof input.request.quoteContext === "object" &&
-    !Array.isArray(input.request.quoteContext)
-      ? input.request.quoteContext
+    request.quoteContext &&
+    typeof request.quoteContext === "object" &&
+    !Array.isArray(request.quoteContext)
+      ? request.quoteContext
       : null;
 
-  const detailUrl =
-    (quoteContext &&
-      (parseNonEmptyString(quoteContext.detail_url) ??
-        parseNonEmptyString(quoteContext.detailUrl))) ||
-    defaultDetailUrlForListing(input.request.listingId);
+  const detailUrl = quoteContext
+    ? (parseNonEmptyString(quoteContext.detail_url) ??
+      parseNonEmptyString(quoteContext.detailUrl) ??
+      "")
+    : "";
 
-  const entityIdFromContext = quoteContext
+  const entityId = quoteContext
     ? (parsePositiveInt(quoteContext.entity_id) ??
       parsePositiveInt(quoteContext.eid) ??
       parsePositiveInt(quoteContext.rcav_eid))
     : null;
-  const idsTupleFromContext = quoteContext
+
+  const idsTuple = quoteContext
     ? (parseNonEmptyString(quoteContext.ids_tuple) ??
       parseNonEmptyString(quoteContext.rcav_ids_8_0))
     : null;
 
-  if (entityIdFromContext && idsTupleFromContext) {
-    const context = {
-      entityId: entityIdFromContext,
-      idsTuple: idsTupleFromContext,
-      detailUrl,
-    };
-    contextCache.set(input.request.listingId, context);
-    return context;
-  }
-
-  const html =
-    (await readCachedDetailHtml(input.request.listingId)) ??
-    (await fetchDetailHtml(detailUrl, input.timeoutMs));
-
-  if (!html) {
+  if (!entityId || !idsTuple || !detailUrl) {
     throw new Error(
-      `Unable to resolve quote context for ${ADAPTER_KEY} listing ${input.request.listingId}: detail html unavailable`,
+      `Missing required quote_context fields (entity_id, ids_tuple, detail_url) for ${ADAPTER_KEY} listing ${request.listingId}`,
     );
   }
 
-  const entityId = parseEntityIdFromHtml(html);
-  const idsTuple = parseIdsTuple(detailUrl, html);
-  if (!entityId || !idsTuple) {
-    throw new Error(
-      `Missing required quote context fields (entity_id / ids_tuple) for ${ADAPTER_KEY} listing ${input.request.listingId}`,
-    );
-  }
-
-  const context = {
+  return {
     entityId,
     idsTuple,
     detailUrl,
   };
-  contextCache.set(input.request.listingId, context);
-  return context;
 }
 
 function buildCheckoutUrl(input: {
@@ -332,7 +209,7 @@ export async function executeBenchmark30aSingleQuote(
 
   let context: BenchmarkQuoteContext;
   try {
-    context = await resolveQuoteContext({ request: input, timeoutMs });
+    context = resolveQuoteContext(input);
   } catch (error: unknown) {
     return {
       success: false,

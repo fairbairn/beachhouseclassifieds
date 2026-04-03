@@ -4,13 +4,22 @@ import { resolve } from "node:path";
 type CanonicalIndexEntry = {
   external_listing_id?: unknown;
   detail_url?: unknown;
+  quote_context?: unknown;
 };
 
 export type CanonicalListing = {
   externalListingId: string;
   detailUrl: string;
   detailFileBaseName: string;
+  quoteContext: Record<string, unknown> | null;
 };
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
 
 export type CanonicalListingSelectionInput = {
   adapterKey: string;
@@ -107,6 +116,7 @@ export async function loadCanonicalListings(
       externalListingId,
       detailUrl,
       detailFileBaseName,
+      quoteContext: asObject(entry.quote_context),
     });
   }
 

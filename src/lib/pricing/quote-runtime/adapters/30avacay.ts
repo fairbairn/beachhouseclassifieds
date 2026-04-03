@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type RouterFeeLine = {
@@ -41,11 +38,6 @@ const USER_AGENT =
 const DEFAULT_TIMEOUT_MS = 20000;
 const RATE_LIMIT_BACKOFF_MS = 900;
 const MAX_RATE_LIMIT_RETRIES = 3;
-const listingContextCache = new Map<
-  string,
-  { unitId: string | null; detailUrl: string | null }
->();
-
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -148,94 +140,37 @@ function buildCheckoutUrl(input: {
   return `${BASE_HOST}/vacation-rentals/checkout/?${params.toString()}`;
 }
 
-async function loadListingContext(listingId: string): Promise<{
-  unitId: string | null;
-  detailUrl: string | null;
-}> {
-  const cached = listingContextCache.get(listingId);
-  if (cached) {
-    return cached;
-  }
-
-  const detailPath = resolve(
-    process.cwd(),
-    "src",
-    "lib",
-    "data",
-    "external-sources",
-    ADAPTER_KEY,
-    "details",
-    "json",
-    `${listingId}.json`,
-  );
-
-  try {
-    const raw = await readFile(detailPath, "utf8");
-    const parsed = JSON.parse(raw) as {
-      detail_url?: unknown;
-      property_profile?: { unit_id?: unknown };
-    };
-    const context = {
-      unitId:
-        typeof parsed.property_profile?.unit_id === "string" &&
-        parsed.property_profile.unit_id.trim()
-          ? parsed.property_profile.unit_id.trim()
-          : typeof parsed.property_profile?.unit_id === "number"
-            ? String(parsed.property_profile.unit_id)
-            : null,
-      detailUrl:
-        typeof parsed.detail_url === "string" && parsed.detail_url.trim()
-          ? parsed.detail_url.trim()
-          : null,
-    };
-    listingContextCache.set(listingId, context);
-    return context;
-  } catch {
-    const fallback = { unitId: null, detailUrl: null };
-    listingContextCache.set(listingId, fallback);
-    return fallback;
-  }
-}
-
-async function resolveRequestContext(input: QuoteExecutionRequest): Promise<{
+function resolveRequestContext(input: QuoteExecutionRequest): {
   unitId: string;
   detailUrl: string;
-}> {
+} {
+  const context =
+    input.quoteContext &&
+    typeof input.quoteContext === "object" &&
+    !Array.isArray(input.quoteContext)
+      ? input.quoteContext
+      : null;
+
   const fromContextUnitId =
-    typeof input.quoteContext?.unit_id === "string"
-      ? input.quoteContext.unit_id.trim()
-      : typeof input.quoteContext?.unit_id === "number"
-        ? String(input.quoteContext.unit_id)
+    typeof context?.unit_id === "string"
+      ? context.unit_id.trim()
+      : typeof context?.unit_id === "number"
+        ? String(context.unit_id)
         : "";
 
   const fromContextDetailUrl =
-    typeof input.quoteContext?.detail_url === "string"
-      ? input.quoteContext.detail_url.trim()
-      : "";
+    typeof context?.detail_url === "string" ? context.detail_url.trim() : "";
 
-  const fallback = await loadListingContext(input.listingId);
-
-  const unitId = fromContextUnitId || fallback.unitId || input.listingId;
-  const detailUrl =
-    fromContextDetailUrl ||
-    fallback.detailUrl ||
-    `${BASE_HOST}/vacation-rentals/rental/${input.listingId}`;
-
-  return { unitId, detailUrl };
-}
-
-function resolveUnitId(input: QuoteExecutionRequest): string {
-  const unitFromContext =
-    typeof input.quoteContext?.unit_id === "string"
-      ? input.quoteContext.unit_id.trim()
-      : typeof input.quoteContext?.unit_id === "number"
-        ? String(input.quoteContext.unit_id)
-        : "";
-  if (unitFromContext) {
-    return unitFromContext;
+  if (!fromContextUnitId || !fromContextDetailUrl) {
+    throw new Error(
+      `Missing required quoteContext.unit_id/detail_url for ${ADAPTER_KEY} listing ${input.listingId}`,
+    );
   }
 
-  return input.listingId;
+  return {
+    unitId: fromContextUnitId,
+    detailUrl: fromContextDetailUrl,
+  };
 }
 
 function toError(input: {
@@ -438,8 +373,23 @@ export async function execute30AvacaySingleQuote(
 ): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
   const timeoutMs = normalizeTimeoutMs(request.options?.timeoutMs);
-  const requestContext = await resolveRequestContext(request);
-  const unitId = requestContext.unitId || resolveUnitId(request);
+  let requestContext: { unitId: string; detailUrl: string };
+  try {
+    requestContext = resolveRequestContext(request);
+  } catch (error: unknown) {
+    return {
+      success: false,
+      elapsedMs: performance.now() - startedAt,
+      error: toError({
+        code: "QUOTE_CONTEXT_MISSING",
+        message:
+          error instanceof Error ? error.message : "Quote context missing",
+        retryable: false,
+        request,
+      }),
+    };
+  }
+  const unitId = requestContext.unitId;
 
   let quote: RouterQuoteResult;
   try {

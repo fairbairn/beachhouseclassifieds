@@ -28,6 +28,9 @@ type CliOptions = {
 type OceanReefDetailRecord = {
   external_listing_id: string;
   detail_url: string;
+  property_profile?: {
+    unit_id?: unknown;
+  };
   h1?: string;
   normalized_matching_profile?: {
     name?: string;
@@ -269,6 +272,20 @@ function parseAmount(value: string): number | null {
   return roundCurrency(parsed);
 }
 
+function resolveNumericPropertyId(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const normalized = String(Math.floor(value));
+    return /^\d+$/.test(normalized) ? normalized : null;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return /^\d+$/.test(normalized) ? normalized : null;
+  }
+
+  return null;
+}
+
 function parsePriceByLabel(html: string, label: string): number | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
@@ -334,17 +351,18 @@ function parseUnavailableReason(html: string): string | null {
 }
 
 function buildFallbackHandoffUrl(input: {
-  listingId: string;
+  propertyId: string | null;
   checkInIso: string;
   checkOutIso: string;
 }): string {
   const checkin = toUsDate(input.checkInIso);
   const checkout = toUsDate(input.checkOutIso);
-  return `${BASE_HOST}/rentals/book-now?propertyID=${input.listingId}&checkin=${checkin}&checkout=${checkout}`;
+  const propertyId = input.propertyId ?? "";
+  return `${BASE_HOST}/rentals/book-now?propertyID=${propertyId}&checkin=${checkin}&checkout=${checkout}`;
 }
 
 function toFormBody(input: {
-  listingId: string;
+  propertyId: string;
   checkInIso: string;
   checkOutIso: string;
   adults: number;
@@ -352,7 +370,7 @@ function toFormBody(input: {
   pets: number;
 }): URLSearchParams {
   const body = new URLSearchParams();
-  body.set("propertyID", input.listingId);
+  body.set("propertyID", input.propertyId);
   body.set("checkin", toUsDate(input.checkInIso));
   body.set("checkout", toUsDate(input.checkOutIso));
   body.set("adults", String(Math.max(1, input.adults)));
@@ -388,6 +406,7 @@ async function sleep(ms: number): Promise<void> {
 async function fetchQuoteHtml(input: {
   detailUrl: string;
   listingId: string;
+  propertyId: string | null;
   checkInIso: string;
   checkOutIso: string;
   adults: number;
@@ -396,12 +415,12 @@ async function fetchQuoteHtml(input: {
   reportProgress?: (message: string) => void;
 }): Promise<RawObservation> {
   const fallbackHandoffUrl = buildFallbackHandoffUrl({
-    listingId: input.listingId,
+    propertyId: input.propertyId,
     checkInIso: input.checkInIso,
     checkOutIso: input.checkOutIso,
   });
 
-  if (!/^\d+$/.test(input.listingId)) {
+  if (!input.propertyId) {
     return {
       startDate: input.checkInIso,
       endDate: input.checkOutIso,
@@ -441,7 +460,7 @@ async function fetchQuoteHtml(input: {
           origin: BASE_HOST,
         },
         body: toFormBody({
-          listingId: input.listingId,
+          propertyId: input.propertyId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
           adults: input.adults,
@@ -561,6 +580,7 @@ async function buildSidecarForListing(input: {
 }> {
   const detailRaw = await readFile(input.detailPath, "utf8");
   const detail = JSON.parse(detailRaw) as OceanReefDetailRecord;
+  const propertyId = resolveNumericPropertyId(detail.property_profile?.unit_id);
 
   const listingName =
     detail.h1?.trim() ||
@@ -588,6 +608,7 @@ async function buildSidecarForListing(input: {
       return fetchQuoteHtml({
         detailUrl: detail.detail_url,
         listingId: detail.external_listing_id,
+        propertyId,
         checkInIso: startDate,
         checkOutIso: endDate,
         adults: input.options.adults,
@@ -839,9 +860,19 @@ export async function runOceanreef30aSingleQuoteObservation(
   progress: QuoteProgress | null = null,
 ): Promise<SingleQuoteObservationResult> {
   const startedAt = performance.now();
+  const quoteContext =
+    input.quoteContext &&
+    typeof input.quoteContext === "object" &&
+    !Array.isArray(input.quoteContext)
+      ? (input.quoteContext as Record<string, unknown>)
+      : null;
+  const propertyId = resolveNumericPropertyId(
+    quoteContext?.unit_id ?? input.listingId,
+  );
   const raw = await fetchQuoteHtml({
     detailUrl: input.detailUrl,
     listingId: input.listingId,
+    propertyId,
     checkInIso: input.checkInIso,
     checkOutIso: input.checkOutIso,
     adults: input.adults,
