@@ -7,10 +7,11 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
+import { executeKeyco30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/keyco30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { runKeyco30aQuoteCli } from "./quotes/keyco30a";
 
 type KeycoDayCode = "A" | "U" | "M" | "X";
 
@@ -3012,7 +3013,20 @@ export function createKeyco30AAdapter(): ScraperAdapter<KeycoDetailRecord> {
         "keyco30a",
         argv,
       );
-      await runKeyco30aQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "keyco30a",
+          executeSingleQuote: executeKeyco30aSingleQuote,
+          maxAttemptsEnvVar: "KEYCO30A_PRICING_CONTEXT_MAX_ATTEMPTS",
+          defaultQuoteTimeoutMs: 5000,
+          defaultQuoteMaxAttempts: 1,
+          defaultEndpointPath: "/api/listing/{listingId}/pricing-context",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 650,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
   };
 }

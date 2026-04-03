@@ -84,10 +84,18 @@ Implemented:
   - `src/lib/pricing/quote-runtime/types.ts`
 - Quote runtime registry:
   - `src/lib/pricing/quote-runtime/registry.ts`
+- Shared runtime-backed batch runner:
+  - `src/lib/pricing/quotes/shared/runtime-adapter-quote-runner.ts`
 - First isolated executor:
   - `src/lib/pricing/quote-runtime/adapters/panhandle30a.ts`
+- Second isolated executor:
+  - `src/lib/pricing/quote-runtime/adapters/360blue.ts`
 - Latency runner dispatch updated to quote-runtime only:
   - `src/lib/scripts/run-ad-hoc-quote-latency.ts`
+
+See also:
+
+- `docs/adapter-quote-refactor-playbook.md` for the full findings log, end-state architecture, and migration checklist used for 360blue.
 
 Important migration note:
 
@@ -187,7 +195,8 @@ If checks fail for `<adapterKey>`:
 Use this list as the working migration board.
 
 - `panhandle30a`: runtime executor created; continue cleanup/removal of wrapper dependency
-- `360blue`: runtime executor created; continue cleanup and strict quote_context propagation
+- `360blue`: migrated to shared runtime batch runner pattern; adapter-specific quote wrapper removed; quote/pricing/handoff validation pass confirmed
+- `keyco30a`: migrated to shared runtime batch runner pattern; adapter-specific quote wrapper removed; quote/pricing validation pass confirmed (current handoff extraction still reports total_not_found)
 - `30abeach`: extract runtime executor
 - `30avacay`: extract runtime executor
 - `coastproperties30a`: extract runtime executor

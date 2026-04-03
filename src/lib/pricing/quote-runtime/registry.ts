@@ -1,4 +1,5 @@
 import { execute360BlueSingleQuote } from "./adapters/360blue";
+import { executeKeyco30aSingleQuote } from "./adapters/keyco30a";
 import { executePanhandle30aSingleQuote } from "./adapters/panhandle30a";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "./types";
 
@@ -8,6 +9,7 @@ export type QuoteRuntimeExecutor = (
 
 const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   "360blue": execute360BlueSingleQuote,
+  keyco30a: executeKeyco30aSingleQuote,
   panhandle30a: executePanhandle30aSingleQuote,
 };
 

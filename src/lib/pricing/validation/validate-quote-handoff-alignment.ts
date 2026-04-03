@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
 import type { CanonicalQuotesSidecarRecord } from "@/lib/pricing/contracts/quote-observations-contract";
+import { getQuoteRuntimeExecutor } from "@/lib/pricing/quote-runtime/registry";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import { selectCanonicalArtifactFiles } from "@/lib/pricing/shared/canonical-index-listings";
 
@@ -17,9 +18,12 @@ const DEFAULT_MAX_OBSERVATIONS = 4;
 const DEFAULT_CONCURRENCY = 4;
 const MAX_CONCURRENCY = 6;
 const DEFAULT_TOLERANCE = 1;
+const DEFAULT_LIVE_QUOTE_TIMEOUT_MS = 7000;
 const DEFAULT_HANDOFF_RETRY_DELAYS_MS = [0, 1000, 2500, 5000, 9000];
 const BEACHBLUE_NAVIGATION_TIMEOUT_MS = 8_000;
 const BEACHBLUE_AJAX_WAIT_TIMEOUT_MS = 15_000;
+const KEYCO_NAVIGATION_TIMEOUT_MS = 20_000;
+const KEYCO_RENDER_WAIT_MS = 1_500;
 
 let validationHttpActive = 0;
 let validationHttpLastStartMs = 0;
@@ -33,6 +37,8 @@ type CliOptions = {
   minLeadDays: number;
   concurrency: number;
   tolerance: number;
+  useLiveRuntimeQuote: boolean;
+  liveQuoteTimeoutMs: number;
 };
 
 type ObservationCandidate = {
@@ -46,6 +52,11 @@ type ObservationCandidate = {
   observedTaxesTotal: number | null;
   handoffUrl: string;
 };
+
+const detailQuoteContextCache = new Map<
+  string,
+  Record<string, unknown> | null
+>();
 
 type ObservationProgressReporter = (message: string) => void;
 
@@ -93,6 +104,8 @@ function parseArgs(argv: string[]): CliOptions {
   let minLeadDays = 0;
   let concurrency = DEFAULT_CONCURRENCY;
   let tolerance = DEFAULT_TOLERANCE;
+  let useLiveRuntimeQuote = true;
+  let liveQuoteTimeoutMs = DEFAULT_LIVE_QUOTE_TIMEOUT_MS;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -157,6 +170,20 @@ function parseArgs(argv: string[]): CliOptions {
       index += 1;
       continue;
     }
+
+    if (arg === "--use-sidecar-observed-total") {
+      useLiveRuntimeQuote = false;
+      continue;
+    }
+
+    if (arg === "--live-quote-timeout-ms" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        liveQuoteTimeoutMs = Math.max(1000, Math.floor(parsed));
+      }
+      index += 1;
+      continue;
+    }
   }
 
   return {
@@ -167,7 +194,83 @@ function parseArgs(argv: string[]): CliOptions {
     minLeadDays,
     concurrency,
     tolerance,
+    useLiveRuntimeQuote,
+    liveQuoteTimeoutMs,
   };
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+async function loadCandidateQuoteContext(
+  candidate: ObservationCandidate,
+): Promise<Record<string, unknown> | null> {
+  const cached = detailQuoteContextCache.get(candidate.listingId);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const detailPath = resolve(
+    process.cwd(),
+    "src",
+    "lib",
+    "data",
+    "external-sources",
+    candidate.adapterKey,
+    "details",
+    "json",
+    `${candidate.listingId}.json`,
+  );
+
+  try {
+    const raw = await readFile(detailPath, "utf8");
+    const parsed = JSON.parse(raw) as { quote_context?: unknown };
+    const quoteContext = asObject(parsed.quote_context);
+    detailQuoteContextCache.set(candidate.listingId, quoteContext);
+    return quoteContext;
+  } catch {
+    detailQuoteContextCache.set(candidate.listingId, null);
+    return null;
+  }
+}
+
+function parseHeadcountFromHandoffUrl(handoffUrl: string): {
+  adults: number;
+  children: number;
+} {
+  try {
+    const parsed = new URL(handoffUrl);
+    const adultsRaw =
+      parsed.searchParams.get("listing_adult_count") ??
+      parsed.searchParams.get("adults") ??
+      parsed.searchParams.get("adultCount") ??
+      "1";
+    const childrenRaw =
+      parsed.searchParams.get("listing_child_count") ??
+      parsed.searchParams.get("children") ??
+      parsed.searchParams.get("childCount") ??
+      "0";
+
+    const adultsParsed = Number(adultsRaw);
+    const childrenParsed = Number(childrenRaw);
+
+    return {
+      adults:
+        Number.isFinite(adultsParsed) && adultsParsed > 0
+          ? Math.floor(adultsParsed)
+          : 1,
+      children:
+        Number.isFinite(childrenParsed) && childrenParsed >= 0
+          ? Math.floor(childrenParsed)
+          : 0,
+    };
+  } catch {
+    return { adults: 1, children: 0 };
+  }
 }
 
 function parseIsoDateToUtcStartMs(value: string): number | null {
@@ -1000,6 +1103,95 @@ async function tryExtractBeachblueCheckoutTotal(
     kind: "request_error",
     message:
       "beachblue checkout total not rendered in #checkout-total after retries",
+  };
+}
+
+async function tryExtractKeycoCheckoutTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  const playwrightModule = await import("playwright").catch(() => null);
+  if (!playwrightModule?.chromium) {
+    return {
+      kind: "request_error",
+      message: "playwright chromium unavailable for keyco checkout validation",
+    };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const browser = await playwrightModule.chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ userAgent: USER_AGENT });
+    const page = await context.newPage();
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      try {
+        await page.goto(candidate.handoffUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: KEYCO_NAVIGATION_TIMEOUT_MS,
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        reportProgress?.(
+          `keyco checkout retry ${attempt + 1}/${retryDelaysMs.length} navigation_error=${message}`,
+        );
+        continue;
+      }
+
+      await page.waitForTimeout(KEYCO_RENDER_WAIT_MS);
+
+      const totalTexts = await page
+        .locator("[class*='total']")
+        .allInnerTexts()
+        .catch(() => []);
+      const selectorTotals = totalTexts
+        .map((text) => parseMoney(text))
+        .filter(
+          (value): value is number => typeof value === "number" && value > 0,
+        );
+      const selectorBest = pickClosestTotal(
+        selectorTotals,
+        candidate.observedGrandTotal,
+      );
+      if (selectorBest) {
+        return {
+          kind: "success",
+          total: selectorBest.total,
+        };
+      }
+
+      const bodyText = await page
+        .locator("body")
+        .innerText()
+        .catch(() => "");
+      const bodyCandidates = extractCandidateTotals(bodyText);
+      const bodyBest = pickClosestTotal(
+        bodyCandidates,
+        candidate.observedGrandTotal,
+      );
+      if (bodyBest) {
+        return {
+          kind: "success",
+          total: bodyBest.total,
+        };
+      }
+
+      reportProgress?.(
+        `keyco checkout retry ${attempt + 1}/${retryDelaysMs.length} total_not_rendered`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    kind: "request_error",
+    message: "keyco checkout total not rendered after retries",
   };
 }
 
@@ -2153,8 +2345,80 @@ async function tryExtract30AEscapesDirectTotal(
 async function validateObservation(
   candidate: ObservationCandidate,
   tolerance: number,
+  options: {
+    useLiveRuntimeQuote: boolean;
+    liveQuoteTimeoutMs: number;
+  },
   reportProgress?: ObservationProgressReporter,
 ): Promise<ValidationFailure | null> {
+  if (options.useLiveRuntimeQuote) {
+    const runtimeExecutor = getQuoteRuntimeExecutor(candidate.adapterKey);
+    if (runtimeExecutor) {
+      const quoteContext = await loadCandidateQuoteContext(candidate);
+      const headcount = parseHeadcountFromHandoffUrl(candidate.handoffUrl);
+      const runtimeResult = await runtimeExecutor({
+        listingId: candidate.listingId,
+        checkInIso: candidate.startDate,
+        checkOutIso: candidate.endDate,
+        adults: headcount.adults,
+        children: headcount.children,
+        quoteContext,
+        options: {
+          timeoutMs: options.liveQuoteTimeoutMs,
+        },
+      });
+
+      if (!runtimeResult.success) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "request_error",
+          message: `Live runtime quote failed: ${runtimeResult.error.message}`,
+          extractedTotal: null,
+        };
+      }
+
+      const live = runtimeResult.observation;
+      if (
+        live.quoteAvailable !== true ||
+        !Number.isFinite(live.grandTotal ?? NaN) ||
+        (live.grandTotal ?? 0) <= 0
+      ) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "direct_status_error",
+          message:
+            "Live runtime quote reports unavailable or missing grand total",
+          extractedTotal: null,
+        };
+      }
+
+      candidate.observedGrandTotal = live.grandTotal as number;
+      candidate.observedBaseTotal =
+        typeof live.baseTotal === "number" && Number.isFinite(live.baseTotal)
+          ? live.baseTotal
+          : candidate.observedBaseTotal;
+      candidate.observedTaxesTotal =
+        typeof live.taxesTotal === "number" && Number.isFinite(live.taxesTotal)
+          ? live.taxesTotal
+          : candidate.observedTaxesTotal;
+      if (typeof live.handoffUrl === "string" && live.handoffUrl.trim()) {
+        candidate.handoffUrl = live.handoffUrl;
+      }
+
+      reportProgress?.(
+        `live runtime quote baseline grand_total=${candidate.observedGrandTotal.toFixed(2)}`,
+      );
+    }
+  }
+
   if (
     !Number.isFinite(candidate.observedGrandTotal) ||
     candidate.observedGrandTotal <= 0
@@ -2627,6 +2891,42 @@ async function validateObservation(
     };
   }
 
+  if (candidate.adapterKey === "keyco30a") {
+    const keycoCheckout = await tryExtractKeycoCheckoutTotal(
+      candidate,
+      reportProgress,
+    );
+    if (keycoCheckout.kind === "success") {
+      const diff = Math.abs(keycoCheckout.total - candidate.observedGrandTotal);
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from keyco checkout total=${keycoCheckout.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: keycoCheckout.total,
+        };
+      }
+      return null;
+    }
+
+    if (keycoCheckout.kind === "status_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "direct_status_error",
+        message: `Keyco checkout extraction returned status error: ${keycoCheckout.message}`,
+        extractedTotal: null,
+      };
+    }
+  }
+
   try {
     const responseResult = await fetchWithRetry({
       url: candidate.handoffUrl,
@@ -2849,7 +3149,7 @@ export async function runValidateQuoteHandoffAlignmentCli(
   }
 
   progress.phase(
-    `Running handoff alignment validation adapter=${options.adapterKey} observations=${candidates.length} min_lead_days=${options.minLeadDays} tolerance=${options.tolerance.toFixed(2)}`,
+    `Running handoff alignment validation adapter=${options.adapterKey} observations=${candidates.length} min_lead_days=${options.minLeadDays} tolerance=${options.tolerance.toFixed(2)} live_runtime_quote=${options.useLiveRuntimeQuote} live_quote_timeout_ms=${options.liveQuoteTimeoutMs}`,
   );
 
   let completed = 0;
@@ -2863,6 +3163,10 @@ export async function runValidateQuoteHandoffAlignmentCli(
         const result = await validateObservation(
           candidate,
           options.tolerance,
+          {
+            useLiveRuntimeQuote: options.useLiveRuntimeQuote,
+            liveQuoteTimeoutMs: options.liveQuoteTimeoutMs,
+          },
           (message) => {
             progress.tick(
               `adapter=${options.adapterKey} listing=${candidate.listingId} window=${candidate.startDate}->${candidate.endDate} ${message}`,

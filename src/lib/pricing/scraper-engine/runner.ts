@@ -2,7 +2,10 @@ import { access, mkdir, open, readFile, readdir, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import type { Browser } from "playwright";
 
-import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
+import {
+  createScrapeProgress,
+  formatModeProgressLine,
+} from "@/core/tooling/terminal/scrape-progress";
 
 import type {
   DetailRecordBase,
@@ -949,6 +952,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
   maxCalendarAdvanceMonths: number,
   refreshMode: ScraperRefreshMode,
   mode: ScraperRunMode,
+  reportDetailProgress: (message: string) => void,
   existingArtifactsByUrl?: Map<string, ExistingDetailArtifact>,
 ): Promise<{
   detailRecords: TDetail[];
@@ -985,16 +989,23 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       (processed / elapsedSec) * 60,
     );
     const throughputStartedPerMinute = Math.round((started / elapsedSec) * 60);
-    const remaining = Math.max(0, urls.length - processed);
-    const etaMinutes =
-      throughputCompletedPerMinute > 0
-        ? Math.round((remaining / throughputCompletedPerMinute) * 10) / 10
-        : null;
-    const pct =
-      urls.length > 0 ? Math.round((processed / urls.length) * 100) : 0;
-
-    return `${label}: started=${started}/${urls.length}, in_flight=${inFlight}, processed=${processed}/${urls.length} (${pct}%), failures=${liveFailures}, elapsed_s=${elapsedSec}, avg_s_per_completed=${avgSecPerDetail || "n/a"}, throughput_completed_per_min=${throughputCompletedPerMinute}, throughput_started_per_min=${throughputStartedPerMinute}, eta_min=${etaMinutes ?? "n/a"}`;
+    return formatModeProgressLine({
+      mode: "detail",
+      completed: processed,
+      total: urls.length,
+      startedAtMs: pullStartedAtMs,
+      text: `${label} started=${started}/${urls.length} in_flight=${inFlight} processed=${processed}/${urls.length} failures=${liveFailures} elapsed_s=${elapsedSec} avg_s_per_completed=${avgSecPerDetail || "n/a"} throughput_completed_per_min=${throughputCompletedPerMinute} throughput_started_per_min=${throughputStartedPerMinute}`,
+    });
   };
+
+  const buildTickLine = (text: string): string =>
+    formatModeProgressLine({
+      mode: "detail",
+      completed: processed,
+      total: urls.length,
+      startedAtMs: pullStartedAtMs,
+      text,
+    });
 
   const heartbeatInterval = setInterval(() => {
     if (processed >= urls.length) {
@@ -1024,9 +1035,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
         refreshMode,
         mode,
         existingDetailJsonPath: existingArtifact?.jsonPath ?? null,
-        reportDetailProgress: (message: string) => {
-          progress.tick(message);
-        },
+        reportDetailProgress,
       });
       const timed = await runTimedDetailFetch(fetchPromise, detailTimeoutMs);
       detailDurationsMs.push(Date.now() - detailStartedAtMs);
@@ -1035,7 +1044,9 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       let detail: TDetail | null = null;
       if (timed.timedOut) {
         progress.tick(
-          `detail ${detailUrl} timed out after ${detailTimeoutMs}ms; marking failed and continuing`,
+          buildTickLine(
+            `detail timed out listing=${detailUrl} timeout_ms=${detailTimeoutMs}; marking failed and continuing`,
+          ),
         );
       } else {
         detail = timed.detail;
@@ -1112,16 +1123,16 @@ async function pullDetails<TDetail extends DetailRecordBase>(
           refreshMode,
           mode,
           existingDetailJsonPath: existingArtifact?.jsonPath ?? null,
-          reportDetailProgress: (message: string) => {
-            progress.tick(message);
-          },
+          reportDetailProgress,
         });
 
         const timed = await runTimedDetailFetch(fetchPromise, detailTimeoutMs);
         if (timed.timedOut || !timed.detail) {
           nextPending.push(detailUrl);
           progress.tick(
-            `retry detail failed attempt=${attempt} url=${detailUrl}`,
+            buildTickLine(
+              `retry detail failed attempt=${attempt} listing=${detailUrl}`,
+            ),
           );
         } else {
           const detail = timed.detail;
@@ -1140,7 +1151,9 @@ async function pullDetails<TDetail extends DetailRecordBase>(
           detailRecords.push(detail);
           recovered.add(detailUrl);
           progress.tick(
-            `retry detail recovered attempt=${attempt} url=${detailUrl}`,
+            buildTickLine(
+              `retry detail recovered attempt=${attempt} listing=${detailUrl}`,
+            ),
           );
         }
 
@@ -1181,6 +1194,23 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     options.detailFetchConcurrency ?? (isRefreshOperation ? 8 : 4);
   const detailFetchDelayMs =
     options.detailFetchDelayMs ?? adapter.detailFetchDelayMs;
+  const verboseDetailProgress =
+    process.env.SCRAPER_VERBOSE_DETAIL_PROGRESS === "1" ||
+    process.env.SCRAPER_VERBOSE_DETAIL_PROGRESS === "true";
+  const detailProgressStartedAtMs = Date.now();
+  const reportDetailProgress = (message: string): void => {
+    if (verboseDetailProgress) {
+      progress.tick(
+        formatModeProgressLine({
+          mode: "detail",
+          completed: 0,
+          total: 0,
+          startedAtMs: detailProgressStartedAtMs,
+          text: message,
+        }),
+      );
+    }
+  };
   const availabilityHorizonDays =
     options.availHorizonDays ?? adapter.availabilityHorizonDays;
   const maxCalendarAdvanceMonths =
@@ -1269,9 +1299,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
           refreshMode: options.refreshMode,
           mode: options.mode,
           existingDetailJsonPath: existingArtifact?.jsonPath ?? null,
-          reportDetailProgress: (message: string) => {
-            progress.tick(message);
-          },
+          reportDetailProgress,
         }),
         options.detailTimeoutMs,
       );
@@ -1324,11 +1352,11 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       progress.success(
         `direct detail scrape complete (id=${detail.external_listing_id})`,
       );
-      console.log(`${adapter.scriptLabel} direct detail scrape complete.`);
-      console.log(`- detail_url: ${detail.detail_url}`);
-      console.log(`- external_listing_id: ${detail.external_listing_id}`);
-      console.log(`- detail_json: ${detailPathRel}`);
-      console.log(`- report_json: ${reportPathRel}`);
+      progress.info(`${adapter.scriptLabel} direct detail scrape complete.`);
+      progress.info(`- detail_url: ${detail.detail_url}`);
+      progress.info(`- external_listing_id: ${detail.external_listing_id}`);
+      progress.info(`- detail_json: ${detailPathRel}`);
+      progress.info(`- report_json: ${reportPathRel}`);
       return;
     }
 
@@ -1339,9 +1367,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
             outputRoot,
             outputDetailsJsonDir,
             adapter.isValidDetailUrl,
-            (message: string) => {
-              progress.tick(message);
-            },
+            reportDetailProgress,
           )
         : [];
       const fileUrls = options.detailUrlsFile
@@ -1445,6 +1471,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         maxCalendarAdvanceMonths,
         options.refreshMode,
         options.mode,
+        reportDetailProgress,
         existingArtifacts,
       );
 
@@ -1508,26 +1535,26 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       progress.success(
         `refresh scrape complete (selected=${selectedUrls.length}, pulled=${detailRecords.length}, skipped_existing=${skippedExistingUrls.length}, skipped_fresh=${skippedFreshUrls.length}, failed=${failedDetailUrls.length}, refresh_mode=${options.refreshMode})`,
       );
-      console.log(`${adapter.scriptLabel} refresh scrape complete.`);
-      console.log(`- refresh_mode: ${options.refreshMode}`);
-      console.log(`- skip_existing_details: ${options.skipExistingDetails}`);
-      console.log(`- skip_fresh_details: ${options.skipFreshDetails}`);
-      console.log(`- fresh_hours: ${options.freshHours}`);
-      console.log(`- known_urls_discovered: ${merged.length}`);
-      console.log(`- urls_selected: ${selectedUrls.length}`);
-      console.log(`- urls_to_pull: ${urlsToPull.length}`);
-      console.log(
+      progress.info(`${adapter.scriptLabel} refresh scrape complete.`);
+      progress.info(`- refresh_mode: ${options.refreshMode}`);
+      progress.info(`- skip_existing_details: ${options.skipExistingDetails}`);
+      progress.info(`- skip_fresh_details: ${options.skipFreshDetails}`);
+      progress.info(`- fresh_hours: ${options.freshHours}`);
+      progress.info(`- known_urls_discovered: ${merged.length}`);
+      progress.info(`- urls_selected: ${selectedUrls.length}`);
+      progress.info(`- urls_to_pull: ${urlsToPull.length}`);
+      progress.info(
         `- detail_pages_skipped_existing: ${skippedExistingUrls.length}`,
       );
-      console.log(`- detail_pages_skipped_fresh: ${skippedFreshUrls.length}`);
-      console.log(`- detail_pages_pulled: ${detailRecords.length}`);
-      console.log(`- detail_pages_failed: ${failedDetailUrls.length}`);
-      console.log(`- pull_elapsed_ms: ${refreshPullElapsedMs}`);
-      console.log(`- pull_throughput_per_minute: ${throughputPerMinute}`);
-      console.log(
+      progress.info(`- detail_pages_skipped_fresh: ${skippedFreshUrls.length}`);
+      progress.info(`- detail_pages_pulled: ${detailRecords.length}`);
+      progress.info(`- detail_pages_failed: ${failedDetailUrls.length}`);
+      progress.info(`- pull_elapsed_ms: ${refreshPullElapsedMs}`);
+      progress.info(`- pull_throughput_per_minute: ${throughputPerMinute}`);
+      progress.info(
         `- pull_avg_seconds_per_detail: ${avgSecondsPerPulled ?? "n/a"}`,
       );
-      console.log(`- report_json: ${reportPathRel}`);
+      progress.info(`- report_json: ${reportPathRel}`);
       return;
     }
 
@@ -1541,13 +1568,26 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     progress.phase("opening collection page");
     const page = await browser.newPage();
     progress.phase("discovering listing links from collection page");
+    const discoveryStartedAtMs = Date.now();
+    let discoveryTicks = 0;
     const discoveredRows = await adapter.discoverListings({
       page,
       anchorUrl: parsedAnchor.toString(),
       maxScrollSteps: options.maxScrollSteps,
       scrollPauseMs: options.scrollPauseMs,
       networkIdleWaitMs: options.networkIdleWaitMs,
-      reportProgress: (message: string) => progress.tick(message),
+      reportProgress: (message: string) => {
+        discoveryTicks += 1;
+        progress.tick(
+          formatModeProgressLine({
+            mode: "discover",
+            completed: discoveryTicks,
+            total: 0,
+            startedAtMs: discoveryStartedAtMs,
+            text: message,
+          }),
+        );
+      },
     });
 
     const normalizedRows = discoveredRows
@@ -1602,6 +1642,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         maxCalendarAdvanceMonths,
         options.refreshMode,
         options.mode,
+        reportDetailProgress,
       );
       detailRecords = pulled.detailRecords;
       failedDetailUrls = pulled.failedDetailUrls;
@@ -1738,22 +1779,22 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         ? `discovery complete (discovered=${totalDiscovered}, selected=${subsetRows.length})`
         : `collection+detail scrape complete (discovered=${totalDiscovered}, selected=${subsetRows.length}, details=${detailRecords.length})`,
     );
-    console.log(
+    progress.info(
       options.discoverOnly
         ? `${adapter.scriptLabel} discovery complete.`
         : `${adapter.scriptLabel} scrape complete.`,
     );
-    console.log(`- source_url: ${parsedAnchor.toString()}`);
-    console.log(`- total_links_discovered: ${totalDiscovered}`);
-    console.log(`- links_selected: ${subsetRows.length}`);
-    console.log(`- start_index: ${startIndex}`);
-    console.log(`- max_listings: ${options.maxListings ?? "all"}`);
-    console.log(`- subset_mode: ${isSubsetMode}`);
-    console.log(`- detail_pages_pulled: ${detailRecords.length}`);
-    console.log(`- detail_pages_failed: ${failedDetailUrls.length}`);
-    console.log(`- report_json: ${reportPathRel}`);
-    console.log(`- external_source_json: ${sourcePathRel}`);
-    console.log(`- details_manifest_json: ${detailsManifestPathRel}`);
+    progress.info(`- source_url: ${parsedAnchor.toString()}`);
+    progress.info(`- total_links_discovered: ${totalDiscovered}`);
+    progress.info(`- links_selected: ${subsetRows.length}`);
+    progress.info(`- start_index: ${startIndex}`);
+    progress.info(`- max_listings: ${options.maxListings ?? "all"}`);
+    progress.info(`- subset_mode: ${isSubsetMode}`);
+    progress.info(`- detail_pages_pulled: ${detailRecords.length}`);
+    progress.info(`- detail_pages_failed: ${failedDetailUrls.length}`);
+    progress.info(`- report_json: ${reportPathRel}`);
+    progress.info(`- external_source_json: ${sourcePathRel}`);
+    progress.info(`- details_manifest_json: ${detailsManifestPathRel}`);
   } finally {
     const closeStartedAt = Date.now();
     progress.phase("finalizing browser shutdown");

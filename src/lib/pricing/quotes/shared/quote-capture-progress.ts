@@ -1,5 +1,5 @@
+import { formatModeProgressLine } from "@/core/tooling/terminal/scrape-progress";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
-import chalk from "chalk";
 
 type QuoteCaptureProgressTrackerInput = {
   progress?: QuoteProgress;
@@ -33,26 +33,14 @@ export function createQuoteCaptureProgressTracker(
   const heartbeatMs = Math.max(1000, input.heartbeatMs ?? 15000);
   const modeLabel = input.modeLabel?.trim() || "quote-capture";
 
-  const formatPrefix = (elapsedSeconds: number): string => {
-    const progressPctRaw =
-      totalWindows > 0 ? (completedWindows / totalWindows) * 100 : 100;
-    const progressPct = Math.round(progressPctRaw * 10) / 10;
-    const throughputPerMinute = Math.round(
-      (completedWindows / elapsedSeconds) * 60,
-    );
-    const remainingWindows = Math.max(0, totalWindows - completedWindows);
-    const etaMinutes =
-      throughputPerMinute > 0
-        ? Math.round((remainingWindows / throughputPerMinute) * 10) / 10
-        : null;
-
-    const modeToken = chalk.cyanBright(modeLabel);
-    const pctToken = chalk.yellowBright(`${progressPct}%`);
-    const etaToken = chalk.greenBright(
-      etaMinutes === null ? "n/a min" : `${etaMinutes} min`,
-    );
-    return `${modeToken} ${pctToken} ${etaToken}`;
-  };
+  const formatPrefix = (): string =>
+    formatModeProgressLine({
+      mode: modeLabel,
+      completed: completedWindows,
+      total: totalWindows,
+      startedAtMs: runStartedAt,
+      text: "",
+    }).replace(/ - $/, "");
 
   const emitProgress = (label: string): void => {
     const elapsedSeconds = Math.max(
@@ -62,7 +50,7 @@ export function createQuoteCaptureProgressTracker(
     const throughputPerMinute = Math.round(
       (completedWindows / elapsedSeconds) * 60,
     );
-    const prefix = formatPrefix(elapsedSeconds);
+    const prefix = formatPrefix();
     input.progress?.tick(
       `${prefix} ${label} windows=${completedWindows}/${totalWindows} available=${availableWindows} unavailable=${unavailableWindows} throughput_per_min=${throughputPerMinute}`,
     );
@@ -80,7 +68,7 @@ export function createQuoteCaptureProgressTracker(
   }
 
   input.progress?.phase(
-    `${chalk.cyanBright(modeLabel)} ${chalk.yellowBright("0%")} ${chalk.greenBright("n/a min")} capturing windows listings=${input.totalListings} windows=${totalWindows}`,
+    `${formatPrefix()} capturing windows listings=${input.totalListings} windows=${totalWindows}`,
   );
 
   return {
@@ -102,11 +90,7 @@ export function createQuoteCaptureProgressTracker(
     },
     onListingComplete: (listingInput: ListingCompleteInput) => {
       completedListings += 1;
-      const elapsedSeconds = Math.max(
-        1,
-        Math.round((Date.now() - runStartedAt) / 1000),
-      );
-      const prefix = formatPrefix(elapsedSeconds);
+      const prefix = formatPrefix();
       input.progress?.tick(
         `${prefix} listing complete ${completedListings}/${input.totalListings} listing=${listingInput.listingId} windows=${listingInput.windows} available=${listingInput.available}`,
       );

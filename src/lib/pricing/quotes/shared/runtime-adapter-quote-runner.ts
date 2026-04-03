@@ -24,6 +24,8 @@ type CliOptions = {
   timeoutMs: number;
   maxAttempts: number;
   allowDetailBackfill: boolean;
+  skipFreshQuotes: boolean;
+  freshHours: number;
 };
 
 type CanonicalIndexEntry = {
@@ -88,6 +90,7 @@ const DEFAULT_CART_CREATE_ENDPOINT =
   "https://www.callistavacations.com/api/nrbe/carts/create.json";
 const DEFAULT_TAX_PCT = 0.12;
 const DEFAULT_BASE_NIGHTLY = 500;
+const DEFAULT_FRESH_HOURS = 24;
 
 function parseArgs(
   argv: string[],
@@ -112,6 +115,14 @@ function parseArgs(
   let allowDetailBackfill =
     process.env.QUOTE_CAPTURE_ALLOW_DETAIL_BACKFILL === "1" ||
     process.env.QUOTE_CAPTURE_ALLOW_DETAIL_BACKFILL === "true";
+  let skipFreshQuotes =
+    process.env.QUOTE_CAPTURE_SKIP_FRESH_QUOTES === "1" ||
+    process.env.QUOTE_CAPTURE_SKIP_FRESH_QUOTES === "true";
+  let freshHours = Math.max(
+    1,
+    Number(process.env.QUOTE_CAPTURE_FRESH_HOURS ?? DEFAULT_FRESH_HOURS) ||
+      DEFAULT_FRESH_HOURS,
+  );
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -213,6 +224,20 @@ function parseArgs(
       allowDetailBackfill = true;
       continue;
     }
+
+    if (arg === "--skip-fresh-quotes") {
+      skipFreshQuotes = true;
+      continue;
+    }
+
+    if (arg === "--fresh-hours" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        freshHours = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
   }
 
   return {
@@ -225,7 +250,39 @@ function parseArgs(
     timeoutMs: Math.max(1000, timeoutMs),
     maxAttempts: Math.max(1, maxAttempts),
     allowDetailBackfill,
+    skipFreshQuotes,
+    freshHours: Math.max(1, freshHours),
   };
+}
+
+function isIsoWithinHours(iso: string, hours: number): boolean {
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) {
+    return false;
+  }
+
+  return Date.now() - parsed <= hours * 60 * 60 * 1000;
+}
+
+async function hasFreshQuoteSidecar(input: {
+  quotesDir: string;
+  externalListingId: string;
+  freshHours: number;
+}): Promise<boolean> {
+  const sidecarPath = resolve(
+    input.quotesDir,
+    `${input.externalListingId}.json`,
+  );
+  try {
+    const raw = await readFile(sidecarPath, "utf8");
+    const parsed = JSON.parse(raw) as { captured_at?: unknown };
+    if (typeof parsed.captured_at !== "string" || !parsed.captured_at.trim()) {
+      return false;
+    }
+    return isIsoWithinHours(parsed.captured_at, input.freshHours);
+  } catch {
+    return false;
+  }
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -846,21 +903,13 @@ export async function runRuntimeAdapterQuoteCli(
       `timeout_ms=${options.timeoutMs}`,
       `max_attempts=${options.maxAttempts}`,
       `allow_detail_backfill=${options.allowDetailBackfill}`,
+      `skip_fresh_quotes=${options.skipFreshQuotes}`,
+      `fresh_hours=${options.freshHours}`,
       `selection=${options.listingId ? `listing:${options.listingId}` : `max-listings:${options.maxListings}`}`,
     ].join(" "),
   );
 
   const listings = await loadListingSeeds(config.adapterKey, options, progress);
-  const tracker = createQuoteCaptureProgressTracker({
-    progress,
-    totalListings: listings.length,
-    windowsPerListing: options.weeks,
-    modeLabel: "quote",
-    heartbeatMs: Math.max(
-      1000,
-      Number(process.env.QUOTE_CAPTURE_HEARTBEAT_MS ?? "15000") || 15000,
-    ),
-  });
 
   const quotesDir = resolve(
     process.cwd(),
@@ -874,8 +923,51 @@ export async function runRuntimeAdapterQuoteCli(
   );
   await mkdir(quotesDir, { recursive: true });
 
+  let listingsToProcess = listings;
+  let skippedFresh = 0;
+  if (options.skipFreshQuotes) {
+    progress?.phase(
+      `evaluating existing quote sidecars for freshness (hours=${options.freshHours})`,
+    );
+    const keep: ListingSeed[] = [];
+    for (const listing of listings) {
+      const fresh = await hasFreshQuoteSidecar({
+        quotesDir,
+        externalListingId: listing.externalListingId,
+        freshHours: options.freshHours,
+      });
+      if (fresh) {
+        skippedFresh += 1;
+      } else {
+        keep.push(listing);
+      }
+    }
+    listingsToProcess = keep;
+    progress?.tick(
+      `quote freshness evaluation complete skipped_fresh=${skippedFresh}/${listings.length} to_process=${listingsToProcess.length}`,
+    );
+  }
+
+  if (listingsToProcess.length === 0) {
+    progress?.success(
+      `quote-capture complete listings=0 observations=0 available=0 skipped_fresh=${skippedFresh}`,
+    );
+    return;
+  }
+
+  const tracker = createQuoteCaptureProgressTracker({
+    progress,
+    totalListings: listingsToProcess.length,
+    windowsPerListing: options.weeks,
+    modeLabel: "quote",
+    heartbeatMs: Math.max(
+      1000,
+      Number(process.env.QUOTE_CAPTURE_HEARTBEAT_MS ?? "15000") || 15000,
+    ),
+  });
+
   const sidecars = await runWithConcurrency(
-    listings,
+    listingsToProcess,
     options.listingConcurrency,
     async (listing) => {
       const sidecar = await buildSidecarForListing({
@@ -927,6 +1019,6 @@ export async function runRuntimeAdapterQuoteCli(
   );
 
   progress?.success(
-    `quote-capture complete listings=${sidecars.length} observations=${totalObservations} available=${availableObservations}`,
+    `quote-capture complete listings=${sidecars.length} observations=${totalObservations} available=${availableObservations} skipped_fresh=${skippedFresh}`,
   );
 }
