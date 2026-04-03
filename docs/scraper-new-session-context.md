@@ -71,9 +71,9 @@ For calendars that are hidden until user interaction:
 - Multiple managers are already on the shared engine.
 - RealJoy runtime migration is complete and validated (quote validator, pricing alignment, scrape filename checks, and latency smoke).
 - Listing discovery manifests are now adapter-local under `working/` folders.
-- Benchmark is the next runtime migration target.
+- oceanreef30a is the next runtime migration target.
 
-## Next Adapter Focus: benchmark30a
+## Next Adapter Focus: oceanreef30a
 
 Input assumptions for upcoming implementation:
 
@@ -83,7 +83,7 @@ Input assumptions for upcoming implementation:
 
 ## Immediate Next Steps
 
-1. Migrate `benchmark30a` quote capture to runtime executor path.
+1. Migrate `oceanreef30a` quote capture to runtime executor path.
 2. Remove legacy quote-module dependency from scraper adapter flow.
 3. Run quote refresh at `--weeks 24` to satisfy validator thresholds.
 4. Validate quote sidecars, pricing alignment, scrape filename contract, and latency smoke.
@@ -100,7 +100,7 @@ Input assumptions for upcoming implementation:
 
 Start from the existing shared scraper engine and continue implementing manager adapters with strict schema and folder consistency.
 
-Current priority: complete `benchmark30a` runtime quote migration and validation loop.
+Current priority: complete `oceanreef30a` runtime quote migration and validation loop.
 
 Expected outcomes:
 
