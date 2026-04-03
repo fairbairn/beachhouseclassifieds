@@ -1,10 +1,8 @@
+import { executeRealjoy30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/realjoy30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  runRealjoy30aQuoteCli,
-  runRealjoy30aSingleQuoteObservation,
-} from "./quotes/realjoy30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -12,6 +10,13 @@ import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 type RealJoyDayCode = "A" | "U" | "I" | "O" | "X";
 
 type RealJoyDetailRecord = DetailRecordBase & {
+  quote_context: {
+    source: "detail_html";
+    property_id: string;
+    property_name: string;
+    detail_url: string;
+    endpoint_path: "/ajax/quote";
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -176,17 +181,7 @@ function normalizeDetailUrl(value: string): string | null {
   }
 }
 
-function extractExternalListingId(html: string, detailUrl: string): string {
-  const unitCode = html.match(/["']unitcode["']\s*:\s*["']?(\d+)["']?/i)?.[1];
-  if (unitCode) {
-    return unitCode;
-  }
-
-  const pageUnitCode = html.match(/data-unitcode=["'](\d+)["']/i)?.[1];
-  if (pageUnitCode) {
-    return pageUnitCode;
-  }
-
+function extractExternalListingId(detailUrl: string): string {
   const normalized = normalizeDetailUrl(detailUrl);
   if (!normalized) {
     return "unknown";
@@ -609,10 +604,7 @@ async function fetchDetail(
         html,
       ).slice(0, 2000);
 
-    const externalListingId = extractExternalListingId(
-      html,
-      normalizedDetailUrl,
-    );
+    const externalListingId = extractExternalListingId(normalizedDetailUrl);
 
     const extractedFromDom = await page.evaluate(() => {
       const widget = document.querySelector(
@@ -931,6 +923,11 @@ async function fetchDetail(
     const titleNormalized = normalizeForMatch(name);
 
     const widget = extractedFromDom.widgetData;
+    const quotePropertyId =
+      String(widget.unitcode || "").trim() ||
+      html.match(/["']unitcode["']\s*:\s*["']?(\d+)["']?/i)?.[1] ||
+      html.match(/data-unitcode=["'](\d+)["']/i)?.[1] ||
+      "";
     const locationInfo = extractedFromDom.propertyInfo;
     const address =
       widget.straddress1 || locationInfo.address || locationInfo.locationName;
@@ -977,6 +974,13 @@ async function fetchDetail(
       external_listing_id: externalListingId,
       detail_url: normalizedDetailUrl,
       fetched_at: new Date().toISOString(),
+      quote_context: {
+        source: "detail_html",
+        property_id: quotePropertyId,
+        property_name: name || externalListingId,
+        detail_url: normalizedDetailUrl,
+        endpoint_path: "/ajax/quote",
+      },
       title,
       h1,
       canonical_url: canonicalUrl,
@@ -1130,10 +1134,61 @@ export function createRealJoy30AAdapter(): ScraperAdapter<RealJoyDetailRecord> {
         "realjoy30a",
         argv,
       );
-      await runRealjoy30aQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "realjoy30a",
+          executeSingleQuote: executeRealjoy30aSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 1,
+          defaultEndpointPath: "/ajax/quote",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runRealjoy30aSingleQuoteObservation(input);
+      const result = await executeRealjoy30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? null,
+        options: {
+          timeoutMs: Number(process.env.REALJOY30A_QUOTE_TIMEOUT_MS ?? 20000),
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            ...result.observation,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "quote_unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: input.handoffUrl ?? null,
+          reason: result.error.code,
+        },
+      };
     },
   };
 }
