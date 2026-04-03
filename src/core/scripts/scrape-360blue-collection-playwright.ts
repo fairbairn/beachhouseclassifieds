@@ -1594,16 +1594,19 @@ async function run(): Promise<void> {
       ? "360blue-30a-playwright-links-subset.json"
       : "360blue-30a-playwright-links.json";
     const sourceFileName = isSubsetMode
-      ? "360blue_listings_subset.json"
-      : "360blue_listings.json";
+      ? "listings_subset.json"
+      : "listings.json";
+    const workingDir = resolve(OUTPUT_ROOT, "working");
 
     const reportPath = resolve(reportsDir, reportFileName);
-    const sourcePath = resolve(externalSourceDir, sourceFileName);
+    const sourcePath = resolve(workingDir, sourceFileName);
     const detailManifestPath = resolve(
       OUTPUT_ROOT,
       "details",
       isSubsetMode ? "index-subset.json" : "index.json",
     );
+
+    await mkdir(workingDir, { recursive: true });
 
     await writeFile(
       reportPath,

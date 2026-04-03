@@ -1340,12 +1340,13 @@ async function run(): Promise<void> {
       "data",
       "external-sources",
     );
+    const workingDir = resolve(externalSourceDir, "stayon30a", "working");
 
     await mkdir(reportsDir, { recursive: true });
-    await mkdir(externalSourceDir, { recursive: true });
+    await mkdir(workingDir, { recursive: true });
 
     const reportPath = resolve(reportsDir, "stayon30a-playwright-links.json");
-    const sourcePath = resolve(externalSourceDir, "stayon30a_listings.json");
+    const sourcePath = resolve(workingDir, "listings.json");
     const detailsManifestPath = resolve(OUTPUT_ROOT, "details", "index.json");
     const availabilityManifestPath = resolve(
       OUTPUT_ROOT,

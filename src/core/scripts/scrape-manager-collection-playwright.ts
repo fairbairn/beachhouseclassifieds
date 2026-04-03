@@ -659,18 +659,20 @@ async function run(): Promise<void> {
       "data",
       "external-sources",
     );
+    const managerWorkingDir = resolve(
+      externalSourceDir,
+      options.managerKey,
+      "working",
+    );
 
     await mkdir(reportsDir, { recursive: true });
-    await mkdir(externalSourceDir, { recursive: true });
+    await mkdir(managerWorkingDir, { recursive: true });
 
     const reportPath = resolve(
       reportsDir,
       `${options.managerKey}-playwright-links.json`,
     );
-    const sourcePath = resolve(
-      externalSourceDir,
-      `${options.managerKey}_listings.json`,
-    );
+    const sourcePath = resolve(managerWorkingDir, "listings.json");
 
     await writeFile(
       reportPath,

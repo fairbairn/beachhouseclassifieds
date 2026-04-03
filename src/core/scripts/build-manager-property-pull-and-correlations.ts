@@ -467,7 +467,9 @@ async function loadExternalCandidates(
     "lib",
     "data",
     "external-sources",
-    "360blue_listings.json",
+    "360blue",
+    "working",
+    "listings.json",
   );
   try {
     const payload = JSON.parse(await readFile(sourcePath, "utf8")) as Array<{

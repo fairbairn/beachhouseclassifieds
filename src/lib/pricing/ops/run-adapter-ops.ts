@@ -496,7 +496,9 @@ async function loadDiscoveredDetailUrls(adapterKey: string): Promise<string[]> {
     "lib",
     "data",
     "external-sources",
-    `${adapterKey}_listings.json`,
+    adapterKey,
+    "working",
+    "listings.json",
   );
 
   const raw = await readFile(listingsFilePath, "utf8");

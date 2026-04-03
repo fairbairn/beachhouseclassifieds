@@ -1683,10 +1683,9 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     );
     const reportPathRel = toProjectRelativePath(reportPath, root);
     const sourcePath = resolve(
-      externalSourceDir,
-      isSubsetMode
-        ? `${adapter.managerKey}_listings_subset.json`
-        : `${adapter.managerKey}_listings.json`,
+      outputRoot,
+      "working",
+      isSubsetMode ? "listings_subset.json" : "listings.json",
     );
     const sourcePathRel = toProjectRelativePath(sourcePath, root);
     const detailsManifestPath = resolve(
