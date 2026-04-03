@@ -8,10 +8,11 @@ import {
   type CanonicalQuoteObservation,
   type CanonicalQuotesSidecarRecord,
 } from "@/lib/pricing/contracts/quote-observations-contract";
+import { execute30AEscapesSingleQuote } from "@/lib/pricing/quote-runtime/adapters/30aescapes";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { runThirtyAEscapesQuoteCli } from "./quotes/30aescapes";
 
 type EscapeDayCode = string;
 
@@ -48,6 +49,13 @@ type EscapeDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "detail_hidden_inputs";
+    property_id: string | null;
+    unit_short_name: string | null;
+    detail_url: string;
+    endpoint_path: string;
   };
   normalized_matching_profile: {
     source: "pm_30aescapes";
@@ -2891,6 +2899,13 @@ async function fetchDetail(
       location,
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
+      quote_context: {
+        source: "detail_hidden_inputs",
+        property_id: extracted.propertyId || null,
+        unit_short_name: extracted.unitShortName || null,
+        detail_url: detailUrl,
+        endpoint_path: ESCAPES_QUOTES_ENDPOINT,
+      },
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: normalizedAvailability,
       normalized_rates: normalizedRates,
@@ -2981,7 +2996,19 @@ export function create30AEscapesAdapter(): ScraperAdapter<EscapeDetailRecord> {
         "30aescapes",
         argv,
       );
-      await runThirtyAEscapesQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "30aescapes",
+          executeSingleQuote: execute30AEscapesSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: ESCAPES_QUOTES_ENDPOINT,
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 650,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
       const propertyId = (() => {

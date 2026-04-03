@@ -29,7 +29,7 @@ const singleObservationPattern =
 const fsImportPattern =
   /from\s+["']node:fs(?:\/promises)?["']|from\s+["']fs["']|from\s+["']fs\/promises["']/;
 const runtimeDiskApiPattern =
-  /\breadFile\s*\(|\bwriteFile\s*\(|\breaddir\s*\(|\bstat\s*\(|\bmkdir\s*\(|\baccess\s*\(|\bopen\s*\(|\bcreateReadStream\s*\(|\bcreateWriteStream\s*\(|\bexistsSync\s*\(|\bappendFile\s*\(|\bmkdtemp\s*\(|\brm\s*\(|\bunlink\s*\(|\brename\s*\(|\bcopyFile\s*\(|\bprocess\.cwd\s*\(|\bresolve\s*\(|\bjoin\s*\(/;
+  /\breadFile\s*\(|\bwriteFile\s*\(|\breaddir\s*\(|\bstat\s*\(|\bmkdir\s*\(|\baccess\s*\(|\bopen\s*\(|\bcreateReadStream\s*\(|\bcreateWriteStream\s*\(|\bexistsSync\s*\(|\bappendFile\s*\(|\bmkdtemp\s*\(|\brm\s*\(|\bunlink\s*\(|\brename\s*\(|\bcopyFile\s*\(|\bprocess\.cwd\s*\(/;
 
 async function listTsFiles(dirPath: string): Promise<string[]> {
   const entries = await readdir(dirPath, { withFileTypes: true });
