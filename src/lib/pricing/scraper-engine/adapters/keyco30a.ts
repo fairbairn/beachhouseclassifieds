@@ -1988,6 +1988,7 @@ async function fetchDetail(
 
       return {
         ...existing,
+        quote_context: {},
         fetched_at: new Date().toISOString(),
         normalized_availability: {
           ...existing.normalized_availability,
@@ -2852,6 +2853,7 @@ async function fetchDetail(
     return {
       external_listing_id: externalListingId,
       detail_url: normalizedDetailUrl,
+      quote_context: {},
       fetched_at: new Date().toISOString(),
       title: normalizedTitle,
       h1: normalizedH1,

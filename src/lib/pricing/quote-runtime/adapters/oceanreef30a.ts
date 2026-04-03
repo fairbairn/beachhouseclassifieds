@@ -1,4 +1,4 @@
-import { runOceanreef30aSingleQuoteObservation } from "@/lib/pricing/scraper-engine/adapters/quotes/oceanreef30a";
+import { runOceanreef30aSingleQuoteObservation } from "@/lib/pricing/quotes/providers/oceanreef30a-single-observation";
 
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 

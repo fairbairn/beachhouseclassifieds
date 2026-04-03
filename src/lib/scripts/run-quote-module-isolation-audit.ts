@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { basename, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 type AuditRecord = {
@@ -26,9 +26,17 @@ type RunnerAuditRecord = {
 
 type QuoteContextCoverageRecord = {
   adapterKey: string;
+  indexMissing: boolean;
+  malformedIndex: boolean;
   total: number;
   withQuoteContext: number;
   missing: number;
+};
+
+type RuntimeLegacyCoexistenceRecord = {
+  adapterKey: string;
+  hasRuntimeAdapter: boolean;
+  hasLegacyQuoteAdapter: boolean;
 };
 
 type QuoteContextExternalIdEchoRecord = {
@@ -44,17 +52,20 @@ const adapterRoots = [
   join(projectRoot, "src/lib/pricing/scraper-engine/adapters/quotes"),
 ];
 const quoteRuntimeRoot = join(projectRoot, "src/lib/pricing/quote-runtime");
+const quoteRuntimeAdaptersRoot = join(
+  projectRoot,
+  "src/lib/pricing/quote-runtime/adapters",
+);
+const legacyQuoteAdaptersRoot = join(
+  projectRoot,
+  "src/lib/pricing/scraper-engine/adapters/quotes",
+);
 const runnerFiles = [
   join(projectRoot, "src/lib/scripts/run-ad-hoc-quote-latency.ts"),
   join(
     projectRoot,
     "src/lib/pricing/quotes/shared/runtime-adapter-quote-runner.ts",
   ),
-];
-const requiredQuoteContextAdapters = [
-  "30avacay",
-  "benchmark30a",
-  "oceanreef30a",
 ];
 const externalSourcesRoot = join(projectRoot, "src/lib/data/external-sources");
 
@@ -135,10 +146,30 @@ async function auditQuoteContextCoverage(
     "index.json",
   );
 
-  const raw = await readFile(indexPath, "utf8");
+  let raw = "";
+  try {
+    raw = await readFile(indexPath, "utf8");
+  } catch {
+    return {
+      adapterKey,
+      indexMissing: true,
+      malformedIndex: false,
+      total: 0,
+      withQuoteContext: 0,
+      missing: 0,
+    };
+  }
+
   const parsed = JSON.parse(raw) as Array<{ quote_context?: unknown }>;
   if (!Array.isArray(parsed)) {
-    throw new Error(`Malformed canonical index for ${adapterKey}`);
+    return {
+      adapterKey,
+      indexMissing: false,
+      malformedIndex: true,
+      total: 0,
+      withQuoteContext: 0,
+      missing: 0,
+    };
   }
 
   const withQuoteContext = parsed.filter((entry) => {
@@ -151,10 +182,37 @@ async function auditQuoteContextCoverage(
 
   return {
     adapterKey,
+    indexMissing: false,
+    malformedIndex: false,
     total: parsed.length,
     withQuoteContext,
     missing: parsed.length - withQuoteContext,
   };
+}
+
+async function listAdapterKeysFromTsFiles(dirPath: string): Promise<string[]> {
+  const files = await listTsFiles(dirPath);
+  const keys = files
+    .filter((filePath) => extname(filePath) === ".ts")
+    .map((filePath) => basename(filePath, ".ts"))
+    .filter((key) => key.length > 0)
+    .sort((left, right) => left.localeCompare(right));
+  return Array.from(new Set(keys));
+}
+
+function auditRuntimeLegacyCoexistence(input: {
+  runtimeAdapterKeys: string[];
+  legacyQuoteAdapterKeys: string[];
+}): RuntimeLegacyCoexistenceRecord[] {
+  const allKeys = Array.from(
+    new Set([...input.runtimeAdapterKeys, ...input.legacyQuoteAdapterKeys]),
+  ).sort((left, right) => left.localeCompare(right));
+
+  return allKeys.map((adapterKey) => ({
+    adapterKey,
+    hasRuntimeAdapter: input.runtimeAdapterKeys.includes(adapterKey),
+    hasLegacyQuoteAdapter: input.legacyQuoteAdapterKeys.includes(adapterKey),
+  }));
 }
 
 function collectScalarPaths(
@@ -297,6 +355,7 @@ async function run(): Promise<number> {
   const runnerRecords: RunnerAuditRecord[] = [];
   const coverageRecords: QuoteContextCoverageRecord[] = [];
   const quoteContextEchoRecords: QuoteContextExternalIdEchoRecord[] = [];
+  const coexistenceRecords: RuntimeLegacyCoexistenceRecord[] = [];
 
   for (const filePath of uniqueFiles) {
     const source = await readFile(filePath, "utf8");
@@ -316,9 +375,23 @@ async function run(): Promise<number> {
     runnerRecords.push(auditRunnerFile(filePath, source));
   }
 
-  for (const adapterKey of requiredQuoteContextAdapters) {
+  const runtimeAdapterKeys = await listAdapterKeysFromTsFiles(
+    quoteRuntimeAdaptersRoot,
+  );
+  const legacyQuoteAdapterKeys = await listAdapterKeysFromTsFiles(
+    legacyQuoteAdaptersRoot,
+  );
+
+  for (const adapterKey of runtimeAdapterKeys) {
     coverageRecords.push(await auditQuoteContextCoverage(adapterKey));
   }
+
+  coexistenceRecords.push(
+    ...auditRuntimeLegacyCoexistence({
+      runtimeAdapterKeys,
+      legacyQuoteAdapterKeys,
+    }),
+  );
 
   const adapterKeysWithCanonicalIndex =
     await listAdapterKeysWithCanonicalIndex();
@@ -345,10 +418,21 @@ async function run(): Promise<number> {
       record.referencesBackfillFlags,
   );
   const coverageViolating = coverageRecords.filter(
-    (record) => record.missing > 0,
+    (record) =>
+      record.indexMissing || record.malformedIndex || record.missing > 0,
+  );
+  const coverageWarningZeroContext = coverageRecords.filter(
+    (record) =>
+      !record.indexMissing &&
+      !record.malformedIndex &&
+      record.total > 0 &&
+      record.withQuoteContext === 0,
   );
   const quoteContextEchoViolating = quoteContextEchoRecords.filter(
     (record) => record.echoed > 0,
+  );
+  const coexistenceViolating = coexistenceRecords.filter(
+    (record) => record.hasRuntimeAdapter && record.hasLegacyQuoteAdapter,
   );
 
   console.log("Quote module isolation audit (single-observation handlers)");
@@ -401,15 +485,57 @@ async function run(): Promise<number> {
   }
 
   console.log("");
-  console.log("Required Quote Context Coverage");
+  console.log("Runtime Adapter Quote Context Coverage");
   console.log(
-    "Rules: migrated runtime adapters must have quote_context on every canonical index entry.",
+    "Rules: every adapter with a quote-runtime adapter file must have canonical index.json with quote_context on every entry.",
   );
   console.log("");
 
   for (const record of coverageRecords) {
+    if (record.indexMissing) {
+      console.log(`- ${record.adapterKey} index=missing`);
+      continue;
+    }
+
+    if (record.malformedIndex) {
+      console.log(`- ${record.adapterKey} index=malformed`);
+      continue;
+    }
+
     console.log(
       `- ${record.adapterKey} total=${record.total} with_quote_context=${record.withQuoteContext} missing=${record.missing}`,
+    );
+  }
+
+  if (coverageWarningZeroContext.length > 0) {
+    console.log("");
+    console.log("Quote Context Zero-Coverage Warnings");
+    console.log(
+      "Rules: adapters with runtime quote support should not have 0% quote_context coverage.",
+    );
+    console.log("");
+    for (const record of coverageWarningZeroContext) {
+      console.log(
+        `- ${record.adapterKey} with_quote_context=${record.withQuoteContext}/${record.total}`,
+      );
+    }
+  }
+
+  console.log("");
+  console.log("Runtime Migration Legacy Coexistence");
+  console.log(
+    "Rules: adapters with quote-runtime/adapters/<adapter>.ts must not also keep scraper-engine/adapters/quotes/<adapter>.ts.",
+  );
+  console.log("");
+
+  for (const record of coexistenceRecords) {
+    if (!record.hasRuntimeAdapter && !record.hasLegacyQuoteAdapter) {
+      continue;
+    }
+    console.log(`- ${record.adapterKey}`);
+    console.log(`  runtime_adapter: ${toFlag(record.hasRuntimeAdapter)}`);
+    console.log(
+      `  legacy_quote_adapter: ${toFlag(record.hasLegacyQuoteAdapter)}`,
     );
   }
 
@@ -433,7 +559,7 @@ async function run(): Promise<number> {
 
   console.log("");
   console.log(
-    `Summary: total_handlers=${records.length} handler_violations=${violating.length} runtime_files=${runtimeRecords.length} runtime_violations=${runtimeViolating.length} runner_files=${runnerRecords.length} runner_violations=${runnerViolating.length} quote_context_adapters=${coverageRecords.length} quote_context_violations=${coverageViolating.length} red_flag_adapters=${quoteContextEchoRecords.length} red_flag_violations=${quoteContextEchoViolating.length}`,
+    `Summary: total_handlers=${records.length} handler_violations=${violating.length} runtime_files=${runtimeRecords.length} runtime_violations=${runtimeViolating.length} runner_files=${runnerRecords.length} runner_violations=${runnerViolating.length} runtime_quote_context_adapters=${coverageRecords.length} quote_context_violations=${coverageViolating.length} quote_context_zero_coverage_warnings=${coverageWarningZeroContext.length} legacy_coexistence_adapters=${coexistenceRecords.length} legacy_coexistence_violations=${coexistenceViolating.length} red_flag_adapters=${quoteContextEchoRecords.length} red_flag_violations=${quoteContextEchoViolating.length}`,
   );
 
   if (
@@ -441,6 +567,7 @@ async function run(): Promise<number> {
     runtimeViolating.length > 0 ||
     runnerViolating.length > 0 ||
     coverageViolating.length > 0 ||
+    coexistenceViolating.length > 0 ||
     quoteContextEchoViolating.length > 0
   ) {
     console.error(
