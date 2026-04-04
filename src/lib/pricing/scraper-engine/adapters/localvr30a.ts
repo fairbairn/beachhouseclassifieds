@@ -1,13 +1,11 @@
+import { executeLocalvr30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/localvr30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import {
-  runLocalvr30aQuoteCli,
-  runLocalvr30aSingleQuoteObservation,
-} from "./quotes/localvr30a";
 
 type LocalVrDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -42,6 +40,11 @@ type LocalVrDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "detail_url_path";
+    listing_id: string;
+    detail_url: string;
   };
   normalized_matching_profile: {
     source: "pm_localvr30a";
@@ -269,6 +272,34 @@ function normalizeCity(value: string): string {
     .trim();
 }
 
+function isUnavailableDetailHtml(html: string): boolean {
+  const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html)
+    .toLowerCase()
+    .trim();
+  const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html)
+    .toLowerCase()
+    .trim();
+  const metaDescription =
+    extractFirst(
+      /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
+      html,
+    )
+      .toLowerCase()
+      .trim() ||
+    extractFirst(
+      /<meta[^>]+content=["']([\s\S]*?)["'][^>]+name=["']description["'][^>]*>/i,
+      html,
+    )
+      .toLowerCase()
+      .trim();
+
+  return (
+    h1 === "404" ||
+    title === "localvr" ||
+    metaDescription.includes("property you are looking for is not available")
+  );
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -279,15 +310,25 @@ function slugify(value: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function extractPropertyId(detailUrl: string): string {
+function extractPropertySlugAndId(detailUrl: string): {
+  externalListingId: string;
+  listingId: string;
+} {
   const normalized = normalizeDetailUrl(detailUrl);
   if (!normalized) {
-    return "unknown";
+    return {
+      externalListingId: "unknown",
+      listingId: "unknown",
+    };
   }
 
   const slug = new URL(normalized).pathname.split("/").filter(Boolean)[1] || "";
-  const id = slug.match(/([a-f0-9]{24})$/i)?.[1];
-  return id || slug || "unknown";
+  const listingId = slug.match(/([a-f0-9]{24})$/i)?.[1] ?? "";
+
+  return {
+    externalListingId: slug || "unknown",
+    listingId: listingId || slug || "unknown",
+  };
 }
 
 function mapAvailabilityStatus(
@@ -686,25 +727,53 @@ async function fetchDetail(
     }
 
     const html = await page.content();
+    let htmlForParsing = html;
 
-    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
+    if (isUnavailableDetailHtml(htmlForParsing)) {
+      try {
+        const fallbackResponse = await fetch(normalizedDetailUrl, {
+          method: "GET",
+          headers: {
+            "user-agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            referer: DEFAULT_ANCHOR_URL,
+          },
+        });
+
+        if (fallbackResponse.ok) {
+          const fallbackHtml = await fallbackResponse.text();
+          if (!isUnavailableDetailHtml(fallbackHtml)) {
+            htmlForParsing = fallbackHtml;
+          }
+        }
+      } catch {
+        // Keep original Playwright HTML if fallback request fails.
+      }
+    }
+
+    const title = extractFirst(
+      /<title[^>]*>([\s\S]*?)<\/title>/i,
+      htmlForParsing,
+    ).slice(0, 240);
+    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, htmlForParsing).slice(
       0,
       240,
     );
-    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html).slice(0, 240);
     const canonicalUrl =
       extractFirst(
         /<link[^>]+rel=["']canonical["'][^>]+href=["']([\s\S]*?)["'][^>]*>/i,
-        html,
+        htmlForParsing,
       ) || normalizedDetailUrl;
     const metaDescription =
       extractFirst(
         /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
-        html,
+        htmlForParsing,
       ).slice(0, 2000) ||
       extractFirst(
         /<meta[^>]+content=["']([\s\S]*?)["'][^>]+name=["']description["'][^>]*>/i,
-        html,
+        htmlForParsing,
       ).slice(0, 2000);
 
     const summaryText = await page.evaluate(() => {
@@ -728,18 +797,19 @@ async function fetchDetail(
       return "";
     });
 
-    const externalListingId = extractPropertyId(normalizedDetailUrl);
+    const { externalListingId, listingId } =
+      extractPropertySlugAndId(normalizedDetailUrl);
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
     );
-    await writeFile(htmlPath, `${html}\n`, "utf8");
+    await writeFile(htmlPath, `${htmlForParsing}\n`, "utf8");
 
-    const schemaObjects = parseJsonLdObjects(html);
+    const schemaObjects = parseJsonLdObjects(htmlForParsing);
     const hotelSchema = pickHotelSchema(schemaObjects);
 
     const availability = extractAvailabilityFromHtml(
-      html,
+      htmlForParsing,
       availabilityHorizonDays,
     );
 
@@ -815,7 +885,7 @@ async function fetchDetail(
 
     const largeImageHrefPattern =
       /href=["'](https?:\/\/assets\.guesty\.com\/image\/upload\/[^"']+)["']/gi;
-    for (const match of html.matchAll(largeImageHrefPattern)) {
+    for (const match of htmlForParsing.matchAll(largeImageHrefPattern)) {
       if (match[1]) {
         pushImage(match[1]);
       }
@@ -901,7 +971,7 @@ async function fetchDetail(
         image_urls: imageUrls,
       },
       property_profile: {
-        unit_id: externalListingId,
+        unit_id: listingId,
         area: "30A",
         location: locationLabel,
         beds,
@@ -909,6 +979,11 @@ async function fetchDetail(
         sleeps,
         city,
         state,
+      },
+      quote_context: {
+        source: "detail_url_path",
+        listing_id: listingId,
+        detail_url: normalizedDetailUrl,
       },
       normalized_matching_profile: {
         source: "pm_localvr30a",
@@ -1022,10 +1097,84 @@ export function createLocalVR30AAdapter(): ScraperAdapter<LocalVrDetailRecord> {
         "localvr30a",
         argv,
       );
-      await runLocalvr30aQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "localvr30a",
+          executeSingleQuote: executeLocalvr30aSingleQuote,
+          maxAttemptsEnvVar: "LOCALVR30A_QUOTE_MAX_ATTEMPTS",
+          defaultMaxListings: 10,
+          defaultWeeks: 24,
+          defaultNights: 7,
+          defaultListingConcurrency: 2,
+          defaultQuoteConcurrency: 3,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/property/[slug] (next-action multipart)",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runLocalvr30aSingleQuoteObservation(input);
+      const result = await executeLocalvr30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? {
+          listing_id: input.listingId,
+          detail_url: input.detailUrl,
+        },
+        options: {
+          timeoutMs:
+            Number(
+              process.env.LOCALVR30A_QUOTE_TIMEOUT_MS ??
+                process.env.QUOTE_CAPTURE_TIMEOUT_MS ??
+                "20000",
+            ) || 20000,
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            startDate: result.observation.startDate,
+            endDate: result.observation.endDate,
+            quoteAvailable: result.observation.quoteAvailable,
+            currency: result.observation.currency,
+            baseTotal: result.observation.baseTotal,
+            taxesTotal: result.observation.taxesTotal,
+            feesTotalExclTaxes: result.observation.feesTotalExclTaxes,
+            grandTotal: result.observation.grandTotal,
+            quotedTotal: result.observation.quotedTotal,
+            handoffUrl: result.observation.handoffUrl,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "Quote unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: null,
+          reason: result.error.message,
+        },
+      };
     },
   };
 }

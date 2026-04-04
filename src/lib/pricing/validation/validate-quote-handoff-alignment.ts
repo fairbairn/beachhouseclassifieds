@@ -28,6 +28,8 @@ const FIVESTAR_NAVIGATION_TIMEOUT_MS = 20_000;
 const FIVESTAR_RENDER_WAIT_MS = 2_500;
 const THIRTYA_VACAY_NAVIGATION_TIMEOUT_MS = 20_000;
 const THIRTYA_VACAY_RENDER_WAIT_MS = 2_000;
+const LOCALVR_NAVIGATION_TIMEOUT_MS = 20_000;
+const LOCALVR_RENDER_WAIT_MS = 2_000;
 
 let validationHttpActive = 0;
 let validationHttpLastStartMs = 0;
@@ -371,6 +373,7 @@ function extractCandidateTotals(html: string): number[] {
   const candidates: number[] = [];
 
   const htmlPatterns = [
+    /total\s*price[^$]{0,140}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi,
     /grand\s*total[^$]{0,140}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi,
     /total\s*due[^$]{0,140}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi,
     /(?:^|>)\s*total\s*(?:<|:|\s)[^$]{0,100}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi,
@@ -394,7 +397,7 @@ function extractCandidateTotals(html: string): number[] {
     .replace(/\s+/g, " ");
 
   const textPattern =
-    /(grand\s*total|total\s*due|\btotal\b)[^$]{0,60}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi;
+    /(total\s*price|grand\s*total|total\s*due|\btotal\b)[^$]{0,80}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi;
   for (const match of text.matchAll(textPattern)) {
     const amount = parseMoney(match[2] ?? "");
     if (amount !== null) {
@@ -1460,6 +1463,132 @@ async function tryExtractFivestarRenderedCheckoutTotal(
     kind: "request_error",
     message:
       "fivestar checkout total not rendered from visible DOM after retries",
+  };
+}
+
+function parseLocalvrTotalPriceText(text: string): number | null {
+  const matches = [
+    ...text.matchAll(/Total\s*Price\s*:?[\s$]*([0-9,]+(?:\.[0-9]{2})?)/gi),
+  ];
+  for (const match of matches) {
+    const parsed = parseMoney(match[1] ?? "");
+    if (parsed !== null && parsed > 0) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+async function tryExtractLocalvrRenderedCheckoutTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (
+    parsed.hostname !== "stay.golocalvr.com" ||
+    !/^\/checkout\/[^/]+\/payment\/?$/i.test(parsed.pathname)
+  ) {
+    return { kind: "unsupported" };
+  }
+
+  const playwrightModule = await import("playwright").catch(() => null);
+  if (!playwrightModule?.chromium) {
+    return {
+      kind: "request_error",
+      message:
+        "playwright chromium unavailable for localvr checkout validation",
+    };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const browser = await playwrightModule.chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ userAgent: USER_AGENT });
+    const page = await context.newPage();
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      try {
+        await page.goto(candidate.handoffUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: LOCALVR_NAVIGATION_TIMEOUT_MS,
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        reportProgress?.(
+          `localvr checkout retry ${attempt + 1}/${retryDelaysMs.length} navigation_error=${message}`,
+        );
+        continue;
+      }
+
+      await page
+        .waitForLoadState("networkidle", { timeout: 12_000 })
+        .catch(() => null);
+      await page.waitForTimeout(LOCALVR_RENDER_WAIT_MS);
+
+      const pollDelaysMs = [0, 400, 900, 1500, 2500];
+      for (let poll = 0; poll < pollDelaysMs.length; poll += 1) {
+        const pollDelay = pollDelaysMs[poll] ?? 0;
+        if (pollDelay > 0) {
+          await sleep(pollDelay);
+        }
+
+        const bodyText = await page
+          .locator("body")
+          .innerText()
+          .catch(() => "");
+
+        const hintedTotal = parseLocalvrTotalPriceText(bodyText);
+        if (hintedTotal !== null) {
+          return {
+            kind: "success",
+            total: hintedTotal,
+          };
+        }
+
+        const selectorTexts = await page
+          .locator("[class*='price' i], [class*='total' i]")
+          .allInnerTexts()
+          .catch(() => []);
+        const selectorTotals = selectorTexts
+          .map((text) => parseMoney(text))
+          .filter(
+            (value): value is number => typeof value === "number" && value > 0,
+          );
+        const selectorBest = pickClosestTotal(
+          selectorTotals,
+          candidate.observedGrandTotal,
+        );
+        if (selectorBest) {
+          return {
+            kind: "success",
+            total: selectorBest.total,
+          };
+        }
+      }
+
+      reportProgress?.(
+        `localvr checkout retry ${attempt + 1}/${retryDelaysMs.length} total_price_not_rendered`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    kind: "request_error",
+    message:
+      "localvr checkout total not rendered from visible DOM after retries",
   };
 }
 
@@ -3110,6 +3239,38 @@ async function validateObservation(
     };
   }
 
+  if (candidate.adapterKey === "localvr30a") {
+    const localvrCheckout = await tryExtractLocalvrRenderedCheckoutTotal(
+      candidate,
+      reportProgress,
+    );
+
+    if (localvrCheckout.kind === "success") {
+      const diff = Math.abs(
+        localvrCheckout.total - candidate.observedGrandTotal,
+      );
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from rendered checkout total=${localvrCheckout.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: localvrCheckout.total,
+        };
+      }
+      return null;
+    }
+
+    if (localvrCheckout.kind === "request_error") {
+      reportProgress?.(
+        `localvr rendered checkout extraction fallback to html parse: ${localvrCheckout.message}`,
+      );
+    }
+  }
+
   const signedHandoff = await tryExtractSignedHandoffTotal(
     candidate,
     reportProgress,
@@ -3558,6 +3719,12 @@ export async function runValidateQuoteHandoffAlignmentCli(
         progress.progress(
           `progress adapter=${options.adapterKey} ${completed}/${candidates.length} listing=${candidate.listingId} window=${candidate.startDate}->${candidate.endDate} outcome=${outcome} elapsed_s=${elapsedSeconds}`,
         );
+        if (result !== null) {
+          progress.failure(
+            `inline failure adapter=${options.adapterKey} listing=${result.listingId} window=${result.startDate}->${result.endDate} code=${result.code} observed=${result.observedGrandTotal.toFixed(2)} extracted=${result.extractedTotal === null ? "n/a" : result.extractedTotal.toFixed(2)} message=${result.message}`,
+          );
+          progress.info(`handoff_url=${result.handoffUrl}`);
+        }
         return result;
       },
     )

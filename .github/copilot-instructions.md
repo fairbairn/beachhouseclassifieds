@@ -55,6 +55,7 @@
 
 - Read this file first, then `AGENTS.md`, then relevant files under `src/core`, `src/lib`, and `src/routes`.
 - Keep reusable infrastructure in `src/core/*`; keep app workflows in app-facing folders.
+- After adapter validation passes, update `docs/adapter-conformance-status.md` first before downstream status docs.
 - Validate with `npm run build` after meaningful edits.
 - For larger refactors that touch docs and runtime code, defer docs build to a final single validation pass unless requested earlier.
 
@@ -67,7 +68,8 @@
 - Current migration baton:
   - `sandersbeach30a` runtime migration and validation are complete.
   - `fivestar30a` runtime migration and validation are complete.
-  - Next adapter target is `localvr30a` (highest-volume pending adapter with `API Quote = ✅` and `Quote Runtime = ❌`).
+  - `localvr30a` runtime migration and validation are complete.
+  - Next adapter target is `royaldestinations`.
 
 ## Validation
 

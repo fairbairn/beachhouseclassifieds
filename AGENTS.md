@@ -58,4 +58,5 @@ Generated projects should include:
 
 - Completed: `sandersbeach30a` runtime migration + validation.
 - Completed: `fivestar30a` runtime migration + validation.
-- Next target: `localvr30a`.
+- Completed: `localvr30a` runtime migration + validation.
+- Next target: `royaldestinations`.
