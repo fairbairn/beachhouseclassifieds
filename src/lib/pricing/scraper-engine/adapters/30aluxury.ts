@@ -1,8 +1,9 @@
+import { execute30ALuxurySingleQuote } from "@/lib/pricing/quote-runtime/adapters/30aluxury";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
-import { runThirtyALuxuryQuoteCli } from "./quotes/30aluxury";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -10,6 +11,12 @@ import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
 type LuxuryDetailRecord = DetailRecordBase & {
+  quote_context: {
+    entity_id: number;
+    ids_tuple: string;
+    rc_type: string;
+    detail_url: string;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -192,6 +199,52 @@ function parseFirstNumber(value: string): number | null {
   }
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseEntityIdFromHtml(html: string): number | null {
+  const patterns = [
+    /['"]eid['"]\s*:\s*['"](\d+)['"]/i,
+    /\brc-eid-(\d+)\b/i,
+    /\bitem_id:(\d+)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const parsed = Number(match[1]);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function parseIdsTupleFromHtml(html: string): string | null {
+  const patterns = [
+    /['"]id['"]\s*:\s*['"](\d+-\d+)['"]/i,
+    /\brcav%5BIDs%5D%5B\d+%5D%5B%5D=(\d+-\d+)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function parseRcTypeFromHtml(html: string): string {
+  const match = html.match(/['"]type['"]\s*:\s*['"](\d+)['"]/i);
+  if (match?.[1]) {
+    return match[1].trim();
+  }
+  return "8";
 }
 
 function parseCityStateFromAddress(address: string): {
@@ -1045,6 +1098,15 @@ async function fetchDetail(
       image_urls: mediaUrls,
     };
 
+    const entityId = parseEntityIdFromHtml(html);
+    const idsTuple = parseIdsTupleFromHtml(html);
+    const rcType = parseRcTypeFromHtml(html);
+    if (!entityId || !idsTuple) {
+      throw new Error(
+        "Missing required quote identifiers (entity_id or ids_tuple) in detail HTML",
+      );
+    }
+
     const streetAddress = stripHtml(locationPayload.street).slice(0, 240);
     const directionsQuery =
       streetAddress ||
@@ -1105,6 +1167,12 @@ async function fetchDetail(
     return {
       external_listing_id: externalListingId,
       detail_url: detailUrl,
+      quote_context: {
+        entity_id: entityId,
+        ids_tuple: idsTuple,
+        rc_type: rcType,
+        detail_url: detailUrl,
+      },
       fetched_at: new Date().toISOString(),
       title: stripHtml(extracted.title).slice(0, 240),
       h1: stripHtml(extracted.h1).slice(0, 240),
@@ -1233,7 +1301,19 @@ export function create30ALuxuryAdapter(): ScraperAdapter<LuxuryDetailRecord> {
         "30aluxury",
         argv,
       );
-      await runThirtyALuxuryQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "30aluxury",
+          executeSingleQuote: execute30ALuxurySingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/rescms/ajax/item/pricing/quote",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
   };
 }

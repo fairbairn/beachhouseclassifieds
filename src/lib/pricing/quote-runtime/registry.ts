@@ -1,4 +1,5 @@
 import { execute30AEscapesSingleQuote } from "./adapters/30aescapes";
+import { execute30ALuxurySingleQuote } from "./adapters/30aluxury";
 import { execute30AvacaySingleQuote } from "./adapters/30avacay";
 import { execute360BlueSingleQuote } from "./adapters/360blue";
 import { executeBenchmark30aSingleQuote } from "./adapters/benchmark30a";
@@ -19,6 +20,7 @@ export type QuoteRuntimeExecutor = (
 const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   "30avacay": execute30AvacaySingleQuote,
   "30aescapes": execute30AEscapesSingleQuote,
+  "30aluxury": execute30ALuxurySingleQuote,
   "360blue": execute360BlueSingleQuote,
   benchmark30a: executeBenchmark30aSingleQuote,
   exclusive30a: executeExclusive30aSingleQuote,
