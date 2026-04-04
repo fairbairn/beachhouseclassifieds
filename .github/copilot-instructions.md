@@ -58,6 +58,16 @@
 - Validate with `npm run build` after meaningful edits.
 - For larger refactors that touch docs and runtime code, defer docs build to a final single validation pass unless requested earlier.
 
+## Operator Shorthand and Session Baton
+
+- User shorthand: `single-mode adhoc quote checkout`
+  - Meaning: run built-in ad-hoc latency single mode for one adapter, random listing + random observation window, and print on-screen pricing financials plus checkout URL (`handoff_url`).
+  - Command pattern: `npm run pricing:latency:adhoc -- --adapter-key <adapterKey> --random-single`
+  - Do not create temporary/custom runners for this workflow.
+- Current migration baton:
+  - `sandersbeach30a` runtime migration and validation are complete.
+  - Next adapter target is `fivestar30a` (highest-volume pending adapter with `API Quote = ✅` and `Quote Runtime = ❌`).
+
 ## Validation
 
 After substantial changes:
