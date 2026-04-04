@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-04-04T19:03:30Z
+Audit date: 2026-04-04T19:33:31Z
 
 Data source:
 
@@ -142,6 +142,7 @@ Active next runtime migration target: `coastproperties30a` (highest-volume pendi
   - `localvr30a`: `Quote validator passed ... validated=42 failed=0`
   - `360blue`: `Quote validator passed ... validated=592 failed=0`
   - `30aluxury`: `Quote validator passed ... validated=105 failed=0`
+  - `grayt30a`: `Quote validator passed ... validated=35 failed=0`; pricing validator passed `validated=35 failed=0`; handoff smoke (`--max-observations 1`) passed `tested=35 matched=35 failed=0`
 - Remaining adapters failing quote pricing validation (`npm run pricing:validate:quotes:all`):
   - none
 

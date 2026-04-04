@@ -174,7 +174,8 @@ function validateAvailableQuoteSanity(
   ) {
     issues.push({
       code: "invalid_fees_total",
-      message: "fees_total_excl_taxes must be < base_total when quote_available=true",
+      message:
+        "fees_total_excl_taxes must be < base_total when quote_available=true",
     });
   }
 

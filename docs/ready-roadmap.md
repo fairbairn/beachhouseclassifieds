@@ -52,10 +52,11 @@ For each adapter promoted:
 ## Latest Promotion
 
 - `funvacay30a` is now Ready after full scrape refresh (46 listings), full quote pull (46/46), pricing cache parity (46/46), and handoff smoke alignment pass (10/10 sampled).
+- `grayt30a` is now Ready with quote and pricing parity at 35/35/35 and handoff smoke alignment passing at one observation per listing (35/35).
 
 ## Current In Progress
 
-- `grayt30a` runtime migration is complete and core validators are green (quote 35/35, pricing 35/35, scrape 35/35), but handoff alignment is not yet conformant (smoke 2/10, full 31/140). Keep status as seeded until handoff direct-status errors are resolved.
+- Next quote-runtime migration target: `coastproperties30a`.
 
 ## Operating Principle
 
