@@ -1,6 +1,6 @@
 # Rates Conformance Campaign
 
-Last generated: 2026-04-02T14:35:00Z
+Last generated: 2026-04-04T23:40:00Z
 
 This campaign orders adapters by listing count (high to low) and defines a concrete rate extraction reinvestigation path per adapter.
 
@@ -23,7 +23,7 @@ Prepare all adapters for upcoming rates-required conformance by closing normaliz
 |    9 | oceanreef30a            |   112 |     0 | 112 | needs_rates | no               | no                      | yes              | custom_hybrid   | Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics.       |
 |   10 | exclusive30a            |   106 |     0 | 106 | needs_rates | no               | no                      | no               | custom_hybrid   | Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics.       |
 |   11 | sandpiper30a            |   106 |     0 | 106 | needs_rates | no               | no                      | yes              | track_bluetent  | Quote runtime + handoff alignment are complete; next isolate deterministic Track/Bluetent listing-level rates path to close normalized_rates gap. |
-|   12 | 30aluxury               |   105 |     0 | 105 | needs_rates | no               | no                      | no               | custom_hybrid   | Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics.       |
+|   12 | 30aluxury               |   105 |     0 | 105 | needs_rates | no               | no                      | yes              | custom_hybrid   | Quote runtime + handoff alignment are complete; next isolate deterministic listing-level rates path to close normalized_rates gap.                |
 |   13 | dunevr30a               |    85 |    85 |   0 | complete    | yes              | yes                     | yes              | streamline      | Probe wp-admin streamline methods first (GetPropertyRates or GetPropertyRatesRawData), then map response days to normalized_rates.                |
 |   14 | stayon30a               |    78 |     0 |  78 | needs_rates | no               | yes                     | no               | streamline      | Probe wp-admin streamline methods first (GetPropertyRates or GetPropertyRatesRawData), then map response days to normalized_rates.                |
 |   15 | sandersbeach30a         |    74 |     0 |  74 | needs_rates | no               | no                      | yes              | streamline      | Quote runtime + handoff alignment are complete; next probe Streamline listing-rates methods to close normalized_rates gap.                        |
@@ -49,7 +49,7 @@ Prepare all adapters for upcoming rates-required conformance by closing normaliz
 5. oceanreef30a (112 files, gap 112) - Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics.
 6. exclusive30a (106 files, gap 106) - Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics.
 7. sandpiper30a (106 files, gap 106) - Probe Track/Bluetent router and booking endpoints for daily or season rates; fallback to DOM rates table if API unavailable.
-8. 30aluxury (105 files, gap 105) - Capture detail-page network traffic during date interactions, identify deterministic rate endpoint, then implement parser with diagnostics.
+8. 30aluxury (105 files, gap 105) - Quote runtime + handoff alignment are complete; next isolate deterministic listing-level rates path to close normalized_rates gap.
 9. stayon30a (78 files, gap 78) - Probe wp-admin streamline methods first (GetPropertyRates or GetPropertyRatesRawData), then map response days to normalized_rates.
 10. sandersbeach30a (74 files, gap 74) - Quote and handoff validations are complete; next probe Streamline methods for listing-level rates.
 
