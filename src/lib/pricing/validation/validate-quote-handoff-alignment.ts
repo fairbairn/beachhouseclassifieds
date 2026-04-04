@@ -24,6 +24,8 @@ const BEACHBLUE_NAVIGATION_TIMEOUT_MS = 8_000;
 const BEACHBLUE_AJAX_WAIT_TIMEOUT_MS = 15_000;
 const KEYCO_NAVIGATION_TIMEOUT_MS = 20_000;
 const KEYCO_RENDER_WAIT_MS = 1_500;
+const FIVESTAR_NAVIGATION_TIMEOUT_MS = 20_000;
+const FIVESTAR_RENDER_WAIT_MS = 2_500;
 const THIRTYA_VACAY_NAVIGATION_TIMEOUT_MS = 20_000;
 const THIRTYA_VACAY_RENDER_WAIT_MS = 2_000;
 
@@ -99,7 +101,7 @@ type ValidationResult = {
 };
 
 function parseArgs(argv: string[]): CliOptions {
-  let adapterKey = "30abeach";
+  let adapterKey: string | null = null;
   let listingId: string | null = null;
   let maxListings: number | null = null;
   let maxObservations = DEFAULT_MAX_OBSERVATIONS;
@@ -188,6 +190,15 @@ function parseArgs(argv: string[]): CliOptions {
     }
   }
 
+  if (!adapterKey) {
+    throw new Error(
+      [
+        "Missing --adapter-key for handoff validation.",
+        "Example: npm run pricing:validate:handoff -- --adapter-key fivestar30a --max-listings 5 --max-observations 2",
+      ].join("\n"),
+    );
+  }
+
   return {
     adapterKey,
     listingId,
@@ -256,19 +267,34 @@ function parseHeadcountFromHandoffUrl(handoffUrl: string): {
       parsed.searchParams.get("children") ??
       parsed.searchParams.get("childCount") ??
       "0";
+    const personsRaw =
+      parsed.searchParams.get("persons") ??
+      parsed.searchParams.get("guests") ??
+      null;
 
     const adultsParsed = Number(adultsRaw);
     const childrenParsed = Number(childrenRaw);
 
+    let adults =
+      Number.isFinite(adultsParsed) && adultsParsed > 0
+        ? Math.floor(adultsParsed)
+        : 1;
+    const children =
+      Number.isFinite(childrenParsed) && childrenParsed >= 0
+        ? Math.floor(childrenParsed)
+        : 0;
+
+    const personsParsed = personsRaw ? Number(personsRaw) : NaN;
+    if (Number.isFinite(personsParsed) && personsParsed > 0) {
+      const persons = Math.floor(personsParsed);
+      if (adults + children !== persons) {
+        adults = Math.max(1, persons - children);
+      }
+    }
+
     return {
-      adults:
-        Number.isFinite(adultsParsed) && adultsParsed > 0
-          ? Math.floor(adultsParsed)
-          : 1,
-      children:
-        Number.isFinite(childrenParsed) && childrenParsed >= 0
-          ? Math.floor(childrenParsed)
-          : 0,
+      adults: adults,
+      children,
     };
   } catch {
     return { adults: 1, children: 0 };
@@ -1294,6 +1320,146 @@ async function tryExtract30AVacayRenderedCheckoutTotal(
     kind: "request_error",
     message:
       "30avacay checkout total not rendered from visible DOM after retries",
+  };
+}
+
+async function tryExtractFivestarRenderedCheckoutTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (
+    !parsed.hostname.endsWith("fivestargulfrentals.com") ||
+    !parsed.pathname.includes("/vacation-rentals/checkout/")
+  ) {
+    return { kind: "unsupported" };
+  }
+
+  const playwrightModule = await import("playwright").catch(() => null);
+  if (!playwrightModule?.chromium) {
+    return {
+      kind: "request_error",
+      message:
+        "playwright chromium unavailable for fivestar checkout validation",
+    };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const browser = await playwrightModule.chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ userAgent: USER_AGENT });
+    const page = await context.newPage();
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      const routerTotalRef: { total: number | null } = { total: null };
+      const onResponse = async (response: {
+        url(): string;
+        request(): { method(): string };
+        json(): Promise<unknown>;
+      }): Promise<void> => {
+        if (
+          !response.url().includes("/vacation-rentals/router/") ||
+          response.request().method() !== "POST"
+        ) {
+          return;
+        }
+
+        try {
+          const payload = (await response.json()) as Record<string, unknown>;
+          const bookingTotal =
+            typeof payload.bookingTotal === "number"
+              ? payload.bookingTotal
+              : typeof payload.bookingTotal === "string"
+                ? Number(payload.bookingTotal.replace(/,/g, "").trim())
+                : NaN;
+          if (Number.isFinite(bookingTotal) && bookingTotal > 0) {
+            routerTotalRef.total = Math.round(bookingTotal * 100) / 100;
+          }
+        } catch {
+          // Ignore non-JSON responses.
+        }
+      };
+
+      page.on("response", onResponse);
+
+      try {
+        await page.goto(candidate.handoffUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: FIVESTAR_NAVIGATION_TIMEOUT_MS,
+        });
+      } catch (error: unknown) {
+        page.off("response", onResponse);
+        const message = error instanceof Error ? error.message : String(error);
+        reportProgress?.(
+          `fivestar checkout retry ${attempt + 1}/${retryDelaysMs.length} navigation_error=${message}`,
+        );
+        continue;
+      }
+
+      await page
+        .waitForLoadState("networkidle", { timeout: 12_000 })
+        .catch(() => null);
+      await page.waitForTimeout(FIVESTAR_RENDER_WAIT_MS);
+
+      const bodyText = await page
+        .locator("body")
+        .innerText()
+        .catch(() => "");
+      const selectorTexts = await page
+        .locator(
+          "[id*='total' i], [class*='total' i], [data-testid*='total' i]",
+        )
+        .allInnerTexts()
+        .catch(() => []);
+      const selectorTotals = selectorTexts
+        .map((text) => parseMoney(text))
+        .filter(
+          (value): value is number => typeof value === "number" && value > 0,
+        );
+
+      const bodyTotals = extractCandidateTotals(bodyText);
+      const allTotals = [...selectorTotals, ...bodyTotals];
+      const best = pickClosestTotal(allTotals, candidate.observedGrandTotal);
+
+      page.off("response", onResponse);
+
+      if (best) {
+        return {
+          kind: "success",
+          total: best.total,
+        };
+      }
+
+      if (routerTotalRef.total !== null) {
+        return {
+          kind: "success",
+          total: routerTotalRef.total,
+        };
+      }
+
+      reportProgress?.(
+        `fivestar checkout retry ${attempt + 1}/${retryDelaysMs.length} total_not_rendered`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    kind: "request_error",
+    message:
+      "fivestar checkout total not rendered from visible DOM after retries",
   };
 }
 
@@ -2890,6 +3056,56 @@ async function validateObservation(
       handoffUrl: candidate.handoffUrl,
       code: "total_not_found",
       message: "Could not extract rendered checkout total for 30avacay",
+      extractedTotal: null,
+    };
+  }
+
+  if (candidate.adapterKey === "fivestar30a") {
+    const fivestarCheckout = await tryExtractFivestarRenderedCheckoutTotal(
+      candidate,
+      reportProgress,
+    );
+
+    if (fivestarCheckout.kind === "success") {
+      const diff = Math.abs(
+        fivestarCheckout.total - candidate.observedGrandTotal,
+      );
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from rendered checkout total=${fivestarCheckout.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: fivestarCheckout.total,
+        };
+      }
+      return null;
+    }
+
+    if (fivestarCheckout.kind === "request_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "request_error",
+        message: `fivestar rendered checkout extraction failed: ${fivestarCheckout.message}`,
+        extractedTotal: null,
+      };
+    }
+
+    return {
+      listingId: candidate.listingId,
+      startDate: candidate.startDate,
+      endDate: candidate.endDate,
+      observedGrandTotal: candidate.observedGrandTotal,
+      handoffUrl: candidate.handoffUrl,
+      code: "total_not_found",
+      message: "Could not extract rendered checkout total for fivestar30a",
       extractedTotal: null,
     };
   }

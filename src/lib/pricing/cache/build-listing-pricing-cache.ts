@@ -106,6 +106,16 @@ function addDays(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+function dayOfWeek(isoDate: string): number {
+  return new Date(`${isoDate}T00:00:00.000Z`).getUTCDay();
+}
+
+function firstSaturdayOnOrAfter(isoDate: string): string {
+  const day = dayOfWeek(isoDate);
+  const delta = (6 - day + 7) % 7;
+  return addDays(isoDate, delta);
+}
+
 function readJson<T>(raw: string): T {
   return JSON.parse(raw) as T;
 }
@@ -207,7 +217,8 @@ export function parsePricingCacheCliArgs(
   defaultWeeks: number,
 ): PricingCacheCliOptions {
   let weeks = defaultWeeks;
-  let fromDate = toIsoDate(new Date());
+  const tomorrow = addDays(toIsoDate(new Date()), 1);
+  let fromDate = firstSaturdayOnOrAfter(tomorrow);
   let listingId: string | null = null;
   let maxListings: number | null = null;
   let dryRun = false;
@@ -226,7 +237,7 @@ export function parsePricingCacheCliArgs(
     }
 
     if (arg === "--from-date" && value) {
-      fromDate = toIsoDate(value);
+      fromDate = firstSaturdayOnOrAfter(toIsoDate(value));
       index += 1;
       continue;
     }
@@ -258,6 +269,7 @@ export async function buildListingPricingCacheForAdapter(
   input: BuildListingPricingCacheInput,
 ): Promise<BuildListingPricingCacheResult> {
   const root = input.rootDir ?? process.cwd();
+  const fromDate = firstSaturdayOnOrAfter(input.options.fromDate);
   const globalDefaultBaseNightly = input.globalDefaultBaseNightly ?? 650;
   const assumptionsAnchorFallbackMultiplier =
     input.assumptionsAnchorFallbackMultiplier ?? 0.92;
@@ -327,9 +339,9 @@ export async function buildListingPricingCacheForAdapter(
 
   const horizonDays = input.options.weeks * 7;
   const dates = Array.from({ length: horizonDays }, (_, index) =>
-    addDays(input.options.fromDate, index),
+    addDays(fromDate, index),
   );
-  const toDate = dates[dates.length - 1] ?? input.options.fromDate;
+  const toDate = dates[dates.length - 1] ?? fromDate;
 
   let listingCount = 0;
   let totalDays = 0;
@@ -495,7 +507,7 @@ export async function buildListingPricingCacheForAdapter(
       detail_url: detail.detail_url,
       generated_at: new Date().toISOString(),
       horizon: {
-        from_date: input.options.fromDate,
+        from_date: fromDate,
         to_date: toDate,
         weeks: input.options.weeks,
       },
@@ -541,7 +553,7 @@ export async function buildListingPricingCacheForAdapter(
   return {
     adapterKey: input.adapterKey,
     weeks: input.options.weeks,
-    fromDate: input.options.fromDate,
+    fromDate,
     toDate,
     listingCount,
     dryRun: input.options.dryRun,

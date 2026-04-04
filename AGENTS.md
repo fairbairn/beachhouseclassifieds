@@ -57,4 +57,5 @@ Generated projects should include:
 ## Current Runtime Migration Baton
 
 - Completed: `sandersbeach30a` runtime migration + validation.
-- Next target: `fivestar30a`.
+- Completed: `fivestar30a` runtime migration + validation.
+- Next target: `localvr30a`.

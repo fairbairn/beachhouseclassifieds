@@ -1,3 +1,5 @@
+import { executeFivestar30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/fivestar30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -5,10 +7,6 @@ import { resolve } from "node:path";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import {
-  runFiveStar30aQuoteCli,
-  runFiveStar30aSingleQuoteObservation,
-} from "./quotes/fivestar30a";
 
 type FiveStarDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -156,6 +154,12 @@ type FiveStarDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "detail_prop_payload";
+    unit_id: string;
+    location_id: string;
+    detail_url: string;
   };
 };
 
@@ -340,23 +344,26 @@ function normalizeDetailUrl(value: string): string | null {
 }
 
 function extractExternalListingId(detailUrl: string, html: string): string {
+  const normalized = normalizeDetailUrl(detailUrl);
+  if (normalized) {
+    try {
+      const parsed = new URL(normalized);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const slug = parts[2] ?? "";
+      if (slug) {
+        return slug;
+      }
+    } catch {
+      return detailUrl;
+    }
+  }
+
   const propUnitId = html.match(/['"]unit_id['"]\s*:\s*['"]?(\d+)['"]?/i)?.[1];
   if (propUnitId) {
     return propUnitId;
   }
 
-  const normalized = normalizeDetailUrl(detailUrl);
-  if (!normalized) {
-    return detailUrl;
-  }
-
-  try {
-    const parsed = new URL(normalized);
-    const parts = parsed.pathname.split("/").filter(Boolean);
-    return parts[2] || detailUrl;
-  } catch {
-    return detailUrl;
-  }
+  return detailUrl;
 }
 
 function parseSlashDate(value: string): Date | null {
@@ -868,6 +875,8 @@ async function fetchDetail(
       normalizedDetailUrl,
       html,
     );
+    const parsedUnitId =
+      html.match(/['"]unit_id['"]\s*:\s*['"]?(\d+)['"]?/i)?.[1] ?? "";
 
     const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
       0,
@@ -1440,7 +1449,7 @@ async function fetchDetail(
         rows: rateRules,
       },
       property_profile: {
-        unit_id: String(propDetails.unit_id ?? externalListingId),
+        unit_id: String(propDetails.unit_id ?? parsedUnitId ?? ""),
         location_id: String(propDetails.location_id ?? ""),
         area: String(propDetails.area ?? ""),
         location: String(propDetails.location ?? ""),
@@ -1455,6 +1464,12 @@ async function fetchDetail(
           : null,
         city: String(propDetails.city ?? ""),
         state: String(propDetails.state ?? ""),
+      },
+      quote_context: {
+        source: "detail_prop_payload",
+        unit_id: String(propDetails.unit_id ?? parsedUnitId ?? ""),
+        location_id: String(propDetails.location_id ?? ""),
+        detail_url: normalizedDetailUrl,
       },
     };
   } catch {
@@ -1500,10 +1515,61 @@ export function createFiveStar30AAdapter(): ScraperAdapter<FiveStarDetailRecord>
         "fivestar30a",
         argv,
       );
-      await runFiveStar30aQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "fivestar30a",
+          executeSingleQuote: executeFivestar30aSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/vacation-rentals/router/",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runFiveStar30aSingleQuoteObservation(input);
+      const result = await executeFivestar30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? null,
+        options: {
+          timeoutMs: Number(process.env.QUOTE_CAPTURE_TIMEOUT_MS ?? "20000"),
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            ...result.observation,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "quote_unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: input.handoffUrl ?? null,
+          reason: result.error.code,
+        },
+      };
     },
   };
 }

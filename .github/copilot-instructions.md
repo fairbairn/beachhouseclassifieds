@@ -66,7 +66,8 @@
   - Do not create temporary/custom runners for this workflow.
 - Current migration baton:
   - `sandersbeach30a` runtime migration and validation are complete.
-  - Next adapter target is `fivestar30a` (highest-volume pending adapter with `API Quote = ✅` and `Quote Runtime = ❌`).
+  - `fivestar30a` runtime migration and validation are complete.
+  - Next adapter target is `localvr30a` (highest-volume pending adapter with `API Quote = ✅` and `Quote Runtime = ❌`).
 
 ## Validation
 
