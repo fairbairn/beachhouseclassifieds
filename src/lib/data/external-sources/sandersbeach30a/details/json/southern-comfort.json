@@ -1,7 +1,7 @@
 {
   "external_listing_id": "southern-comfort",
   "detail_url": "https://www.sandersbeachrentals.com/30a-vacation-rentals/southern-comfort",
-  "fetched_at": "2026-04-02T13:34:35.872Z",
+  "fetched_at": "2026-04-04T13:39:53.885Z",
   "title": "Southern Comfort Vacation Rental",
   "h1": "Southern Comfort",
   "canonical_url": "https://www.sandersbeachrentals.com/30a-vacation-rentals/southern-comfort",
@@ -300,7 +300,8 @@
     "source": "detail_riot_payload",
     "eid": 156,
     "inventory_id": "899157",
-    "type_id": "8"
+    "type_id": "8",
+    "detail_url": "https://www.sandersbeachrentals.com/30a-vacation-rentals/southern-comfort"
   },
   "normalized_matching_profile": {
     "source": "pm_sandersbeach30a",
@@ -318,7 +319,7 @@
   "normalized_availability": {
     "source": "pm_sandersbeach30a",
     "external_listing_id": "southern-comfort",
-    "captured_at": "2026-04-02T13:34:35.872Z",
+    "captured_at": "2026-04-04T13:39:53.885Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key #Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -328,7 +329,7 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-02",
+    "window_start": "2026-04-04",
     "window_end": "2027-07-31",
     "code_legend": {
       "A": "available",
@@ -337,26 +338,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUUUIOUUUUUUIAAAAAOUUUUUUUIAAAAAAAAAOUUUUUUUUUUUIAAAAOUUUUUUUUUUUUUUUUUUUUIOUUUUUIOUUUUUUIAAAAOUUUUUUIOUUUUUUIAAAAAAAAAAAAAAAAAAAAOUUUUUUUIAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
+    "day_codes": "UUUUUUUIOUUUUUUIAAAAOUUUUUUUUIAAAAAAAAAOUUUUUUUUUUUIAAAAOUUUUUUUUUUUUUUUUUUUUIOUUUUUIOUUUUUUIAAAAOUUUUUUIOUUUUUUIAAAAAAAAAAAAAAAAAAAAOUUUUUUUIAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
     "days": [
-      {
-        "date": "2026-04-02",
-        "status_code": "U",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-03",
-        "status_code": "U",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-04",
         "status_code": "U",
@@ -539,20 +522,20 @@
       },
       {
         "date": "2026-04-24",
-        "status_code": "A",
+        "status_code": "O",
         "is_available": true,
-        "is_available_for_checkin": true,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
         "min_nights_required": null
       },
       {
         "date": "2026-04-25",
-        "status_code": "O",
-        "is_available": true,
+        "status_code": "U",
+        "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": null
       },
       {
@@ -4715,21 +4698,21 @@
       }
     ],
     "counts": {
-      "available": 257,
-      "unavailable": 204,
+      "available": 256,
+      "unavailable": 203,
       "checkin_only": 13,
       "checkout_only": 12,
       "other": 0,
-      "booking_available": 269,
-      "booking_unavailable": 217,
+      "booking_available": 268,
+      "booking_unavailable": 216,
       "booking_unknown": 0
     }
   },
   "html_path": "src/lib/data/external-sources/sandersbeach30a/details/html/southern-comfort.html",
   "scrape_metrics": {
-    "total_ms": 9100,
-    "page_load_ms": 4426,
-    "extraction_ms": 4574,
+    "total_ms": 7387,
+    "page_load_ms": 2845,
+    "extraction_ms": 4430,
     "calendar_clicks": 3,
     "calendar_iterations": 4
   }

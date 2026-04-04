@@ -27,7 +27,7 @@ Primary inputs are:
 3. Compute normalized per-day rates from observed windows where possible.
 4. Fill gaps from deterministic existing rates when available.
 5. Apply bounded interpolation/derivation for missing windows.
-6. Write per-listing pricing JSON and refresh index metadata.
+6. Write per-listing pricing JSON records.
 
 ## Interpolation and Derivation
 
@@ -45,7 +45,6 @@ General policy:
 Pricing outputs are stored under each adapter pricing directory:
 
 - Per-listing pricing JSON files.
-- index.json for inventory/summary bookkeeping.
 
 Pricing parity for readiness is defined as:
 

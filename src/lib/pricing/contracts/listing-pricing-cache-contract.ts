@@ -42,28 +42,6 @@ export type ListingPricingCacheRecord = {
   };
 };
 
-export type ListingPricingCacheIndexRow = {
-  external_listing_id: string;
-  detail_url: string;
-  cache_path: string;
-  days: number;
-  avg_base_nightly: number;
-  avg_all_in_nightly: number;
-  generated_at: string;
-};
-
-export type ListingPricingCacheIndex = {
-  adapter_key: string;
-  generated_at: string;
-  weeks: number;
-  from_date: string;
-  to_date: string;
-  listing_count: number;
-  avg_base_nightly: number | null;
-  avg_all_in_nightly: number | null;
-  listings: ListingPricingCacheIndexRow[];
-};
-
 export function isIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }

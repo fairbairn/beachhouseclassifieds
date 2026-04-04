@@ -12,6 +12,7 @@ import { executeOversee30aSingleQuote } from "./adapters/oversee30a";
 import { executePanhandle30aSingleQuote } from "./adapters/panhandle30a";
 import { executeRealjoy30aSingleQuote } from "./adapters/realjoy30a";
 import { executeRoyaldestinationsSingleQuote } from "./adapters/royaldestinations";
+import { executeSandersbeach30aSingleQuote } from "./adapters/sandersbeach30a";
 import { executeSandpiper30aSingleQuote } from "./adapters/sandpiper30a";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "./types";
 
@@ -34,6 +35,7 @@ const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   panhandle30a: executePanhandle30aSingleQuote,
   realjoy30a: executeRealjoy30aSingleQuote,
   royaldestinations: executeRoyaldestinationsSingleQuote,
+  sandersbeach30a: executeSandersbeach30aSingleQuote,
   sandpiper30a: executeSandpiper30aSingleQuote,
 };
 

@@ -1,7 +1,7 @@
 {
   "external_listing_id": "wake-slow",
   "detail_url": "https://www.sandersbeachrentals.com/30a-vacation-rentals/wake-slow",
-  "fetched_at": "2026-04-02T13:34:36.269Z",
+  "fetched_at": "2026-04-04T13:39:55.840Z",
   "title": "Wake Up Slow Vacation Rental",
   "h1": "Wake Up Slow",
   "canonical_url": "https://www.sandersbeachrentals.com/30a-vacation-rentals/wake-slow",
@@ -193,7 +193,7 @@
     "longitude": -86.1386745
   },
   "media_gallery": {
-    "image_count": 64,
+    "image_count": 63,
     "image_urls": [
       "https://gallery.streamlinevrs.com/units-gallery/00/0F/EC/image_172185633.jpeg",
       "https://gallery.streamlinevrs.com/units-gallery/00/0F/EC/image_171994764.jpeg",
@@ -219,7 +219,6 @@
       "https://gallery.streamlinevrs.com/units-gallery/00/0F/EC/image_171994804.jpeg",
       "https://gallery.streamlinevrs.com/units-gallery/00/0F/EC/image_171994805.jpeg",
       "https://gallery.streamlinevrs.com/units-gallery/00/0F/EC/image_171994806.jpeg",
-      "https://gallery.streamlinevrs.com/units-gallery/00/0F/EC/image_171994807.jpeg",
       "https://gallery.streamlinevrs.com/units-gallery/00/0F/EC/image_171994808.jpeg",
       "https://gallery.streamlinevrs.com/units-gallery/00/0F/EC/image_171994809.jpeg",
       "https://gallery.streamlinevrs.com/units-gallery/00/0F/EC/image_171994810.jpeg",
@@ -275,7 +274,8 @@
     "source": "detail_riot_payload",
     "eid": 167,
     "inventory_id": "1043709",
-    "type_id": "8"
+    "type_id": "8",
+    "detail_url": "https://www.sandersbeachrentals.com/30a-vacation-rentals/wake-slow"
   },
   "normalized_matching_profile": {
     "source": "pm_sandersbeach30a",
@@ -293,7 +293,7 @@
   "normalized_availability": {
     "source": "pm_sandersbeach30a",
     "external_listing_id": "wake-slow",
-    "captured_at": "2026-04-02T13:34:36.269Z",
+    "captured_at": "2026-04-04T13:39:55.840Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key #Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -303,7 +303,7 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-02",
+    "window_start": "2026-04-04",
     "window_end": "2027-07-31",
     "code_legend": {
       "A": "available",
@@ -312,33 +312,15 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "IAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
+    "day_codes": "UUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
     "days": [
       {
-        "date": "2026-04-02",
-        "status_code": "I",
+        "date": "2026-04-04",
+        "status_code": "U",
         "is_available": false,
-        "is_available_for_checkin": true,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-03",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-04",
-        "status_code": "O",
-        "is_available": true,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
         "min_nights_required": null
       },
       {
@@ -4690,21 +4672,21 @@
       }
     ],
     "counts": {
-      "available": 379,
-      "unavailable": 102,
-      "checkin_only": 3,
-      "checkout_only": 2,
+      "available": 378,
+      "unavailable": 103,
+      "checkin_only": 2,
+      "checkout_only": 1,
       "other": 0,
-      "booking_available": 381,
+      "booking_available": 379,
       "booking_unavailable": 105,
       "booking_unknown": 0
     }
   },
   "html_path": "src/lib/data/external-sources/sandersbeach30a/details/html/wake-slow.html",
   "scrape_metrics": {
-    "total_ms": 8918,
-    "page_load_ms": 4467,
-    "extraction_ms": 4354,
+    "total_ms": 9005,
+    "page_load_ms": 4190,
+    "extraction_ms": 4721,
     "calendar_clicks": 3,
     "calendar_iterations": 4
   }

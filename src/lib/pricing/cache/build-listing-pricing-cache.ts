@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 
 import {
   assertListingPricingCacheRecord,
-  type ListingPricingCacheIndex,
   type ListingPricingCacheRecord,
   type ListingPricingDayRecord,
 } from "@/lib/pricing/contracts/listing-pricing-cache-contract";
@@ -332,8 +331,6 @@ export async function buildListingPricingCacheForAdapter(
   );
   const toDate = dates[dates.length - 1] ?? input.options.fromDate;
 
-  const indexRows: ListingPricingCacheIndex["listings"] = [];
-
   let listingCount = 0;
   let totalDays = 0;
   let totalBase = 0;
@@ -521,7 +518,6 @@ export async function buildListingPricingCacheForAdapter(
     );
 
     const cachePath = resolve(pricingDir, `${detail.external_listing_id}.json`);
-    const cachePathRelative = `details/pricing/${detail.external_listing_id}.json`;
 
     if (!input.options.dryRun) {
       await writeFile(
@@ -531,43 +527,16 @@ export async function buildListingPricingCacheForAdapter(
       );
     }
 
-    indexRows.push({
-      external_listing_id: detail.external_listing_id,
-      detail_url: detail.detail_url,
-      cache_path: cachePathRelative,
-      days: days.length,
-      avg_base_nightly: avgBaseNightly,
-      avg_all_in_nightly: avgAllInNightly,
-      generated_at: listingCache.generated_at,
-    });
-
     listingCount += 1;
     totalDays += days.length;
     totalBase += days.reduce((sum, day) => sum + day.base_nightly, 0);
     totalAllIn += days.reduce((sum, day) => sum + day.all_in_nightly, 0);
   }
 
-  const indexPayload: ListingPricingCacheIndex = {
-    adapter_key: input.adapterKey,
-    generated_at: new Date().toISOString(),
-    weeks: input.options.weeks,
-    from_date: input.options.fromDate,
-    to_date: toDate,
-    listing_count: listingCount,
-    avg_base_nightly:
-      listingCount > 0 ? roundCurrency(totalBase / totalDays) : null,
-    avg_all_in_nightly:
-      listingCount > 0 ? roundCurrency(totalAllIn / totalDays) : null,
-    listings: indexRows,
-  };
-
-  if (!input.options.dryRun) {
-    await writeFile(
-      resolve(pricingDir, "index.json"),
-      `${JSON.stringify(indexPayload, null, 2)}\n`,
-      "utf8",
-    );
-  }
+  const avgBaseNightly =
+    totalDays > 0 ? roundCurrency(totalBase / totalDays) : null;
+  const avgAllInNightly =
+    totalDays > 0 ? roundCurrency(totalAllIn / totalDays) : null;
 
   return {
     adapterKey: input.adapterKey,
@@ -576,7 +545,7 @@ export async function buildListingPricingCacheForAdapter(
     toDate,
     listingCount,
     dryRun: input.options.dryRun,
-    avgBaseNightly: indexPayload.avg_base_nightly,
-    avgAllInNightly: indexPayload.avg_all_in_nightly,
+    avgBaseNightly,
+    avgAllInNightly,
   };
 }
