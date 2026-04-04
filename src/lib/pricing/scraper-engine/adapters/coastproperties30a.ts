@@ -1,13 +1,11 @@
+import { executeCoastproperties30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/coastproperties30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import {
-  runCoastProperties30AQuoteCli,
-  runCoastProperties30ASingleQuoteObservation,
-} from "./quotes/coastproperties30a";
 
 type CoastDetailRecord = DetailRecordBase & {
   title: string;
@@ -40,6 +38,11 @@ type CoastDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "detail_url_path";
+    unit_id: string;
+    detail_url: string;
   };
   normalized_matching_profile: {
     source: "pm_coastproperties30a";
@@ -160,6 +163,19 @@ function normalizeForMatch(value: string): string {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function slugifyExternalListingId(input: {
+  name: string;
+  rentalId: string;
+}): string {
+  const base = input.name
+    .toLowerCase()
+    .replace(/&amp;/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const normalized = base || "listing";
+  return `${normalized}-${input.rentalId}`;
 }
 
 function hashSha256(value: string): string {
@@ -735,7 +751,15 @@ async function fetchDetail(
         )}`
       : "";
 
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);
+    const externalListingId = slugifyExternalListingId({
+      name: h1 || title || rentalId,
+      rentalId,
+    });
+
+    const htmlPath = resolve(
+      OUTPUT_DETAILS_HTML_DIR,
+      `${externalListingId}.html`,
+    );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
     const availabilityApiUrl = `${origin}/wp-admin/admin-ajax.php?${new URLSearchParams(
@@ -931,7 +955,7 @@ async function fetchDetail(
     const mediaImageUrls = Array.from(imageUrls);
 
     return {
-      external_listing_id: rentalId,
+      external_listing_id: externalListingId,
       detail_url: detailUrl,
       fetched_at: new Date().toISOString(),
       title,
@@ -967,9 +991,14 @@ async function fetchDetail(
         city,
         state: "",
       },
+      quote_context: {
+        source: "detail_url_path",
+        unit_id: rentalId,
+        detail_url: detailUrl,
+      },
       normalized_matching_profile: {
         source: "pm_coastproperties30a",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         name,
         description,
         match_signals: {
@@ -979,7 +1008,7 @@ async function fetchDetail(
           title_sha256: hashSha256(titleNormalized),
           listing_composite_key: [
             "pm_coastproperties30a",
-            rentalId,
+            externalListingId,
             hashSha256(descriptionNormalized),
             hashSha256(titleNormalized),
           ].join("::"),
@@ -987,7 +1016,7 @@ async function fetchDetail(
       },
       normalized_availability: {
         source: "pm_coastproperties30a",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
         window_start: conformanceDays[0]?.date ?? "",
         window_end: conformanceDays[conformanceDays.length - 1]?.date ?? "",
@@ -1019,7 +1048,7 @@ async function fetchDetail(
       },
       normalized_rates: {
         source: "pm_coastproperties30a",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
         currency: "USD",
         window_start: normalizedRateDays[0]?.date ?? "",
@@ -1101,10 +1130,25 @@ export function createCoastProperties30AAdapter(): ScraperAdapter<CoastDetailRec
         "coastproperties30a",
         argv,
       );
-      await runCoastProperties30AQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "coastproperties30a",
+          executeSingleQuote: executeCoastproperties30aSingleQuote,
+          maxAttemptsEnvVar: "COASTPROPERTIES30A_QUOTE_MAX_ATTEMPTS",
+          defaultMaxListings: 30,
+          defaultWeeks: 24,
+          defaultNights: 7,
+          defaultListingConcurrency: 2,
+          defaultQuoteConcurrency: 3,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runCoastProperties30ASingleQuoteObservation(input);
+      return executeCoastproperties30aSingleQuote(input);
     },
   };
 }

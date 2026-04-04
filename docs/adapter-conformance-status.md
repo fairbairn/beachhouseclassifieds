@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-04-04T19:33:31Z
+Audit date: 2026-04-04T19:48:34Z
 
 Data source:
 
@@ -70,7 +70,7 @@ Preferred (non-blocking):
 | 30avacay                |   115 |  115 |     115 |          115 |          115 |        115 |       115 |    115 |     0 |             115 |       5329 |        46.34 |     -     |     -     |    ✅     |      ✅       |  ✅   |
 | 360blue                 |   592 |  592 |     592 |          592 |          592 |        592 |       592 |    592 |   592 |             592 |      29516 |        49.86 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
 | benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |     0 |             128 |       8508 |        66.47 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
-| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |    30 |              30 |       2063 |        68.77 |    ✅     |    ✅     |    ✅     |      ❌       |  ❌   |
+| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |    30 |              30 |       2063 |        68.77 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   |
 | dunevr30a               |    85 |   85 |      85 |           85 |           85 |         85 |        85 |     85 |    85 |              85 |       4031 |        47.42 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   |
 | exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |             106 |       5629 |        53.10 |     -     |     -     |    ✅     |      ✅       |  ✅   |
 | fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |    63 |              63 |       6594 |       104.67 |     -     |     -     |    ✅     |      ✅       |  ✅   |
@@ -89,13 +89,13 @@ Preferred (non-blocking):
 | scenicstays30a          |    44 |   44 |      44 |           44 |           44 |         44 |        44 |     44 |    44 |               0 |       2490 |        56.59 |    ✅     |    ✅     |    ❌     |      ❌       |  ❌   |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |     0 |               0 |       2418 |        65.35 |     -     |     -     |    ❌     |      ❌       |  ❌   |
 | stayon30a               |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |     0 |               0 |      11150 |       142.95 |    ✅     |     -     |    ❌     |      ❌       |  ❌   |
-| **TOTAL**               |  3038 | 3038 |    3038 |         3038 |         3038 |       3038 |      3038 |   3038 |  1588 |            2867 |     186401 |        61.36 |     —     |     —     |     —     |       —       | 20/25 |
+| **TOTAL**               |  3038 | 3038 |    3038 |         3038 |         3038 |       3038 |      3038 |   3038 |  1588 |            2867 |     186401 |        61.36 |     —     |     —     |     —     |       —       | 21/25 |
 
 ## Current Snapshot Summary
 
 - 25 adapters audited.
 - All 25 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 20 / 25.
+- Combined-ready adapters (Ready = ✅): 21 / 25.
 - Rates coverage signal: 1588 / 3038 files currently include normalized_rates.days.
 - Pricing-records coverage signal: 2867 / 3038 files currently have per-listing pricing JSON records.
 - API capability signal:
@@ -131,10 +131,10 @@ This queue defines migration order for adapters that already have direct quote A
 |    18 | localvr30a              |    42 |    ✅     |      ✅       | complete |
 |    19 | funvacay30a             |    46 |    ✅     |      ✅       | complete |
 |    20 | grayt30a                |    35 |    ✅     |      ✅       | complete |
-|    21 | coastproperties30a      |    30 |    ✅     |      ❌       | pending  |
+|    21 | coastproperties30a      |    30 |    ✅     |      ✅       | complete |
 |    22 | 30abeach                |    17 |    ✅     |      ❌       | pending  |
 
-Active next runtime migration target: `coastproperties30a` (highest-volume pending adapter with `API Quote = ✅`).
+Active next runtime migration target: `30abeach` (highest-volume pending adapter with `API Quote = ✅`).
 
 ## Quote Pricing Validation Snapshot (2026-04-01)
 
@@ -143,6 +143,7 @@ Active next runtime migration target: `coastproperties30a` (highest-volume pendi
   - `360blue`: `Quote validator passed ... validated=592 failed=0`
   - `30aluxury`: `Quote validator passed ... validated=105 failed=0`
   - `grayt30a`: `Quote validator passed ... validated=35 failed=0`; pricing validator passed `validated=35 failed=0`; handoff smoke (`--max-observations 1`) passed `tested=35 matched=35 failed=0`
+  - `coastproperties30a`: `Quote validator passed ... validated=30 failed=0`; pricing validator passed `validated=30 failed=0`; handoff smoke (`--max-observations 1 --max-listings 10`) passed `tested=9 matched=9 failed=0`; full handoff passed `tested=116 matched=116 failed=0`
 - Remaining adapters failing quote pricing validation (`npm run pricing:validate:quotes:all`):
   - none
 
