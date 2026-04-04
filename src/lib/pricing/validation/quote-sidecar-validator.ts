@@ -19,6 +19,7 @@ export type QuoteValidationOptions = {
 const DEFAULT_EXPECTED_NIGHTS = 7;
 const DEFAULT_MINIMUM_MAX_QUERIES = 24;
 const DEFAULT_MINIMUM_OBSERVATION_COUNT = 24;
+const MIN_VALID_BASE_TOTAL = 100;
 
 function addDays(isoDate: string, days: number): string {
   const date = new Date(`${isoDate}T00:00:00.000Z`);
@@ -131,6 +132,55 @@ function validateObservationCadence(
   return issues;
 }
 
+function validateAvailableQuoteSanity(
+  observation: CanonicalQuoteObservation,
+): QuoteValidationIssue[] {
+  const issues: QuoteValidationIssue[] = [];
+
+  const baseTotal = observation.base_total;
+  const taxesTotal = observation.taxes_total;
+  const feesTotal = observation.fees_total_excl_taxes;
+  const grandTotal = observation.grand_total;
+
+  if (!isFiniteNumber(baseTotal) || baseTotal < MIN_VALID_BASE_TOTAL) {
+    issues.push({
+      code: "invalid_base_total",
+      message: `base_total must be >= ${MIN_VALID_BASE_TOTAL} when quote_available=true`,
+    });
+  }
+
+  if (!isFiniteNumber(taxesTotal) || taxesTotal <= 0) {
+    issues.push({
+      code: "invalid_taxes_total",
+      message: "taxes_total must be > 0 when quote_available=true",
+    });
+  }
+
+  if (
+    !isFiniteNumber(grandTotal) ||
+    !isFiniteNumber(baseTotal) ||
+    grandTotal <= baseTotal
+  ) {
+    issues.push({
+      code: "invalid_grand_total",
+      message: "grand_total must be > base_total when quote_available=true",
+    });
+  }
+
+  if (
+    !isFiniteNumber(feesTotal) ||
+    !isFiniteNumber(baseTotal) ||
+    feesTotal >= baseTotal
+  ) {
+    issues.push({
+      code: "invalid_fees_total",
+      message: "fees_total_excl_taxes must be < base_total when quote_available=true",
+    });
+  }
+
+  return issues;
+}
+
 export function validateCanonicalQuoteSidecar(
   sidecar: CanonicalQuotesSidecarRecord,
   options: QuoteValidationOptions = {},
@@ -228,6 +278,15 @@ export function validateCanonicalQuoteSidecar(
         code: "missing_unavailable_reason",
         message: `observation[${index}]: quote_unavailable_reason is required when quote_available=false`,
       });
+    }
+
+    if (observation.quote_available) {
+      for (const issue of validateAvailableQuoteSanity(observation)) {
+        issues.push({
+          code: issue.code,
+          message: `observation[${index}]: ${issue.message}`,
+        });
+      }
     }
 
     if (requireNonNullPricingFields) {

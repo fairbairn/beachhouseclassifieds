@@ -3,12 +3,10 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
+import { executeGrayt30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/grayt30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import {
-  runGrayt30AQuoteCli,
-  runGrayt30ASingleQuoteObservation,
-} from "./quotes/grayt30a";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -43,6 +41,13 @@ type LuxuryDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "description_expanded";
+    item_eid: string;
+    type_id: string;
+    inventory_id: string;
+    detail_url: string;
   };
   normalized_matching_profile: {
     source: "pm_grayt30a";
@@ -178,6 +183,75 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function extractRcavIdentity(input: {
+  listingId: string;
+  descriptionExpanded: string;
+  detailHtml: string;
+}): {
+  itemEid: string;
+  typeId: string;
+  inventoryId: string;
+} {
+  const source = `${input.detailHtml}\n${input.descriptionExpanded}`;
+  const decodedSource = safeDecodeURIComponent(source);
+
+  const rcavIdPattern = /rcav\[IDs\]\[(\d+)\]\[(?:0)?\]=(\d+)/i;
+  const encodedRcavIdPattern = /rcav%5BIDs%5D%5B(\d+)\]%5B(?:0)?%5D=(\d+)/i;
+  const rcavEidPattern = /rcav\[eid\]=(\d+)/i;
+  const encodedRcavEidPattern = /rcav%5Beid%5D=(\d+)/i;
+
+  const decodedIdMatch = decodedSource.match(rcavIdPattern);
+  const encodedIdMatch = source.match(encodedRcavIdPattern);
+  const typeId = decodedIdMatch?.[1] ?? encodedIdMatch?.[1] ?? null;
+  const inventoryId = decodedIdMatch?.[2] ?? encodedIdMatch?.[2] ?? null;
+
+  const decodedEidMatch = decodedSource.match(rcavEidPattern);
+  const encodedEidMatch = source.match(encodedRcavEidPattern);
+  const itemEid = decodedEidMatch?.[1] ?? encodedEidMatch?.[1] ?? null;
+
+  if (itemEid && typeId && inventoryId) {
+    return {
+      itemEid,
+      typeId,
+      inventoryId,
+    };
+  }
+
+  const exactEntityMatch = source.match(
+    /'entity':\{'eid':'(\d+)'.*?'id':'(\d+)'.*?'type':'(\d+)'/s,
+  );
+  if (exactEntityMatch) {
+    return {
+      itemEid: exactEntityMatch[1],
+      inventoryId: exactEntityMatch[2],
+      typeId: exactEntityMatch[3],
+    };
+  }
+
+  const fallbackMatch = source.match(
+    /'eid':'(\d+)','engine_eid':'\d+','id':'(\d+)'.*?'type':'(\d+)'/s,
+  );
+  if (fallbackMatch) {
+    return {
+      itemEid: fallbackMatch[1],
+      inventoryId: fallbackMatch[2],
+      typeId: fallbackMatch[3],
+    };
+  }
+
+  throw new Error(
+    `Missing rcav identity fields for listing ${input.listingId}`,
+  );
 }
 
 function normalizeListingName(value: string): string {
@@ -1406,6 +1480,11 @@ async function fetchDetail(
       stripHtml(descriptionText).slice(0, 30000) ||
       extractListingAboutFromHtml(html)
     ).slice(0, 30000);
+    const rcavIdentity = extractRcavIdentity({
+      listingId: externalListingId,
+      descriptionExpanded,
+      detailHtml: html,
+    });
 
     const locationPayload = extractFieldLocationFromHtml(html);
 
@@ -1554,6 +1633,13 @@ async function fetchDetail(
       location,
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
+      quote_context: {
+        source: "description_expanded",
+        item_eid: rcavIdentity.itemEid,
+        type_id: rcavIdentity.typeId,
+        inventory_id: rcavIdentity.inventoryId,
+        detail_url: detailUrl,
+      },
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_grayt30a",
@@ -1677,10 +1763,82 @@ export function createGrayt30AAdapter(): ScraperAdapter<LuxuryDetailRecord> {
         "grayt30a",
         argv,
       );
-      await runGrayt30AQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "grayt30a",
+          executeSingleQuote: executeGrayt30aSingleQuote,
+          maxAttemptsEnvVar: "GRAYT30A_QUOTE_MAX_ATTEMPTS",
+          defaultMaxListings: 10,
+          defaultWeeks: 24,
+          defaultNights: 7,
+          defaultListingConcurrency: 1,
+          defaultQuoteConcurrency: 2,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/rescms/ajax/item/pricing/quote",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runGrayt30ASingleQuoteObservation(input);
+      const result = await executeGrayt30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? {
+          listing_id: input.listingId,
+          detail_url: input.detailUrl,
+        },
+        options: {
+          timeoutMs:
+            Number(
+              process.env.GRAYT30A_QUOTE_TIMEOUT_MS ??
+                process.env.QUOTE_CAPTURE_TIMEOUT_MS ??
+                "20000",
+            ) || 20000,
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            startDate: result.observation.startDate,
+            endDate: result.observation.endDate,
+            quoteAvailable: result.observation.quoteAvailable,
+            currency: result.observation.currency,
+            baseTotal: result.observation.baseTotal,
+            taxesTotal: result.observation.taxesTotal,
+            feesTotalExclTaxes: result.observation.feesTotalExclTaxes,
+            grandTotal: result.observation.grandTotal,
+            quotedTotal: result.observation.quotedTotal,
+            handoffUrl: result.observation.handoffUrl,
+            reason: null,
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: input.handoffUrl ?? null,
+          reason: result.error.message,
+        },
+      };
     },
   };
 }

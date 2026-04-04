@@ -16,6 +16,7 @@ export type QuoteExecutionObservation = {
   startDate: string;
   endDate: string;
   quoteAvailable: boolean;
+  quoteUnavailableReason?: string | null;
   currency: string | null;
   baseTotal: number | null;
   taxesTotal: number | null;

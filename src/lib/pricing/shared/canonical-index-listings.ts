@@ -112,11 +112,18 @@ export async function loadCanonicalListings(
       continue;
     }
 
+    const quoteContext = asObject(entry.quote_context);
+    if (quoteContext && "endpoint_path" in quoteContext) {
+      throw new Error(
+        `Invalid quote_context for adapter '${adapterKey}' listing '${externalListingId}': quote_context.endpoint_path is redundant and disallowed.`,
+      );
+    }
+
     listings.push({
       externalListingId,
       detailUrl,
       detailFileBaseName,
-      quoteContext: asObject(entry.quote_context),
+      quoteContext,
     });
   }
 

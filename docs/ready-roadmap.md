@@ -53,6 +53,10 @@ For each adapter promoted:
 
 - `funvacay30a` is now Ready after full scrape refresh (46 listings), full quote pull (46/46), pricing cache parity (46/46), and handoff smoke alignment pass (10/10 sampled).
 
+## Current In Progress
+
+- `grayt30a` runtime migration is complete and core validators are green (quote 35/35, pricing 35/35, scrape 35/35), but handoff alignment is not yet conformant (smoke 2/10, full 31/140). Keep status as seeded until handoff direct-status errors are resolved.
+
 ## Operating Principle
 
 Prefer targeted remediation and modular hardening over large reruns whenever failures are isolated.

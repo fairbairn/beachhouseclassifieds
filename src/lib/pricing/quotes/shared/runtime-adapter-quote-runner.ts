@@ -58,6 +58,22 @@ type QuoteWindow = {
   endDate: string;
 };
 
+function hasPositiveNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function hasUsableAvailableTotals(result: QuoteExecutionResult): boolean {
+  if (!result.success || !result.observation.quoteAvailable) {
+    return false;
+  }
+
+  const { baseTotal, grandTotal, quotedTotal } = result.observation;
+  const hasBase = hasPositiveNumber(baseTotal);
+  const hasGrand =
+    hasPositiveNumber(grandTotal) || hasPositiveNumber(quotedTotal);
+  return hasBase && hasGrand;
+}
+
 export type RuntimeAdapterQuoteRunnerConfig = {
   adapterKey: string;
   executeSingleQuote: (
@@ -444,6 +460,16 @@ async function loadListingSeeds(
     );
   }
 
+  const redundantEndpointPathEntries = parsed.filter((entry) => {
+    const quoteContext = asObject(entry.quote_context);
+    return quoteContext !== null && "endpoint_path" in quoteContext;
+  }).length;
+  if (redundantEndpointPathEntries > 0) {
+    throw new Error(
+      `canonical index entries include redundant quote_context.endpoint_path=${redundantEndpointPathEntries}; remove endpoint_path from quote_context payloads`,
+    );
+  }
+
   const seeds: ListingSeed[] = [];
   let scanned = 0;
   for (const entry of parsed) {
@@ -757,7 +783,7 @@ async function buildSidecarForListing(input: {
 
   const observations: CanonicalQuoteObservation[] = runtimeResults.map(
     (entry) => {
-      if (entry.result.success) {
+      if (hasUsableAvailableTotals(entry.result)) {
         input.onWindowResult?.({ quoteAvailable: true });
         return createSuccessObservation({
           listingId: listing.externalListingId,
@@ -771,7 +797,10 @@ async function buildSidecarForListing(input: {
         nights: options.nights,
         taxPctOfBase: fallbackTaxPct,
       });
-      const reason = `${entry.result.error.code}: ${entry.result.error.message}`;
+      const reason = entry.result.success
+        ? entry.result.observation.quoteUnavailableReason?.trim() ||
+          "adapter returned unavailable quote window"
+        : `${entry.result.error.code}: ${entry.result.error.message}`;
       input.onWindowResult?.({ quoteAvailable: false });
       return createUnavailableObservation({
         listingId: listing.externalListingId,

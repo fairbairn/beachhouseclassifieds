@@ -49,7 +49,6 @@ type LuxuryDetailRecord = DetailRecordBase & {
     type_id: string;
     inventory_id: string;
     detail_url: string;
-    endpoint_path: "/rescms/ajax/item/pricing/quote";
   };
   normalized_matching_profile: {
     source: "pm_funvacay30a";
@@ -2342,7 +2341,6 @@ async function fetchDetail(
         type_id: rcavIdentity.typeId,
         inventory_id: rcavIdentity.inventoryId,
         detail_url: detailUrl,
-        endpoint_path: "/rescms/ajax/item/pricing/quote" as const,
       },
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
