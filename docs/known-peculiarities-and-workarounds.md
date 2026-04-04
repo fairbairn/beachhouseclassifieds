@@ -27,6 +27,19 @@ Workarounds used:
 - Targeted remediation scripts for failed windows instead of full reruns.
 - Strict sequencing: quote refresh, quote validate, handoff validate, then cache/docs.
 
+## exclusive30a Checkout Cookie Gate
+
+Observed:
+
+- `booking/review` checkout routes rely on destination-site session state (`bc_session`).
+- Deep-linking users directly from an external domain can return 404 when required cookies were not seeded on `exclusive30a.com`.
+
+Workarounds used:
+
+- Keep quote runtime generation and quote validation active for pricing intelligence.
+- Treat detail-page redirect as the supported production handoff path for user flows.
+- Track this adapter as checkout-cookie-gated until provider-side handoff/session bootstrap support is available.
+
 ## General Multi-Adapter Challenges
 
 Observed:

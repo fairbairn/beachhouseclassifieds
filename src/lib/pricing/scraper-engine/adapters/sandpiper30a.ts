@@ -1,8 +1,9 @@
+import { executeSandpiper30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/sandpiper30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
-import { runSandpiper30AQuoteCli } from "./quotes/sandpiper30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -10,6 +11,10 @@ import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
 type LuxuryDetailRecord = DetailRecordBase & {
+  quote_context: {
+    unit_code: string;
+    detail_url: string;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -189,6 +194,17 @@ function normalizeListingName(value: string): string {
     .trim();
 
   return cleaned.slice(0, 240);
+}
+
+function extractRequiredUnitCodeFromHtml(html: string): string {
+  const match = html.match(
+    /<input[^>]*id=["']unitCode["'][^>]*value=["']([^"']+)["'][^>]*>/i,
+  );
+  const unitCode = match?.[1]?.trim() ?? "";
+  if (!unitCode) {
+    throw new Error("Missing required unitCode in detail HTML");
+  }
+  return unitCode;
 }
 
 function dedupePreserveOrder(values: string[]): string[] {
@@ -1482,6 +1498,7 @@ async function fetchDetail(
       `${externalListingId}.html`,
     );
     const html = await page.content();
+    const unitCode = extractRequiredUnitCodeFromHtml(html);
     await writeFile(htmlPath, html, "utf8");
 
     const locationPayload = extractFieldLocationFromHtml(html);
@@ -1608,6 +1625,10 @@ async function fetchDetail(
     return {
       external_listing_id: externalListingId,
       detail_url: detailUrl,
+      quote_context: {
+        unit_code: unitCode,
+        detail_url: detailUrl,
+      },
       fetched_at: new Date().toISOString(),
       title: normalizeListingName(extracted.title || extracted.h1 || ""),
       h1: listingName,
@@ -1744,7 +1765,61 @@ export function createSandpiper30AAdapter(): ScraperAdapter<LuxuryDetailRecord> 
         "sandpiper30a",
         argv,
       );
-      await runSandpiper30AQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "sandpiper30a",
+          executeSingleQuote: executeSandpiper30aSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/wp-admin/admin-ajax.php?action=q4vr_stay",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
+    },
+    async runSingleQuoteObservation(input) {
+      const result = await executeSandpiper30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? null,
+        options: {
+          timeoutMs: Number(process.env.QUOTE_CAPTURE_TIMEOUT_MS ?? "20000"),
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            ...result.observation,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "quote_unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: input.handoffUrl ?? null,
+          reason: result.error.code,
+        },
+      };
     },
   };
 }

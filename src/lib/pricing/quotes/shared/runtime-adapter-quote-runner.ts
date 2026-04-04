@@ -557,10 +557,33 @@ function createSuccessObservation(input: {
         handoffUrl: null,
       };
 
-  const baseTotal = observation.baseTotal ?? 0;
-  const taxesTotal = observation.taxesTotal ?? 0;
-  const feesTotalExclTaxes = observation.feesTotalExclTaxes ?? 0;
-  const grandTotal = observation.grandTotal ?? observation.quotedTotal ?? 0;
+  const observedBaseTotal =
+    typeof observation.baseTotal === "number" && observation.baseTotal > 0
+      ? observation.baseTotal
+      : null;
+  const observedTaxesTotal =
+    typeof observation.taxesTotal === "number" && observation.taxesTotal >= 0
+      ? observation.taxesTotal
+      : null;
+  const observedFeesTotal =
+    typeof observation.feesTotalExclTaxes === "number" &&
+    observation.feesTotalExclTaxes >= 0
+      ? observation.feesTotalExclTaxes
+      : null;
+  const observedGrandTotal =
+    typeof observation.grandTotal === "number" && observation.grandTotal > 0
+      ? observation.grandTotal
+      : typeof observation.quotedTotal === "number" &&
+          observation.quotedTotal > 0
+        ? observation.quotedTotal
+        : null;
+
+  const baseTotal = observedBaseTotal ?? observedGrandTotal ?? 1;
+  const taxesTotal = observedTaxesTotal ?? 0;
+  const feesTotalExclTaxes = observedFeesTotal ?? 0;
+  const grandTotal =
+    observedGrandTotal ??
+    Math.round((baseTotal + taxesTotal + feesTotalExclTaxes) * 100) / 100;
   const baseNightly =
     input.nights > 0
       ? Math.round((baseTotal / input.nights) * 100) / 100
@@ -589,7 +612,10 @@ function createSuccessObservation(input: {
     fees_total_excl_taxes: feesTotalExclTaxes,
     fee_lines: [],
     grand_total: grandTotal,
-    quoted_total: observation.quotedTotal ?? grandTotal,
+    quoted_total:
+      typeof observation.quotedTotal === "number" && observation.quotedTotal > 0
+        ? observation.quotedTotal
+        : grandTotal,
     fee_pct_of_base:
       baseTotal > 0
         ? Math.round((feesTotalExclTaxes / baseTotal) * 1_000_000) / 1_000_000
@@ -606,7 +632,7 @@ function createSuccessObservation(input: {
     all_in_multiplier:
       baseTotal > 0
         ? Math.round((grandTotal / baseTotal) * 1_000_000) / 1_000_000
-        : null,
+        : 1,
     handoff_url: observation.handoffUrl,
     source: "quote_api",
   };

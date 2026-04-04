@@ -9,6 +9,7 @@ import { executeOceanreef30aSingleQuote } from "./adapters/oceanreef30a";
 import { executePanhandle30aSingleQuote } from "./adapters/panhandle30a";
 import { executeRealjoy30aSingleQuote } from "./adapters/realjoy30a";
 import { executeRoyaldestinationsSingleQuote } from "./adapters/royaldestinations";
+import { executeSandpiper30aSingleQuote } from "./adapters/sandpiper30a";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "./types";
 
 export type QuoteRuntimeExecutor = (
@@ -27,6 +28,7 @@ const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   panhandle30a: executePanhandle30aSingleQuote,
   realjoy30a: executeRealjoy30aSingleQuote,
   royaldestinations: executeRoyaldestinationsSingleQuote,
+  sandpiper30a: executeSandpiper30aSingleQuote,
 };
 
 export function getKnownQuoteRuntimeAdapterKeys(): string[] {
