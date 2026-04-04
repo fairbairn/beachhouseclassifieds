@@ -36,3 +36,10 @@ Generated projects should include:
 - Return codes: `0` success, `1` handled failure, `130` cancellation.
 - Catch errors and print concise operator-facing messages.
 - Handle `Ctrl-C` gracefully in interactive routines.
+
+## Adapter Identity and Runtime Quote Context
+
+- Prefer slug-based `external_listing_id` whenever an adapter has stable listing slugs.
+- Keep provider-specific numeric identifiers required by quote/handoff flows in `quote_context`.
+- Evaluate slug migration and `quote_context` completeness as one of the first steps in quote-runtime migration work.
+- When migrating identity from numeric filenames to slug filenames, clean up legacy numeric detail artifacts under `details/json`, `details/html`, `details/quotes`, and `details/pricing`.

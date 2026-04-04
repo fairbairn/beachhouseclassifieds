@@ -31,6 +31,13 @@
 - Use structured app errors (`code`, `message`, optional `fieldErrors`) consistently across server/client boundaries.
 - Centralize user-facing error copy in `src/core/errors/user-facing-messages.ts` and reference it across API/server/UI flows.
 
+## Adapter Identity and Quote Context Policy
+
+- For adapters that expose stable listing slugs, set `external_listing_id` to slug values (not transient numeric IDs).
+- Preserve provider-required numeric identifiers inside `quote_context` (for example `listing_id`, `entity_id`, `unit_id`) when runtime quote/handoff flows need them.
+- Treat slug migration + `quote_context` completeness as an early migration gate before quote-runtime rollout and validation loops.
+- After slug migration, remove legacy numeric-named detail artifacts so canonical detail/html/quote/pricing filenames align with slug-based `external_listing_id`.
+
 ## Local Tooling Constraints
 
 - Do not use `rg` (ripgrep) on this machine; treat it as unavailable.

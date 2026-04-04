@@ -21,12 +21,18 @@ Outcome target:
 
 1. Confirm adapter key and existing scraper adapter file.
 2. Confirm quote provider function already exists (or identify where to extract it from).
-3. Verify data folders exist:
+3. Evaluate listing identity strategy first:
+
+- If stable slugs exist, migrate `external_listing_id` to slug values first.
+- Move provider-required numeric identifiers to `quote_context` (for example `listing_id`, `entity_id`, `unit_id`).
+- Plan removal of legacy numeric-named detail artifacts after migration.
+
+4. Verify data folders exist:
 
 - src/lib/data/external-sources/ADAPTER_KEY/details/index.json
 - src/lib/data/external-sources/ADAPTER_KEY/details/quotes
 
-4. Verify current commands run for this adapter:
+5. Verify current commands run for this adapter:
 
 - quote capture
 - quote validator
@@ -90,6 +96,12 @@ Recommended quote_context rules:
 1. Keep stable identifiers only (unit/property codes, API keys, endpoint hints).
 2. Keep values deterministic and serializable.
 3. Do not store volatile runtime payloads that change per quote request.
+
+Slug migration cleanup rules:
+
+1. Ensure canonical artifact filenames align with slug-based `external_listing_id`.
+2. Remove legacy numeric-named files from `details/json`, `details/html`, `details/quotes`, and `details/pricing` once slug artifacts are rebuilt.
+3. Re-run scrape filename validation after cleanup.
 
 ## Phase 5: Functional Validation Loop
 

@@ -1,10 +1,8 @@
+import { executeOversee30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/oversee30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  runOversee30aQuoteCli,
-  runOversee30aSingleQuoteObservation,
-} from "./quotes/oversee30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -44,6 +42,12 @@ type OverseeBookedDatesResponse = {
 };
 
 type OverseeDetailRecord = DetailRecordBase & {
+  quote_context: {
+    listing_id: string;
+    detail_url: string;
+    infants: number;
+    pets: number;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -739,10 +743,14 @@ async function fetchDetail(
     const unitSlug =
       unitData["unit-slug"] || extractSlugFromDetailUrl(normalizedDetailUrl);
     const externalListingId =
+      unitSlug ||
       unitData["unit-id"] ||
       unitData["unit-property-code"] ||
-      unitSlug ||
       normalizedDetailUrl;
+    const quoteListingId =
+      unitData["unit-id"] ||
+      unitData["unit-property-code"] ||
+      externalListingId;
 
     const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
       0,
@@ -948,6 +956,12 @@ async function fetchDetail(
     return {
       external_listing_id: externalListingId,
       detail_url: normalizedDetailUrl,
+      quote_context: {
+        listing_id: quoteListingId,
+        detail_url: normalizedDetailUrl,
+        infants: 0,
+        pets: 0,
+      },
       fetched_at: new Date().toISOString(),
       html_path: htmlPath,
       title,
@@ -1079,10 +1093,61 @@ export function createOversee30AAdapter(): ScraperAdapter<OverseeDetailRecord> {
         "oversee30a",
         argv,
       );
-      await runOversee30aQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "oversee30a",
+          executeSingleQuote: executeOversee30aSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/?vrpjax=1&act=checkavailability&par=1",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 650,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runOversee30aSingleQuoteObservation(input);
+      const result = await executeOversee30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? null,
+        options: {
+          timeoutMs: Number(process.env.QUOTE_CAPTURE_TIMEOUT_MS ?? "20000"),
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            ...result.observation,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "quote_unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: null,
+          reason: result.error?.message ?? "quote_failed",
+        },
+      };
     },
   };
 }
