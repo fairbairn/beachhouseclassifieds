@@ -135,6 +135,10 @@ Run in this order for one adapter:
 
 - npm run pricing:latency:adhoc -- --adapter-key ADAPTER_KEY --random-single --include-booking-fetch
 
+Run order rule:
+
+- Execute ad-hoc runtime latency smoke last, after all validators, isolation audit, and documentation updates.
+
 If quote validator or handoff validator fails, inspect failure classes first:
 
 1. request_error: transport, endpoint, anti-bot, auth, or payload shape drift.
@@ -176,9 +180,9 @@ Treat migration as complete only when all items are true.
 5. Handoff validator passes or has explicit accepted exclusions with rationale.
 6. Pricing cache build and validator pass.
 7. Scrape filename validator passes.
-8. Ad hoc latency run returns valid quote and checkout/handoff URL.
-9. quote-runtime isolation audit passes.
-10. Conformance docs updated with current status.
+8. quote-runtime isolation audit passes.
+9. Conformance docs updated with current status.
+10. Ad hoc latency run returns valid quote and checkout/handoff URL (final completion step).
 
 ## Operator Notes
 

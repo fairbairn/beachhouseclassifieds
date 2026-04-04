@@ -1,11 +1,9 @@
+import { executeDunevr30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/dunevr30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Page } from "playwright";
-import {
-  runDunevr30aQuoteCli,
-  runDunevr30aSingleQuoteObservation,
-} from "./quotes/dunevr30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -28,6 +26,10 @@ type DuneListingRow = {
 type DuneDayCode = "Y" | "N" | "X";
 
 type DuneDetailRecord = DetailRecordBase & {
+  quote_context: {
+    listing_id: string;
+    detail_url: string;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -381,6 +383,16 @@ function extractSeoPathFromDetailUrl(detailUrl: string): string {
   } catch {
     return "";
   }
+}
+
+function extractExternalListingSlug(value: string): string {
+  const normalized = normalizeSeoLookupKey(value);
+  if (!normalized) {
+    return "";
+  }
+
+  const parts = normalized.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? "";
 }
 
 function extractUnitIdFromHtml(html: string): string | null {
@@ -1163,7 +1175,17 @@ async function fetchDetail(
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsDaddr)}`
       : "";
 
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);
+    const externalListingId =
+      extractExternalListingSlug(
+        listingRow?.seoPageName ??
+          extractSeoPathFromDetailUrl(resolvedDetailUrl),
+      ) || rentalId;
+
+    const normalizedDetailUrl = normalizeLink(resolvedDetailUrl);
+    const htmlPath = resolve(
+      OUTPUT_DETAILS_HTML_DIR,
+      `${externalListingId}.html`,
+    );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
     const availabilityPayload = await callStreamlineApi<{
@@ -1284,9 +1306,13 @@ async function fetchDetail(
     ]);
 
     return {
-      external_listing_id: rentalId,
-      detail_url: normalizeLink(detailUrl),
+      external_listing_id: externalListingId,
+      detail_url: normalizedDetailUrl,
       fetched_at: new Date().toISOString(),
+      quote_context: {
+        listing_id: rentalId,
+        detail_url: normalizedDetailUrl,
+      },
       title,
       h1,
       canonical_url: canonicalUrl,
@@ -1326,7 +1352,7 @@ async function fetchDetail(
       },
       normalized_matching_profile: {
         source: "pm_dunevr30a",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         name,
         description,
         match_signals: {
@@ -1336,7 +1362,7 @@ async function fetchDetail(
           title_sha256: hashSha256(titleNormalized),
           listing_composite_key: [
             "pm_dunevr30a",
-            rentalId,
+            externalListingId,
             hashSha256(descriptionNormalized),
             hashSha256(titleNormalized),
           ].join("::"),
@@ -1344,7 +1370,7 @@ async function fetchDetail(
       },
       normalized_availability: {
         source: "pm_dunevr30a",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
         window_start: filteredDays[0]?.date ?? "",
         window_end: filteredDays[filteredDays.length - 1]?.date ?? "",
@@ -1377,7 +1403,7 @@ async function fetchDetail(
       },
       normalized_rates: {
         source: "pm_dunevr30a",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
         currency: "USD",
         window_start: normalizedRateDays[0]?.date ?? "",
@@ -1484,10 +1510,61 @@ export function createDuneVR30AAdapter(): ScraperAdapter<DuneDetailRecord> {
         "dunevr30a",
         argv,
       );
-      await runDunevr30aQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "dunevr30a",
+          executeSingleQuote: executeDunevr30aSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/wp-admin/admin-ajax.php",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runDunevr30aSingleQuoteObservation(input);
+      const result = await executeDunevr30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? null,
+        options: {
+          timeoutMs: Number(process.env.QUOTE_CAPTURE_TIMEOUT_MS ?? "20000"),
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            ...result.observation,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "quote_unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: input.handoffUrl ?? null,
+          reason: result.error.code,
+        },
+      };
     },
   };
 }
