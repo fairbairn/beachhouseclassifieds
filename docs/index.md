@@ -17,6 +17,7 @@ Welcome to the docs site scaffold.
 - Use [Quote Modules and Platform Strategy](./quote-modules-platform-strategy.md) for quote-sidecar behavior and stack-specific extraction strategy.
 - Use [Quote Runtime Isolation Evolution](./quote-runtime-isolation-evolution.md) for the runtime portability boundary, migration phases, and adapter task tracker.
 - Use [Adapter Quote Refactor Playbook](./adapter-quote-refactor-playbook.md) for the full findings log, end-state goals, and step-by-step migration procedure.
+- Use [Adapter Quote Runtime Migration Implementation Playbook](./adapter-quote-runtime-migration-implementation-playbook.md) for implementation-first runtime migration steps, quote_context requirements, and compliance gates.
 - Use [Pricing Cache Builder](./pricing-cache-builder.md) for cache inputs, interpolation policy, and parity outputs.
 - Use [Quote Validator](./quote-validator.md) for sidecar enforcement rules and failure classes.
 - Use [Handoff Validator](./handoff-validator.md) for checkout parity validation paths, pacing, and retry behavior.
