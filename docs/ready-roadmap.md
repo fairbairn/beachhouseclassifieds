@@ -51,7 +51,7 @@ For each adapter promoted:
 
 ## Latest Promotion
 
-- `panhandle30a` is now Ready after full quote pull (51 listings), quote validation pass (51/51), pricing cache parity (51/51), and full handoff alignment pass (204/204).
+- `funvacay30a` is now Ready after full scrape refresh (46 listings), full quote pull (46/46), pricing cache parity (46/46), and handoff smoke alignment pass (10/10 sampled).
 
 ## Operating Principle
 

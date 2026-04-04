@@ -38,6 +38,12 @@
 - Treat slug migration + `quote_context` completeness as an early migration gate before quote-runtime rollout and validation loops.
 - After slug migration, remove legacy numeric-named detail artifacts so canonical detail/html/quote/pricing filenames align with slug-based `external_listing_id`.
 
+## Scraper Adapter Exclusion Policy
+
+- Never implement explicit listing exclusions in any adapter scraping engine.
+- Do not add hard-coded exclusion lists, exclusion registry filtering, or adapter-level skip logic that omits discovered listings.
+- Extraction issues must surface as failures to diagnose and fix, not be hidden by exclusion logic.
+
 ## Local Tooling Constraints
 
 - Do not use `rg` (ripgrep) on this machine; treat it as unavailable.

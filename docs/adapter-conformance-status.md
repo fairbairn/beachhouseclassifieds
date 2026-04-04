@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-04-04T17:26:30Z
+Audit date: 2026-04-04T18:33:30Z
 
 Data source:
 
@@ -74,7 +74,7 @@ Preferred (non-blocking):
 | dunevr30a               |    85 |   85 |      85 |           85 |           85 |         85 |        85 |     85 |    85 |              85 |       4031 |        47.42 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   |
 | exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |             106 |       5629 |        53.10 |     -     |     -     |    ✅     |      ✅       |  ✅   |
 | fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |    63 |              63 |       6594 |       104.67 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| funvacay30a             |    40 |   40 |      40 |           40 |           40 |         40 |        40 |     40 |     0 |              40 |        240 |         6.00 |     -     |     -     |    ✅     |      ❌       |  ❌   |
+| funvacay30a             |    46 |   46 |      46 |           46 |           46 |         46 |        46 |     46 |     0 |              46 |        276 |         6.00 |     -     |     -     |    ✅     |      ✅       |  ✅   |
 | grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |     0 |              35 |       4495 |       128.43 |    ✅     |     -     |    ✅     |      ❌       |  ❌   |
 | homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |   208 |             208 |      10762 |        51.74 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   |
 | keyco30a                |   381 |  381 |     381 |          381 |          381 |        381 |       381 |    381 |   381 |             381 |      27564 |        72.35 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
@@ -89,15 +89,15 @@ Preferred (non-blocking):
 | scenicstays30a          |    44 |   44 |      44 |           44 |           44 |         44 |        44 |     44 |    44 |               0 |       2490 |        56.59 |    ✅     |    ✅     |    ❌     |      ❌       |  ❌   |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |     0 |               0 |       2418 |        65.35 |     -     |     -     |    ❌     |      ❌       |  ❌   |
 | stayon30a               |    78 |   78 |      78 |           78 |           78 |         78 |        78 |     78 |     0 |               0 |      11150 |       142.95 |    ✅     |     -     |    ❌     |      ❌       |  ❌   |
-| **TOTAL**               |  3032 | 3032 |    3032 |         3032 |         3032 |       3032 |      3032 |   3032 |  1588 |            2861 |     186365 |        61.44 |     —     |     —     |     —     |       —       | 18/25 |
+| **TOTAL**               |  3038 | 3038 |    3038 |         3038 |         3038 |       3038 |      3038 |   3038 |  1588 |            2867 |     186401 |        61.36 |     —     |     —     |     —     |       —       | 19/25 |
 
 ## Current Snapshot Summary
 
 - 25 adapters audited.
 - All 25 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 18 / 25.
-- Rates coverage signal: 1588 / 3033 files currently include normalized_rates.days.
-- Pricing-records coverage signal: 2862 / 3033 files currently have per-listing pricing JSON records.
+- Combined-ready adapters (Ready = ✅): 19 / 25.
+- Rates coverage signal: 1588 / 3038 files currently include normalized_rates.days.
+- Pricing-records coverage signal: 2867 / 3038 files currently have per-listing pricing JSON records.
 - API capability signal:
   - Availability API present: 13 / 25 adapters.
   - Rates API present: 6 / 25 adapters.
@@ -129,12 +129,12 @@ This queue defines migration order for adapters that already have direct quote A
 |    16 | fivestar30a             |    63 |    ✅     |      ✅       | complete |
 |    17 | panhandle30a            |    51 |    ✅     |      ✅       | complete |
 |    18 | localvr30a              |    42 |    ✅     |      ✅       | complete |
-|    19 | funvacay30a             |    40 |    ✅     |      ❌       | pending  |
+|    19 | funvacay30a             |    46 |    ✅     |      ✅       | complete |
 |    20 | grayt30a                |    35 |    ✅     |      ❌       | pending  |
 |    21 | coastproperties30a      |    30 |    ✅     |      ❌       | pending  |
 |    22 | 30abeach                |    17 |    ✅     |      ❌       | pending  |
 
-Active next runtime migration target: `funvacay30a` (highest-volume pending adapter with `API Quote = ✅`).
+Active next runtime migration target: `grayt30a` (highest-volume pending adapter with `API Quote = ✅`).
 
 ## Quote Pricing Validation Snapshot (2026-04-01)
 

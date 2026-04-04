@@ -10,7 +10,6 @@ import {
 import { executeKeyco30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/keyco30a";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
-import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type KeycoDayCode = "A" | "U" | "M" | "X";
@@ -44,6 +43,11 @@ type KeycoPricingContextResponse = {
   } | null;
   isAvailable?: boolean;
   totalBaseRate?: number | null;
+  taxes?: number | null;
+  pricingFees?: Array<{
+    amount?: number | null;
+    description?: string | null;
+  }> | null;
   averageBaseRateDescription?: string | null;
   errorMessage?: string | null;
   handoffUrl?: string | null;
@@ -112,6 +116,7 @@ type KeycoDetailRecord = DetailRecordBase & {
     baths: number | null;
     sleeps: number | null;
   };
+  quote_context: Record<string, never>;
   normalized_matching_profile: {
     source: "pm_keyco30a";
     external_listing_id: string;
@@ -132,6 +137,9 @@ type KeycoDetailRecord = DetailRecordBase & {
     window_start: string;
     window_end: string;
     code_legend: {
+      A: "available";
+      U: "unavailable";
+      M: "restricted_or_rule_constrained";
       X: "unknown";
     };
     day_codes: string;
@@ -205,8 +213,6 @@ const OUTPUT_ROOT = resolve(
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
-
-const EXCLUDED_LISTING_IDS = loadActiveExclusions("keyco30a", ["ra3jpPCp6O"]);
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/+$/, "") ?? url;
@@ -1416,10 +1422,6 @@ async function fetchDetail(
   const externalListingId =
     normalizeLink(normalizedDetailUrl).split("/").filter(Boolean).at(-1) ||
     "unknown";
-
-  if (EXCLUDED_LISTING_IDS.has(externalListingId)) {
-    return null;
-  }
 
   const logStage = (stage: string, message: string): void => {
     if (!reportDetailProgress) {

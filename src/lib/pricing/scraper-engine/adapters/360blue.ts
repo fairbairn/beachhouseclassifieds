@@ -11,7 +11,6 @@ import {
 import { execute360BlueSingleQuote } from "@/lib/pricing/quote-runtime/adapters/360blue";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
-import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type BookingDayState = "bookable" | "blocked" | "unknown";
@@ -242,8 +241,6 @@ function build360BlueHandoffUrl(input: {
   params.set("payload", JSON.stringify(payload));
   return `${BLUE360_CART_CREATE_ENDPOINT}#${params.toString()}`;
 }
-
-const EXCLUDED_LISTING_IDS = loadActiveExclusions("360blue");
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
@@ -1117,11 +1114,6 @@ async function discoverListings(
       continue;
     }
 
-    const listingId = extractExternalListingId(valid);
-    if (EXCLUDED_LISTING_IDS.has(listingId)) {
-      continue;
-    }
-
     seen.add(valid);
     rows.push({
       link: valid,
@@ -1150,9 +1142,6 @@ async function fetchDetail(
   reportDetailProgress?: (message: string) => void,
 ): Promise<DetailRecord360Blue | null> {
   const externalListingId = extractExternalListingId(detailUrl);
-  if (EXCLUDED_LISTING_IDS.has(externalListingId)) {
-    return null;
-  }
 
   const page = await browser.newPage();
   const fetchStartedAt = Date.now();

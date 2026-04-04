@@ -44,6 +44,12 @@ Generated projects should include:
 - Evaluate slug migration and `quote_context` completeness as one of the first steps in quote-runtime migration work.
 - When migrating identity from numeric filenames to slug filenames, clean up legacy numeric detail artifacts under `details/json`, `details/html`, `details/quotes`, and `details/pricing`.
 
+## Scraper Exclusion Policy
+
+- Never implement explicit listing exclusions in scraper adapters.
+- Do not use adapter-level exclusion sets, hard-coded listing skips, or exclusion registry lookups to suppress listings from discovery or detail pulls.
+- If a listing fails extraction, treat it as a scraper failure to fix (or a temporary run-time failure to report), not as a candidate for exclusion logic.
+
 ## Operator Shorthand
 
 - Phrase: `single-mode adhoc quote checkout`

@@ -149,20 +149,6 @@ const OUTPUT_ROOT = resolve(
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 
-const EXCLUDED_SLUGS = new Set([
-  "30a",
-  "condominium",
-  "private-home",
-  "large-group-vacation-rentals",
-  "luxury",
-  "destin-miramar-beach",
-  "panama-city-beach",
-  "beachfront-vacation-rentals",
-  "pet-friendly",
-  "golf-cart",
-  "pool",
-]);
-
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
 }
@@ -183,7 +169,7 @@ function isLikelyDetailPath(pathname: string): boolean {
   }
 
   const slug = normalizedPath.split("/").filter(Boolean).at(-1) ?? "";
-  if (!slug || EXCLUDED_SLUGS.has(slug)) {
+  if (!slug) {
     return false;
   }
 
@@ -600,20 +586,6 @@ async function discoverListings(
       const rows: Array<{ href: string; text: string }> = [];
       const seen = new Set<string>();
 
-      const excluded = new Set([
-        "30a",
-        "condominium",
-        "private-home",
-        "large-group-vacation-rentals",
-        "luxury",
-        "destin-miramar-beach",
-        "panama-city-beach",
-        "beachfront-vacation-rentals",
-        "pet-friendly",
-        "golf-cart",
-        "pool",
-      ]);
-
       const toNormalized = (hrefValue: string): string => {
         try {
           const absolute = new URL(hrefValue, window.location.origin);
@@ -629,11 +601,7 @@ async function discoverListings(
           }
 
           const slug = normalizedPath.split("/").filter(Boolean).at(-1) ?? "";
-          if (
-            !slug ||
-            excluded.has(slug) ||
-            !/^[a-z0-9][a-z0-9-]*$/i.test(slug)
-          ) {
+          if (!slug || !/^[a-z0-9][a-z0-9-]*$/i.test(slug)) {
             return "";
           }
 

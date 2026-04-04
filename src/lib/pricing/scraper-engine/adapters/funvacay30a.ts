@@ -1,15 +1,12 @@
+import { executeFunvacay30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/funvacay30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
-import { loadActiveExclusions } from "../shared/exclusion-registry";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import {
-  runFunVacay30AQuoteCli,
-  runFunVacay30ASingleQuoteObservation,
-} from "./quotes/funvacay30a";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
@@ -45,6 +42,14 @@ type LuxuryDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "description_expanded";
+    item_eid: string;
+    type_id: string;
+    inventory_id: string;
+    detail_url: string;
+    endpoint_path: "/rescms/ajax/item/pricing/quote";
   };
   normalized_matching_profile: {
     source: "pm_funvacay30a";
@@ -120,7 +125,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://www.funvacay.com/emerald-coast-vacation-rentals/30a";
+  "https://www.funvacay.com/emerald-coast-vacation-rentals#fq=%7B!tag%3DRiotSolrWidget%2CRiotSolrFacetList-sm_nid%24rc_core_term_location%24name%7Dsm_nid%24rc_core_term_location%24name%3A%2230A%22";
 const EXPECTED_LISTING_COUNT = 45;
 const DETAIL_PATH_PREFIXES = ["/emerald-coast-vacation-rentals/"];
 const OUTPUT_ROOT = resolve(
@@ -132,14 +137,6 @@ const OUTPUT_ROOT = resolve(
   "funvacay30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
-
-const EXCLUDED_LISTING_IDS = loadActiveExclusions("funvacay30a", [
-  "gulf-getaway",
-  "little-bleu",
-  "sea-la-vie",
-  "spf-30a",
-  "tides-blue",
-]);
 
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
@@ -673,6 +670,36 @@ function extractExternalListingId(detailUrl: string): string {
   } catch {
     return detailUrl;
   }
+}
+
+function extractRcavIdentityFromSource(source: string): {
+  itemEid: string;
+  typeId: string;
+  inventoryId: string;
+} | null {
+  const exactEntityMatch = source.match(
+    /'entity':\{'eid':'(\d+)'.*?'id':'(\d+)'.*?'type':'(\d+)'/s,
+  );
+  if (exactEntityMatch) {
+    return {
+      itemEid: exactEntityMatch[1],
+      inventoryId: exactEntityMatch[2],
+      typeId: exactEntityMatch[3],
+    };
+  }
+
+  const fallbackMatch = source.match(
+    /'eid':'(\d+)','engine_eid':'\d+','id':'(\d+)'.*?'type':'(\d+)'/s,
+  );
+  if (fallbackMatch) {
+    return {
+      itemEid: fallbackMatch[1],
+      inventoryId: fallbackMatch[2],
+      typeId: fallbackMatch[3],
+    };
+  }
+
+  return null;
 }
 
 async function installEvaluateNameShim(page: Page): Promise<void> {
@@ -1267,9 +1294,9 @@ async function discoverListings(
   let discovery = await readDiscoverySnapshot();
   let previousCount = discovery.rows.length;
   let stagnantSteps = 0;
-  // This stack relies on incremental lazy load; allow deeper passes.
-  const effectiveScrollSteps = Math.max(120, maxScrollSteps);
-  const effectivePauseMs = Math.max(320, Math.min(scrollPauseMs, 1200));
+  // Keep infinite-scroll responsive; do not force deep crawl loops.
+  const effectiveScrollSteps = Math.max(12, maxScrollSteps);
+  const effectivePauseMs = Math.max(220, Math.min(scrollPauseMs, 900));
   const wheelDelta = Math.max(
     560,
     Math.floor((page.viewportSize()?.height ?? 900) * 0.85),
@@ -1296,6 +1323,16 @@ async function discoverListings(
       break;
     }
 
+    if (
+      discovery.expectedCount === null &&
+      discovery.rows.length >= EXPECTED_LISTING_COUNT
+    ) {
+      reportProgress(
+        `discovery reached planner target after scroll step ${step}: ${discovery.rows.length}/${EXPECTED_LISTING_COUNT}`,
+      );
+      break;
+    }
+
     await page.mouse.wheel(0, wheelDelta);
     await page.evaluate(() => {
       window.scrollBy(0, Math.floor(window.innerHeight * 0.5));
@@ -1315,7 +1352,7 @@ async function discoverListings(
     }
 
     stagnantSteps += 1;
-    if (stagnantSteps >= 24 && step >= 100) {
+    if (stagnantSteps >= 8) {
       break;
     }
   }
@@ -1328,16 +1365,11 @@ async function discoverListings(
     reportProgress(`discovery final captured=${discovery.rows.length}`);
   }
 
-  return discovery.rows
-    .filter((row) => {
-      const normalized = normalizeDetailUrl(row.href);
-      return !EXCLUDED_LISTING_IDS.has(extractExternalListingId(normalized));
-    })
-    .map((row) => ({
-      link: normalizeDetailUrl(row.href),
-      source_url: anchorUrl,
-      anchor_text: row.text,
-    }));
+  return discovery.rows.map((row) => ({
+    link: normalizeDetailUrl(row.href),
+    source_url: anchorUrl,
+    anchor_text: row.text,
+  }));
 }
 
 async function extractAvailabilitySnapshot(page: Page): Promise<{
@@ -1944,9 +1976,6 @@ async function fetchDetail(
     const horizonIso = horizon.toISOString().slice(0, 10);
 
     const externalListingId = extractExternalListingId(detailUrl);
-    if (EXCLUDED_LISTING_IDS.has(externalListingId)) {
-      return null;
-    }
 
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
@@ -2285,6 +2314,14 @@ async function fetchDetail(
 
     const extractionMs = Date.now() - beforeLoad - pageLoadMs;
     const totalMs = Date.now() - startedAt;
+    const rcavIdentity = extractRcavIdentityFromSource(
+      `${descriptionExpanded}\n${html}`,
+    );
+    if (!rcavIdentity) {
+      throw new Error(
+        `Missing required quote context identity tuple (eid/type/id) for ${externalListingId}`,
+      );
+    }
 
     return {
       external_listing_id: externalListingId,
@@ -2299,6 +2336,14 @@ async function fetchDetail(
       location,
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
+      quote_context: {
+        source: "description_expanded" as const,
+        item_eid: rcavIdentity.itemEid,
+        type_id: rcavIdentity.typeId,
+        inventory_id: rcavIdentity.inventoryId,
+        detail_url: detailUrl,
+        endpoint_path: "/rescms/ajax/item/pricing/quote" as const,
+      },
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_funvacay30a",
@@ -2441,10 +2486,84 @@ export function createFunVacay30AAdapter(): ScraperAdapter<LuxuryDetailRecord> {
         "funvacay30a",
         argv,
       );
-      await runFunVacay30AQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "funvacay30a",
+          executeSingleQuote: executeFunvacay30aSingleQuote,
+          maxAttemptsEnvVar: "FUNVACAY30A_QUOTE_MAX_ATTEMPTS",
+          defaultMaxListings: 10,
+          defaultWeeks: 24,
+          defaultNights: 7,
+          defaultListingConcurrency: 1,
+          defaultQuoteConcurrency: 2,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/rescms/ajax/item/pricing/quote",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runFunVacay30ASingleQuoteObservation(input);
+      const result = await executeFunvacay30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? {
+          listing_id: input.listingId,
+          detail_url: input.detailUrl,
+        },
+        options: {
+          timeoutMs:
+            Number(
+              process.env.FUNVACAY30A_QUOTE_TIMEOUT_MS ??
+                process.env.QUOTE_CAPTURE_TIMEOUT_MS ??
+                "20000",
+            ) || 20000,
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            startDate: result.observation.startDate,
+            endDate: result.observation.endDate,
+            quoteAvailable: result.observation.quoteAvailable,
+            currency: result.observation.currency,
+            baseTotal: result.observation.baseTotal,
+            taxesTotal: result.observation.taxesTotal,
+            feesTotalExclTaxes: result.observation.feesTotalExclTaxes,
+            grandTotal: result.observation.grandTotal,
+            quotedTotal: result.observation.quotedTotal,
+            handoffUrl: result.observation.handoffUrl,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "Quote unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: null,
+          reason: result.error.message,
+        },
+      };
     },
   };
 }

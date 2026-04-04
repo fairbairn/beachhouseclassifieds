@@ -162,15 +162,6 @@ const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-const EXCLUDED_LISTING_IDS = new Set<string>([
-  "370278",
-  "370279",
-  "370280",
-  "370281",
-  "370282",
-  "1002652",
-]);
-
 const listingCache = new Map<string, Promise<DuneListingRow[]>>();
 
 function normalizeLink(url: string): string {
@@ -659,9 +650,7 @@ async function discoverListings(
 ): Promise<ScrapedLink[]> {
   const parsed = new URL(anchorUrl);
   const origin = parsed.origin;
-  const rows = (await loadListingRows(origin)).filter(
-    (row) => !EXCLUDED_LISTING_IDS.has(row.id),
-  );
+  const rows = await loadListingRows(origin);
   const links = rows
     .map((row): ScrapedLink | null => {
       const detailUrl = detailUrlFromSeoPath(origin, row.seoPageName);
