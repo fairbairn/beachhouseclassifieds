@@ -45,6 +45,7 @@ const BASE_HOST = "https://www.funvacay.com";
 const RCAPI_ENDPOINT = `${BASE_HOST}/rcapi/item/avail/search`;
 const DETAILED_QUOTE_ENDPOINT = `${BASE_HOST}/rescms/ajax/item/pricing/quote`;
 const DEFAULT_TIMEOUT_MS = 20000;
+const MIN_VALID_BASE_TOTAL = 100;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -92,6 +93,24 @@ function stripHtmlToText(value: string): string {
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function parseEmbeddedDetailedQuoteError(contentHtml: string): string | null {
+  const hasErrorContainer = /class="messages\s+error"/i.test(contentHtml);
+  if (!hasErrorContainer) {
+    return null;
+  }
+
+  const listItemMatches = [...contentHtml.matchAll(/<li>([\s\S]*?)<\/li>/gi)];
+  const messages = listItemMatches
+    .map((match) => stripHtmlToText(match[1] ?? ""))
+    .filter((message) => message.length > 0);
+
+  if (messages.length === 0) {
+    return "Detailed quote marked request as unavailable";
+  }
+
+  return messages.join("; ");
 }
 
 function parseClassSummaryAmount(
@@ -375,6 +394,15 @@ async function fetchDetailedQuote(input: {
   const content = typeof payload.content === "string" ? payload.content : "";
   const message = asOptionalString(payload.message);
 
+  const embeddedError =
+    content.length > 0 ? parseEmbeddedDetailedQuoteError(content) : null;
+  if (embeddedError) {
+    return {
+      parsed: null,
+      reason: embeddedError,
+    };
+  }
+
   if (!Number.isFinite(status) || status !== 1 || content.length === 0) {
     return {
       parsed: null,
@@ -428,19 +456,21 @@ export async function executeFunvacay30aSingleQuote(
 
     if (!base.quoteAvailable || base.baseTotal === null) {
       return {
-        success: false,
+        success: true,
         elapsedMs: performance.now() - startedAt,
-        error: toError({
-          code: "QUOTE_UNAVAILABLE",
-          message: base.reason ?? "Quote unavailable",
-          retryable: true,
-          listingId: input.listingId,
-          checkInIso: input.checkInIso,
-          checkOutIso: input.checkOutIso,
-          details: {
-            handoffUrl: base.handoffUrl,
-          },
-        }),
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          quoteUnavailableReason: base.reason ?? "Quote unavailable",
+          currency: base.currency,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: base.handoffUrl,
+        },
       };
     }
 
@@ -453,21 +483,92 @@ export async function executeFunvacay30aSingleQuote(
       signal: controller.signal,
     });
 
-    const resolvedBase = detailed.parsed?.baseTotal ?? base.baseTotal;
-    const resolvedTaxes = detailed.parsed?.taxesTotal ?? 0;
+    if (!detailed.parsed) {
+      return {
+        success: true,
+        elapsedMs: performance.now() - startedAt,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          quoteUnavailableReason:
+            detailed.reason ??
+            "Detailed quote data missing for selected stay window",
+          currency: base.currency,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: base.handoffUrl,
+        },
+      };
+    }
+
+    const resolvedBase = detailed.parsed.baseTotal ?? base.baseTotal;
+    const resolvedTaxes = detailed.parsed.taxesTotal;
     const resolvedFees =
-      detailed.parsed?.feesTotal ??
+      detailed.parsed.feesTotal ??
       roundCurrency(
         Math.max(
           0,
-          (detailed.parsed?.grandTotal ?? resolvedBase) -
+          (detailed.parsed.grandTotal ?? resolvedBase) -
             resolvedBase -
-            resolvedTaxes,
+            (resolvedTaxes ?? 0),
         ),
       );
     const resolvedGrand =
-      detailed.parsed?.grandTotal ??
-      roundCurrency(resolvedBase + resolvedFees + resolvedTaxes);
+      detailed.parsed.grandTotal ??
+      roundCurrency(resolvedBase + resolvedFees + (resolvedTaxes ?? 0));
+
+    if (
+      resolvedBase === null ||
+      resolvedBase < MIN_VALID_BASE_TOTAL ||
+      resolvedTaxes === null ||
+      resolvedTaxes <= 0 ||
+      resolvedGrand === null ||
+      resolvedGrand <= resolvedBase
+    ) {
+      return {
+        success: true,
+        elapsedMs: performance.now() - startedAt,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          quoteUnavailableReason:
+            "Detailed quote totals were incomplete or inconsistent",
+          currency: base.currency,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: base.handoffUrl,
+        },
+      };
+    }
+
+    if (resolvedFees < 0 || resolvedFees >= resolvedBase) {
+      return {
+        success: true,
+        elapsedMs: performance.now() - startedAt,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          quoteUnavailableReason:
+            "Detailed quote totals produced invalid derived fees",
+          currency: base.currency,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: base.handoffUrl,
+        },
+      };
+    }
 
     return {
       success: true,

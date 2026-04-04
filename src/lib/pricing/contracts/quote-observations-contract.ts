@@ -29,6 +29,7 @@ export type CanonicalQuoteObservation = {
   all_in_multiplier: number | null;
   handoff_url: string | null;
   source: "quote_api";
+  pricing_source?: "runtime_parsed" | "estimated_unavailable";
 };
 
 export type CanonicalQuoteAssumptionsSnapshot = {

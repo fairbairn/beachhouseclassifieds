@@ -15,7 +15,6 @@ type RealJoyDetailRecord = DetailRecordBase & {
     property_id: string;
     property_name: string;
     detail_url: string;
-    endpoint_path: "/ajax/quote";
   };
   title: string;
   h1: string;
@@ -979,7 +978,6 @@ async function fetchDetail(
         property_id: quotePropertyId,
         property_name: name || externalListingId,
         detail_url: normalizedDetailUrl,
-        endpoint_path: "/ajax/quote",
       },
       title,
       h1,

@@ -55,7 +55,6 @@ type EscapeDetailRecord = DetailRecordBase & {
     property_id: string | null;
     unit_short_name: string | null;
     detail_url: string;
-    endpoint_path: string;
   };
   normalized_matching_profile: {
     source: "pm_30aescapes";
@@ -2904,7 +2903,6 @@ async function fetchDetail(
         property_id: extracted.propertyId || null,
         unit_short_name: extracted.unitShortName || null,
         detail_url: detailUrl,
-        endpoint_path: ESCAPES_QUOTES_ENDPOINT,
       },
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: normalizedAvailability,

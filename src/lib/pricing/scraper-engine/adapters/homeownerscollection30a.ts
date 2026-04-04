@@ -78,7 +78,6 @@ type LuxuryDetailRecord = DetailRecordBase & {
     source: "detail_html_and_rcapi";
     entity_id: number | null;
     detail_url: string;
-    endpoint_path: "/rcapi/item/avail/search";
     quote_coupon: string;
   };
   normalized_matching_profile: {
@@ -2285,7 +2284,6 @@ async function fetchDetail(
         source: "detail_html_and_rcapi",
         entity_id: entityId ?? null,
         detail_url: detailUrl,
-        endpoint_path: HOMEOWNERS_RCAPI_PATH,
         quote_coupon:
           process.env.HOMEOWNERSCOLLECTION30A_RATES_QUOTE_COUPON ??
           "INVALIDCODE",

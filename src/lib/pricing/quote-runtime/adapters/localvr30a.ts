@@ -48,6 +48,7 @@ type LocalVrQuoteContext = {
 const ADAPTER_KEY = "localvr30a" as const;
 const DEFAULT_NEXT_ACTION = "40c1a0d7c1ff53bb657668b83335272ee28af08351";
 const DEFAULT_TIMEOUT_MS = 20000;
+const MIN_VALID_BASE_TOTAL = 100;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -128,6 +129,39 @@ function normalizeTimeoutMs(raw: number | undefined): number {
     return DEFAULT_TIMEOUT_MS;
   }
   return Math.max(1000, Math.floor(raw));
+}
+
+function validateAvailableTotals(input: {
+  baseTotal: number | null;
+  taxesTotal: number | null;
+  feesTotal: number | null;
+  grandTotal: number | null;
+}): string | null {
+  if (input.baseTotal === null || input.baseTotal < MIN_VALID_BASE_TOTAL) {
+    return `base_total_below_minimum(${MIN_VALID_BASE_TOTAL})`;
+  }
+
+  if (input.taxesTotal === null || input.taxesTotal <= 0) {
+    return "taxes_total_not_positive";
+  }
+
+  if (input.grandTotal === null || input.grandTotal <= input.baseTotal) {
+    return "grand_total_not_greater_than_base_total";
+  }
+
+  if (input.feesTotal === null) {
+    return "fees_total_missing";
+  }
+
+  if (input.feesTotal < 0) {
+    return "fees_total_negative";
+  }
+
+  if (input.feesTotal >= input.baseTotal) {
+    return "fees_total_gte_base_total";
+  }
+
+  return null;
 }
 
 function toError(input: {
@@ -344,6 +378,8 @@ export async function executeLocalvr30aSingleQuote(
         startDate: input.checkInIso,
         endDate: input.checkOutIso,
         quoteAvailable: false,
+        quoteUnavailableReason:
+          reasonParts.join("; ") || "quote_response_missing_or_invalid",
         currency: "USD",
         baseTotal: null,
         taxesTotal: null,
@@ -401,11 +437,17 @@ export async function executeLocalvr30aSingleQuote(
             input.checkOutIso,
         });
 
-  const available =
-    baseTotal !== null &&
-    baseTotal > 0 &&
-    grandTotal !== null &&
-    grandTotal >= baseTotal;
+  const roundedBase = baseTotal === null ? null : roundCurrency(baseTotal);
+  const roundedTaxes = taxesTotal === null ? null : roundCurrency(taxesTotal);
+  const roundedFees = feesTotal === null ? null : roundCurrency(feesTotal);
+  const roundedGrand = grandTotal === null ? null : roundCurrency(grandTotal);
+  const unavailableReason = validateAvailableTotals({
+    baseTotal: roundedBase,
+    taxesTotal: roundedTaxes,
+    feesTotal: roundedFees,
+    grandTotal: roundedGrand,
+  });
+  const available = unavailableReason === null;
 
   return {
     success: true,
@@ -414,12 +456,13 @@ export async function executeLocalvr30aSingleQuote(
       startDate: input.checkInIso,
       endDate: input.checkOutIso,
       quoteAvailable: available,
+      quoteUnavailableReason: available ? null : unavailableReason,
       currency,
-      baseTotal: baseTotal === null ? null : roundCurrency(baseTotal),
-      taxesTotal: taxesTotal === null ? null : roundCurrency(taxesTotal),
-      feesTotalExclTaxes: feesTotal === null ? null : roundCurrency(feesTotal),
-      grandTotal: grandTotal === null ? null : roundCurrency(grandTotal),
-      quotedTotal: baseTotal === null ? null : roundCurrency(baseTotal),
+      baseTotal: available ? roundedBase : null,
+      taxesTotal: available ? roundedTaxes : null,
+      feesTotalExclTaxes: available ? roundedFees : null,
+      grandTotal: available ? roundedGrand : null,
+      quotedTotal: available ? roundedGrand : null,
       handoffUrl,
     },
   };

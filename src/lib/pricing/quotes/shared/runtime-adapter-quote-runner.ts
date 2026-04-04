@@ -661,6 +661,7 @@ function createSuccessObservation(input: {
         : 1,
     handoff_url: observation.handoffUrl,
     source: "quote_api",
+    pricing_source: "runtime_parsed",
   };
 }
 
@@ -699,6 +700,7 @@ function createUnavailableObservation(input: {
     all_in_multiplier: input.pricing.allInMultiplier,
     handoff_url: input.handoffUrl,
     source: "quote_api",
+    pricing_source: "estimated_unavailable",
   };
 }
 

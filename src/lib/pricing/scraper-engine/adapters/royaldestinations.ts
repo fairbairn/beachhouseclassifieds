@@ -56,7 +56,6 @@ type RoyalDestinationsDetailRecord = DetailRecordBase & {
     entity_id: number | null;
     ids_tuple: string | null;
     detail_url: string;
-    endpoint_path: string;
   };
   normalized_matching_profile: {
     source: "pm_royaldestinations";
@@ -1422,7 +1421,6 @@ async function fetchDetail(
         entity_id: quoteEntityId,
         ids_tuple: quoteIdsTuple,
         detail_url: normalizedDetailUrl,
-        endpoint_path: ROYALDESTINATIONS_RCAPI_PATH,
       },
       normalized_matching_profile: {
         source: "pm_royaldestinations",

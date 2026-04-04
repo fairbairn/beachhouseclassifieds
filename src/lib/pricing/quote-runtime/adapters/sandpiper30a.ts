@@ -22,6 +22,7 @@ type RawObservation = {
 const ADAPTER_KEY = "sandpiper30a" as const;
 const BASE_HOST = "https://sandpipervacationrentals.com";
 const AJAX_ENDPOINT = `${BASE_HOST}/wp-admin/admin-ajax.php`;
+const MIN_VALID_BASE_TOTAL = 100;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -158,6 +159,31 @@ function parseBookingBreakdown(bookingHtml: string): {
   };
 }
 
+function resolveGrandTotal(input: {
+  baseTotal: number | null;
+  taxesTotal: number | null;
+  feesTotal: number | null;
+  parsedGrandTotal: number | null;
+  fallbackGrandTotal: number | null;
+}): number | null {
+  const derivedFromParts =
+    input.baseTotal !== null &&
+    input.taxesTotal !== null &&
+    input.feesTotal !== null
+      ? roundCurrency(input.baseTotal + input.taxesTotal + input.feesTotal)
+      : null;
+
+  if (derivedFromParts !== null) {
+    return derivedFromParts;
+  }
+
+  if (input.parsedGrandTotal !== null) {
+    return input.parsedGrandTotal;
+  }
+
+  return input.fallbackGrandTotal;
+}
+
 function parseUnavailableReason(fragmentHtml: string): string | null {
   const listItemMatch = fragmentHtml.match(
     /class=["'][^"']*stay-error-list-item[^"']*["'][^>]*>([\s\S]*?)<\/li>/i,
@@ -179,6 +205,39 @@ function parseUnavailableReason(fragmentHtml: string): string | null {
   if (text.includes("please select") || text.includes("required")) {
     return "Quote API rejected request parameters";
   }
+  return null;
+}
+
+function validateAvailableTotals(input: {
+  baseTotal: number | null;
+  taxesTotal: number | null;
+  feesTotal: number | null;
+  grandTotal: number | null;
+}): string | null {
+  if (input.baseTotal === null || input.baseTotal < MIN_VALID_BASE_TOTAL) {
+    return `base_total_below_minimum(${MIN_VALID_BASE_TOTAL})`;
+  }
+
+  if (input.taxesTotal === null || input.taxesTotal <= 0) {
+    return "taxes_total_not_positive";
+  }
+
+  if (input.grandTotal === null || input.grandTotal <= input.baseTotal) {
+    return "grand_total_not_greater_than_base_total";
+  }
+
+  if (input.feesTotal === null) {
+    return "fees_total_missing";
+  }
+
+  if (input.feesTotal < 0) {
+    return "fees_total_negative";
+  }
+
+  if (input.feesTotal >= input.baseTotal) {
+    return "fees_total_gte_base_total";
+  }
+
   return null;
 }
 
@@ -300,19 +359,34 @@ async function fetchQuoteObservation(input: {
           taxesTotal = parsed.taxesTotal;
           feesTotal = parsed.feesTotal;
           feeLines = parsed.feeLines;
-          if (parsed.grandTotal !== null) {
-            grandTotal = parsed.grandTotal;
-          }
+          grandTotal = resolveGrandTotal({
+            baseTotal,
+            taxesTotal,
+            feesTotal,
+            parsedGrandTotal: parsed.grandTotal,
+            fallbackGrandTotal: totalFromFragment,
+          });
         }
       } catch {
         // Keep quote fragment totals when booking fetch fails.
       }
     }
 
-    const quoteAvailable =
+    const preliminaryAvailable =
       payload.success === true &&
       totalFromFragment !== null &&
       (grandTotal !== null || baseTotal !== null);
+
+    const availabilityError = preliminaryAvailable
+      ? validateAvailableTotals({
+          baseTotal,
+          taxesTotal,
+          feesTotal,
+          grandTotal,
+        })
+      : null;
+
+    const quoteAvailable = preliminaryAvailable && availabilityError === null;
 
     return {
       startDate: input.startDate,
@@ -320,7 +394,9 @@ async function fetchQuoteObservation(input: {
       quoteAvailable,
       quoteUnavailableReason: quoteAvailable
         ? null
-        : (unavailableReason ?? "Quote unavailable for selected stay window"),
+        : (availabilityError ??
+          unavailableReason ??
+          "Quote unavailable for selected stay window"),
       baseTotal,
       taxesTotal,
       feesTotal,

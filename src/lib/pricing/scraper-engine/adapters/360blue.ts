@@ -96,7 +96,6 @@ type DetailRecord360Blue = DetailRecordBase & {
   };
   quote_context: {
     unit_id: string;
-    endpoint_path: string;
     cart_create_endpoint: string;
   };
   normalized_availability: {
@@ -2119,8 +2118,6 @@ async function fetchDetail(
     const totalMs = Date.now() - fetchStartedAt;
     const quoteContext: DetailRecord360Blue["quote_context"] = {
       unit_id: propertyProfile.unit_id,
-      endpoint_path:
-        quoteSidecar.endpoint_path ?? "/api/nrbe/reservation-quotes.json",
       cart_create_endpoint: BLUE360_CART_CREATE_ENDPOINT,
     };
 

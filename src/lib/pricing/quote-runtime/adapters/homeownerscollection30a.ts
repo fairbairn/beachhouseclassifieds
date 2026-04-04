@@ -12,6 +12,7 @@ type HomeownersQuoteContext = {
 const ADAPTER_KEY = "homeownerscollection30a" as const;
 const DEFAULT_TIMEOUT_MS = 20000;
 const DEFAULT_COUPON_CODE = "INVALIDCODE";
+const MIN_VALID_BASE_TOTAL = 100;
 
 const entityIdByListing = new Map<string, number>();
 
@@ -250,22 +251,71 @@ export async function executeHomeownerscollection30aSingleQuote(
   const grandTotal = quote.grand_total ?? quote.quoted_total;
   const quotedTotal = quote.quoted_total ?? quote.grand_total;
 
+  if (quote.reliability !== "buy_page_charges") {
+    return {
+      success: true,
+      elapsedMs: performance.now() - startedAt,
+      observation: {
+        startDate: input.checkInIso,
+        endDate: input.checkOutIso,
+        quoteAvailable: false,
+        quoteUnavailableReason: `incomplete_charge_breakdown:${quote.reliability}`,
+        currency: quote.currency || "USD",
+        baseTotal: null,
+        taxesTotal: null,
+        feesTotalExclTaxes: null,
+        grandTotal: null,
+        quotedTotal: null,
+        handoffUrl: quote.buy_url,
+      },
+    };
+  }
+
   if (baseTotal === null || grandTotal === null || quotedTotal === null) {
     return {
-      success: false,
+      success: true,
       elapsedMs: performance.now() - startedAt,
-      error: toError({
-        code: "QUOTE_RESPONSE_INCOMPLETE",
-        message: "Quote response missing required totals",
-        retryable: false,
-        listingId: input.listingId,
-        checkInIso: input.checkInIso,
-        checkOutIso: input.checkOutIso,
-        details: {
-          entityId,
-          reliability: quote.reliability,
-        },
-      }),
+      observation: {
+        startDate: input.checkInIso,
+        endDate: input.checkOutIso,
+        quoteAvailable: false,
+        quoteUnavailableReason: "quote_response_missing_required_totals",
+        currency: quote.currency || "USD",
+        baseTotal: null,
+        taxesTotal: null,
+        feesTotalExclTaxes: null,
+        grandTotal: null,
+        quotedTotal: null,
+        handoffUrl: quote.buy_url,
+      },
+    };
+  }
+
+  if (
+    baseTotal < MIN_VALID_BASE_TOTAL ||
+    taxesTotal === null ||
+    taxesTotal <= 0 ||
+    grandTotal <= baseTotal ||
+    feesTotalExclTaxes === null ||
+    feesTotalExclTaxes < 0 ||
+    feesTotalExclTaxes >= baseTotal
+  ) {
+    return {
+      success: true,
+      elapsedMs: performance.now() - startedAt,
+      observation: {
+        startDate: input.checkInIso,
+        endDate: input.checkOutIso,
+        quoteAvailable: false,
+        quoteUnavailableReason: "quote_totals_failed_sanity_checks",
+        currency: quote.currency || "USD",
+        baseTotal: null,
+        taxesTotal: null,
+        feesTotalExclTaxes: null,
+        grandTotal: null,
+        quotedTotal: null,
+        handoffUrl: quote.buy_url,
+      },
     };
   }
 
