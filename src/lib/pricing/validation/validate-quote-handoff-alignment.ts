@@ -348,6 +348,8 @@ function extractCandidateTotals(html: string): number[] {
     /grand\s*total[^$]{0,140}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi,
     /total\s*due[^$]{0,140}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi,
     /(?:^|>)\s*total\s*(?:<|:|\s)[^$]{0,100}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi,
+    /name=["']amount["'][^>]*value=["']([0-9,]+(?:\.[0-9]{2})?)["']/gi,
+    /value=["']([0-9,]+(?:\.[0-9]{2})?)["'][^>]*name=["']amount["']/gi,
   ];
 
   for (const pattern of htmlPatterns) {
