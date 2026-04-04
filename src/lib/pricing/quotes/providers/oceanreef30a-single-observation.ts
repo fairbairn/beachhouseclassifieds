@@ -289,7 +289,7 @@ function resolveNumericPropertyId(value: unknown): string | null {
 function parsePriceByLabel(html: string, label: string): number | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
-    `<li\\s+class=\"book-quote-item(?:\\s+[^\"]*)?\">[\\s\\S]*?<span\\s+class=\"book-quote-item-text\">\\s*${escaped}\\s*</span>[\\s\\S]*?<span\\s+class=\"book-quote-item-price\"[^>]*data-price=\"([^\"]+)\"`,
+    `<li\\s+class="book-quote-item(?:\\s+[^"]*)?">[\\s\\S]*?<span\\s+class="book-quote-item-text">\\s*${escaped}\\s*</span>[\\s\\S]*?<span\\s+class="book-quote-item-price"[^>]*data-price="([^"]+)"`,
     "i",
   );
   const match = html.match(pattern);
@@ -302,14 +302,14 @@ function parsePriceByLabel(html: string, label: string): number | null {
 function parseFeeLines(html: string): Array<{ name: string; amount: number }> {
   const feeLines: Array<{ name: string; amount: number }> = [];
   const feeSectionMatch = html.match(
-    /<ul\s+class=\"book-quote-item-toggle-list\">([\s\S]*?)<\/ul>/i,
+    /<ul\s+class="book-quote-item-toggle-list">([\s\S]*?)<\/ul>/i,
   );
   if (!feeSectionMatch?.[1]) {
     return feeLines;
   }
 
   const itemPattern =
-    /<span\s+class=\"book-quote-item-text\">\s*([^<]+?)\s*<\/span>[\s\S]*?<span\s+class=\"book-quote-item-price\"[^>]*data-price=\"([^\"]+)\"/gi;
+    /<span\s+class="book-quote-item-text">\s*([^<]+?)\s*<\/span>[\s\S]*?<span\s+class="book-quote-item-price"[^>]*data-price="([^"]+)"/gi;
 
   let match: RegExpExecArray | null = itemPattern.exec(feeSectionMatch[1]);
   while (match) {

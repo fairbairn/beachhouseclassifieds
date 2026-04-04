@@ -666,24 +666,6 @@ function parseSignedHandoffSpec(handoffUrl: string): SignedHandoffSpec | null {
   };
 }
 
-function findFirstUrlInJsonLikeText(text: string): string | null {
-  const quotedUrlPattern =
-    /"(?:redirect(?:_url|Url)?|url|booking(?:_url|Url)?|checkout(?:_url|Url)?)"\s*:\s*"([^"\n]+)"/i;
-  const quotedMatch = text.match(quotedUrlPattern);
-  if (quotedMatch?.[1]) {
-    const normalized = quotedMatch[1].replace(/\\\//g, "/");
-    if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
-      return normalized;
-    }
-    if (normalized.startsWith("/")) {
-      return normalized;
-    }
-  }
-
-  const bareUrlPattern = /(https?:\/\/[^\s"'<>]+)/i;
-  return text.match(bareUrlPattern)?.[1] ?? null;
-}
-
 function parseSignedHandoffTotalFromJsonText(text: string): {
   total: number;
   baseTotal: number | null;
@@ -994,6 +976,11 @@ async function tryExtractBeachblueCheckoutTotal(
     return null;
   };
 
+  type BeachblueRouterResult = Exclude<
+    ReturnType<typeof parseBeachblueRouterResult>,
+    null
+  >;
+
   try {
     const context = await browser.newContext({ userAgent: USER_AGENT });
     const page = await context.newPage();
@@ -1004,10 +991,9 @@ async function tryExtractBeachblueCheckoutTotal(
         await sleep(delayMs);
       }
 
-      let routerResult:
-        | { kind: "success"; total: number }
-        | { kind: "status_error"; message: string }
-        | null = null;
+      const routerResultRef: { value: BeachblueRouterResult | null } = {
+        value: null,
+      };
 
       const onResponse = async (response: {
         url(): string;
@@ -1024,7 +1010,7 @@ async function tryExtractBeachblueCheckoutTotal(
         try {
           const parsed = parseBeachblueRouterResult(await response.json());
           if (parsed !== null) {
-            routerResult = parsed;
+            routerResultRef.value = parsed;
           }
         } catch {
           // Ignore non-JSON router responses.
@@ -1067,17 +1053,23 @@ async function tryExtractBeachblueCheckoutTotal(
         };
       }
 
-      if (routerResult?.kind === "success") {
+      if (
+        routerResultRef.value !== null &&
+        routerResultRef.value.kind === "success"
+      ) {
         page.off("response", onResponse);
         return {
           kind: "success",
-          total: routerResult.total,
+          total: routerResultRef.value.total,
         };
       }
 
-      if (routerResult?.kind === "status_error") {
+      if (
+        routerResultRef.value !== null &&
+        routerResultRef.value.kind === "status_error"
+      ) {
         page.off("response", onResponse);
-        return routerResult;
+        return routerResultRef.value;
       }
 
       const warningText = await page
@@ -1398,7 +1390,7 @@ function parseOceanreefPriceByLabel(
 ): number | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
-    `<span\\s+class=\"book-quote-item-text\">\\s*${escaped}\\s*<\\/span>[\\s\\S]*?<span\\s+class=\"book-quote-item-price\"[^>]*data-price=\"([^\"]+)\"`,
+    `<span\\s+class="book-quote-item-text">\\s*${escaped}\\s*<\\/span>[\\s\\S]*?<span\\s+class="book-quote-item-price"[^>]*data-price="([^"]+)"`,
     "i",
   );
   const value = pattern.exec(html)?.[1] ?? "";
@@ -1411,14 +1403,14 @@ function parseOceanreefFeeLines(
 ): Array<{ name: string; amount: number }> {
   const feeLines: Array<{ name: string; amount: number }> = [];
   const feeSectionMatch = html.match(
-    /<ul\s+class=\"book-quote-item-toggle-list\">([\s\S]*?)<\/ul>/i,
+    /<ul\s+class="book-quote-item-toggle-list">([\s\S]*?)<\/ul>/i,
   );
   if (!feeSectionMatch?.[1]) {
     return feeLines;
   }
 
   const itemPattern =
-    /<span\s+class=\"book-quote-item-text\">\s*([^<]+?)\s*<\/span>[\s\S]*?<span\s+class=\"book-quote-item-price\"[^>]*data-price=\"([^\"]+)\"/gi;
+    /<span\s+class="book-quote-item-text">\s*([^<]+?)\s*<\/span>[\s\S]*?<span\s+class="book-quote-item-price"[^>]*data-price="([^"]+)"/gi;
 
   let match: RegExpExecArray | null = itemPattern.exec(feeSectionMatch[1]);
   while (match) {
@@ -1443,7 +1435,7 @@ function parseOceanreefTotalsFromHtml(html: string): {
     parseOceanreefPriceByLabel(html, "Total") ??
     parseMoney(
       html.match(
-        /id=\"hiddenTotal\"\)\.val\(\"([0-9,]+(?:\.[0-9]{2})?)\"\)/i,
+        /id="hiddenTotal"\)\.val\("([0-9,]+(?:\.[0-9]{2})?)"\)/i,
       )?.[1] ?? "",
     );
   const baseTotal = parseOceanreefPriceByLabel(html, "Rent");
@@ -1464,7 +1456,7 @@ function parsePanhandlePriceByLabelContains(
 ): number | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
-    `<span\\s+class=\"book-quote-item-text\">\\s*[^<]*${escaped}[^<]*\\s*<\\/span>[\\s\\S]*?<span\\s+class=\"book-quote-item-price\"[^>]*data-price=\"([^\"]+)\"`,
+    `<span\\s+class="book-quote-item-text">\\s*[^<]*${escaped}[^<]*\\s*<\\/span>[\\s\\S]*?<span\\s+class="book-quote-item-price"[^>]*data-price="([^"]+)"`,
     "i",
   );
   const value = pattern.exec(html)?.[1] ?? "";
@@ -2568,7 +2560,7 @@ async function validateObservation(
       candidate.adapterKey === "30aescapes" &&
       candidate.observedBaseTotal !== null &&
       Number.isFinite(candidate.observedBaseTotal) &&
-      escapesDirect.baseTotal !== null &&
+      typeof escapesDirect.baseTotal === "number" &&
       Number.isFinite(escapesDirect.baseTotal)
     ) {
       const baseDiff = Math.abs(
@@ -2592,7 +2584,7 @@ async function validateObservation(
       candidate.adapterKey === "30aescapes" &&
       candidate.observedTaxesTotal !== null &&
       Number.isFinite(candidate.observedTaxesTotal) &&
-      escapesDirect.taxesTotal !== null &&
+      typeof escapesDirect.taxesTotal === "number" &&
       Number.isFinite(escapesDirect.taxesTotal)
     ) {
       const taxesDiff = Math.abs(
@@ -2678,7 +2670,7 @@ async function validateObservation(
       if (
         candidate.observedBaseTotal !== null &&
         Number.isFinite(candidate.observedBaseTotal) &&
-        oceanreefDirect.baseTotal !== null &&
+        typeof oceanreefDirect.baseTotal === "number" &&
         Number.isFinite(oceanreefDirect.baseTotal)
       ) {
         const baseDiff = Math.abs(
@@ -2701,7 +2693,7 @@ async function validateObservation(
       if (
         candidate.observedTaxesTotal !== null &&
         Number.isFinite(candidate.observedTaxesTotal) &&
-        oceanreefDirect.taxesTotal !== null &&
+        typeof oceanreefDirect.taxesTotal === "number" &&
         Number.isFinite(oceanreefDirect.taxesTotal)
       ) {
         const taxesDiff = Math.abs(

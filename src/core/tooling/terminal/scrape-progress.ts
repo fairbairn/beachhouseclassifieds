@@ -12,7 +12,7 @@ type ModeProgressLineInput = {
   text: string;
 };
 
-const ANSI_ESCAPE_PATTERN = /\x1B\[[0-?]*[ -/]*[@-~]/;
+const ANSI_ESCAPE_PREFIX = "\u001B[";
 
 function roundToOne(value: number): number {
   return Math.round(value * 10) / 10;
@@ -65,7 +65,7 @@ export function createScrapeProgress(options: ProgressOptions) {
   const scriptLabel = chalk.bgBlue.white.bold(` ${options.script} `);
 
   function styleTickMessage(message: string): string {
-    if (ANSI_ESCAPE_PATTERN.test(message)) {
+    if (message.includes(ANSI_ESCAPE_PREFIX)) {
       return message;
     }
     const lowered = message.toLowerCase();

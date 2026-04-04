@@ -165,7 +165,11 @@ export async function runValidatePricingCacheAlignmentCli(
   const detailsJsonDir = resolve(adapterRoot, "details", "json");
   const pricingDir = resolve(adapterRoot, "details", "pricing");
 
-  let files: string[];
+  let files: {
+    listingIds: string[];
+    fileNames: string[];
+    missingListingIds: string[];
+  };
   try {
     files = await collectPricingFiles(
       options.adapterKey,
@@ -187,7 +191,7 @@ export async function runValidatePricingCacheAlignmentCli(
     return 1;
   }
 
-  let validated = files.listingIds.length;
+  const validated = files.listingIds.length;
   let failed = files.missingListingIds.length;
   const failures: ListingValidationFailure[] = [];
   const currentUtcDateYmd = getCurrentUtcDateYmd();

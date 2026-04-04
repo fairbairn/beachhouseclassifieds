@@ -141,7 +141,7 @@ export async function runValidateAdapterQuoteSidecarsCli(
     return 1;
   }
 
-  let validated = files.listingIds.length;
+  const validated = files.listingIds.length;
   let failed = files.missingListingIds.length;
   const failures: ListingValidationFailure[] = [];
 
