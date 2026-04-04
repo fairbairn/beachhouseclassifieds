@@ -1,3 +1,4 @@
+import { execute30ABeachSingleQuote } from "./adapters/30abeach";
 import { execute30AEscapesSingleQuote } from "./adapters/30aescapes";
 import { execute30ALuxurySingleQuote } from "./adapters/30aluxury";
 import { execute30AvacaySingleQuote } from "./adapters/30avacay";
@@ -26,6 +27,7 @@ export type QuoteRuntimeExecutor = (
 ) => Promise<QuoteExecutionResult>;
 
 const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
+  "30abeach": execute30ABeachSingleQuote,
   "30avacay": execute30AvacaySingleQuote,
   "30aescapes": execute30AEscapesSingleQuote,
   "30aluxury": execute30ALuxurySingleQuote,

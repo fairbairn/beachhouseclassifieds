@@ -1,3 +1,5 @@
+import { execute30ABeachSingleQuote } from "@/lib/pricing/quote-runtime/adapters/30abeach";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -9,10 +11,6 @@ import {
 } from "../adapter-foundation";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import {
-  runThirtyABeachQuoteCli,
-  runThirtyABeachSingleQuoteObservation,
-} from "./quotes/30abeach";
 
 type ThirtyABeachListingRow = {
   id: string;
@@ -32,6 +30,11 @@ type ThirtyABeachListingRow = {
 type ThirtyABeachDayCode = "Y" | "N" | "X";
 
 type ThirtyABeachDetailRecord = DetailRecordBase & {
+  quote_context: {
+    listing_id: string;
+    unit_id: string;
+    detail_url: string;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -384,6 +387,20 @@ function extractSeoPathFromDetailUrl(detailUrl: string): string {
   } catch {
     return "";
   }
+}
+
+function externalListingIdFromDetailUrl(
+  detailUrl: string,
+  fallbackUnitId: string,
+): string {
+  const seoPath = extractSeoPathFromDetailUrl(detailUrl);
+  if (!seoPath) {
+    return fallbackUnitId;
+  }
+
+  const segments = seoPath.split("/").filter((segment) => segment.length > 0);
+  const leaf = segments[segments.length - 1] ?? "";
+  return leaf || fallbackUnitId;
 }
 
 function extractUnitIdFromHtml(html: string): string | null {
@@ -907,9 +924,9 @@ async function scrollAndCollectListingLinks(
   networkIdleWaitMs: number,
   logger: ReturnType<typeof createDiscoveryLogger>,
 ): Promise<ScrapedLink[]> {
-  let previousSignature = "";
   let stagnantSteps = 0;
   const collected = new Map<string, ScrapedLink>();
+  let previousCollectedCount = 0;
 
   const collectStepLinks = async (): Promise<void> => {
     const links = await collectCurrentUnitListLinks(page, sourceUrl);
@@ -921,6 +938,7 @@ async function scrollAndCollectListingLinks(
   };
 
   await collectStepLinks();
+  previousCollectedCount = collected.size;
 
   for (let step = 0; step < maxScrollSteps; step += 1) {
     const loadMoreClicked = await page.evaluate(() => {
@@ -955,53 +973,6 @@ async function scrollAndCollectListingLinks(
       await page.waitForTimeout(Math.max(500, scrollPauseMs));
     }
 
-    const signature = await page.evaluate(() => {
-      const unitListRoot =
-        document.querySelector(".unitList.listings_wrapper_box.row") ??
-        document.querySelector(".unit-list.listings_wrapper_box.row") ??
-        document.querySelector(".unit-list") ??
-        document.querySelector('[class*="unit-list"]') ??
-        document.querySelector(
-          '[class*="unitList"][class*="listings_wrapper_box"][class*="row"]',
-        ) ??
-        document.querySelector('[id*="unit-list"]') ??
-        document.body;
-
-      const anchors = Array.from(unitListRoot.querySelectorAll("a[href]"));
-      const listingCount = anchors.filter((anchor) => {
-        const href =
-          (anchor as HTMLAnchorElement).getAttribute("href")?.toLowerCase() ??
-          "";
-        return (
-          href.includes("/rentals/") ||
-          href.includes("/vacation-rental/") ||
-          href.includes("/rental/")
-        );
-      }).length;
-
-      return `${document.body.scrollHeight}:${listingCount}`;
-    });
-
-    if (signature === previousSignature && !loadMoreClicked) {
-      stagnantSteps += 1;
-      if (stagnantSteps >= 3) {
-        const discovered = Number(signature.split(":")[1] ?? 0) || 0;
-        logger.earlyStop({
-          reason: "stagnant-signature",
-          discovered,
-          step: step + 1,
-          maxSteps: maxScrollSteps,
-          extras: {
-            source: "dom",
-          },
-        });
-        break;
-      }
-    } else {
-      stagnantSteps = 0;
-      previousSignature = signature;
-    }
-
     await page.evaluate(() => {
       window.scrollBy(0, window.innerHeight * 1.4);
     });
@@ -1009,10 +980,30 @@ async function scrollAndCollectListingLinks(
 
     await collectStepLinks();
 
-    const discovered = Number(signature.split(":")[1] ?? 0) || 0;
+    if (collected.size <= previousCollectedCount) {
+      stagnantSteps += 1;
+    } else {
+      stagnantSteps = 0;
+    }
+    previousCollectedCount = collected.size;
+
+    if (stagnantSteps >= 3) {
+      logger.earlyStop({
+        reason: "stagnant-discovery-count",
+        discovered: collected.size,
+        step: step + 1,
+        maxSteps: maxScrollSteps,
+        extras: {
+          source: "dom",
+          load_more_clicked: loadMoreClicked,
+        },
+      });
+      break;
+    }
+
     logger.progress({
       stage: "scroll",
-      discovered: Math.max(discovered, collected.size),
+      discovered: collected.size,
       step: step + 1,
       maxSteps: maxScrollSteps,
       noGrowthRounds: stagnantSteps,
@@ -1312,8 +1303,8 @@ async function fetchDetail(
         listingRows.find((row) => row.id === extractedUnitId) ?? null;
     }
 
-    const rentalId = listingRow?.id ?? extractedUnitId ?? "";
-    if (!rentalId) {
+    const unitId = listingRow?.id ?? extractedUnitId ?? "";
+    if (!unitId) {
       return null;
     }
 
@@ -1356,7 +1347,19 @@ async function fetchDetail(
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsDaddr)}`
       : "";
 
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);
+    const canonicalDetailUrl = listingRow
+      ? detailUrlFromSeoPath(origin, listingRow.seoPageName)
+      : resolvedDetailUrl;
+
+    const externalListingId = externalListingIdFromDetailUrl(
+      canonicalDetailUrl,
+      unitId,
+    );
+
+    const htmlPath = resolve(
+      OUTPUT_DETAILS_HTML_DIR,
+      `${externalListingId}.html`,
+    );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
     const availabilityPayload = await callStreamlineApi<{
@@ -1365,7 +1368,7 @@ async function fetchDetail(
         availability?: string;
       };
     }>(origin, "GetPropertyAvailabilityRawData", {
-      unit_id: Number(rentalId),
+      unit_id: Number(unitId),
       use_room_type_logic: "no",
       standard_pricing: 1,
     });
@@ -1431,7 +1434,7 @@ async function fetchDetail(
     const ratesPayload =
       ratesStartDateUs && ratesEndDateUs
         ? await callStreamlineApi(origin, "GetPropertyRatesRawData", {
-            unit_id: Number(rentalId),
+            unit_id: Number(unitId),
             use_yielding_with_dates: "yes",
             startdate: ratesStartDateUs,
             enddate: ratesEndDateUs,
@@ -1503,8 +1506,13 @@ async function fetchDetail(
     ]);
 
     return {
-      external_listing_id: rentalId,
-      detail_url: normalizeLink(detailUrl),
+      external_listing_id: externalListingId,
+      detail_url: normalizeLink(canonicalDetailUrl),
+      quote_context: {
+        listing_id: unitId,
+        unit_id: unitId,
+        detail_url: normalizeLink(canonicalDetailUrl),
+      },
       fetched_at: new Date().toISOString(),
       title,
       h1,
@@ -1535,7 +1543,7 @@ async function fetchDetail(
         image_urls: mediaImageUrls,
       },
       property_profile: {
-        unit_id: rentalId,
+        unit_id: unitId,
         area: listingRow?.city ?? "",
         location: [listingRow?.city ?? "", listingRow?.state ?? ""]
           .filter((part) => part.length > 0)
@@ -1548,7 +1556,7 @@ async function fetchDetail(
       },
       normalized_matching_profile: {
         source: "pm_30abeach",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         name,
         description,
         match_signals: {
@@ -1558,7 +1566,7 @@ async function fetchDetail(
           title_sha256: hashSha256(titleNormalized),
           listing_composite_key: [
             "pm_30abeach",
-            rentalId,
+            externalListingId,
             hashSha256(descriptionNormalized),
             hashSha256(titleNormalized),
           ].join("::"),
@@ -1566,7 +1574,7 @@ async function fetchDetail(
       },
       normalized_availability: {
         source: "pm_30abeach",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
         window_start: availabilityDays[0]?.date ?? "",
         window_end: availabilityDays[availabilityDays.length - 1]?.date ?? "",
@@ -1599,7 +1607,7 @@ async function fetchDetail(
       },
       normalized_rates: {
         source: "pm_30abeach",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
         currency: "USD",
         window_start: normalizedRateDays[0]?.date ?? "",
@@ -1717,10 +1725,61 @@ export function create30ABeachAdapter(): ScraperAdapter<ThirtyABeachDetailRecord
         "30abeach",
         argv,
       );
-      await runThirtyABeachQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "30abeach",
+          executeSingleQuote: execute30ABeachSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/wp-admin/admin-ajax.php",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 650,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
     async runSingleQuoteObservation(input) {
-      return runThirtyABeachSingleQuoteObservation(input);
+      const result = await execute30ABeachSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? null,
+        options: {
+          timeoutMs: Number(process.env.QUOTE_CAPTURE_TIMEOUT_MS ?? "20000"),
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            ...result.observation,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "quote_unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: null,
+          reason: result.error.message,
+        },
+      };
     },
   };
 }
