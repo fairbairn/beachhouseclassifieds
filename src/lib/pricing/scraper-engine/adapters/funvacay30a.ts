@@ -1570,6 +1570,14 @@ async function extractDescriptionText(page: Page): Promise<string> {
 
   return page.evaluate(() => {
     const candidates: string[] = [];
+    const preferredSelectors = [
+      "#listing-about",
+      "[id='listing-about']",
+      ".group-about",
+      ".listingDescReadMore-processed",
+      "section[id*='about']",
+      "[class*='about']",
+    ];
     const selectors = [
       "#description",
       "[id*='description']",
@@ -1579,6 +1587,15 @@ async function extractDescriptionText(page: Page): Promise<string> {
       ".tab-content",
       "[role='tabpanel']",
     ];
+
+    for (const selector of preferredSelectors) {
+      for (const node of Array.from(document.querySelectorAll(selector))) {
+        const text = (node.textContent ?? "").replace(/\s+/g, " ").trim();
+        if (text.length >= 80) {
+          candidates.push(text);
+        }
+      }
+    }
 
     for (const selector of selectors) {
       for (const node of Array.from(document.querySelectorAll(selector))) {
@@ -1939,11 +1956,7 @@ async function fetchDetail(
       };
     });
 
-    const descriptionText = (await extractDescriptionText(page)).slice(
-      0,
-      15000,
-    );
-    const descriptionExpanded = stripHtml(descriptionText).slice(0, 30000);
+    let descriptionText = (await extractDescriptionText(page)).slice(0, 15000);
 
     const dayCodeByDate = new Map<string, LuxuryDayCode>();
     const minNightsByDate = new Map<string, number>();
@@ -1982,6 +1995,8 @@ async function fetchDetail(
     );
     const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
+
+    const descriptionExpanded = stripHtml(descriptionText).slice(0, 30000);
 
     const rightWidgetAvailability = extractAvailabilityFromRightWidgetHtml(
       html,

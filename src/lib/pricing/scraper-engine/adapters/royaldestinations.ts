@@ -316,7 +316,9 @@ function parseAvailabilityDaysFromHtml(html: string): Array<{
 
   const days = new Map<string, RoyalDestinationsDayCode>();
   const monthBlocks = Array.from(
-    section.matchAll(/<div class="rc-calendar rcav-month">([\s\S]*?)<\/div>/gi),
+    section.matchAll(
+      /<div class="[^"]*\brc-calendar\b[^"]*\brcav-month\b[^"]*">([\s\S]*?)<\/div>/gi,
+    ),
   );
 
   for (const monthBlock of monthBlocks) {

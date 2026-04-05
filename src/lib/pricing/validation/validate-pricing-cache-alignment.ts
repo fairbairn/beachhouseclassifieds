@@ -1,5 +1,5 @@
 import { Chalk } from "chalk";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -164,6 +164,12 @@ export async function runValidatePricingCacheAlignmentCli(
   );
   const detailsJsonDir = resolve(adapterRoot, "details", "json");
   const pricingDir = resolve(adapterRoot, "details", "pricing");
+  let pricingDirExists = true;
+  try {
+    await access(pricingDir);
+  } catch {
+    pricingDirExists = false;
+  }
 
   let files: {
     listingIds: string[];
@@ -177,9 +183,17 @@ export async function runValidatePricingCacheAlignmentCli(
       options.listingId,
       options.maxListings,
     );
-  } catch {
+  } catch (error: unknown) {
+    if (!pricingDirExists) {
+      console.error(
+        `No pricing directory found for adapter=${options.adapterKey}. Expected: ${pricingDir}`,
+      );
+      return 1;
+    }
+
+    const reason = error instanceof Error ? error.message : String(error);
     console.error(
-      `No pricing directory found for adapter=${options.adapterKey}. Expected: ${pricingDir}`,
+      `Failed to collect pricing artifacts for adapter=${options.adapterKey}: ${reason}`,
     );
     return 1;
   }

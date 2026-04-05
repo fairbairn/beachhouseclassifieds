@@ -212,6 +212,17 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 700,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  luxe30a: {
+    adapterKey: "luxe30a",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.03,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.15,
+    },
+    globalDefaultBaseNightly: 700,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
   oceanreef30a: {
     adapterKey: "oceanreef30a",
     defaultWeeks: 24,
@@ -269,6 +280,17 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
   },
   stayon30a: {
     adapterKey: "stayon30a",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.1,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.22,
+    },
+    globalDefaultBaseNightly: 650,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
+  stayat30a: {
+    adapterKey: "stayat30a",
     defaultWeeks: 24,
     defaultAssumptions: {
       avgFeePct: 0.1,

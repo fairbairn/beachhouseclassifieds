@@ -18,6 +18,7 @@ import { createGrayt30AAdapter } from "./adapters/grayt30a";
 import { createHomeownersCollection30AAdapter } from "./adapters/homeownerscollection30a";
 import { createKeyco30AAdapter } from "./adapters/keyco30a";
 import { createLocalVR30AAdapter } from "./adapters/localvr30a";
+import { createLuxe30AAdapter } from "./adapters/luxe30a";
 import { createOceanReef30AAdapter } from "./adapters/oceanreef30a";
 import { createOversee30AAdapter } from "./adapters/oversee30a";
 import { createPanhandle30AAdapter } from "./adapters/panhandle30a";
@@ -55,6 +56,7 @@ const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   homeownerscollection30a: createHomeownersCollection30AAdapter,
   keyco30a: createKeyco30AAdapter,
   localvr30a: createLocalVR30AAdapter,
+  luxe30a: createLuxe30AAdapter,
   oceanreef30a: createOceanReef30AAdapter,
   oversee30a: createOversee30AAdapter,
   panhandle30a: createPanhandle30AAdapter,

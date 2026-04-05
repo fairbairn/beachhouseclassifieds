@@ -30,6 +30,10 @@ const THIRTYA_VACAY_NAVIGATION_TIMEOUT_MS = 20_000;
 const THIRTYA_VACAY_RENDER_WAIT_MS = 2_000;
 const LOCALVR_NAVIGATION_TIMEOUT_MS = 20_000;
 const LOCALVR_RENDER_WAIT_MS = 2_000;
+const STAYAT_NAVIGATION_TIMEOUT_MS = 20_000;
+const STAYAT_RENDER_WAIT_MS = 1_500;
+const STAYAT_FRAGMENT_WAIT_TIMEOUT_MS = 45_000;
+const STAYAT_FRAGMENT_POLL_INTERVAL_MS = 500;
 
 let validationHttpActive = 0;
 let validationHttpLastStartMs = 0;
@@ -362,11 +366,27 @@ async function collectQuoteFiles(
 }
 
 function parseMoney(value: string): number | null {
-  const parsed = Number(value.replace(/,/g, "").trim());
-  if (!Number.isFinite(parsed)) {
+  const raw = value.trim();
+  if (!raw) {
     return null;
   }
-  return Math.round(parsed * 100) / 100;
+
+  const direct = Number(raw.replace(/[$,\s]/g, ""));
+  if (Number.isFinite(direct)) {
+    return Math.round(direct * 100) / 100;
+  }
+
+  const moneyLike = raw.match(/-?\$?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/);
+  if (!moneyLike?.[1]) {
+    return null;
+  }
+
+  const extracted = Number(moneyLike[1].replace(/,/g, ""));
+  if (!Number.isFinite(extracted)) {
+    return null;
+  }
+
+  return Math.round(extracted * 100) / 100;
 }
 
 function extractCandidateTotals(html: string): number[] {
@@ -1716,6 +1736,200 @@ async function tryExtractScenicRenderedCheckoutTotal(
     kind: "request_error",
     message:
       "scenic checkout total not rendered from #hiddenTotal or book-sidebar after retries",
+  };
+}
+
+async function tryExtractStayatRenderedCheckoutTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (
+    !parsed.hostname.endsWith("stayat30avacationrentals.com") ||
+    !parsed.pathname.includes("/vacation-rentals/checkout/")
+  ) {
+    return { kind: "unsupported" };
+  }
+
+  const playwrightModule = await import("playwright").catch(() => null);
+  if (!playwrightModule?.chromium) {
+    return {
+      kind: "request_error",
+      message: "playwright chromium unavailable for stayat checkout validation",
+    };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const browser = await playwrightModule.chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ userAgent: USER_AGENT });
+    const page = await context.newPage();
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      const routerState: {
+        sawResponse: boolean;
+        statusMessage: string | null;
+      } = {
+        sawResponse: false,
+        statusMessage: null,
+      };
+
+      const onResponse = async (response: {
+        url(): string;
+        request(): { method(): string };
+        json(): Promise<unknown>;
+      }): Promise<void> => {
+        if (
+          !response.url().includes("/vacation-rentals/router/") ||
+          response.request().method() !== "POST"
+        ) {
+          return;
+        }
+
+        routerState.sawResponse = true;
+        try {
+          const payload = response.json
+            ? ((await response.json()) as Record<string, unknown>)
+            : null;
+          if (!payload || typeof payload !== "object") {
+            return;
+          }
+
+          const apiError = asOptionalString(payload.apiError);
+          const errorMsg = asOptionalString(payload.errorMsg);
+          const unavailable = payload.isAvailable === false;
+          if (apiError || errorMsg || unavailable) {
+            routerState.statusMessage =
+              apiError ??
+              errorMsg ??
+              "checkout router marked stay unavailable for selected dates";
+          }
+        } catch {
+          // Ignore non-JSON and opaque responses from unrelated router calls.
+        }
+      };
+
+      page.on("response", onResponse);
+
+      try {
+        await page.goto(candidate.handoffUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: STAYAT_NAVIGATION_TIMEOUT_MS,
+        });
+      } catch (error: unknown) {
+        page.off("response", onResponse);
+        const message = error instanceof Error ? error.message : String(error);
+        reportProgress?.(
+          `stayat checkout retry ${attempt + 1}/${retryDelaysMs.length} navigation_error=${message}`,
+        );
+        continue;
+      }
+
+      await page
+        .waitForLoadState("networkidle", { timeout: 12_000 })
+        .catch(() => null);
+      await page.waitForTimeout(STAYAT_RENDER_WAIT_MS);
+
+      // Require the rendered totals fragment in order: container first, then total.
+      await page
+        .locator(".price-totals")
+        .first()
+        .waitFor({ state: "visible", timeout: STAYAT_FRAGMENT_WAIT_TIMEOUT_MS })
+        .catch(() => null);
+
+      await page
+        .waitForFunction(
+          () => {
+            const totals = document.querySelector<HTMLElement>(".price-totals");
+            if (!totals) {
+              return false;
+            }
+
+            const totalNode =
+              totals.querySelector<HTMLElement>("#checkout-total");
+            const totalText = (totalNode?.textContent ?? "").trim();
+            return /\$\s*[0-9,.]+/.test(totalText);
+          },
+          undefined,
+          { timeout: STAYAT_FRAGMENT_WAIT_TIMEOUT_MS },
+        )
+        .catch(() => null);
+
+      const checkoutTotalText = await page
+        .locator(".price-totals #checkout-total")
+        .innerText()
+        .catch(() => "");
+      const checkoutTotal = parseMoney(checkoutTotalText);
+      if (checkoutTotal !== null && checkoutTotal > 0) {
+        page.off("response", onResponse);
+        return {
+          kind: "success",
+          total: checkoutTotal,
+        };
+      }
+
+      const selectorTexts = await page
+        .locator(
+          ".price-totals .price-row, .price-breakdown .price-row, [id*='total' i], [class*='total' i]",
+        )
+        .allInnerTexts()
+        .catch(() => []);
+      const selectorTotals = selectorTexts
+        .map((text) => parseMoney(text))
+        .filter(
+          (value): value is number => typeof value === "number" && value > 0,
+        );
+      const best = pickClosestTotal(
+        selectorTotals,
+        candidate.observedGrandTotal,
+      );
+      if (best) {
+        page.off("response", onResponse);
+        return {
+          kind: "success",
+          total: best.total,
+        };
+      }
+
+      if (routerState.statusMessage) {
+        page.off("response", onResponse);
+        return {
+          kind: "status_error",
+          message: routerState.statusMessage,
+        };
+      }
+
+      const bodyPreview = await page
+        .locator("body")
+        .innerText()
+        .then((text) => text.replace(/\s+/g, " ").trim().slice(0, 220))
+        .catch(() => "");
+
+      reportProgress?.(
+        `stayat checkout retry ${attempt + 1}/${retryDelaysMs.length} total_not_rendered router_seen=${routerState.sawResponse ? "yes" : "no"}${bodyPreview ? ` preview='${bodyPreview}'` : ""}`,
+      );
+
+      page.off("response", onResponse);
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    kind: "request_error",
+    message:
+      "stayat checkout total not rendered from .price-totals/#checkout-total after retries",
   };
 }
 
@@ -3437,6 +3651,49 @@ async function validateObservation(
         scenicCheckout.kind === "status_error"
           ? `scenic rendered checkout returned status error: ${scenicCheckout.message}`
           : `scenic rendered checkout extraction failed: ${scenicCheckout.message}`,
+      extractedTotal: null,
+    };
+  }
+
+  if (candidate.adapterKey === "stayat30a") {
+    const stayatCheckout = await tryExtractStayatRenderedCheckoutTotal(
+      candidate,
+      reportProgress,
+    );
+
+    if (stayatCheckout.kind === "success") {
+      const diff = Math.abs(
+        stayatCheckout.total - candidate.observedGrandTotal,
+      );
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from stayat rendered checkout total=${stayatCheckout.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: stayatCheckout.total,
+        };
+      }
+      return null;
+    }
+
+    return {
+      listingId: candidate.listingId,
+      startDate: candidate.startDate,
+      endDate: candidate.endDate,
+      observedGrandTotal: candidate.observedGrandTotal,
+      handoffUrl: candidate.handoffUrl,
+      code:
+        stayatCheckout.kind === "status_error"
+          ? "direct_status_error"
+          : "request_error",
+      message:
+        stayatCheckout.kind === "status_error"
+          ? `stayat rendered checkout returned status error: ${stayatCheckout.message}`
+          : `stayat rendered checkout extraction failed: ${stayatCheckout.message}`,
       extractedTotal: null,
     };
   }

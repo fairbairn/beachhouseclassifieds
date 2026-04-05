@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-04-05T00:22:59Z
+Audit date: 2026-04-05T16:47:25.523Z
 
 Data source:
 
@@ -64,47 +64,46 @@ Preferred (non-blocking):
 
 | Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Rates | Pricing Records | Image URLs | Avg Img/List | API Avail | API Rates | API Quote | Quote Runtime | Ready |
 | ----------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ----: | --------------: | ---------: | -----------: | :-------: | :-------: | :-------: | :-----------: | :---: |
-| 30abeach                |    17 |   17 |      17 |           17 |           17 |         17 |        17 |     17 |    17 |              17 |       1652 |        97.18 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   |
-| 30aescapes              |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |   169 |             169 |       6282 |        37.17 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   |
-| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     0 |             105 |       5247 |        49.97 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| 30avacay                |   115 |  115 |     115 |          115 |          115 |        115 |       115 |    115 |     0 |             115 |       5329 |        46.34 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| 360blue                 |   592 |  592 |     592 |          592 |          592 |        592 |       592 |    592 |   592 |             592 |      29516 |        49.86 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
-| benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |     0 |             128 |       8508 |        66.47 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
-| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |    30 |              30 |       2063 |        68.77 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   |
-| dunevr30a               |    85 |   85 |      85 |           85 |           85 |         85 |        85 |     85 |    85 |              85 |       4031 |        47.42 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   |
-| exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |             106 |       5629 |        53.10 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |    63 |              63 |       6594 |       104.67 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| funvacay30a             |    46 |   46 |      46 |           46 |           46 |         46 |        46 |     46 |     0 |              46 |        276 |         6.00 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |     0 |              35 |       4495 |       128.43 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
-| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |   208 |             208 |      10762 |        51.74 |    ✅     |    ✅     |    ✅     |      ✅       |  ✅   |
-| keyco30a                |   381 |  381 |     381 |          381 |          381 |        381 |       381 |    381 |   381 |             381 |      27564 |        72.35 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
-| localvr30a              |    42 |   42 |      42 |           42 |           42 |         42 |        42 |     42 |     0 |              42 |       1774 |        42.24 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |     0 |             112 |       8314 |        74.23 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| oversee30a              |   104 |  104 |     104 |          104 |          104 |        104 |       104 |    104 |     0 |             104 |       6812 |        64.88 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
-| panhandle30a            |    51 |   51 |      51 |           51 |           51 |         51 |        51 |     51 |     0 |              51 |       2641 |        51.78 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| realjoy30a              |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |     0 |             140 |      16334 |       116.67 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| royaldestinations       |   143 |  143 |     143 |          143 |          143 |        143 |       143 |    143 |     0 |             143 |       6677 |        46.69 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
-| sandersbeach30a         |    74 |   74 |      74 |           74 |           74 |         74 |        74 |     74 |     0 |              74 |       3633 |        49.09 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| sandpiper30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |             106 |       5436 |        51.28 |     -     |     -     |    ✅     |      ✅       |  ✅   |
-| scenicstays30a          |    44 |   44 |      44 |           44 |           44 |         44 |        44 |     44 |    44 |               0 |       2490 |        56.59 |    ✅     |    ✅     |    ❌     |      ❌       |  ❌   |
-| stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |     0 |               0 |       2418 |        65.35 |     -     |     -     |    ❌     |      ❌       |  ❌   |
-| stayon30a               |    82 |   82 |      82 |           82 |           82 |         82 |        82 |     82 |     0 |              82 |      11628 |       141.80 |    ✅     |     -     |    ✅     |      ✅       |  ✅   |
-| **TOTAL**               |  3042 | 3042 |    3042 |         3042 |         3042 |       3042 |      3042 |   3042 |  1588 |            2949 |     186879 |        61.43 |     —     |     —     |     —     |       —       | 23/25 |
+| 30abeach                |    17 |   17 |      17 |           17 |           17 |         17 |        17 |     17 |    17 |              17 |       1652 |       97.18 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
+| 30aescapes              |   170 |  170 |     170 |          170 |          170 |        170 |       170 |    170 |   170 |             170 |       6277 |       36.92 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
+| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     0 |             105 |       5242 |       49.92 |         - |         - |         ✅ |             ✅ |     ✅   |
+| 30avacay                |   115 |  115 |     115 |          115 |          115 |        115 |       115 |    115 |     0 |             115 |       5230 |       45.48 |         - |         - |         ✅ |             ✅ |     ✅   |
+| 360blue                 |   590 |  590 |     590 |          590 |          590 |        590 |       590 |    590 |   590 |             590 |      29471 |       49.95 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
+| benchmark30a            |   129 |  129 |     129 |          129 |          129 |        129 |       129 |    129 |     0 |             129 |       8646 |       67.02 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
+| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |    30 |              30 |       2063 |       68.77 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
+| dunevr30a               |    85 |   85 |      85 |           85 |           85 |         85 |        85 |     85 |    85 |              85 |       4031 |       47.42 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
+| exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |             106 |       5666 |       53.45 |         - |         - |         ✅ |             ✅ |     ✅   |
+| fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |    63 |              63 |       6546 |      103.90 |         - |         - |         ✅ |             ✅ |     ✅   |
+| funvacay30a             |    46 |   46 |      46 |           46 |           46 |         46 |        46 |     46 |     0 |              46 |        170 |        3.70 |         - |         - |         ✅ |             ✅ |     ✅   |
+| grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |     0 |              35 |       4495 |      128.43 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
+| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |   208 |             208 |      10776 |       51.81 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
+| keyco30a                |   390 |  390 |     390 |          390 |          390 |        390 |       390 |    390 |   390 |             390 |      28034 |       71.88 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
+| localvr30a              |    43 |   43 |      43 |           43 |           43 |         43 |        43 |     43 |     0 |              43 |       1826 |       42.47 |         - |         - |         ✅ |             ✅ |     ✅   |
+| oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |     0 |             112 |       8314 |       74.23 |         - |         - |         ✅ |             ✅ |     ✅   |
+| oversee30a              |   104 |  104 |     104 |          104 |          104 |        104 |       104 |    104 |     0 |             104 |       6763 |       65.03 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
+| panhandle30a            |    51 |   51 |      51 |           51 |           51 |         51 |        51 |     51 |     0 |              51 |       2640 |       51.76 |         - |         - |         ✅ |             ✅ |     ✅   |
+| realjoy30a              |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |     0 |             140 |      16328 |      116.63 |         - |         - |         ✅ |             ✅ |     ✅   |
+| royaldestinations       |   142 |  142 |     142 |          142 |          142 |        142 |       142 |    142 |     0 |             142 |       6627 |       46.67 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
+| sandersbeach30a         |    74 |   74 |      74 |           74 |           74 |         74 |        74 |     74 |     0 |              74 |       3696 |       49.95 |         - |         - |         ✅ |             ✅ |     ✅   |
+| sandpiper30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |             106 |       5458 |       51.49 |         - |         - |         ✅ |             ✅ |     ✅   |
+| scenicstays30a          |    45 |   45 |      45 |           45 |           44 |         45 |        45 |     45 |    44 |              45 |       2503 |       55.62 |         ✅ |         ✅ |         ✅ |             ✅ |     ❌   |
+| stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |     0 |              37 |       2418 |       65.35 |         - |         - |         ✅ |             ✅ |     ✅   |
+| stayon30a               |    82 |   82 |      82 |           82 |           82 |         82 |        82 |     82 |     0 |              82 |      11628 |      141.80 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
+| **TOTAL**               |  3025 | 3025 |    3025 |         3025 |         3024 |       3025 |      3025 |   3025 |  1597 |            3025 |     186500 |       61.65 |         — |         — |         — |             — | 24/25 |
 
 ## Current Snapshot Summary
 
 - 25 adapters audited.
 - All 25 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 23 / 25.
-- Rates coverage signal: 1588 / 3042 files currently include normalized_rates.days.
-- Pricing-records coverage signal: 2949 / 3042 files currently have per-listing pricing JSON records.
+- Combined-ready adapters (Ready = ✅): 24 / 25.
+- Rates coverage signal: 1597 / 3025 files currently include normalized_rates.days.
+- Pricing-records coverage signal: 3025 / 3025 files currently have per-listing pricing JSON records.
 - API capability signal:
   - Availability API present: 13 / 25 adapters.
   - Rates API present: 6 / 25 adapters.
-  - Pre-reservation API present: 23 / 25 adapters.
+  - Pre-reservation API present: 25 / 25 adapters.
 - Geo location minimum (required): 25 / 25 adapters currently have 100% numeric lat/lng coverage.
 - Preferred horizon (>=730d) remains non-blocking and is tracked in probe metrics, outside this matrix.
-
 ## Quote Runtime Migration Ledger (API Quote = ✅, Highest Listings First)
 
 This queue defines migration order for adapters that already have direct quote API support. Adapters without `API Quote = ✅` are intentionally deferred until this list is complete.
@@ -139,20 +138,19 @@ API-quote migration queue status: complete.
 
 ## Quote Runtime Discovery Ledger (API Quote = ❌)
 
-This queue covers adapters that do not yet have a proven quote API in our implementation. For these adapters, we run quote-runtime-first discovery to probe provider patterns, then implement runtime executors before quote/pricing validators.
+Discovery queue status: complete.
 
-| Order | Adapter        | Files | API Quote | Quote Runtime | State                 |
-| ----: | -------------- | ----: | :-------: | :-----------: | --------------------- |
-|     1 | scenicstays30a |    44 |    ❌     |      ❌       | deferred-rate-limited |
-|     2 | stayat30a      |    37 |    ❌     |      ❌       | pending               |
+The formerly pending adapters (`scenicstays30a`, `stayat30a`) are now quote-runtime wired and passing quote/pricing validators.
 
-Active next runtime discovery target: `stayat30a`.
-
-Scenic pause note: `scenicstays30a` quote/runtime completion is temporarily deferred due to repeated provider throttling (`TOO_MANY_REQUESTS` / 429-like behavior). Resume after cooldown and rerun with conservative defaults.
+Active next runtime discovery target: none.
 
 ## Quote Pricing Validation Snapshot (2026-04-05)
 
 - Newly confirmed complete in this pass:
+  - `royaldestinations`: targeted listing remediation completed with strict validator pass (142/142)
+  - `luxe30a`: scraper + pricing cache pipeline restored and strict pricing validator passing (12/12)
+  - `scenicstays30a`: quote validator passing (45/45) and pricing validator passing (45/45)
+  - `stayat30a`: quote validator passing (37/37) and pricing validator passing (37/37)
   - `stayon30a`: quote validator passing (82/82), pricing validator passing (82/82), scrape filename validator passing (82/82), full-sample handoff validation passing after transient upstream retry (300/300), ad-hoc single quote+checkout smoke passing
   - `localvr30a`: `Quote validator passed ... validated=42 failed=0`
   - `360blue`: `Quote validator passed ... validated=592 failed=0`
@@ -162,7 +160,8 @@ Scenic pause note: `scenicstays30a` quote/runtime completion is temporarily defe
 - Remaining adapters failing quote pricing validation (`npm run pricing:validate:quotes:all`):
   - none
 
-- Full all-adapter quote pass/fail sweep (post-stayon refresh): `adapters_checked=23 passed=23 failed=0`.
+- Full all-adapter quote pass/fail sweep: `adapters_checked=25 passed=25 failed=0`.
+- Full all-adapter pricing pass/fail sweep (excluding intentionally out-of-scope `beachblue`): `adapters_checked=26 passed=26 failed=0`.
 
 ## Follow-Up Refinement Backlog (Post Base-Adapter Completion)
 

@@ -76,7 +76,13 @@ function extractCanonicalQuoteContext(
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
-  return value as Record<string, unknown>;
+
+  const context = value as Record<string, unknown>;
+  const sanitized = Object.fromEntries(
+    Object.entries(context).filter(([key]) => key !== "endpoint_path"),
+  );
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
 }
 
 function toProjectRelativePath(pathValue: string, root: string): string {
