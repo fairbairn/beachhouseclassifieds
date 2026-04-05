@@ -390,6 +390,16 @@ export async function execute30AvacaySingleQuote(
     };
   }
   const unitId = requestContext.unitId;
+  const fallbackHandoffUrl = buildCheckoutUrl({
+    unitId,
+    startDate: request.checkInIso,
+    endDate: request.checkOutIso,
+    nights:
+      (toUnixSecondsAtUtcMidnight(request.checkOutIso) -
+        toUnixSecondsAtUtcMidnight(request.checkInIso)) /
+      86400,
+    persons: Math.max(1, request.adults + request.children),
+  });
 
   let quote: RouterQuoteResult;
   try {
@@ -414,6 +424,7 @@ export async function execute30AvacaySingleQuote(
         request,
         details: {
           unitId,
+          handoffUrl: fallbackHandoffUrl,
         },
       }),
     };

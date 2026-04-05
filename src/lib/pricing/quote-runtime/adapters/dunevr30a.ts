@@ -281,6 +281,9 @@ export async function executeDunevr30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl,
+        },
       }),
     };
   } finally {
@@ -298,6 +301,9 @@ export async function executeDunevr30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl,
+        },
       }),
     };
   }
@@ -342,7 +348,10 @@ export async function executeDunevr30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
-          details: { status: response.status },
+          details: {
+            status: response.status,
+            handoffUrl,
+          },
         }),
       };
     }
@@ -361,6 +370,9 @@ export async function executeDunevr30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          details: {
+            handoffUrl,
+          },
         }),
       };
     }
@@ -376,6 +388,9 @@ export async function executeDunevr30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          details: {
+            handoffUrl,
+          },
         }),
       };
     }
@@ -433,6 +448,9 @@ export async function executeDunevr30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          details: {
+            handoffUrl,
+          },
         }),
       };
     }
@@ -468,6 +486,9 @@ export async function executeDunevr30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl,
+        },
       }),
     };
   } finally {

@@ -1592,6 +1592,133 @@ async function tryExtractLocalvrRenderedCheckoutTotal(
   };
 }
 
+function parseScenicBookSidebarPriceByLabel(
+  html: string,
+  label: string,
+): number | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `<span\\s+class="book-quote-item-text">\\s*${escaped}\\s*<\\/span>[\\s\\S]*?<span\\s+class="book-quote-item-price"[^>]*data-price="([^"]+)"`,
+    "i",
+  );
+  const value = pattern.exec(html)?.[1] ?? "";
+  const parsed = parseMoney(value);
+  return parsed !== null && parsed >= 0 ? parsed : null;
+}
+
+async function tryExtractScenicRenderedCheckoutTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (
+    !parsed.hostname.endsWith("myscenicstays.com") ||
+    !parsed.pathname.includes("/rentals/book-now")
+  ) {
+    return { kind: "unsupported" };
+  }
+
+  const playwrightModule = await import("playwright").catch(() => null);
+  if (!playwrightModule?.chromium) {
+    return {
+      kind: "request_error",
+      message: "playwright chromium unavailable for scenic checkout validation",
+    };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const browser = await playwrightModule.chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ userAgent: USER_AGENT });
+    const page = await context.newPage();
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      try {
+        await page.goto(candidate.handoffUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 20_000,
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        reportProgress?.(
+          `scenic checkout retry ${attempt + 1}/${retryDelaysMs.length} navigation_error=${message}`,
+        );
+        continue;
+      }
+
+      await page
+        .waitForLoadState("networkidle", { timeout: 15_000 })
+        .catch(() => null);
+
+      await page
+        .waitForFunction(
+          () => {
+            const input =
+              document.querySelector<HTMLInputElement>("#hiddenTotal");
+            return Boolean(input && input.value && input.value.trim().length);
+          },
+          undefined,
+          { timeout: 15_000 },
+        )
+        .catch(() => null);
+
+      const html = await page.content();
+      const hiddenTotalValue = await page
+        .locator("#hiddenTotal")
+        .inputValue()
+        .catch(() => "");
+
+      const totalFromHidden = parseMoney(hiddenTotalValue);
+      const totalFromSidebar = parseScenicBookSidebarPriceByLabel(
+        html,
+        "Total",
+      );
+      const baseTotal = parseScenicBookSidebarPriceByLabel(html, "Rent");
+      const taxesTotal = parseScenicBookSidebarPriceByLabel(html, "Tax");
+
+      const resolvedTotal =
+        (totalFromHidden !== null && totalFromHidden > 0
+          ? totalFromHidden
+          : null) ??
+        (totalFromSidebar !== null && totalFromSidebar > 0
+          ? totalFromSidebar
+          : null);
+
+      if (resolvedTotal !== null && resolvedTotal > 0) {
+        return {
+          kind: "success",
+          total: resolvedTotal,
+          baseTotal,
+          taxesTotal,
+        };
+      }
+
+      reportProgress?.(
+        `scenic checkout retry ${attempt + 1}/${retryDelaysMs.length} total_not_rendered`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    kind: "request_error",
+    message:
+      "scenic checkout total not rendered from #hiddenTotal or book-sidebar after retries",
+  };
+}
+
 function extract30AEscapesAjaxPath(
   handoffHtml: string,
   fallbackPath: string,
@@ -3269,6 +3396,49 @@ async function validateObservation(
         `localvr rendered checkout extraction fallback to html parse: ${localvrCheckout.message}`,
       );
     }
+  }
+
+  if (candidate.adapterKey === "scenicstays30a") {
+    const scenicCheckout = await tryExtractScenicRenderedCheckoutTotal(
+      candidate,
+      reportProgress,
+    );
+
+    if (scenicCheckout.kind === "success") {
+      const diff = Math.abs(
+        scenicCheckout.total - candidate.observedGrandTotal,
+      );
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from scenic rendered checkout total=${scenicCheckout.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: scenicCheckout.total,
+        };
+      }
+      return null;
+    }
+
+    return {
+      listingId: candidate.listingId,
+      startDate: candidate.startDate,
+      endDate: candidate.endDate,
+      observedGrandTotal: candidate.observedGrandTotal,
+      handoffUrl: candidate.handoffUrl,
+      code:
+        scenicCheckout.kind === "status_error"
+          ? "direct_status_error"
+          : "request_error",
+      message:
+        scenicCheckout.kind === "status_error"
+          ? `scenic rendered checkout returned status error: ${scenicCheckout.message}`
+          : `scenic rendered checkout extraction failed: ${scenicCheckout.message}`,
+      extractedTotal: null,
+    };
   }
 
   const signedHandoff = await tryExtractSignedHandoffTotal(

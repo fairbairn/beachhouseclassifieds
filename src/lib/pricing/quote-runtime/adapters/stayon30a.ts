@@ -115,7 +115,12 @@ function buildCheckoutUrl(input: {
   adults: number;
   children: number;
 }): string {
-  const origin = new URL(input.detailUrl).origin;
+  let origin = "https://www.stayon30a.com";
+  try {
+    origin = new URL(input.detailUrl).origin;
+  } catch {
+    origin = "https://www.stayon30a.com";
+  }
   const params = new URLSearchParams();
   params.set("unit", input.listingId);
   params.set("sd", input.checkInIso);
@@ -421,6 +426,7 @@ export async function executeStayon30aSingleQuote(
 ): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
   const timeoutMs = normalizeTimeoutMs(input.options?.timeoutMs);
+  const fallbackHandoffUrlWithoutContext = `https://www.stayon30a.com/checkout/?sd=${encodeURIComponent(input.checkInIso)}&ed=${encodeURIComponent(input.checkOutIso)}&oc=${Math.max(1, input.adults)}&os=${Math.max(0, input.children)}`;
 
   let runtimeContext: { listingId: string; detailUrl: string };
   try {
@@ -437,9 +443,21 @@ export async function executeStayon30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl: fallbackHandoffUrlWithoutContext,
+        },
       }),
     };
   }
+
+  const runtimeHandoffUrl = buildCheckoutUrl({
+    detailUrl: runtimeContext.detailUrl,
+    listingId: runtimeContext.listingId,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+    adults: Math.max(1, input.adults),
+    children: Math.max(0, input.children),
+  });
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -466,6 +484,9 @@ export async function executeStayon30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          details: {
+            handoffUrl: raw.handoffUrl || runtimeHandoffUrl,
+          },
         }),
       };
     }
@@ -503,6 +524,9 @@ export async function executeStayon30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl: runtimeHandoffUrl,
+        },
       }),
     };
   } finally {

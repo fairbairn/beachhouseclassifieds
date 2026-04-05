@@ -3,9 +3,21 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser } from "playwright";
 
+import { executeScenicstays30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/scenicstays30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type ScenicStaysDetailRecord = DetailRecordBase & {
+  quote_context: {
+    listing_id: string;
+    unit_id: string;
+    detail_url: string;
+    quote_endpoint: string;
+    property_name: string;
+    room_type_id: string;
+    hash: string;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -369,6 +381,15 @@ function extractRentalSlugFromDetailUrl(detailUrl: string): string {
   } catch {
     return "";
   }
+}
+
+function sanitizeSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function extractWidgetUnitId(html: string): string {
@@ -1408,16 +1429,25 @@ async function fetchDetail(
     const mediaUrls = collectMediaUrls(parsingHtml, detailUrl, jsonLdObjects);
 
     const widgetUnitId = extractWidgetUnitId(parsingHtml);
-    const rentalId =
-      widgetUnitId ||
-      rentalIdFromUrl ||
-      rentalSlugFromUrl ||
-      normalizeLink(detailUrl).split("/").filter(Boolean).at(-1) ||
-      "unknown";
+    const numericUnitIdRaw =
+      (widgetUnitId && /^\d+$/.test(widgetUnitId) ? widgetUnitId : "") ||
+      (rentalIdFromUrl && /^\d+$/.test(rentalIdFromUrl) ? rentalIdFromUrl : "");
+    const normalizedSlug = sanitizeSlug(rentalSlugFromUrl);
+    const fallbackSlug = sanitizeSlug(
+      normalizeLink(detailUrl).split("/").filter(Boolean).at(-1) || "",
+    );
+    const externalListingId =
+      normalizedSlug || fallbackSlug || numericUnitIdRaw || "unknown-listing";
 
-    const numericUnitId = /^\d+$/.test(rentalId) ? Number(rentalId) : null;
+    const numericUnitId =
+      numericUnitIdRaw && /^\d+$/.test(numericUnitIdRaw)
+        ? Number(numericUnitIdRaw)
+        : null;
 
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);
+    const htmlPath = resolve(
+      OUTPUT_DETAILS_HTML_DIR,
+      `${externalListingId}.html`,
+    );
     await writeFile(htmlPath, `${parsingHtml}\n`, "utf8");
 
     let rawBeginDate = "";
@@ -1664,9 +1694,18 @@ async function fetchDetail(
     const titleNormalized = normalizeForMatch(name);
 
     return {
-      external_listing_id: rentalId,
+      external_listing_id: externalListingId,
       detail_url: detailUrl,
       fetched_at: new Date().toISOString(),
+      quote_context: {
+        listing_id: numericUnitIdRaw || externalListingId,
+        unit_id: numericUnitIdRaw || externalListingId,
+        detail_url: detailUrl,
+        quote_endpoint: `${new URL(detailUrl).origin}/ajax/quote`,
+        property_name: h1 || title || externalListingId,
+        room_type_id: "",
+        hash: "",
+      },
       title,
       h1,
       canonical_url: canonicalUrl,
@@ -1682,8 +1721,8 @@ async function fetchDetail(
         image_urls: mediaUrls,
       },
       property_profile: {
-        unit_id: rentalId,
-        property_code: rentalId,
+        unit_id: numericUnitIdRaw || externalListingId,
+        property_code: numericUnitIdRaw || externalListingId,
         beds: bedsResolved,
         baths,
         sleeps: sleepsResolved,
@@ -1693,7 +1732,7 @@ async function fetchDetail(
       },
       normalized_matching_profile: {
         source: "pm_scenicstays30a",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         name,
         description,
         match_signals: {
@@ -1703,7 +1742,7 @@ async function fetchDetail(
           title_sha256: hashSha256(titleNormalized),
           listing_composite_key: [
             "pm_scenicstays30a",
-            rentalId,
+            externalListingId,
             hashSha256(descriptionNormalized),
             hashSha256(titleNormalized),
           ].join("::"),
@@ -1711,7 +1750,7 @@ async function fetchDetail(
       },
       normalized_availability: {
         source: "pm_scenicstays30a",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
         window_start: completeWindowDays[0]?.date ?? "",
         window_end:
@@ -1744,7 +1783,7 @@ async function fetchDetail(
       },
       normalized_rates: {
         source: "pm_scenicstays30a",
-        external_listing_id: rentalId,
+        external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
         currency: "USD",
         window_start: ratesStartIso,
@@ -1825,6 +1864,69 @@ export function createScenicStays30AAdapter(): ScraperAdapter<ScenicStaysDetailR
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "scenicstays30a",
+        argv,
+      );
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "scenicstays30a",
+          executeSingleQuote: executeScenicstays30aSingleQuote,
+          defaultListingConcurrency: 1,
+          defaultQuoteConcurrency: 1,
+          defaultQuoteTimeoutMs: 12000,
+          defaultQuoteMaxAttempts: 4,
+          defaultEndpointPath: "/api/nrbe/reservation-quotes.json",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 450,
+        },
+        normalizedArgs,
+        progress,
+      );
+    },
+    async runSingleQuoteObservation(input) {
+      const result = await executeScenicstays30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? null,
+        options: {
+          timeoutMs: Number(process.env.QUOTE_CAPTURE_TIMEOUT_MS ?? "20000"),
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            ...result.observation,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "quote_unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: null,
+          reason: result.error.message,
+        },
+      };
     },
   };
 }

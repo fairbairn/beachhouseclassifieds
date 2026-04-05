@@ -113,7 +113,19 @@ function buildFallbackHandoffUrl(input: {
 }): string {
   const checkin = toUsDate(input.checkInIso);
   const checkout = toUsDate(input.checkOutIso);
-  return `${BASE_HOST}/beach-rentals/book-now?propertyID=${input.propertyId}&checkin=${checkin}&checkout=${checkout}`;
+  return `${BASE_HOST}/beach-rentals/book-now?propertyID=${input.propertyId}&checkin=${checkin}&checkout=${checkout}&promocode=`;
+}
+
+function normalizeHandoffUrl(urlValue: string): string {
+  try {
+    const parsed = new URL(urlValue, BASE_HOST);
+    if (!parsed.searchParams.has("promocode")) {
+      parsed.searchParams.set("promocode", "");
+    }
+    return parsed.toString();
+  } catch {
+    return urlValue;
+  }
 }
 
 function toFormBody(input: {
@@ -290,7 +302,9 @@ async function fetchRealjoyQuote(input: {
       const taxesTotal = parsePriceByLabel(html, "Taxes");
       const feesTotal = parsePriceByLabel(html, "Fees");
       const grandTotal = parsePriceByLabel(html, "Total");
-      const handoffUrl = extractBookNowUrl(html) ?? fallbackHandoffUrl;
+      const handoffUrl = normalizeHandoffUrl(
+        extractBookNowUrl(html) ?? fallbackHandoffUrl,
+      );
 
       const quoteAvailable =
         reason === null &&
@@ -344,7 +358,7 @@ async function fetchRealjoyQuote(input: {
     feesTotal: null,
     grandTotal: null,
     currency: "USD",
-    handoffUrl: fallbackHandoffUrl,
+    handoffUrl: normalizeHandoffUrl(fallbackHandoffUrl),
   };
 }
 

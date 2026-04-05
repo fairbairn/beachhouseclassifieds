@@ -357,6 +357,12 @@ function resolveRuntimeQuoteContext(input: QuoteExecutionRequest): {
 export async function executeOceanreef30aSingleQuote(
   input: QuoteExecutionRequest,
 ): Promise<QuoteExecutionResult> {
+  const fallbackHandoffUrl = buildFallbackHandoffUrl({
+    propertyId: null,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+  });
+
   let runtimeContext: {
     detailUrl: string;
     quoteContext: Record<string, unknown>;
@@ -377,6 +383,7 @@ export async function executeOceanreef30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          handoffUrl: fallbackHandoffUrl,
         },
       },
     };
@@ -397,10 +404,17 @@ export async function executeOceanreef30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          handoffUrl: fallbackHandoffUrl,
         },
       },
     };
   }
+
+  const runtimeHandoffUrl = buildFallbackHandoffUrl({
+    propertyId: unitId,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+  });
 
   try {
     const raw = await fetchQuoteHtml({
@@ -427,6 +441,7 @@ export async function executeOceanreef30aSingleQuote(
             listingId: input.listingId,
             checkInIso: input.checkInIso,
             checkOutIso: input.checkOutIso,
+            handoffUrl: runtimeHandoffUrl,
           },
         },
       };
@@ -462,6 +477,7 @@ export async function executeOceanreef30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          handoffUrl: runtimeHandoffUrl,
         },
       },
     };

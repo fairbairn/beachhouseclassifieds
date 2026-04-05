@@ -393,6 +393,7 @@ export async function execute30AEscapesSingleQuote(
 ): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
   const timeoutMs = normalizeTimeoutMs(input.options?.timeoutMs);
+  const fallbackHandoffUrlWithoutContext = `${BASE_HOST}/rentals/book-now.cfm?strcheckin=${encodeURIComponent(toUsDate(input.checkInIso))}&strcheckout=${encodeURIComponent(toUsDate(input.checkOutIso))}`;
 
   let quoteContext: EscapesQuoteContext;
   try {
@@ -409,6 +410,9 @@ export async function execute30AEscapesSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl: fallbackHandoffUrlWithoutContext,
+        },
       }),
     };
   }
@@ -436,6 +440,9 @@ export async function execute30AEscapesSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl,
+        },
       }),
     };
   }
@@ -451,6 +458,9 @@ export async function execute30AEscapesSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl,
+        },
       }),
     };
   }

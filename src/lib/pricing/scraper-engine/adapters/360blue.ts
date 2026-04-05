@@ -2261,8 +2261,6 @@ export function create360BlueAdapter(): ScraperAdapter<DetailRecord360Blue> {
           defaultQuoteTimeoutMs: 12000,
           defaultQuoteMaxAttempts: 2,
           defaultEndpointPath: "/api/nrbe/reservation-quotes.json",
-          defaultCartCreateEndpoint:
-            "https://www.callistavacations.com/api/nrbe/carts/create.json",
           defaultTaxPct: 0.12,
           defaultBaseNightly: 500,
         },

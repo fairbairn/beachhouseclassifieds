@@ -240,14 +240,20 @@ function buildBuyUrlFromQuote(
   params.set("rcav[eid]", eidRaw);
   params.set("rcav[coupon]", coupon);
 
+  let appendedIds = false;
   if (rcav?.IDs && typeof rcav.IDs === "object") {
     for (const [key, values] of Object.entries(rcav.IDs)) {
       for (const value of values ?? []) {
         if (typeof value === "string" && value.trim()) {
           params.append(`rcav[IDs][${key}][]`, value.trim());
+          appendedIds = true;
         }
       }
     }
+  }
+
+  if (!appendedIds) {
+    params.append("rcav[IDs][8][]", "0");
   }
 
   if (qp?.special_data?.processor) {
@@ -400,6 +406,12 @@ export async function fetchHomeownersCheckoutQuote(
   });
 
   if (!quote.quote_available) {
+    const buyUrl = buildBuyUrlFromQuote(
+      input.entityId,
+      input.checkInIso,
+      input.checkOutIso,
+      quote.quote_node,
+    );
     return {
       entity_id: input.entityId,
       start_date: input.checkInIso,
@@ -409,7 +421,7 @@ export async function fetchHomeownersCheckoutQuote(
       currency: quote.currency,
       quoted_total: null,
       discount_name: quote.discount_name,
-      buy_url: null,
+      buy_url: buyUrl,
       base_total: null,
       taxes_total: null,
       fees_total_excl_taxes: null,

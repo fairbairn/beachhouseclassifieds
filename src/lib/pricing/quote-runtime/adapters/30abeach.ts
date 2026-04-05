@@ -441,6 +441,15 @@ export async function execute30ABeachSingleQuote(
     };
   }
 
+  const fallbackHandoffUrl = buildCheckoutUrl({
+    detailUrl: runtimeContext.detailUrl,
+    listingId: runtimeContext.listingId,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+    adults: Math.max(1, input.adults),
+    children: Math.max(0, input.children),
+  });
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -466,6 +475,9 @@ export async function execute30ABeachSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          details: {
+            handoffUrl: raw.handoffUrl,
+          },
         }),
       };
     }
@@ -503,6 +515,9 @@ export async function execute30ABeachSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl: fallbackHandoffUrl,
+        },
       }),
     };
   } finally {

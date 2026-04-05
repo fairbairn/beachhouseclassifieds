@@ -12,7 +12,7 @@ export type QuoteValidationIssue = {
 export type QuoteValidationOptions = {
   requireNonNullPricingFields?: boolean;
   expectedNights?: number;
-  minimumMaxQueries?: number;
+  expectedMaxQueries?: number;
   minimumObservationCount?: number;
 };
 
@@ -20,6 +20,43 @@ const DEFAULT_EXPECTED_NIGHTS = 7;
 const DEFAULT_MINIMUM_MAX_QUERIES = 24;
 const DEFAULT_MINIMUM_OBSERVATION_COUNT = 24;
 const MIN_VALID_BASE_TOTAL = 100;
+
+const ADAPTER_EXPECTED_HANDOFF_SIGNATURES: Record<string, string[]> = {
+  scenicstays30a: [
+    "https://myscenicstays.com/rentals/book-now?keys=checkin,checkout,propertyID",
+  ],
+  stayat30a: [
+    "https://www.stayat30avacationrentals.com/vacation-rentals/checkout/?keys=arr,depart,id,nights,persons,quote",
+  ],
+};
+
+function expectedAdapterSignatures(adapterKey: string): string[] {
+  return ADAPTER_EXPECTED_HANDOFF_SIGNATURES[adapterKey] ?? [];
+}
+
+function toHandoffSignature(handoffUrl: string): string | null {
+  try {
+    const parsed = new URL(handoffUrl);
+    const queryKeys = [...new Set(parsed.searchParams.keys())].sort();
+    const hashPayload = parsed.hash.startsWith("#")
+      ? parsed.hash.slice(1)
+      : parsed.hash;
+    const hashParams = new URLSearchParams(hashPayload);
+    const hashKeys = [...new Set(hashParams.keys())].sort();
+
+    if (queryKeys.length > 0) {
+      return `${parsed.origin}${parsed.pathname}?keys=${queryKeys.join(",")}`;
+    }
+
+    if (hashKeys.length > 0) {
+      return `${parsed.origin}${parsed.pathname}#keys=${hashKeys.join(",")}`;
+    }
+
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return null;
+  }
+}
 
 function addDays(isoDate: string, days: number): string {
   const date = new Date(`${isoDate}T00:00:00.000Z`);
@@ -188,8 +225,8 @@ export function validateCanonicalQuoteSidecar(
 ): QuoteValidationIssue[] {
   const issues: QuoteValidationIssue[] = [];
   const expectedNights = options.expectedNights ?? DEFAULT_EXPECTED_NIGHTS;
-  const minimumMaxQueries =
-    options.minimumMaxQueries ?? DEFAULT_MINIMUM_MAX_QUERIES;
+  const expectedMaxQueries =
+    options.expectedMaxQueries ?? DEFAULT_MINIMUM_MAX_QUERIES;
   const minimumObservationCount =
     options.minimumObservationCount ?? DEFAULT_MINIMUM_OBSERVATION_COUNT;
   const requireNonNullPricingFields =
@@ -217,11 +254,21 @@ export function validateCanonicalQuoteSidecar(
     });
   }
 
+  if (sidecar.quote_window_cadence !== "weekly_sat_to_sat") {
+    issues.push({
+      code: "invalid_quote_window_cadence",
+      message: 'quote_window_cadence must equal "weekly_sat_to_sat"',
+    });
+  }
+
   const quoteMaxQueries = sidecar.quote_max_queries;
-  if (!isFiniteNumber(quoteMaxQueries) || quoteMaxQueries < minimumMaxQueries) {
+  if (
+    !isFiniteNumber(quoteMaxQueries) ||
+    quoteMaxQueries !== expectedMaxQueries
+  ) {
     issues.push({
       code: "invalid_quote_max_queries",
-      message: `quote_max_queries must be >= ${minimumMaxQueries}`,
+      message: `quote_max_queries must equal ${expectedMaxQueries}`,
     });
   }
 
@@ -258,6 +305,42 @@ export function validateCanonicalQuoteSidecar(
     });
   }
 
+  const nonNullHandoffObservations = observations.filter(
+    (observation) =>
+      typeof observation.handoff_url === "string" &&
+      observation.handoff_url.trim().length > 0,
+  );
+
+  const adapterExpectedSignatures = expectedAdapterSignatures(
+    sidecar.adapter_key,
+  );
+
+  const expectedHandoffSignature =
+    nonNullHandoffObservations
+      .find((observation) => observation.quote_available)
+      ?.handoff_url?.trim() ??
+    nonNullHandoffObservations[0]?.handoff_url?.trim() ??
+    null;
+
+  const expectedParsedSignature =
+    expectedHandoffSignature === null
+      ? null
+      : toHandoffSignature(expectedHandoffSignature);
+
+  const effectiveExpectedSignatures =
+    adapterExpectedSignatures.length > 0
+      ? adapterExpectedSignatures
+      : expectedParsedSignature !== null
+        ? [expectedParsedSignature]
+        : [];
+
+  if (expectedHandoffSignature !== null && expectedParsedSignature === null) {
+    issues.push({
+      code: "invalid_handoff_signature",
+      message: "unable to parse baseline handoff_url signature",
+    });
+  }
+
   for (let index = 0; index < observations.length; index += 1) {
     const observation = observations[index]!;
     const expectedStart = addDays(expectedAnchor, index * expectedNights);
@@ -279,6 +362,36 @@ export function validateCanonicalQuoteSidecar(
         code: "missing_unavailable_reason",
         message: `observation[${index}]: quote_unavailable_reason is required when quote_available=false`,
       });
+    }
+
+    const handoffUrl =
+      typeof observation.handoff_url === "string"
+        ? observation.handoff_url.trim()
+        : "";
+
+    if (!handoffUrl) {
+      issues.push({
+        code: "missing_handoff_url",
+        message: `observation[${index}]: handoff_url is required`,
+      });
+    } else {
+      const parsedSignature = toHandoffSignature(handoffUrl);
+      if (parsedSignature === null) {
+        issues.push({
+          code: "invalid_handoff_url",
+          message: `observation[${index}]: handoff_url is not a valid URL`,
+        });
+      } else if (
+        effectiveExpectedSignatures.length > 0 &&
+        !effectiveExpectedSignatures.includes(parsedSignature)
+      ) {
+        issues.push({
+          code: "handoff_signature_mismatch",
+          message:
+            `observation[${index}]: handoff_url signature mismatch; ` +
+            `expected one of '${effectiveExpectedSignatures.join("' | '")}' got '${parsedSignature}'`,
+        });
+      }
     }
 
     if (observation.quote_available) {

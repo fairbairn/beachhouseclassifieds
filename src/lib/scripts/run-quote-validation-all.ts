@@ -1,9 +1,9 @@
-import chalk from "chalk";
-import { spawnSync } from "node:child_process";
 import {
   createValidatedAdapterOperationProxyByKey,
   getKnownAdapterKeys,
 } from "@/lib/pricing/scraper-engine/adapter-registry";
+import chalk from "chalk";
+import { spawnSync } from "node:child_process";
 
 type CliOptions = {
   maxAdapters: number | null;
@@ -45,7 +45,14 @@ function listActiveQuoteAdapters(): string[] {
 function runAdapterValidation(root: string, adapter: string): AdapterResult {
   const result = spawnSync(
     "npm",
-    ["run", "pricing:validate:quotes:raw", "--", "--adapter-key", adapter],
+    [
+      "run",
+      "pricing:validate:quotes:raw",
+      "--",
+      "--adapter-key",
+      adapter,
+      "--summary-only",
+    ],
     {
       cwd: root,
       encoding: "utf8",
@@ -86,9 +93,15 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
     return 1;
   }
 
-  const results = selected.map((adapter) =>
-    runAdapterValidation(root, adapter),
-  );
+  const results: AdapterResult[] = [];
+  for (const adapter of selected) {
+    const entry = runAdapterValidation(root, adapter);
+    results.push(entry);
+    const statusLabel = entry.pass ? chalk.green("PASS") : chalk.red("FAIL");
+    console.log(
+      `${statusLabel} ${chalk.bold(entry.adapter)} :: ${entry.summaryLine}`,
+    );
+  }
   const passed = results.filter((entry) => entry.pass).length;
   const failed = results.length - passed;
 
@@ -101,13 +114,6 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
           `adapters_checked=${results.length} passed=${passed} failed=0`,
         ),
   );
-  for (const entry of results) {
-    const statusLabel = entry.pass ? chalk.green("PASS") : chalk.red("FAIL");
-    console.log(
-      `${statusLabel} ${chalk.bold(entry.adapter)} :: ${entry.summaryLine}`,
-    );
-  }
-
   return failed > 0 ? 1 : 0;
 }
 

@@ -141,12 +141,14 @@ API-quote migration queue status: complete.
 
 This queue covers adapters that do not yet have a proven quote API in our implementation. For these adapters, we run quote-runtime-first discovery to probe provider patterns, then implement runtime executors before quote/pricing validators.
 
-| Order | Adapter        | Files | API Quote | Quote Runtime | State   |
-| ----: | -------------- | ----: | :-------: | :-----------: | ------- |
-|     1 | scenicstays30a |    44 |    ❌     |      ❌       | pending |
-|     2 | stayat30a      |    37 |    ❌     |      ❌       | pending |
+| Order | Adapter        | Files | API Quote | Quote Runtime | State                 |
+| ----: | -------------- | ----: | :-------: | :-----------: | --------------------- |
+|     1 | scenicstays30a |    44 |    ❌     |      ❌       | deferred-rate-limited |
+|     2 | stayat30a      |    37 |    ❌     |      ❌       | pending               |
 
-Active next runtime discovery target: `scenicstays30a`.
+Active next runtime discovery target: `stayat30a`.
+
+Scenic pause note: `scenicstays30a` quote/runtime completion is temporarily deferred due to repeated provider throttling (`TOO_MANY_REQUESTS` / 429-like behavior). Resume after cooldown and rerun with conservative defaults.
 
 ## Quote Pricing Validation Snapshot (2026-04-05)
 

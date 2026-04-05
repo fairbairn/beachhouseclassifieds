@@ -88,7 +88,6 @@ export type RuntimeAdapterQuoteRunnerConfig = {
   defaultQuoteTimeoutMs?: number;
   defaultQuoteMaxAttempts?: number;
   defaultEndpointPath?: string;
-  defaultCartCreateEndpoint?: string;
   defaultTaxPct?: number;
   defaultBaseNightly?: number;
 };
@@ -101,8 +100,6 @@ const DEFAULT_QUOTE_CONCURRENCY = 3;
 const DEFAULT_QUOTE_TIMEOUT_MS = 12000;
 const DEFAULT_QUOTE_MAX_ATTEMPTS = 2;
 const DEFAULT_ENDPOINT_PATH = "/api/nrbe/reservation-quotes.json";
-const DEFAULT_CART_CREATE_ENDPOINT =
-  "https://www.callistavacations.com/api/nrbe/carts/create.json";
 const DEFAULT_TAX_PCT = 0.12;
 const DEFAULT_BASE_NIGHTLY = 500;
 const DEFAULT_FRESH_HOURS = 24;
@@ -344,48 +341,6 @@ function median(values: number[]): number | null {
   return Math.round(((left + right) / 2) * 100) / 100;
 }
 
-function buildHandoffUrlFromContext(input: {
-  quoteContext: Record<string, unknown> | null;
-  checkInIso: string;
-  checkOutIso: string;
-  defaultCartCreateEndpoint: string;
-}): string | null {
-  const context = input.quoteContext;
-  if (!context) {
-    return null;
-  }
-
-  const unitIdRaw = context.unit_id;
-  const unitId =
-    typeof unitIdRaw === "string"
-      ? Number(unitIdRaw.trim())
-      : Number(unitIdRaw);
-  if (!Number.isFinite(unitId) || unitId <= 0) {
-    return null;
-  }
-
-  const cartCreateEndpointRaw =
-    typeof context.cart_create_endpoint === "string"
-      ? context.cart_create_endpoint.trim()
-      : "";
-  const cartCreateEndpoint =
-    cartCreateEndpointRaw || input.defaultCartCreateEndpoint;
-
-  const payload = {
-    unitId: Math.floor(unitId),
-    arrivalDate: input.checkInIso,
-    departureDate: input.checkOutIso,
-    adults: 1,
-    children: 0,
-  };
-
-  const params = new URLSearchParams();
-  params.set("method", "POST");
-  params.set("contentType", "application/json");
-  params.set("payload", JSON.stringify(payload));
-  return `${cartCreateEndpoint}#${params.toString()}`;
-}
-
 function createEstimatedPricing(input: {
   baseNightly: number;
   nights: number;
@@ -548,12 +503,38 @@ async function executeWithRetries(
     request: QuoteExecutionRequest,
   ) => Promise<QuoteExecutionResult>,
 ): Promise<QuoteExecutionResult> {
+  const isRateLimitedResult = (result: QuoteExecutionResult): boolean => {
+    if (result.success) {
+      return false;
+    }
+
+    const code = result.error.code.trim().toUpperCase();
+    const message = result.error.message.trim().toLowerCase();
+    return (
+      code === "QUOTE_RATE_LIMITED" ||
+      message.includes("too_many_requests") ||
+      message.includes("too many requests") ||
+      message.includes("rate limit") ||
+      message.includes("status 429")
+    );
+  };
+
+  const sleep = async (ms: number): Promise<void> => {
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+  };
+
   let lastResult = await executeSingleQuote(request);
   if (lastResult.success || !lastResult.error.retryable || maxAttempts <= 1) {
     return lastResult;
   }
 
   for (let attempt = 2; attempt <= maxAttempts; attempt += 1) {
+    const backoffMs = isRateLimitedResult(lastResult)
+      ? Math.min(12000, 2000 * 2 ** (attempt - 2))
+      : Math.min(3000, 500 * attempt);
+    const jitterMs = Math.floor(Math.random() * 400);
+    await sleep(backoffMs + jitterMs);
+
     lastResult = await executeSingleQuote(request);
     if (lastResult.success || !lastResult.error.retryable) {
       return lastResult;
@@ -704,6 +685,57 @@ function createUnavailableObservation(input: {
   };
 }
 
+function toUnavailableReason(result: QuoteExecutionResult): string {
+  if (result.success) {
+    return (
+      result.observation.quoteUnavailableReason?.trim() ||
+      "adapter returned unavailable quote window"
+    );
+  }
+
+  const code = result.error.code.trim().toUpperCase();
+  const message = result.error.message.trim();
+  const normalizedMessage = message.toLowerCase();
+  const isRateLimited =
+    code === "QUOTE_RATE_LIMITED" ||
+    normalizedMessage.includes("too_many_requests") ||
+    normalizedMessage.includes("too many requests") ||
+    normalizedMessage.includes("rate limit") ||
+    normalizedMessage.includes("status 429");
+
+  if (isRateLimited) {
+    return "QUOTE_UNAVAILABLE: Quote provider temporarily throttled request";
+  }
+
+  return `${result.error.code}: ${result.error.message}`;
+}
+
+function runtimeProvidedHandoffUrl(
+  result: QuoteExecutionResult,
+): string | null {
+  if (result.success) {
+    if (
+      typeof result.observation.handoffUrl === "string" &&
+      result.observation.handoffUrl.trim().length > 0
+    ) {
+      return result.observation.handoffUrl.trim();
+    }
+    return null;
+  }
+
+  const details =
+    result.error.details && typeof result.error.details === "object"
+      ? result.error.details
+      : null;
+  const handoff =
+    details?.handoffUrl ??
+    (typeof details?.handoff_url === "string" ? details.handoff_url : null);
+  if (typeof handoff === "string" && handoff.trim().length > 0) {
+    return handoff.trim();
+  }
+  return null;
+}
+
 async function buildSidecarForListing(input: {
   config: RuntimeAdapterQuoteRunnerConfig;
   listing: ListingSeed;
@@ -740,9 +772,22 @@ async function buildSidecarForListing(input: {
         options.maxAttempts,
         config.executeSingleQuote,
       );
+
+      const runtimeHandoffUrl = runtimeProvidedHandoffUrl(result);
+      if (!runtimeHandoffUrl) {
+        throw new Error(
+          `runtime adapter '${config.adapterKey}' did not provide handoffUrl for listing '${listing.externalListingId}' window ${window.startDate} -> ${window.endDate}`,
+        );
+      }
+
+      const quoteAvailable = hasUsableAvailableTotals(result);
+      input.onWindowResult?.({ quoteAvailable });
+
       return {
         window,
         result,
+        runtimeHandoffUrl,
+        quoteAvailable,
       };
     },
   );
@@ -785,8 +830,16 @@ async function buildSidecarForListing(input: {
 
   const observations: CanonicalQuoteObservation[] = runtimeResults.map(
     (entry) => {
-      if (hasUsableAvailableTotals(entry.result)) {
-        input.onWindowResult?.({ quoteAvailable: true });
+      if (entry.quoteAvailable) {
+        if (
+          !entry.result.success ||
+          typeof entry.result.observation.handoffUrl !== "string" ||
+          entry.result.observation.handoffUrl.trim().length === 0
+        ) {
+          throw new Error(
+            `runtime adapter '${config.adapterKey}' returned available totals without handoffUrl for listing '${listing.externalListingId}' window ${entry.window.startDate} -> ${entry.window.endDate}`,
+          );
+        }
         return createSuccessObservation({
           listingId: listing.externalListingId,
           nights: options.nights,
@@ -799,11 +852,7 @@ async function buildSidecarForListing(input: {
         nights: options.nights,
         taxPctOfBase: fallbackTaxPct,
       });
-      const reason = entry.result.success
-        ? entry.result.observation.quoteUnavailableReason?.trim() ||
-          "adapter returned unavailable quote window"
-        : `${entry.result.error.code}: ${entry.result.error.message}`;
-      input.onWindowResult?.({ quoteAvailable: false });
+      const reason = toUnavailableReason(entry.result);
       return createUnavailableObservation({
         listingId: listing.externalListingId,
         startDate: entry.window.startDate,
@@ -811,13 +860,7 @@ async function buildSidecarForListing(input: {
         nights: options.nights,
         reason,
         pricing: estimated,
-        handoffUrl: buildHandoffUrlFromContext({
-          quoteContext: listing.quoteContext,
-          checkInIso: entry.window.startDate,
-          checkOutIso: entry.window.endDate,
-          defaultCartCreateEndpoint:
-            config.defaultCartCreateEndpoint ?? DEFAULT_CART_CREATE_ENDPOINT,
-        }),
+        handoffUrl: entry.runtimeHandoffUrl,
       });
     },
   );

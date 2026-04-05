@@ -248,6 +248,7 @@ export async function executeOversee30aSingleQuote(
             listingId: runtimeContext.listingId,
             checkInIso: input.checkInIso,
             checkOutIso: input.checkOutIso,
+            handoffUrl,
           },
         },
       };
@@ -314,6 +315,7 @@ export async function executeOversee30aSingleQuote(
             listingId: runtimeContext.listingId,
             checkInIso: input.checkInIso,
             checkOutIso: input.checkOutIso,
+            handoffUrl,
           },
         },
       };
@@ -349,6 +351,7 @@ export async function executeOversee30aSingleQuote(
           listingId: runtimeContext.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          handoffUrl,
         },
       },
     };

@@ -207,26 +207,6 @@ function buildPropertyQuoteUrl(input: {
   return parsed.toString();
 }
 
-function buildHandoffUrl(input: {
-  detailUrl: string;
-  quoteId: string;
-  listingId: string;
-  adults: number;
-  children: number;
-  checkInDate: string;
-  checkOutDate: string;
-}): string {
-  const origin = new URL(input.detailUrl).origin;
-  const params = new URLSearchParams();
-  params.set("property", input.listingId);
-  params.set("adults", String(Math.max(1, input.adults)));
-  params.set("children", String(Math.max(0, input.children)));
-  params.set("infants", "0");
-  params.set("checkIn", input.checkInDate);
-  params.set("checkOut", input.checkOutDate);
-  return `${origin}/checkout/${input.quoteId}/payment?${params.toString()}`;
-}
-
 function extractQuoteContext(
   input: QuoteExecutionRequest,
 ): LocalVrQuoteContext {
@@ -386,7 +366,7 @@ export async function executeLocalvr30aSingleQuote(
         feesTotalExclTaxes: null,
         grandTotal: null,
         quotedTotal: null,
-        handoffUrl: null,
+        handoffUrl: endpoint,
       },
     };
   }
@@ -417,25 +397,19 @@ export async function executeLocalvr30aSingleQuote(
     feeLines.push({ name, amount: roundCurrency(amount) });
   }
 
-  const quoteId = asString(quote._id);
-  const handoffUrl =
-    quoteId === null
-      ? endpoint
-      : buildHandoffUrl({
-          detailUrl: quoteContext.detailUrl,
-          quoteId,
-          listingId: quoteContext.listingId,
-          adults: input.adults,
-          children: input.children,
-          checkInDate:
-            asString(quote.checkInDateLocalized) ??
-            asString(quote.stay?.[0]?.checkInDateLocalized) ??
-            input.checkInIso,
-          checkOutDate:
-            asString(quote.checkOutDateLocalized) ??
-            asString(quote.stay?.[0]?.checkOutDateLocalized) ??
-            input.checkOutIso,
-        });
+  const handoffUrl = buildPropertyQuoteUrl({
+    detailUrl: quoteContext.detailUrl,
+    adults: input.adults,
+    children: input.children,
+    checkInDate:
+      asString(quote.checkInDateLocalized) ??
+      asString(quote.stay?.[0]?.checkInDateLocalized) ??
+      input.checkInIso,
+    checkOutDate:
+      asString(quote.checkOutDateLocalized) ??
+      asString(quote.stay?.[0]?.checkOutDateLocalized) ??
+      input.checkOutIso,
+  });
 
   const roundedBase = baseTotal === null ? null : roundCurrency(baseTotal);
   const roundedTaxes = taxesTotal === null ? null : roundCurrency(taxesTotal);

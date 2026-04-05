@@ -17,6 +17,7 @@ type CliOptions = {
   listingId: string | null;
   maxListings: number | null;
   allowNullPricingFields: boolean;
+  summaryOnly: boolean;
 };
 
 type ListingValidationFailure = {
@@ -25,11 +26,40 @@ type ListingValidationFailure = {
   issues: QuoteValidationIssue[];
 };
 
+function printListingStatus(input: {
+  index: number;
+  total: number;
+  listingId: string;
+  fileName: string;
+  status: "PASS" | "FAIL" | "MISSING";
+  issueCount?: number;
+  firstIssue?: QuoteValidationIssue;
+}): void {
+  const counter = chalk.gray(`[${input.index}/${input.total}]`);
+  const listing = `${chalk.bold(input.listingId)} (${input.fileName})`;
+
+  if (input.status === "PASS") {
+    console.log(`${counter} ${chalk.green("PASS")} ${listing}`);
+    return;
+  }
+
+  const issueCount = Math.max(1, input.issueCount ?? 1);
+  const issueSummary = input.firstIssue
+    ? `${chalk.yellow(`[${input.firstIssue.code}]`)} ${input.firstIssue.message}`
+    : chalk.yellow("no issue details");
+  const label =
+    input.status === "MISSING" ? chalk.yellow("MISSING") : chalk.red("FAIL");
+  console.log(
+    `${counter} ${label} ${listing} issues=${issueCount} ${issueSummary}`,
+  );
+}
+
 function parseArgs(argv: string[]): CliOptions {
   let adapterKey = "360blue";
   let listingId: string | null = null;
   let maxListings: number | null = null;
   let allowNullPricingFields = false;
+  let summaryOnly = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -59,6 +89,10 @@ function parseArgs(argv: string[]): CliOptions {
     if (arg === "--allow-null-pricing-fields") {
       allowNullPricingFields = true;
     }
+
+    if (arg === "--summary-only") {
+      summaryOnly = true;
+    }
   }
 
   return {
@@ -66,6 +100,7 @@ function parseArgs(argv: string[]): CliOptions {
     listingId,
     maxListings,
     allowNullPricingFields,
+    summaryOnly,
   };
 }
 
@@ -144,9 +179,19 @@ export async function runValidateAdapterQuoteSidecarsCli(
   const validated = files.listingIds.length;
   let failed = files.missingListingIds.length;
   const failures: ListingValidationFailure[] = [];
+  const totalItems = files.missingListingIds.length + files.fileNames.length;
+  let processedItems = 0;
+
+  if (!options.summaryOnly) {
+    console.log(
+      chalk.cyan(
+        `Streaming quote validation adapter=${options.adapterKey} selected=${validated} files=${files.fileNames.length} missing=${files.missingListingIds.length}`,
+      ),
+    );
+  }
 
   for (const missingListingId of files.missingListingIds) {
-    failures.push({
+    const missingFailure: ListingValidationFailure = {
       listingId: missingListingId,
       fileName: `${missingListingId}.json`,
       issues: [
@@ -155,20 +200,34 @@ export async function runValidateAdapterQuoteSidecarsCli(
           message: `missing quote sidecar for active listing '${missingListingId}'`,
         },
       ],
-    });
+    };
+    failures.push(missingFailure);
+    processedItems += 1;
+    if (!options.summaryOnly) {
+      printListingStatus({
+        index: processedItems,
+        total: totalItems,
+        listingId: missingFailure.listingId,
+        fileName: missingFailure.fileName,
+        status: "MISSING",
+        issueCount: missingFailure.issues.length,
+        firstIssue: missingFailure.issues[0],
+      });
+    }
   }
 
   for (const fileName of files.fileNames) {
     const filePath = resolve(quotesDir, fileName);
     const raw = await readFile(filePath, "utf8");
+    const fallbackListingId = fileName.replace(/\.json$/i, "");
 
     let parsed: CanonicalQuotesSidecarRecord;
     try {
       parsed = JSON.parse(raw) as CanonicalQuotesSidecarRecord;
     } catch (error: unknown) {
       failed += 1;
-      failures.push({
-        listingId: fileName.replace(/\.json$/i, ""),
+      const invalidJsonFailure: ListingValidationFailure = {
+        listingId: fallbackListingId,
         fileName,
         issues: [
           {
@@ -176,9 +235,24 @@ export async function runValidateAdapterQuoteSidecarsCli(
             message: error instanceof Error ? error.message : String(error),
           },
         ],
-      });
+      };
+      failures.push(invalidJsonFailure);
+      processedItems += 1;
+      if (!options.summaryOnly) {
+        printListingStatus({
+          index: processedItems,
+          total: totalItems,
+          listingId: invalidJsonFailure.listingId,
+          fileName,
+          status: "FAIL",
+          issueCount: invalidJsonFailure.issues.length,
+          firstIssue: invalidJsonFailure.issues[0],
+        });
+      }
       continue;
     }
+
+    const listingId = parsed.external_listing_id || fallbackListingId;
 
     const issues = validateCanonicalQuoteSidecar(parsed, {
       expectedNights: 7,
@@ -187,11 +261,35 @@ export async function runValidateAdapterQuoteSidecarsCli(
 
     if (issues.length > 0) {
       failed += 1;
-      failures.push({
-        listingId:
-          parsed.external_listing_id || fileName.replace(/\.json$/i, ""),
+      const listingFailure: ListingValidationFailure = {
+        listingId,
         fileName,
         issues,
+      };
+      failures.push(listingFailure);
+      processedItems += 1;
+      if (!options.summaryOnly) {
+        printListingStatus({
+          index: processedItems,
+          total: totalItems,
+          listingId,
+          fileName,
+          status: "FAIL",
+          issueCount: issues.length,
+          firstIssue: issues[0],
+        });
+      }
+      continue;
+    }
+
+    processedItems += 1;
+    if (!options.summaryOnly) {
+      printListingStatus({
+        index: processedItems,
+        total: totalItems,
+        listingId,
+        fileName,
+        status: "PASS",
       });
     }
   }

@@ -441,6 +441,16 @@ export async function executeFunvacay30aSingleQuote(
     };
   }
 
+  const fallbackHandoffUrl = buildHandoffUrl({
+    itemEid: context.itemEid,
+    typeId: context.typeId,
+    inventoryId: context.inventoryId,
+    startDate: input.checkInIso,
+    endDate: input.checkOutIso,
+    adults: input.adults,
+    children: input.children,
+  });
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -603,6 +613,9 @@ export async function executeFunvacay30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl: fallbackHandoffUrl,
+        },
       }),
     };
   } finally {

@@ -240,6 +240,7 @@ export async function executeHomeownerscollection30aSingleQuote(
         details: {
           entityId,
           reliability: quote.reliability,
+          handoffUrl: quote.buy_url || quoteContext.detailUrl,
         },
       }),
     };

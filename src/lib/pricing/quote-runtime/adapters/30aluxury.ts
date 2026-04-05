@@ -514,6 +514,7 @@ export async function execute30ALuxurySingleQuote(
             listingId: input.listingId,
             checkInIso: input.checkInIso,
             checkOutIso: input.checkOutIso,
+            handoffUrl: raw.handoffUrl,
           },
         },
       };

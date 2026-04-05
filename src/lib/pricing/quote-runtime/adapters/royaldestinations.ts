@@ -271,7 +271,6 @@ export async function executeRoyaldestinationsSingleQuote(
           idsTuple: context.idsTuple,
           detailUrl: context.detailUrl,
           handoff_url: generatedCheckoutUrl,
-          handoff_url: generatedCheckoutUrl,
         },
       }),
     };

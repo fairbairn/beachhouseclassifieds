@@ -162,7 +162,18 @@ function buildFallbackHandoffUrl(input: {
   params.set("promoCode", input.promoCode);
   params.set("cid", input.cid);
   params.set("nights", String(input.nights));
-  return `${BASE_HOST}/booking/review?${params.toString()}`;
+  return `${BASE_HOST}/booking/review/?${params.toString()}`;
+}
+
+function normalizeHandoffUrl(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith(`${BASE_HOST}/booking/review?`)) {
+    return trimmed.replace(
+      `${BASE_HOST}/booking/review?`,
+      `${BASE_HOST}/booking/review/?`,
+    );
+  }
+  return trimmed;
 }
 
 async function fetchQuote(input: {
@@ -256,17 +267,18 @@ async function fetchQuote(input: {
     typeof cidRaw === "string" || typeof cidRaw === "number"
       ? String(cidRaw)
       : "";
-  const handoffUrl =
+  const handoffUrl = normalizeHandoffUrl(
     asString(body.bookingURL).trim() ||
-    buildFallbackHandoffUrl({
-      startDate: input.startDate,
-      endDate: input.endDate,
-      listingId: input.listingId,
-      adults: input.adults,
-      promoCode: asString(body.promoCode).trim() || input.promoCode,
-      cid,
-      nights: input.nights,
-    });
+      buildFallbackHandoffUrl({
+        startDate: input.startDate,
+        endDate: input.endDate,
+        listingId: input.listingId,
+        adults: input.adults,
+        promoCode: asString(body.promoCode).trim() || input.promoCode,
+        cid,
+        nights: input.nights,
+      }),
+  );
 
   if (result !== "success") {
     const reason =
@@ -387,6 +399,23 @@ export async function executeExclusive30aSingleQuote(
     };
   }
 
+  const fallbackHandoffUrl = buildFallbackHandoffUrl({
+    startDate: input.checkInIso,
+    endDate: input.checkOutIso,
+    listingId: propertyId,
+    adults: Math.max(1, Math.floor(input.adults)),
+    promoCode: "",
+    cid: "",
+    nights: Math.max(
+      1,
+      Math.round(
+        (new Date(`${input.checkOutIso}T00:00:00.000Z`).getTime() -
+          new Date(`${input.checkInIso}T00:00:00.000Z`).getTime()) /
+          86400000,
+      ),
+    ),
+  });
+
   try {
     const nights = Math.max(
       1,
@@ -423,6 +452,7 @@ export async function executeExclusive30aSingleQuote(
             listingId: input.listingId,
             checkInIso: input.checkInIso,
             checkOutIso: input.checkOutIso,
+            handoffUrl: raw.handoffUrl,
           },
         },
       };
@@ -458,6 +488,7 @@ export async function executeExclusive30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          handoffUrl: fallbackHandoffUrl,
         },
       },
     };

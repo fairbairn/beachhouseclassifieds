@@ -530,6 +530,7 @@ export async function executeSandpiper30aSingleQuote(
             listingId: input.listingId,
             checkInIso: input.checkInIso,
             checkOutIso: input.checkOutIso,
+            handoffUrl: raw.handoffUrl,
           },
         },
       };
@@ -552,6 +553,13 @@ export async function executeSandpiper30aSingleQuote(
       },
     };
   } catch (error: unknown) {
+    const fallbackHandoff = buildFallbackHandoffUrl({
+      startDate: input.checkInIso,
+      endDate: input.checkOutIso,
+      unitCode,
+      adults: Math.max(1, input.adults),
+      children: Math.max(0, input.children),
+    });
     return {
       success: false,
       elapsedMs: 0,
@@ -565,6 +573,7 @@ export async function executeSandpiper30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          handoffUrl: fallbackHandoff,
         },
       },
     };

@@ -249,6 +249,16 @@ export async function executeKeyco30aSingleQuote(
   });
 
   const endpoint = `${BASE_HOST}/api/listing/${input.listingId}/pricing-context?${params.toString()}`;
+  const fallbackHandoffUrl = resolveHandoffUrl({
+    listingId: input.listingId,
+    detailUrl: resolveDetailUrl(input),
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+    adults,
+    children,
+    pricingNode: null,
+    body: null,
+  });
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -277,6 +287,7 @@ export async function executeKeyco30aSingleQuote(
           checkOutIso: input.checkOutIso,
           details: {
             status: response.status,
+            handoffUrl: fallbackHandoffUrl,
           },
         }),
       };
@@ -296,6 +307,9 @@ export async function executeKeyco30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          details: {
+            handoffUrl: fallbackHandoffUrl,
+          },
         }),
       };
     }
@@ -330,6 +344,9 @@ export async function executeKeyco30aSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          details: {
+            handoffUrl: fallbackHandoffUrl,
+          },
         }),
       };
     }
@@ -392,6 +409,9 @@ export async function executeKeyco30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl: fallbackHandoffUrl,
+        },
       }),
     };
   } finally {

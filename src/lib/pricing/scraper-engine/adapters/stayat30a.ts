@@ -3,12 +3,20 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
+import { executeStayat30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/stayat30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
 type StayAt30ADetailRecord = DetailRecordBase & {
   title: string;
+  quote_context?: {
+    unit_id: string;
+    listing_id: string;
+    detail_url: string;
+  };
   h1: string;
   canonical_url: string;
   meta_description: string;
@@ -2269,6 +2277,11 @@ async function fetchDetail(
     return {
       external_listing_id: externalListingId,
       detail_url: detailUrl,
+      quote_context: {
+        unit_id: propertyProfile.unit_id,
+        listing_id: propertyProfile.unit_id,
+        detail_url: detailUrl,
+      },
       fetched_at: new Date().toISOString(),
       title: normalizeListingName(extracted.title || extracted.h1 || ""),
       h1: listingName,
@@ -2413,6 +2426,67 @@ export function createStayAt30AAdapter(): ScraperAdapter<StayAt30ADetailRecord> 
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
       );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "stayat30a",
+        argv,
+      );
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "stayat30a",
+          executeSingleQuote: executeStayat30aSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 3,
+          defaultEndpointPath: "/vacation-rentals/router/",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
+    },
+    async runSingleQuoteObservation(input) {
+      const result = await executeStayat30aSingleQuote({
+        listingId: input.listingId,
+        checkInIso: input.checkInIso,
+        checkOutIso: input.checkOutIso,
+        adults: input.adults,
+        children: input.children,
+        quoteContext: input.quoteContext ?? null,
+        options: {
+          timeoutMs: Number(process.env.QUOTE_CAPTURE_TIMEOUT_MS ?? "20000"),
+        },
+      });
+
+      if (result.success) {
+        return {
+          elapsedMs: result.elapsedMs,
+          observation: {
+            ...result.observation,
+            reason: result.observation.quoteAvailable
+              ? null
+              : "quote_unavailable",
+          },
+        };
+      }
+
+      return {
+        elapsedMs: result.elapsedMs,
+        observation: {
+          startDate: input.checkInIso,
+          endDate: input.checkOutIso,
+          quoteAvailable: false,
+          currency: null,
+          baseTotal: null,
+          taxesTotal: null,
+          feesTotalExclTaxes: null,
+          grandTotal: null,
+          quotedTotal: null,
+          handoffUrl: null,
+          reason: result.error.message,
+        },
+      };
     },
   };
 }

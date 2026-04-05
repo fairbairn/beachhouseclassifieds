@@ -208,6 +208,7 @@ export async function executeSandersbeach30aSingleQuote(
 ): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
   const timeoutMs = normalizeTimeoutMs(input.options?.timeoutMs);
+  const fallbackHandoffUrlWithoutContext = `${BASE_HOST}/rescms/`;
 
   let quoteContext: SandersQuoteContext;
   try {
@@ -224,6 +225,9 @@ export async function executeSandersbeach30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl: fallbackHandoffUrlWithoutContext,
+        },
       }),
     };
   }
@@ -271,6 +275,9 @@ export async function executeSandersbeach30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl: fallbackHandoffUrl,
+        },
       }),
     };
   }
@@ -309,6 +316,9 @@ export async function executeSandersbeach30aSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: {
+          handoffUrl: handoffUrl || fallbackHandoffUrl,
+        },
       }),
     };
   }
