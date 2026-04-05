@@ -31,8 +31,9 @@ See:
 
 2. None adapters with quote potential
 
-- Discover and normalize quote/handoff signatures.
-- Add validator coverage and sidecar policy.
+- Build quote-runtime first.
+- Investigate provider systems for quote patterns and candidate endpoints.
+- Normalize identity/files in parallel so generated artifacts stay in conformity while runtime is being built.
 
 3. None adapters without deterministic quote
 
@@ -54,10 +55,12 @@ For each adapter promoted:
 - `funvacay30a` is now Ready after full scrape refresh (46 listings), full quote pull (46/46), pricing cache parity (46/46), and handoff smoke alignment pass (10/10 sampled).
 - `grayt30a` is now Ready with quote and pricing parity at 35/35/35 and handoff smoke alignment passing at one observation per listing (35/35).
 - `coastproperties30a` is now Ready with slug-based detail identity + quote_context migration complete, quote/pricing parity at 30/30/30, and handoff validations passing (smoke 9/9 sampled; full 116/116).
+- `30abeach` is now Ready with mixed detail identity conformity (slug when detail URL leaf is slug, numeric when leaf is numeric), full quote-runtime capture, quote validation pass (17/17), pricing parity pass (17/17), and handoff alignment pass (63/63).
 
 ## Current In Progress
 
-- Next quote-runtime migration target: `30abeach`.
+- Next quote-runtime-first discovery target: `stayon30a`.
+- Current execution order for discovery adapters: scrape conformity -> quote-runtime implementation -> quote capture -> validators (quote, pricing, handoff).
 
 ## Operating Principle
 

@@ -267,4 +267,15 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 700,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  stayon30a: {
+    adapterKey: "stayon30a",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.1,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.22,
+    },
+    globalDefaultBaseNightly: 650,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
 };
