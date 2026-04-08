@@ -11,7 +11,6 @@ import { LoginHeader } from "@/components/LoginHeader";
 import { getOptionalSession } from "@/core/auth/auth-guards";
 import { APP_CONTAINER_CLASS } from "@/core/ui/layout";
 import appCss from "@/styles.css?url";
-import tweaksCss from "@/tweaks.css?url";
 
 const appName = import.meta.env.VITE_APP_NAME ?? "BeachHouseClassifieds";
 
@@ -25,10 +24,7 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: appName },
     ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "stylesheet", href: tweaksCss },
-    ],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
   shellComponent: RootDocument,
   notFoundComponent: () => (
@@ -44,9 +40,10 @@ function RootDocument({ children }: { children: ReactNode }) {
     select: (state) => state.location.pathname,
   });
   const isLoginPage = pathname === "/login";
+  const isHomePage = pathname === "/home";
   const header = isLoginPage ? (
     <LoginHeader appName={appName} />
-  ) : (
+  ) : isHomePage ? null : (
     <AppHeader appName={appName} userName={session?.user?.name} />
   );
 
@@ -57,7 +54,15 @@ function RootDocument({ children }: { children: ReactNode }) {
       </head>
       <body>
         {header}
-        <main className={isLoginPage ? "app-main app-main-login" : "app-main"}>
+        <main
+          className={
+            isLoginPage
+              ? "app-main app-main-login"
+              : isHomePage
+                ? "app-main app-main-home"
+                : "app-main"
+          }
+        >
           {children}
         </main>
         <Scripts />

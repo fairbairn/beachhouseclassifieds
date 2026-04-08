@@ -1,0 +1,988 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:25:55.483Z",
+    "adapter_key": "royaldestinations",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 142,
+    "matched": 13,
+    "unmatched": 129,
+    "high_confidence_0_95_plus": 2
+  },
+  "matched": [
+    {
+      "external_listing_id": "15-mathis-cove",
+      "vrbo_ref_id": "91026189",
+      "vrbo_source_listing_id": "3230561",
+      "score": 0.9932,
+      "confidence_label": "exact",
+      "shortlist_count": 3,
+      "geo_distance_meters": 7.388
+    },
+    {
+      "external_listing_id": "salt-light",
+      "vrbo_ref_id": "96823665",
+      "vrbo_source_listing_id": "3566273",
+      "score": 0.9932,
+      "confidence_label": "exact",
+      "shortlist_count": 6,
+      "geo_distance_meters": 1.5644
+    },
+    {
+      "external_listing_id": "carousel",
+      "vrbo_ref_id": "119408641",
+      "vrbo_source_listing_id": "4739448",
+      "score": 0.9165,
+      "confidence_label": "high",
+      "shortlist_count": 3,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "after-dune-delight",
+      "vrbo_ref_id": "21691253",
+      "vrbo_source_listing_id": "568503",
+      "score": 0.7988,
+      "confidence_label": "medium",
+      "shortlist_count": 13,
+      "geo_distance_meters": 6.9764
+    },
+    {
+      "external_listing_id": "buena-vista",
+      "vrbo_ref_id": "22864759",
+      "vrbo_source_listing_id": "1272771",
+      "score": 0.7932,
+      "confidence_label": "medium",
+      "shortlist_count": 12,
+      "geo_distance_meters": 3.7681
+    },
+    {
+      "external_listing_id": "shear-elegance",
+      "vrbo_ref_id": "21691814",
+      "vrbo_source_listing_id": "1030591",
+      "score": 0.7932,
+      "confidence_label": "medium",
+      "shortlist_count": 5,
+      "geo_distance_meters": 0.7766
+    },
+    {
+      "external_listing_id": "408-blue-mountain",
+      "vrbo_ref_id": "29672139",
+      "vrbo_source_listing_id": "1422079",
+      "score": 0.7765,
+      "confidence_label": "medium",
+      "shortlist_count": 4,
+      "geo_distance_meters": 11.7856
+    },
+    {
+      "external_listing_id": "emerald-isle",
+      "vrbo_ref_id": "100402250",
+      "vrbo_source_listing_id": "3712348",
+      "score": 0.7165,
+      "confidence_label": "medium",
+      "shortlist_count": 6,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "riders-sun",
+      "vrbo_ref_id": "34370616",
+      "vrbo_source_listing_id": "1552568",
+      "score": 0.6821,
+      "confidence_label": "low",
+      "shortlist_count": 7,
+      "geo_distance_meters": 28.8455
+    },
+    {
+      "external_listing_id": "sandpipers-retreat",
+      "vrbo_ref_id": "111929803",
+      "vrbo_source_listing_id": "4364879",
+      "score": 0.6748,
+      "confidence_label": "low",
+      "shortlist_count": 5,
+      "geo_distance_meters": 1.2835
+    },
+    {
+      "external_listing_id": "sunny-day",
+      "vrbo_ref_id": "123458115",
+      "vrbo_source_listing_id": "4982325",
+      "score": 0.6198,
+      "confidence_label": "low",
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "b-side-seaside",
+      "vrbo_ref_id": "38194538",
+      "vrbo_source_listing_id": "1686350",
+      "score": 0.6121,
+      "confidence_label": "low",
+      "shortlist_count": 14,
+      "geo_distance_meters": 2.3358
+    },
+    {
+      "external_listing_id": "seabreeze",
+      "vrbo_ref_id": "73761329",
+      "vrbo_source_listing_id": "2585966",
+      "score": 0.6053,
+      "confidence_label": "low",
+      "shortlist_count": 5,
+      "geo_distance_meters": 132.5099
+    }
+  ],
+  "unmatched": [
+    {
+      "external_listing_id": "37-lake-district-lane",
+      "top_vrbo_ref_id": "66902191",
+      "top_score": 0.5864,
+      "shortlist_count": 4,
+      "geo_distance_meters": 52.0329
+    },
+    {
+      "external_listing_id": "grayton-dream",
+      "top_vrbo_ref_id": "21709361",
+      "top_score": 0.5748,
+      "shortlist_count": 8,
+      "geo_distance_meters": 2.8743
+    },
+    {
+      "external_listing_id": "harps-haven-main-and-carriage",
+      "top_vrbo_ref_id": "88765444",
+      "top_score": 0.5421,
+      "shortlist_count": 14,
+      "geo_distance_meters": 4.4752
+    },
+    {
+      "external_listing_id": "latitude-adjustment-blue-mountain-beach",
+      "top_vrbo_ref_id": "120361053",
+      "top_score": 0.5421,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "harps-haven-main-house",
+      "top_vrbo_ref_id": "88765444",
+      "top_score": 0.4892,
+      "shortlist_count": 14,
+      "geo_distance_meters": 4.4752
+    },
+    {
+      "external_listing_id": "ocean",
+      "top_vrbo_ref_id": "77967117",
+      "top_score": 0.4588,
+      "shortlist_count": 4,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "harps-haven-carriage-house",
+      "top_vrbo_ref_id": "88765444",
+      "top_score": 0.4306,
+      "shortlist_count": 13,
+      "geo_distance_meters": 4.4752
+    },
+    {
+      "external_listing_id": "seas-day",
+      "top_vrbo_ref_id": "21660542",
+      "top_score": 0.4188,
+      "shortlist_count": 1,
+      "geo_distance_meters": 5.414
+    },
+    {
+      "external_listing_id": "vitamin-sea-seacrest",
+      "top_vrbo_ref_id": "61501692",
+      "top_score": 0.4188,
+      "shortlist_count": 4,
+      "geo_distance_meters": 15.1361
+    },
+    {
+      "external_listing_id": "summer-breeze",
+      "top_vrbo_ref_id": "100426360",
+      "top_score": 0.4011,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "244-spartina-circle-camp-watercolor",
+      "top_vrbo_ref_id": "121327810",
+      "top_score": 0.3821,
+      "shortlist_count": 4,
+      "geo_distance_meters": 75.3774
+    },
+    {
+      "external_listing_id": "sip-n-sea",
+      "top_vrbo_ref_id": "59963259",
+      "top_score": 0.3797,
+      "shortlist_count": 12,
+      "geo_distance_meters": 74.6688
+    },
+    {
+      "external_listing_id": "my-blue-heaven",
+      "top_vrbo_ref_id": "21660542",
+      "top_score": 0.3684,
+      "shortlist_count": 4,
+      "geo_distance_meters": 64.0395
+    },
+    {
+      "external_listing_id": "emerald-escape",
+      "top_vrbo_ref_id": "127124240",
+      "top_score": 0.3648,
+      "shortlist_count": 8,
+      "geo_distance_meters": 129.281
+    },
+    {
+      "external_listing_id": "sea-rest",
+      "top_vrbo_ref_id": "124829823",
+      "top_score": 0.3642,
+      "shortlist_count": 3,
+      "geo_distance_meters": 129.8681
+    },
+    {
+      "external_listing_id": "gone-coastal",
+      "top_vrbo_ref_id": "61501692",
+      "top_score": 0.3635,
+      "shortlist_count": 2,
+      "geo_distance_meters": 115.9068
+    },
+    {
+      "external_listing_id": "sunset-lounge",
+      "top_vrbo_ref_id": "70554230",
+      "top_score": 0.3602,
+      "shortlist_count": 12,
+      "geo_distance_meters": 34.0001
+    },
+    {
+      "external_listing_id": "blue-pearl",
+      "top_vrbo_ref_id": "125420139",
+      "top_score": 0.3564,
+      "shortlist_count": 10,
+      "geo_distance_meters": 81.0296
+    },
+    {
+      "external_listing_id": "southern-coastal",
+      "top_vrbo_ref_id": "122888926",
+      "top_score": 0.3503,
+      "shortlist_count": 23,
+      "geo_distance_meters": 131.1471
+    },
+    {
+      "external_listing_id": "kevins-heaven",
+      "top_vrbo_ref_id": "21691253",
+      "top_score": 0.3481,
+      "shortlist_count": 12,
+      "geo_distance_meters": 92.242
+    },
+    {
+      "external_listing_id": "pools-paradise",
+      "top_vrbo_ref_id": "124419391",
+      "top_score": 0.3456,
+      "shortlist_count": 18,
+      "geo_distance_meters": 137.1808
+    },
+    {
+      "external_listing_id": "52-south-grande-beach-drive",
+      "top_vrbo_ref_id": "88663543",
+      "top_score": 0.3454,
+      "shortlist_count": 5,
+      "geo_distance_meters": 49.0273
+    },
+    {
+      "external_listing_id": "modern-magnolia-grayton",
+      "top_vrbo_ref_id": "102460316",
+      "top_score": 0.3454,
+      "shortlist_count": 5,
+      "geo_distance_meters": 80.6106
+    },
+    {
+      "external_listing_id": "isle-view",
+      "top_vrbo_ref_id": "21660542",
+      "top_score": 0.3448,
+      "shortlist_count": 19,
+      "geo_distance_meters": 94.0634
+    },
+    {
+      "external_listing_id": "gulf-jewel",
+      "top_vrbo_ref_id": "21691814",
+      "top_score": 0.344,
+      "shortlist_count": 10,
+      "geo_distance_meters": 125.4463
+    },
+    {
+      "external_listing_id": "shell",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.3431,
+      "shortlist_count": 6,
+      "geo_distance_meters": 73.5379
+    },
+    {
+      "external_listing_id": "watercastle",
+      "top_vrbo_ref_id": "34464223",
+      "top_score": 0.3399,
+      "shortlist_count": 5,
+      "geo_distance_meters": 94.7964
+    },
+    {
+      "external_listing_id": "peek-boo-view",
+      "top_vrbo_ref_id": "99097790",
+      "top_score": 0.3383,
+      "shortlist_count": 13,
+      "geo_distance_meters": 151.1375
+    },
+    {
+      "external_listing_id": "paradise-found",
+      "top_vrbo_ref_id": "101090171",
+      "top_score": 0.3373,
+      "shortlist_count": 3,
+      "geo_distance_meters": 24.1169
+    },
+    {
+      "external_listing_id": "bluegrass-blessings",
+      "top_vrbo_ref_id": "67416908",
+      "top_score": 0.3334,
+      "shortlist_count": 18,
+      "geo_distance_meters": 72.4256
+    },
+    {
+      "external_listing_id": "143-forest-street",
+      "top_vrbo_ref_id": "108540710",
+      "top_score": 0.3333,
+      "shortlist_count": 11,
+      "geo_distance_meters": 130.6617
+    },
+    {
+      "external_listing_id": "sunrise-dream",
+      "top_vrbo_ref_id": "34326660",
+      "top_score": 0.3312,
+      "shortlist_count": 6,
+      "geo_distance_meters": 95.0771
+    },
+    {
+      "external_listing_id": "sea-la-vie",
+      "top_vrbo_ref_id": "42478967",
+      "top_score": 0.3311,
+      "shortlist_count": 5,
+      "geo_distance_meters": 135.8465
+    },
+    {
+      "external_listing_id": "beach-bliss",
+      "top_vrbo_ref_id": "123169537",
+      "top_score": 0.3306,
+      "shortlist_count": 2,
+      "geo_distance_meters": 117.2999
+    },
+    {
+      "external_listing_id": "313-western-lake-drive",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.3291,
+      "shortlist_count": 3,
+      "geo_distance_meters": 51.6387
+    },
+    {
+      "external_listing_id": "fintastic",
+      "top_vrbo_ref_id": "116893613",
+      "top_score": 0.3285,
+      "shortlist_count": 9,
+      "geo_distance_meters": 29.8227
+    },
+    {
+      "external_listing_id": "blue-sol",
+      "top_vrbo_ref_id": "63675804",
+      "top_score": 0.3275,
+      "shortlist_count": 6,
+      "geo_distance_meters": 107.8807
+    },
+    {
+      "external_listing_id": "the-flying-pig",
+      "top_vrbo_ref_id": "126471070",
+      "top_score": 0.3275,
+      "shortlist_count": 7,
+      "geo_distance_meters": 50.3948
+    },
+    {
+      "external_listing_id": "sandy-boardwalk",
+      "top_vrbo_ref_id": "126471070",
+      "top_score": 0.3266,
+      "shortlist_count": 7,
+      "geo_distance_meters": 65.1941
+    },
+    {
+      "external_listing_id": "hallelujah",
+      "top_vrbo_ref_id": "18980007",
+      "top_score": 0.3265,
+      "shortlist_count": 1,
+      "geo_distance_meters": 94.2811
+    },
+    {
+      "external_listing_id": "870-western-lake-drive",
+      "top_vrbo_ref_id": "66902191",
+      "top_score": 0.3255,
+      "shortlist_count": 4,
+      "geo_distance_meters": 60.2812
+    },
+    {
+      "external_listing_id": "blue-pine-sea-clusion",
+      "top_vrbo_ref_id": "117753017",
+      "top_score": 0.3245,
+      "shortlist_count": 1,
+      "geo_distance_meters": 122.4961
+    },
+    {
+      "external_listing_id": "emerald-view-30a",
+      "top_vrbo_ref_id": "100402250",
+      "top_score": 0.3242,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "sugar-magnolia",
+      "top_vrbo_ref_id": "90805242",
+      "top_score": 0.3193,
+      "shortlist_count": 5,
+      "geo_distance_meters": 95.1821
+    },
+    {
+      "external_listing_id": "the-rock",
+      "top_vrbo_ref_id": "59964748",
+      "top_score": 0.3187,
+      "shortlist_count": 9,
+      "geo_distance_meters": 134.6026
+    },
+    {
+      "external_listing_id": "hidden-cypress",
+      "top_vrbo_ref_id": "108002518",
+      "top_score": 0.3183,
+      "shortlist_count": 5,
+      "geo_distance_meters": 67.6417
+    },
+    {
+      "external_listing_id": "30a-linger-longer",
+      "top_vrbo_ref_id": "104804215",
+      "top_score": 0.3176,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "59-barcelona-avenue",
+      "top_vrbo_ref_id": "115106984",
+      "top_score": 0.3145,
+      "shortlist_count": 8,
+      "geo_distance_meters": 91.8945
+    },
+    {
+      "external_listing_id": "wave-it-all",
+      "top_vrbo_ref_id": "49314360",
+      "top_score": 0.3143,
+      "shortlist_count": 1,
+      "geo_distance_meters": 60.3722
+    },
+    {
+      "external_listing_id": "vitamin-sea-seagrove",
+      "top_vrbo_ref_id": "103075054",
+      "top_score": 0.3137,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "harps-hideaway",
+      "top_vrbo_ref_id": "101977692",
+      "top_score": 0.3125,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "watercolor-5-beachside",
+      "top_vrbo_ref_id": "104211562",
+      "top_score": 0.3119,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "west-inn",
+      "top_vrbo_ref_id": "123169537",
+      "top_score": 0.3118,
+      "shortlist_count": 2,
+      "geo_distance_meters": 117.7481
+    },
+    {
+      "external_listing_id": "seagrove-serenity",
+      "top_vrbo_ref_id": "101977692",
+      "top_score": 0.3109,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "the-cottage",
+      "top_vrbo_ref_id": "25142131",
+      "top_score": 0.3099,
+      "shortlist_count": 7,
+      "geo_distance_meters": 102.1049
+    },
+    {
+      "external_listing_id": "over-dune",
+      "top_vrbo_ref_id": "123169537",
+      "top_score": 0.3094,
+      "shortlist_count": 1,
+      "geo_distance_meters": 30.5556
+    },
+    {
+      "external_listing_id": "jackson-house",
+      "top_vrbo_ref_id": "41941555",
+      "top_score": 0.3089,
+      "shortlist_count": 15,
+      "geo_distance_meters": 140.6766
+    },
+    {
+      "external_listing_id": "coastal-cottage",
+      "top_vrbo_ref_id": "126856830",
+      "top_score": 0.3088,
+      "shortlist_count": 1,
+      "geo_distance_meters": 145.6015
+    },
+    {
+      "external_listing_id": "salt-sand-retreat",
+      "top_vrbo_ref_id": "102108659",
+      "top_score": 0.3072,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "legasea-30a",
+      "top_vrbo_ref_id": "107858173",
+      "top_score": 0.3049,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "sonshine-sea",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.3044,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "c-breeze",
+      "top_vrbo_ref_id": "110996303",
+      "top_score": 0.3036,
+      "shortlist_count": 3,
+      "geo_distance_meters": 83.552
+    },
+    {
+      "external_listing_id": "sandy-feet",
+      "top_vrbo_ref_id": "83056963",
+      "top_score": 0.3029,
+      "shortlist_count": 1,
+      "geo_distance_meters": 122.051
+    },
+    {
+      "external_listing_id": "30a-mojo",
+      "top_vrbo_ref_id": "102756335",
+      "top_score": 0.302,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "always-beachy-30a",
+      "top_vrbo_ref_id": "104804215",
+      "top_score": 0.3016,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "white-house",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.3014,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "life-dream",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.2998,
+      "shortlist_count": 3,
+      "geo_distance_meters": 134.9971
+    },
+    {
+      "external_listing_id": "sunsational",
+      "top_vrbo_ref_id": "33691935",
+      "top_score": 0.2983,
+      "shortlist_count": 2,
+      "geo_distance_meters": 139.8378
+    },
+    {
+      "external_listing_id": "blissful-beach",
+      "top_vrbo_ref_id": "101977692",
+      "top_score": 0.2973,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "brown-eyed-girl",
+      "top_vrbo_ref_id": "123027446",
+      "top_score": 0.2933,
+      "shortlist_count": 2,
+      "geo_distance_meters": 133.6603
+    },
+    {
+      "external_listing_id": "skip-dunes",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.293,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "serenity-blue",
+      "top_vrbo_ref_id": "105135603",
+      "top_score": 0.2918,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "be-still-30a",
+      "top_vrbo_ref_id": "100879794",
+      "top_score": 0.2903,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "tranquility-110",
+      "top_vrbo_ref_id": "101989809",
+      "top_score": 0.2892,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "southern-charm",
+      "top_vrbo_ref_id": "33491332",
+      "top_score": 0.2882,
+      "shortlist_count": 2,
+      "geo_distance_meters": 123.6221
+    },
+    {
+      "external_listing_id": "sandcastle-sandstone",
+      "top_vrbo_ref_id": "126656863",
+      "top_score": 0.2858,
+      "shortlist_count": 1,
+      "geo_distance_meters": 130.2941
+    },
+    {
+      "external_listing_id": "salty-seagull",
+      "top_vrbo_ref_id": "102108659",
+      "top_score": 0.2843,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "2501-e-county-highway-30a",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2831,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "waterhouse-202",
+      "top_vrbo_ref_id": "101989809",
+      "top_score": 0.2784,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "172-street",
+      "top_vrbo_ref_id": "110996303",
+      "top_score": 0.2781,
+      "shortlist_count": 2,
+      "geo_distance_meters": 44.4175
+    },
+    {
+      "external_listing_id": "cardinal-view",
+      "top_vrbo_ref_id": "101528312",
+      "top_score": 0.2769,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "74-elysee-court",
+      "top_vrbo_ref_id": "119120209",
+      "top_score": 0.2758,
+      "shortlist_count": 12,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "ashore-thing",
+      "top_vrbo_ref_id": "102108659",
+      "top_score": 0.2752,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "b402-sunset-beach-villa",
+      "top_vrbo_ref_id": "102906827",
+      "top_score": 0.2723,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "edge-sea",
+      "top_vrbo_ref_id": "21660542",
+      "top_score": 0.272,
+      "shortlist_count": 15,
+      "geo_distance_meters": 89.4069
+    },
+    {
+      "external_listing_id": "waterhouse-204",
+      "top_vrbo_ref_id": "100402250",
+      "top_score": 0.2695,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "costa-blanca-penthouse-400",
+      "top_vrbo_ref_id": "104804215",
+      "top_score": 0.2684,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "forever-grateful",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2682,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "waterhouse-304-open-air",
+      "top_vrbo_ref_id": "101333039",
+      "top_score": 0.268,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "28-beach-bike-way",
+      "top_vrbo_ref_id": "123835812",
+      "top_score": 0.2668,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "waterhouse-402",
+      "top_vrbo_ref_id": "100402250",
+      "top_score": 0.2641,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "el-cielo",
+      "top_vrbo_ref_id": "102108659",
+      "top_score": 0.264,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "sand-sky",
+      "top_vrbo_ref_id": "100402250",
+      "top_score": 0.2636,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "latitude-adjustment",
+      "top_vrbo_ref_id": "60532665",
+      "top_score": 0.2632,
+      "shortlist_count": 33,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "mimis-beach-house",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2574,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "coastal-corner",
+      "top_vrbo_ref_id": "100741837",
+      "top_score": 0.2523,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "mercado-rosemary-4a",
+      "top_vrbo_ref_id": "104410893",
+      "top_score": 0.25,
+      "shortlist_count": 8,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "136-silver-laurel",
+      "top_vrbo_ref_id": "34464223",
+      "top_score": 0.2339,
+      "shortlist_count": 5,
+      "geo_distance_meters": 116.578
+    },
+    {
+      "external_listing_id": "daydreams-sea",
+      "top_vrbo_ref_id": "124352961",
+      "top_score": 0.2338,
+      "shortlist_count": 19,
+      "geo_distance_meters": 32.5222
+    },
+    {
+      "external_listing_id": "48-geoff-wilder",
+      "top_vrbo_ref_id": "33248860",
+      "top_score": 0.2227,
+      "shortlist_count": 1,
+      "geo_distance_meters": 126.3625
+    },
+    {
+      "external_listing_id": "caribbean-breeze",
+      "top_vrbo_ref_id": "112242340",
+      "top_score": 0.2219,
+      "shortlist_count": 19,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "14-trigger-trail",
+      "top_vrbo_ref_id": "102707184",
+      "top_score": 0.2172,
+      "shortlist_count": 1,
+      "geo_distance_meters": 108.8226
+    },
+    {
+      "external_listing_id": "13-madaket-way",
+      "top_vrbo_ref_id": "92316538",
+      "top_score": 0.2169,
+      "shortlist_count": 1,
+      "geo_distance_meters": 120.2767
+    },
+    {
+      "external_listing_id": "crossings-watersound-b105",
+      "top_vrbo_ref_id": "101090171",
+      "top_score": 0.206,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "dunesider-dream",
+      "top_vrbo_ref_id": "69709599",
+      "top_score": 0.2028,
+      "shortlist_count": 20,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "sea-view-watersound-crossings",
+      "top_vrbo_ref_id": "101090171",
+      "top_score": 0.1987,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "250-needlerush",
+      "top_vrbo_ref_id": "70943587",
+      "top_score": 0.198,
+      "shortlist_count": 2,
+      "geo_distance_meters": 61.4473
+    },
+    {
+      "external_listing_id": "all-decked-out",
+      "top_vrbo_ref_id": "126248864",
+      "top_score": 0.1945,
+      "shortlist_count": 18,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "bungalow-8",
+      "top_vrbo_ref_id": "102906827",
+      "top_score": 0.1928,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "217-gulf-bridge-lane",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.1922,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "the-golden-pearl",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.1886,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "barefoot-beach",
+      "top_vrbo_ref_id": "77967117",
+      "top_score": 0.1789,
+      "shortlist_count": 16,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "waterhouse-401",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.1734,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "281-salt-box-lane",
+      "top_vrbo_ref_id": "100741837",
+      "top_score": 0.1725,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "pura-vida",
+      "top_vrbo_ref_id": "104410893",
+      "top_score": 0.1718,
+      "shortlist_count": 14,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "254-yacht-pond-lane",
+      "top_vrbo_ref_id": "53733085",
+      "top_score": 0.169,
+      "shortlist_count": 8,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "compass-point-1-unit-204",
+      "top_vrbo_ref_id": "103597016",
+      "top_score": 0.1575,
+      "shortlist_count": 16,
+      "geo_distance_meters": null
+    }
+  ],
+  "unmatched_no_candidates": [
+    "105-pelican-circle",
+    "110-surfer-lane",
+    "239-pelican-circle",
+    "28-dalton-drive",
+    "34-south-briland-lane-carriage-house",
+    "34-south-briland-main-house",
+    "afternoon-nap",
+    "barefoot-daze",
+    "beach-haven",
+    "carillon-beach-white-house",
+    "jubilee-retreat",
+    "just-b-seacrest-beach-estate"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

@@ -1,0 +1,283 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:22:33.389Z",
+    "adapter_key": "grayt30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 35,
+    "matched": 0,
+    "unmatched": 35,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "cottage-62",
+      "top_vrbo_ref_id": "45784968",
+      "top_score": 0.3313,
+      "shortlist_count": 8,
+      "geo_distance_meters": 47.6131
+    },
+    {
+      "external_listing_id": "grayton-pines",
+      "top_vrbo_ref_id": "29664151",
+      "top_score": 0.3312,
+      "shortlist_count": 5,
+      "geo_distance_meters": 131.0373
+    },
+    {
+      "external_listing_id": "artless-sprite",
+      "top_vrbo_ref_id": "21716320",
+      "top_score": 0.331,
+      "shortlist_count": 7,
+      "geo_distance_meters": 149.3766
+    },
+    {
+      "external_listing_id": "beach-you-it",
+      "top_vrbo_ref_id": "103175333",
+      "top_score": 0.3149,
+      "shortlist_count": 18,
+      "geo_distance_meters": 123.1748
+    },
+    {
+      "external_listing_id": "mimis-cottage",
+      "top_vrbo_ref_id": "21710422",
+      "top_score": 0.3148,
+      "shortlist_count": 12,
+      "geo_distance_meters": 122.5147
+    },
+    {
+      "external_listing_id": "milly-maes-cottage",
+      "top_vrbo_ref_id": "46263660",
+      "top_score": 0.3115,
+      "shortlist_count": 15,
+      "geo_distance_meters": 99.3979
+    },
+    {
+      "external_listing_id": "billiken-bungalow",
+      "top_vrbo_ref_id": "21695702",
+      "top_score": 0.3103,
+      "shortlist_count": 7,
+      "geo_distance_meters": 80.6823
+    },
+    {
+      "external_listing_id": "aspen-beach-house",
+      "top_vrbo_ref_id": "18980007",
+      "top_score": 0.308,
+      "shortlist_count": 3,
+      "geo_distance_meters": 71.6016
+    },
+    {
+      "external_listing_id": "elizabeth-white-house",
+      "top_vrbo_ref_id": "38194538",
+      "top_score": 0.306,
+      "shortlist_count": 12,
+      "geo_distance_meters": 73.0705
+    },
+    {
+      "external_listing_id": "aerial-view",
+      "top_vrbo_ref_id": "21675166",
+      "top_score": 0.3052,
+      "shortlist_count": 12,
+      "geo_distance_meters": 48.5609
+    },
+    {
+      "external_listing_id": "high-dune",
+      "top_vrbo_ref_id": "21691253",
+      "top_score": 0.3033,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "port-caw",
+      "top_vrbo_ref_id": "100741837",
+      "top_score": 0.3025,
+      "shortlist_count": 6,
+      "geo_distance_meters": 143.164
+    },
+    {
+      "external_listing_id": "dune-watch",
+      "top_vrbo_ref_id": "22145178",
+      "top_score": 0.3024,
+      "shortlist_count": 10,
+      "geo_distance_meters": 97.4286
+    },
+    {
+      "external_listing_id": "tupelo-honey",
+      "top_vrbo_ref_id": "78172993",
+      "top_score": 0.2992,
+      "shortlist_count": 3,
+      "geo_distance_meters": 76.7269
+    },
+    {
+      "external_listing_id": "moondance",
+      "top_vrbo_ref_id": "78172993",
+      "top_score": 0.2944,
+      "shortlist_count": 4,
+      "geo_distance_meters": 77.9607
+    },
+    {
+      "external_listing_id": "sunday-morning",
+      "top_vrbo_ref_id": "78172993",
+      "top_score": 0.2882,
+      "shortlist_count": 13,
+      "geo_distance_meters": 148.4605
+    },
+    {
+      "external_listing_id": "high-tide",
+      "top_vrbo_ref_id": "104211562",
+      "top_score": 0.2743,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "mimosa-mornings",
+      "top_vrbo_ref_id": "104211562",
+      "top_score": 0.2731,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "lucky-dog",
+      "top_vrbo_ref_id": "104211562",
+      "top_score": 0.2695,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "seabatical",
+      "top_vrbo_ref_id": "99526797",
+      "top_score": 0.2676,
+      "shortlist_count": 16,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "follow-heron",
+      "top_vrbo_ref_id": "23618666",
+      "top_score": 0.2666,
+      "shortlist_count": 18,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "serendipity",
+      "top_vrbo_ref_id": "125355391",
+      "top_score": 0.2665,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "grayton-pointe",
+      "top_vrbo_ref_id": "102460316",
+      "top_score": 0.2651,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "ocho-cinco",
+      "top_vrbo_ref_id": "21691814",
+      "top_score": 0.2646,
+      "shortlist_count": 23,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "50-sea-turtle",
+      "top_vrbo_ref_id": "108540710",
+      "top_score": 0.2627,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "da-beach",
+      "top_vrbo_ref_id": "104211562",
+      "top_score": 0.2623,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "breezeway",
+      "top_vrbo_ref_id": "104211562",
+      "top_score": 0.2583,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "jadas-dare",
+      "top_vrbo_ref_id": "31862975",
+      "top_score": 0.2559,
+      "shortlist_count": 6,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "pelican-trace",
+      "top_vrbo_ref_id": "101949665",
+      "top_score": 0.2488,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "gindarra",
+      "top_vrbo_ref_id": "104092903",
+      "top_score": 0.2451,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "sea-turtle-cottage",
+      "top_vrbo_ref_id": "75631860",
+      "top_score": 0.2439,
+      "shortlist_count": 4,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "far-niente",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2258,
+      "shortlist_count": 2,
+      "geo_distance_meters": 91.3388
+    },
+    {
+      "external_listing_id": "bucket-list",
+      "top_vrbo_ref_id": "21714316",
+      "top_score": 0.1895,
+      "shortlist_count": 5,
+      "geo_distance_meters": 88.1978
+    },
+    {
+      "external_listing_id": "magnolia-honeymoon-cottage",
+      "top_vrbo_ref_id": "20140022",
+      "top_score": 0.18,
+      "shortlist_count": 4,
+      "geo_distance_meters": 64.027
+    },
+    {
+      "external_listing_id": "30a-hideaway",
+      "top_vrbo_ref_id": "100129522",
+      "top_score": 0.178,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    }
+  ],
+  "unmatched_no_candidates": [],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

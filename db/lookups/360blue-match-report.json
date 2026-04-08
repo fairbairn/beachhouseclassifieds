@@ -1,0 +1,3647 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:16:08.539Z",
+    "adapter_key": "360blue",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 590,
+    "matched": 0,
+    "unmatched": 590,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "watersound-104-s-watch-tower-1327",
+      "top_vrbo_ref_id": "27384074",
+      "top_score": 0.5511,
+      "shortlist_count": 2,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "watercolor-241-red-cedar-way-1218",
+      "top_vrbo_ref_id": "36353284",
+      "top_score": 0.52,
+      "shortlist_count": 10,
+      "geo_distance_meters": 1.9325
+    },
+    {
+      "external_listing_id": "dune-allen-days-like-this-68-baird-road-361",
+      "top_vrbo_ref_id": "27157778",
+      "top_score": 0.5188,
+      "shortlist_count": 8,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "grayton-beach-all-decked-out-64-hotz-avenue-419",
+      "top_vrbo_ref_id": "21715455",
+      "top_score": 0.5152,
+      "shortlist_count": 14,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seacrest-beach-pool-envy-170-seacrest-beach-boulevard-east-776",
+      "top_vrbo_ref_id": "97038479",
+      "top_score": 0.3877,
+      "shortlist_count": 25,
+      "geo_distance_meters": 77.7028
+    },
+    {
+      "external_listing_id": "watersound-west-17-blue-moon-lane-2816",
+      "top_vrbo_ref_id": "124958954",
+      "top_score": 0.3605,
+      "shortlist_count": 3,
+      "geo_distance_meters": 81.314
+    },
+    {
+      "external_listing_id": "dune-allen-santa-rosa-one-5055-west-county-hwy-30a-unit-1029-363",
+      "top_vrbo_ref_id": "110590366",
+      "top_score": 0.3581,
+      "shortlist_count": 6,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-my-blue-heaven-327-blue-mountain-road-2959",
+      "top_vrbo_ref_id": "125420139",
+      "top_score": 0.3525,
+      "shortlist_count": 5,
+      "geo_distance_meters": 64.7014
+    },
+    {
+      "external_listing_id": "rosemary-beach-heaven-on-7-67-dunmore-town-lane-main-house-750",
+      "top_vrbo_ref_id": "67416908",
+      "top_score": 0.3468,
+      "shortlist_count": 17,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seagrove-beach-chel-sea-lane-hideaway-80-chelsey-lane-2929",
+      "top_vrbo_ref_id": "123806390",
+      "top_score": 0.3455,
+      "shortlist_count": 1,
+      "geo_distance_meters": 0.3087
+    },
+    {
+      "external_listing_id": "seagrove-beach-fore-seasons-392-wood-beach-drive-221",
+      "top_vrbo_ref_id": "101960985",
+      "top_score": 0.3443,
+      "shortlist_count": 12,
+      "geo_distance_meters": 0.096
+    },
+    {
+      "external_listing_id": "watercolor-12-pine-lily-circle-1181",
+      "top_vrbo_ref_id": "27764575",
+      "top_score": 0.3421,
+      "shortlist_count": 2,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "watercolor-blessed-beaches-116-east-royal-fern-way-2990",
+      "top_vrbo_ref_id": "125879096",
+      "top_score": 0.3403,
+      "shortlist_count": 12,
+      "geo_distance_meters": 0.096
+    },
+    {
+      "external_listing_id": "watercolor-128-red-cedar-way-1178",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.3372,
+      "shortlist_count": 9,
+      "geo_distance_meters": 111.3825
+    },
+    {
+      "external_listing_id": "watercolor-happy-place-beach-house-81-western-lake-drive-1304",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.323,
+      "shortlist_count": 3,
+      "geo_distance_meters": 38.257
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-64-on-the-shore-64-emma-huggins-lane-3010",
+      "top_vrbo_ref_id": "126248864",
+      "top_score": 0.3188,
+      "shortlist_count": 4,
+      "geo_distance_meters": 0.4798
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-isla-del-sol-44-s-grande-beach-dr-75",
+      "top_vrbo_ref_id": "88663543",
+      "top_score": 0.3188,
+      "shortlist_count": 6,
+      "geo_distance_meters": 0.096
+    },
+    {
+      "external_listing_id": "grayton-beach-shades-of-summer-185-garfield-st-411",
+      "top_vrbo_ref_id": "45998914",
+      "top_score": 0.3188,
+      "shortlist_count": 12,
+      "geo_distance_meters": 1.9195
+    },
+    {
+      "external_listing_id": "grayton-beach-the-sand-box-277-pine-st-413",
+      "top_vrbo_ref_id": "90805242",
+      "top_score": 0.3188,
+      "shortlist_count": 7,
+      "geo_distance_meters": 0.1112
+    },
+    {
+      "external_listing_id": "inlet-beach-306-w-park-place-avenue-464",
+      "top_vrbo_ref_id": "107045566",
+      "top_score": 0.3188,
+      "shortlist_count": 18,
+      "geo_distance_meters": 0.2219
+    },
+    {
+      "external_listing_id": "inlet-beach-pompano-palms-296-pompano-st-463",
+      "top_vrbo_ref_id": "108687347",
+      "top_score": 0.3188,
+      "shortlist_count": 29,
+      "geo_distance_meters": 0.4929
+    },
+    {
+      "external_listing_id": "rosemary-beach-blue-door-cottage-and-carriage-121-round-road-702",
+      "top_vrbo_ref_id": "45732331",
+      "top_score": 0.3188,
+      "shortlist_count": 13,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "rosemary-beach-the-sanctuary-18-new-providence-lane-723",
+      "top_vrbo_ref_id": "77103787",
+      "top_score": 0.3188,
+      "shortlist_count": 3,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seagrove-beach-absolutely-2890-e-co-hwy-30a-827",
+      "top_vrbo_ref_id": "21693395",
+      "top_score": 0.3188,
+      "shortlist_count": 9,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seagrove-beach-sunset-serenity-26-beachside-drive-2927",
+      "top_vrbo_ref_id": "123907784",
+      "top_score": 0.3188,
+      "shortlist_count": 3,
+      "geo_distance_meters": 0.384
+    },
+    {
+      "external_listing_id": "seagrove-tiger-thyme-233-thyme-street-218",
+      "top_vrbo_ref_id": "21702600",
+      "top_score": 0.3188,
+      "shortlist_count": 19,
+      "geo_distance_meters": 28.1974
+    },
+    {
+      "external_listing_id": "inlet-beach-pickleton-place-329-winston-lane-465",
+      "top_vrbo_ref_id": "92044310",
+      "top_score": 0.3176,
+      "shortlist_count": 27,
+      "geo_distance_meters": 0.1112
+    },
+    {
+      "external_listing_id": "watercolor-on-the-m-a-p-138-red-cedar-way-2966",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.317,
+      "shortlist_count": 9,
+      "geo_distance_meters": 141.2402
+    },
+    {
+      "external_listing_id": "seagrove-beach-sandy-paws-341-wood-beach-drive-2820",
+      "top_vrbo_ref_id": "117753017",
+      "top_score": 0.3164,
+      "shortlist_count": 5,
+      "geo_distance_meters": 0.1469
+    },
+    {
+      "external_listing_id": "watercolor-the-preppy-mermaid-29-red-basil-1231",
+      "top_vrbo_ref_id": "122441560",
+      "top_score": 0.3151,
+      "shortlist_count": 10,
+      "geo_distance_meters": 85.2963
+    },
+    {
+      "external_listing_id": "watersound-west-22-sextant-lane-261",
+      "top_vrbo_ref_id": "121723789",
+      "top_score": 0.3151,
+      "shortlist_count": 3,
+      "geo_distance_meters": 35.1375
+    },
+    {
+      "external_listing_id": "seagrove-beach-casa-blanco-86-san-roy-road-main-and-carriage-house-2473",
+      "top_vrbo_ref_id": "117194986",
+      "top_score": 0.314,
+      "shortlist_count": 3,
+      "geo_distance_meters": 0.288
+    },
+    {
+      "external_listing_id": "rosemary-beach-the-sanctuary-18-new-providence-lane-main-house-725",
+      "top_vrbo_ref_id": "77103787",
+      "top_score": 0.3114,
+      "shortlist_count": 3,
+      "geo_distance_meters": 1.9205
+    },
+    {
+      "external_listing_id": "watersound-west-blue-moon-10-blue-moon-lane-260",
+      "top_vrbo_ref_id": "124958954",
+      "top_score": 0.3109,
+      "shortlist_count": 2,
+      "geo_distance_meters": 143.869
+    },
+    {
+      "external_listing_id": "watercolor-sea-chase-11-viridian-park-drive-1167",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.3104,
+      "shortlist_count": 3,
+      "geo_distance_meters": 43.2299
+    },
+    {
+      "external_listing_id": "watercolor-70-red-cedar-way-1290",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.3079,
+      "shortlist_count": 8,
+      "geo_distance_meters": 150.1174
+    },
+    {
+      "external_listing_id": "watersound-90-watch-tower-lane-1372",
+      "top_vrbo_ref_id": "27384074",
+      "top_score": 0.3063,
+      "shortlist_count": 2,
+      "geo_distance_meters": 51.9268
+    },
+    {
+      "external_listing_id": "watercolor-cinnamon-s-retreat-33-wisteria-way-1240",
+      "top_vrbo_ref_id": "122441560",
+      "top_score": 0.3057,
+      "shortlist_count": 10,
+      "geo_distance_meters": 149.5572
+    },
+    {
+      "external_listing_id": "watercolor-chez-coeur-145-sunflower-street-238",
+      "top_vrbo_ref_id": "122441560",
+      "top_score": 0.3052,
+      "shortlist_count": 7,
+      "geo_distance_meters": 101.7458
+    },
+    {
+      "external_listing_id": "rosemary-beach-the-sea-psalms-72-new-providence-lane-751",
+      "top_vrbo_ref_id": "92783112",
+      "top_score": 0.3049,
+      "shortlist_count": 23,
+      "geo_distance_meters": 3.729
+    },
+    {
+      "external_listing_id": "watercolor-compass-point-87-sunflower-street-1313",
+      "top_vrbo_ref_id": "122441560",
+      "top_score": 0.3046,
+      "shortlist_count": 4,
+      "geo_distance_meters": 137.9275
+    },
+    {
+      "external_listing_id": "rosemary-heaven-on-7-67-dunmore-town-lane-carriage-house-749",
+      "top_vrbo_ref_id": "120752174",
+      "top_score": 0.3045,
+      "shortlist_count": 17,
+      "geo_distance_meters": 66.717
+    },
+    {
+      "external_listing_id": "seacrest-beach-sandy-pants-117-lifeguard-loop-e-180",
+      "top_vrbo_ref_id": "122888926",
+      "top_score": 0.3036,
+      "shortlist_count": 14,
+      "geo_distance_meters": 59.8869
+    },
+    {
+      "external_listing_id": "rosemary-beach-la-bella-vita-123-e-long-green-road-708",
+      "top_vrbo_ref_id": "20139561",
+      "top_score": 0.3033,
+      "shortlist_count": 15,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "watercolor-88-vermilion-way-1449",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.3023,
+      "shortlist_count": 1,
+      "geo_distance_meters": 55.0833
+    },
+    {
+      "external_listing_id": "grayton-beach-matarangi-54-lupine-rd-417",
+      "top_vrbo_ref_id": "47854651",
+      "top_score": 0.3021,
+      "shortlist_count": 4,
+      "geo_distance_meters": 0.096
+    },
+    {
+      "external_listing_id": "inlet-beach-emerald-eternity-74-emerald-cove-lane-s-467",
+      "top_vrbo_ref_id": "110479795",
+      "top_score": 0.3021,
+      "shortlist_count": 26,
+      "geo_distance_meters": 0.1921
+    },
+    {
+      "external_listing_id": "inlet-beach-park-place-pearl-220-e-park-place-ave-462",
+      "top_vrbo_ref_id": "102404264",
+      "top_score": 0.3021,
+      "shortlist_count": 10,
+      "geo_distance_meters": 0.4802
+    },
+    {
+      "external_listing_id": "inlet-beach-sandy-lane-212-walton-rose-lane-461",
+      "top_vrbo_ref_id": "57738378",
+      "top_score": 0.3021,
+      "shortlist_count": 31,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "inlet-beach-villa-bel-tramonto-210-winston-lane-460",
+      "top_vrbo_ref_id": "111358051",
+      "top_score": 0.3021,
+      "shortlist_count": 21,
+      "geo_distance_meters": 0.2219
+    },
+    {
+      "external_listing_id": "seagrove-beach-seaclusion-dunes-425-beachfront-trail-839",
+      "top_vrbo_ref_id": "21715677",
+      "top_score": 0.3021,
+      "shortlist_count": 5,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "watercolor-the-sea-section-81-needlerush-drive-1303",
+      "top_vrbo_ref_id": "22122619",
+      "top_score": 0.3021,
+      "shortlist_count": 4,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "watercolor-sandy-feet-325-western-lake-drive-1236",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.3014,
+      "shortlist_count": 2,
+      "geo_distance_meters": 51.0674
+    },
+    {
+      "external_listing_id": "seacrest-beach-shrimply-the-best-249-beach-bike-way-2823",
+      "top_vrbo_ref_id": "104019462",
+      "top_score": 0.3011,
+      "shortlist_count": 18,
+      "geo_distance_meters": 120.0673
+    },
+    {
+      "external_listing_id": "watercolor-wispy-waters-73-western-lake-drive-1292",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2998,
+      "shortlist_count": 3,
+      "geo_distance_meters": 44.8372
+    },
+    {
+      "external_listing_id": "seacrest-beach-poolside-paradise-370-beach-bike-way-779",
+      "top_vrbo_ref_id": "125382602",
+      "top_score": 0.2988,
+      "shortlist_count": 10,
+      "geo_distance_meters": 96.5605
+    },
+    {
+      "external_listing_id": "watercolor-sea-la-vie-301-east-royal-fern-1234",
+      "top_vrbo_ref_id": "27764575",
+      "top_score": 0.2971,
+      "shortlist_count": 2,
+      "geo_distance_meters": 82.3316
+    },
+    {
+      "external_listing_id": "seacrest-beach-casa-blue-273-beach-bike-way-2822",
+      "top_vrbo_ref_id": "104019462",
+      "top_score": 0.2963,
+      "shortlist_count": 17,
+      "geo_distance_meters": 151.959
+    },
+    {
+      "external_listing_id": "watercolor-27-red-cedar-way-1223",
+      "top_vrbo_ref_id": "104211562",
+      "top_score": 0.2961,
+      "shortlist_count": 8,
+      "geo_distance_meters": 132.5298
+    },
+    {
+      "external_listing_id": "watercolor-vermilion-sunset-45-vermilion-way-1267",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.2961,
+      "shortlist_count": 1,
+      "geo_distance_meters": 59.9348
+    },
+    {
+      "external_listing_id": "watercolor-crystal-sands-128-needlerush-drive-1177",
+      "top_vrbo_ref_id": "103707575",
+      "top_score": 0.296,
+      "shortlist_count": 7,
+      "geo_distance_meters": 54.1234
+    },
+    {
+      "external_listing_id": "watercolor-happy-place-370-spartina-circle-1249",
+      "top_vrbo_ref_id": "104211562",
+      "top_score": 0.296,
+      "shortlist_count": 9,
+      "geo_distance_meters": 58.2071
+    },
+    {
+      "external_listing_id": "watersound-west-beach-adventure-west-25-full-moon-lane-262",
+      "top_vrbo_ref_id": "33659568",
+      "top_score": 0.2959,
+      "shortlist_count": 3,
+      "geo_distance_meters": 41.2012
+    },
+    {
+      "external_listing_id": "watercolor-82-vermilion-way-1307",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.2954,
+      "shortlist_count": 1,
+      "geo_distance_meters": 35.171
+    },
+    {
+      "external_listing_id": "grayton-beach-bella-waves-60-hotz-avenue-418",
+      "top_vrbo_ref_id": "21715455",
+      "top_score": 0.2953,
+      "shortlist_count": 16,
+      "geo_distance_meters": 31.5022
+    },
+    {
+      "external_listing_id": "rosemary-beach-memories-on-water-325-west-water-street-main-and-carriage-house-734",
+      "top_vrbo_ref_id": "120556132",
+      "top_score": 0.295,
+      "shortlist_count": 30,
+      "geo_distance_meters": 113.9856
+    },
+    {
+      "external_listing_id": "watercolor-lakehouse-34-viridian-park-1243",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2948,
+      "shortlist_count": 4,
+      "geo_distance_meters": 114.7886
+    },
+    {
+      "external_listing_id": "watercolor-sunshine-smiles-109-bluejack-street-1158",
+      "top_vrbo_ref_id": "103707575",
+      "top_score": 0.2936,
+      "shortlist_count": 5,
+      "geo_distance_meters": 75.357
+    },
+    {
+      "external_listing_id": "seacrest-beach-sunny-shores-29-beachcomber-lane-182",
+      "top_vrbo_ref_id": "104019462",
+      "top_score": 0.2932,
+      "shortlist_count": 20,
+      "geo_distance_meters": 55.1233
+    },
+    {
+      "external_listing_id": "watercolor-254-red-cedar-way-240",
+      "top_vrbo_ref_id": "36353284",
+      "top_score": 0.2914,
+      "shortlist_count": 8,
+      "geo_distance_meters": 34.585
+    },
+    {
+      "external_listing_id": "watercolor-28-red-cedar-way-1227",
+      "top_vrbo_ref_id": "104211562",
+      "top_score": 0.2914,
+      "shortlist_count": 8,
+      "geo_distance_meters": 144.3597
+    },
+    {
+      "external_listing_id": "watercolor-a-shuckin-good-time-74-wisteria-way-1294",
+      "top_vrbo_ref_id": "122441560",
+      "top_score": 0.2914,
+      "shortlist_count": 10,
+      "geo_distance_meters": 129.2375
+    },
+    {
+      "external_listing_id": "rosemary-beach-blue-door-cottage-121-round-road-main-house-704",
+      "top_vrbo_ref_id": "45732331",
+      "top_score": 0.2902,
+      "shortlist_count": 13,
+      "geo_distance_meters": 2.2192
+    },
+    {
+      "external_listing_id": "blue-mountain-blue-mountain-seacret-138-cabana-trail-138",
+      "top_vrbo_ref_id": "66175749",
+      "top_score": 0.2899,
+      "shortlist_count": 8,
+      "geo_distance_meters": 109.9849
+    },
+    {
+      "external_listing_id": "watercolor-64-vermilion-way-1283",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.2894,
+      "shortlist_count": 1,
+      "geo_distance_meters": 7.1213
+    },
+    {
+      "external_listing_id": "rosemary-beach-mozell-cottage-30-spanish-town-lane-731",
+      "top_vrbo_ref_id": "33248860",
+      "top_score": 0.2882,
+      "shortlist_count": 22,
+      "geo_distance_meters": 57.3082
+    },
+    {
+      "external_listing_id": "rosemary-beach-memories-on-water-325-west-water-street-main-house-736",
+      "top_vrbo_ref_id": "120556132",
+      "top_score": 0.2881,
+      "shortlist_count": 30,
+      "geo_distance_meters": 103.9784
+    },
+    {
+      "external_listing_id": "watercolor-65-wisteria-way-1285",
+      "top_vrbo_ref_id": "124204708",
+      "top_score": 0.288,
+      "shortlist_count": 9,
+      "geo_distance_meters": 138.5605
+    },
+    {
+      "external_listing_id": "watercolor-blue-saffire-289-western-lake-drive-1226",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2878,
+      "shortlist_count": 5,
+      "geo_distance_meters": 75.6777
+    },
+    {
+      "external_listing_id": "watercolor-102-vermillion-way-1155",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.2877,
+      "shortlist_count": 1,
+      "geo_distance_meters": 81.3859
+    },
+    {
+      "external_listing_id": "rosemary-beach-mary-rose-45-abaco-lane-carriage-house-740",
+      "top_vrbo_ref_id": "59823163",
+      "top_score": 0.2876,
+      "shortlist_count": 3,
+      "geo_distance_meters": 120.9688
+    },
+    {
+      "external_listing_id": "blue-mountain-le-tiki-76-cabana-trail-155",
+      "top_vrbo_ref_id": "66175749",
+      "top_score": 0.2867,
+      "shortlist_count": 6,
+      "geo_distance_meters": 74.1919
+    },
+    {
+      "external_listing_id": "rosemary-beach-the-beach-house-106-rosemary-avenue-2955",
+      "top_vrbo_ref_id": "67416908",
+      "top_score": 0.286,
+      "shortlist_count": 16,
+      "geo_distance_meters": 121.0949
+    },
+    {
+      "external_listing_id": "watercolor-102-red-cedar-way-1154",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.286,
+      "shortlist_count": 10,
+      "geo_distance_meters": 113.0815
+    },
+    {
+      "external_listing_id": "watercolor-421-western-lake-drive-1258",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2859,
+      "shortlist_count": 2,
+      "geo_distance_meters": 138.82
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-just-one-more-16-n-spooky-lane-65",
+      "top_vrbo_ref_id": "27166803",
+      "top_score": 0.2855,
+      "shortlist_count": 4,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "inlet-beach-the-salty-dog-94-emerald-cove-lane-471",
+      "top_vrbo_ref_id": "70107937",
+      "top_score": 0.2855,
+      "shortlist_count": 29,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seagrove-beach-freebird-seagrove-135-dogwood-street-805",
+      "top_vrbo_ref_id": "77985045",
+      "top_score": 0.2855,
+      "shortlist_count": 21,
+      "geo_distance_meters": 0.192
+    },
+    {
+      "external_listing_id": "watersound-west-octopus-garden-78-tumblehome-way-265",
+      "top_vrbo_ref_id": "33659568",
+      "top_score": 0.2843,
+      "shortlist_count": 3,
+      "geo_distance_meters": 127.7256
+    },
+    {
+      "external_listing_id": "rosemary-beach-never-say-never-113-bourne-lane-700",
+      "top_vrbo_ref_id": "67416908",
+      "top_score": 0.2842,
+      "shortlist_count": 13,
+      "geo_distance_meters": 124.274
+    },
+    {
+      "external_listing_id": "rosemary-beach-mozell-cottage-30-spanish-town-lane-main-house-733",
+      "top_vrbo_ref_id": "33248860",
+      "top_score": 0.2832,
+      "shortlist_count": 23,
+      "geo_distance_meters": 52.1834
+    },
+    {
+      "external_listing_id": "watercolor-90-scrub-oak-circle-1319",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.2829,
+      "shortlist_count": 4,
+      "geo_distance_meters": 151.3784
+    },
+    {
+      "external_listing_id": "seagrove-beach-azure-leisure-107-cypress-hill-road-2985",
+      "top_vrbo_ref_id": "124408703",
+      "top_score": 0.2819,
+      "shortlist_count": 16,
+      "geo_distance_meters": 0.4926
+    },
+    {
+      "external_listing_id": "watercolor-cove-hollow-house-142-cove-hollow-street-1192",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.2819,
+      "shortlist_count": 1,
+      "geo_distance_meters": 70.6437
+    },
+    {
+      "external_listing_id": "seacrest-beach-rosecrest-259-lifeguard-loop-east-181",
+      "top_vrbo_ref_id": "122888926",
+      "top_score": 0.2815,
+      "shortlist_count": 8,
+      "geo_distance_meters": 118.7161
+    },
+    {
+      "external_listing_id": "dune-allen-magical-place-21-magical-place-162",
+      "top_vrbo_ref_id": "104804215",
+      "top_score": 0.2814,
+      "shortlist_count": 3,
+      "geo_distance_meters": 36.193
+    },
+    {
+      "external_listing_id": "seaside-ocean-eyes-824-forest-street-875",
+      "top_vrbo_ref_id": "21709655",
+      "top_score": 0.2814,
+      "shortlist_count": 6,
+      "geo_distance_meters": 95.438
+    },
+    {
+      "external_listing_id": "watercolor-beachside-7-1848-e-co-hwy-30a-1150",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2814,
+      "shortlist_count": 2,
+      "geo_distance_meters": 88.6684
+    },
+    {
+      "external_listing_id": "watercolor-beachside-8-1848-e-co-hwy-30a-1151",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2814,
+      "shortlist_count": 2,
+      "geo_distance_meters": 100.9706
+    },
+    {
+      "external_listing_id": "seagrove-beach-sea-sparrow-265-dogwood-street-826",
+      "top_vrbo_ref_id": "61460602",
+      "top_score": 0.281,
+      "shortlist_count": 10,
+      "geo_distance_meters": 48.5381
+    },
+    {
+      "external_listing_id": "rosemary-beach-stillwater-cottage-174-west-water-street-719",
+      "top_vrbo_ref_id": "77103763",
+      "top_score": 0.2792,
+      "shortlist_count": 14,
+      "geo_distance_meters": 130.6752
+    },
+    {
+      "external_listing_id": "watercolor-128-mystic-cobalt-1176",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.2792,
+      "shortlist_count": 3,
+      "geo_distance_meters": 95.7247
+    },
+    {
+      "external_listing_id": "watercolor-sunny-oak-98-scrub-oak-circle-1325",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.279,
+      "shortlist_count": 4,
+      "geo_distance_meters": 149.0454
+    },
+    {
+      "external_listing_id": "watercolor-sunset-park-28-sunset-ridge-lane-1228",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.279,
+      "shortlist_count": 8,
+      "geo_distance_meters": 111.4817
+    },
+    {
+      "external_listing_id": "watersound-87-salt-box-lane-1371",
+      "top_vrbo_ref_id": "126794750",
+      "top_score": 0.2788,
+      "shortlist_count": 3,
+      "geo_distance_meters": 108.2708
+    },
+    {
+      "external_listing_id": "watercolor-blessings-by-the-sea-160-e-royal-fern-way-1203",
+      "top_vrbo_ref_id": "122441560",
+      "top_score": 0.2787,
+      "shortlist_count": 8,
+      "geo_distance_meters": 88.5045
+    },
+    {
+      "external_listing_id": "watercolor-vermillionaire-46-vermillion-way-1270",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.2783,
+      "shortlist_count": 1,
+      "geo_distance_meters": 23.8002
+    },
+    {
+      "external_listing_id": "grayton-beach-grateful-2bn-grayton-433-defuniak-street-415",
+      "top_vrbo_ref_id": "59964748",
+      "top_score": 0.2782,
+      "shortlist_count": 8,
+      "geo_distance_meters": 145.1944
+    },
+    {
+      "external_listing_id": "watersound-30-north-shingle-lane-1351",
+      "top_vrbo_ref_id": "126794750",
+      "top_score": 0.2776,
+      "shortlist_count": 2,
+      "geo_distance_meters": 92.7347
+    },
+    {
+      "external_listing_id": "inlet-beach-beach-smiles-70-emerald-cove-lane-466",
+      "top_vrbo_ref_id": "84117256",
+      "top_score": 0.277,
+      "shortlist_count": 8,
+      "geo_distance_meters": 63.0991
+    },
+    {
+      "external_listing_id": "watercolor-always-amazing-1227-western-lake-drive-1171",
+      "top_vrbo_ref_id": "36353284",
+      "top_score": 0.2765,
+      "shortlist_count": 8,
+      "geo_distance_meters": 114.3111
+    },
+    {
+      "external_listing_id": "seacrest-beach-sea-the-wonder-77-cobia-run-e-193",
+      "top_vrbo_ref_id": "97038479",
+      "top_score": 0.2764,
+      "shortlist_count": 14,
+      "geo_distance_meters": 141.871
+    },
+    {
+      "external_listing_id": "rosemary-beach-mr-sanders-122-west-kingston-road-main-and-carriage-house-705",
+      "top_vrbo_ref_id": "124784879",
+      "top_score": 0.2757,
+      "shortlist_count": 10,
+      "geo_distance_meters": 0.3999
+    },
+    {
+      "external_listing_id": "watercolor-searendipity-108-scrub-oak-circle-235",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.2757,
+      "shortlist_count": 4,
+      "geo_distance_meters": 141.7239
+    },
+    {
+      "external_listing_id": "rosemary-beach-red-stick-190-e-water-st-726",
+      "top_vrbo_ref_id": "59823163",
+      "top_score": 0.2755,
+      "shortlist_count": 18,
+      "geo_distance_meters": 151.1248
+    },
+    {
+      "external_listing_id": "grayton-beach-seas-the-day-524-defuniak-street-416",
+      "top_vrbo_ref_id": "59964748",
+      "top_score": 0.2754,
+      "shortlist_count": 15,
+      "geo_distance_meters": 18.0184
+    },
+    {
+      "external_listing_id": "rosemary-beach-the-sanctuary-18-new-providence-lane-carriage-house-724",
+      "top_vrbo_ref_id": "77103787",
+      "top_score": 0.2754,
+      "shortlist_count": 3,
+      "geo_distance_meters": 12.9652
+    },
+    {
+      "external_listing_id": "watercolor-135-buttercup-street-1186",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2752,
+      "shortlist_count": 5,
+      "geo_distance_meters": 134.0886
+    },
+    {
+      "external_listing_id": "watercolor-the-way-we-like-it-27-running-oak-circle-1224",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.2747,
+      "shortlist_count": 7,
+      "geo_distance_meters": 138.5009
+    },
+    {
+      "external_listing_id": "watersound-19-salt-box-lane-1336",
+      "top_vrbo_ref_id": "126794750",
+      "top_score": 0.2741,
+      "shortlist_count": 3,
+      "geo_distance_meters": 72.143
+    },
+    {
+      "external_listing_id": "watersound-tidepool-treasure-24-tidepool-lane-1347",
+      "top_vrbo_ref_id": "126794750",
+      "top_score": 0.2741,
+      "shortlist_count": 4,
+      "geo_distance_meters": 101.3804
+    },
+    {
+      "external_listing_id": "rosemary-beach-pura-vida-174-round-road-main-house-718",
+      "top_vrbo_ref_id": "64695756",
+      "top_score": 0.2738,
+      "shortlist_count": 18,
+      "geo_distance_meters": 71.6372
+    },
+    {
+      "external_listing_id": "watercolor-685-western-lake-drive-1286",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.2737,
+      "shortlist_count": 3,
+      "geo_distance_meters": 87.106
+    },
+    {
+      "external_listing_id": "watercolor-662-western-lake-drive-1446",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.2735,
+      "shortlist_count": 3,
+      "geo_distance_meters": 49.842
+    },
+    {
+      "external_listing_id": "watercolor-beachside-10-1848-e-co-hwy-30a-1143",
+      "top_vrbo_ref_id": "53331761",
+      "top_score": 0.2735,
+      "shortlist_count": 2,
+      "geo_distance_meters": 44.7808
+    },
+    {
+      "external_listing_id": "naturewalk-a-peace-of-gold-10-chordgrass-way-175",
+      "top_vrbo_ref_id": "121399249",
+      "top_score": 0.2733,
+      "shortlist_count": 1,
+      "geo_distance_meters": 101.1013
+    },
+    {
+      "external_listing_id": "rosemary-beach-the-salty-rose-49-hamilton-lane-745",
+      "top_vrbo_ref_id": "21713930",
+      "top_score": 0.2731,
+      "shortlist_count": 10,
+      "geo_distance_meters": 73.0283
+    },
+    {
+      "external_listing_id": "rosemary-beach-mary-rose-45-abaco-lane-main-and-carriage-house-739",
+      "top_vrbo_ref_id": "59823163",
+      "top_score": 0.273,
+      "shortlist_count": 3,
+      "geo_distance_meters": 121.9302
+    },
+    {
+      "external_listing_id": "seacrest-beach-footprints-in-the-sand-36-kareny-lane-185",
+      "top_vrbo_ref_id": "33668818",
+      "top_score": 0.273,
+      "shortlist_count": 5,
+      "geo_distance_meters": 149.5583
+    },
+    {
+      "external_listing_id": "watercolor-36-inkberry-street-1246",
+      "top_vrbo_ref_id": "73026781",
+      "top_score": 0.2728,
+      "shortlist_count": 1,
+      "geo_distance_meters": 68.7624
+    },
+    {
+      "external_listing_id": "watercolor-just-dream-29-wisteria-way-242",
+      "top_vrbo_ref_id": "122441560",
+      "top_score": 0.2727,
+      "shortlist_count": 10,
+      "geo_distance_meters": 148.9873
+    },
+    {
+      "external_listing_id": "watercolor-214-spartina-circle-2818",
+      "top_vrbo_ref_id": "121327810",
+      "top_score": 0.2726,
+      "shortlist_count": 4,
+      "geo_distance_meters": 14.2407
+    },
+    {
+      "external_listing_id": "watercolor-55-wisteria-way-1276",
+      "top_vrbo_ref_id": "122441560",
+      "top_score": 0.2726,
+      "shortlist_count": 10,
+      "geo_distance_meters": 151.7547
+    },
+    {
+      "external_listing_id": "rosemary-beach-living-the-dream-32-rosemary-avenue-main-and-carriage-house-2937",
+      "top_vrbo_ref_id": "67416908",
+      "top_score": 0.2725,
+      "shortlist_count": 17,
+      "geo_distance_meters": 125.0699
+    },
+    {
+      "external_listing_id": "watercolor-the-spindrift-house-76-tall-timber-1295",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.2725,
+      "shortlist_count": 4,
+      "geo_distance_meters": 7.0289
+    },
+    {
+      "external_listing_id": "seacrest-beach-70-surfer-lane-192",
+      "top_vrbo_ref_id": "57710201",
+      "top_score": 0.2721,
+      "shortlist_count": 2,
+      "geo_distance_meters": 147.9453
+    },
+    {
+      "external_listing_id": "watercolor-328-red-cedar-way-1237",
+      "top_vrbo_ref_id": "36353284",
+      "top_score": 0.2721,
+      "shortlist_count": 7,
+      "geo_distance_meters": 151.3356
+    },
+    {
+      "external_listing_id": "watercolor-1-2-3-and-to-the-shore-848-western-lake-drive-1309",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2719,
+      "shortlist_count": 4,
+      "geo_distance_meters": 93.8969
+    },
+    {
+      "external_listing_id": "seagrove-beach-beachful-easy-feeling-59-santa-clara-street-2974",
+      "top_vrbo_ref_id": "99932567",
+      "top_score": 0.2718,
+      "shortlist_count": 13,
+      "geo_distance_meters": 55.2278
+    },
+    {
+      "external_listing_id": "seagrove-beach-golden-hour-230-dogwood-st-823",
+      "top_vrbo_ref_id": "61460602",
+      "top_score": 0.2717,
+      "shortlist_count": 14,
+      "geo_distance_meters": 48.8504
+    },
+    {
+      "external_listing_id": "watercolor-western-lake-luxe-1383-western-lake-drive-1188",
+      "top_vrbo_ref_id": "121327810",
+      "top_score": 0.2716,
+      "shortlist_count": 4,
+      "geo_distance_meters": 112.6534
+    },
+    {
+      "external_listing_id": "watercolor-143-buttercup-st-1193",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2714,
+      "shortlist_count": 5,
+      "geo_distance_meters": 147.0538
+    },
+    {
+      "external_listing_id": "watercolor-22-wiregrass-way-1216",
+      "top_vrbo_ref_id": "73026781",
+      "top_score": 0.2714,
+      "shortlist_count": 5,
+      "geo_distance_meters": 134.9
+    },
+    {
+      "external_listing_id": "watercolor-144-buttercup-street-1195",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.2713,
+      "shortlist_count": 4,
+      "geo_distance_meters": 82.5975
+    },
+    {
+      "external_listing_id": "seagrove-beach-8-degrees-of-separation-45-sea-walk-circle-844",
+      "top_vrbo_ref_id": "70554230",
+      "top_score": 0.2711,
+      "shortlist_count": 10,
+      "geo_distance_meters": 47.2503
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-32-beach-walk-lane-71",
+      "top_vrbo_ref_id": "27166803",
+      "top_score": 0.271,
+      "shortlist_count": 7,
+      "geo_distance_meters": 82.6401
+    },
+    {
+      "external_listing_id": "watercolor-434-western-lake-drive-1261",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2708,
+      "shortlist_count": 4,
+      "geo_distance_meters": 111.3223
+    },
+    {
+      "external_listing_id": "watercolor-royal-retreat-21-royal-fern-way-1211",
+      "top_vrbo_ref_id": "88763978",
+      "top_score": 0.2708,
+      "shortlist_count": 3,
+      "geo_distance_meters": 129.8162
+    },
+    {
+      "external_listing_id": "rosemary-beach-living-the-dream-32-rosemary-avenue-main-house-2938",
+      "top_vrbo_ref_id": "67416908",
+      "top_score": 0.2703,
+      "shortlist_count": 17,
+      "geo_distance_meters": 125.0699
+    },
+    {
+      "external_listing_id": "watercolor-great-blue-heron-44-crossvine-circle-1264",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.2702,
+      "shortlist_count": 2,
+      "geo_distance_meters": 148.8235
+    },
+    {
+      "external_listing_id": "watercolor-1785-e-county-hwy-30a-301-1310",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2699,
+      "shortlist_count": 2,
+      "geo_distance_meters": 70.0806
+    },
+    {
+      "external_listing_id": "watercolor-sea-salt-137-scrub-oak-circle-1187",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.2692,
+      "shortlist_count": 4,
+      "geo_distance_meters": 133.8365
+    },
+    {
+      "external_listing_id": "watercolor-low-key-cottage-785-western-lake-drive-1296",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2691,
+      "shortlist_count": 3,
+      "geo_distance_meters": 77.773
+    },
+    {
+      "external_listing_id": "watercolor-1275-western-lake-drive-1174",
+      "top_vrbo_ref_id": "36353284",
+      "top_score": 0.2688,
+      "shortlist_count": 9,
+      "geo_distance_meters": 148.7208
+    },
+    {
+      "external_listing_id": "watercolor-140-flatwood-street-1191",
+      "top_vrbo_ref_id": "73026781",
+      "top_score": 0.2688,
+      "shortlist_count": 4,
+      "geo_distance_meters": 142.1799
+    },
+    {
+      "external_listing_id": "watercolor-222-spartina-circle-1213",
+      "top_vrbo_ref_id": "78696966",
+      "top_score": 0.2688,
+      "shortlist_count": 3,
+      "geo_distance_meters": 95.2356
+    },
+    {
+      "external_listing_id": "watercolor-139-mystic-cobalt-1189",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.2687,
+      "shortlist_count": 4,
+      "geo_distance_meters": 146.3433
+    },
+    {
+      "external_listing_id": "watercolor-79-running-oak-circle-1298",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.2687,
+      "shortlist_count": 6,
+      "geo_distance_meters": 122.1874
+    },
+    {
+      "external_listing_id": "watercolor-heart-s-desire-467-east-royal-fern-1269",
+      "top_vrbo_ref_id": "27764575",
+      "top_score": 0.2685,
+      "shortlist_count": 1,
+      "geo_distance_meters": 136.0254
+    },
+    {
+      "external_listing_id": "watercolor-1785-e-county-hwy-30a-101-250",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2681,
+      "shortlist_count": 2,
+      "geo_distance_meters": 69.3937
+    },
+    {
+      "external_listing_id": "watercolor-whit-s-end-1848-east-county-highway-30a-4-2104",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2681,
+      "shortlist_count": 2,
+      "geo_distance_meters": 97.8898
+    },
+    {
+      "external_listing_id": "rosemary-beach-mozell-cottage-30-spanish-town-lane-carriage-732",
+      "top_vrbo_ref_id": "112498513",
+      "top_score": 0.268,
+      "shortlist_count": 22,
+      "geo_distance_meters": 65.4207
+    },
+    {
+      "external_listing_id": "seacrest-beach-the-chill-out-27-blue-dolphin-court-2945",
+      "top_vrbo_ref_id": "59963259",
+      "top_score": 0.268,
+      "shortlist_count": 8,
+      "geo_distance_meters": 67.238
+    },
+    {
+      "external_listing_id": "watersound-57-salt-box-lane-1359",
+      "top_vrbo_ref_id": "126794750",
+      "top_score": 0.268,
+      "shortlist_count": 3,
+      "geo_distance_meters": 58.2414
+    },
+    {
+      "external_listing_id": "watercolor-wanderlust-in-watercolor-55-royal-fern-way-246",
+      "top_vrbo_ref_id": "83056963",
+      "top_score": 0.2678,
+      "shortlist_count": 1,
+      "geo_distance_meters": 47.9404
+    },
+    {
+      "external_listing_id": "watercolor-the-piper-828-western-lake-drive-1305",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2677,
+      "shortlist_count": 6,
+      "geo_distance_meters": 59.239
+    },
+    {
+      "external_listing_id": "rosemary-beach-birdhouse-36-town-hall-738",
+      "top_vrbo_ref_id": "77103763",
+      "top_score": 0.2674,
+      "shortlist_count": 5,
+      "geo_distance_meters": 61.8947
+    },
+    {
+      "external_listing_id": "watercolor-306-red-cedar-way-1235",
+      "top_vrbo_ref_id": "36353284",
+      "top_score": 0.2674,
+      "shortlist_count": 7,
+      "geo_distance_meters": 105.1779
+    },
+    {
+      "external_listing_id": "watercolor-healing-palms-295-west-lake-forest-drive-241",
+      "top_vrbo_ref_id": "121327810",
+      "top_score": 0.2671,
+      "shortlist_count": 4,
+      "geo_distance_meters": 108.8038
+    },
+    {
+      "external_listing_id": "watercolor-ranch-water-1407-western-lake-drive-1190",
+      "top_vrbo_ref_id": "121327810",
+      "top_score": 0.267,
+      "shortlist_count": 3,
+      "geo_distance_meters": 91.419
+    },
+    {
+      "external_listing_id": "watercolor-30-watercolor-blvd-n-202-1232",
+      "top_vrbo_ref_id": "78392517",
+      "top_score": 0.2667,
+      "shortlist_count": 4,
+      "geo_distance_meters": 89.9169
+    },
+    {
+      "external_listing_id": "watercolor-sunny-side-up-568-east-royal-fern-way-1277",
+      "top_vrbo_ref_id": "112894312",
+      "top_score": 0.2663,
+      "shortlist_count": 1,
+      "geo_distance_meters": 77.6107
+    },
+    {
+      "external_listing_id": "watercolor-150-cove-hollow-street-1198",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.2661,
+      "shortlist_count": 1,
+      "geo_distance_meters": 75.4148
+    },
+    {
+      "external_listing_id": "rosemary-beach-living-the-dream-32-rosemary-avenue-carriage-house-2939",
+      "top_vrbo_ref_id": "120752174",
+      "top_score": 0.266,
+      "shortlist_count": 17,
+      "geo_distance_meters": 131.1732
+    },
+    {
+      "external_listing_id": "watercolor-131-mystic-cobalt-street-1183",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.266,
+      "shortlist_count": 5,
+      "geo_distance_meters": 148.0551
+    },
+    {
+      "external_listing_id": "watercolor-boathouse-746-western-lake-drive-1293",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2659,
+      "shortlist_count": 4,
+      "geo_distance_meters": 82.1724
+    },
+    {
+      "external_listing_id": "prominence-four-buoys-and-a-birdie-24-w-crabbing-hole-lane-178",
+      "top_vrbo_ref_id": "33703520",
+      "top_score": 0.2655,
+      "shortlist_count": 3,
+      "geo_distance_meters": 80.0727
+    },
+    {
+      "external_listing_id": "watercolor-stellaluna-beach-house-125-silver-laurel-2099",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.2655,
+      "shortlist_count": 3,
+      "geo_distance_meters": 36.7049
+    },
+    {
+      "external_listing_id": "watercolor-65-spartina-circle-1284",
+      "top_vrbo_ref_id": "101949665",
+      "top_score": 0.2654,
+      "shortlist_count": 11,
+      "geo_distance_meters": 130.3164
+    },
+    {
+      "external_listing_id": "watercolor-7th-heaven-82-flatwood-st-1306",
+      "top_vrbo_ref_id": "73026781",
+      "top_score": 0.2654,
+      "shortlist_count": 5,
+      "geo_distance_meters": 72.785
+    },
+    {
+      "external_listing_id": "seacrest-beach-three-little-birds-30-barefoot-lane-183",
+      "top_vrbo_ref_id": "104019462",
+      "top_score": 0.2653,
+      "shortlist_count": 14,
+      "geo_distance_meters": 93.3943
+    },
+    {
+      "external_listing_id": "watercolor-1785-e-co-hwy-30a-unit-303-1312",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2651,
+      "shortlist_count": 2,
+      "geo_distance_meters": 70.4495
+    },
+    {
+      "external_listing_id": "watercolor-beach-haven-604-western-lake-drive-1282",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.2651,
+      "shortlist_count": 3,
+      "geo_distance_meters": 118.3336
+    },
+    {
+      "external_listing_id": "watercolor-slice-of-30a-1680-e-county-hwy-30a-103-249",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.265,
+      "shortlist_count": 4,
+      "geo_distance_meters": 87.5541
+    },
+    {
+      "external_listing_id": "seagrove-beach-paradise-city-115-santa-clara-803",
+      "top_vrbo_ref_id": "123835016",
+      "top_score": 0.2646,
+      "shortlist_count": 4,
+      "geo_distance_meters": 61.8117
+    },
+    {
+      "external_listing_id": "seagrove-she-winds-3329-east-co-hwy-30a-834",
+      "top_vrbo_ref_id": "33691935",
+      "top_score": 0.2646,
+      "shortlist_count": 8,
+      "geo_distance_meters": 59.4708
+    },
+    {
+      "external_listing_id": "watercolor-11-watercolor-blvd-w-101-1160",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.2644,
+      "shortlist_count": 6,
+      "geo_distance_meters": 85.7153
+    },
+    {
+      "external_listing_id": "seaside-forget-me-not-795-forest-street-874",
+      "top_vrbo_ref_id": "21709655",
+      "top_score": 0.2642,
+      "shortlist_count": 11,
+      "geo_distance_meters": 141.874
+    },
+    {
+      "external_listing_id": "watercolor-beachside-22-1848-e-co-hwy-30a-1147",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2642,
+      "shortlist_count": 2,
+      "geo_distance_meters": 101.5017
+    },
+    {
+      "external_listing_id": "seagrove-beach-ocean-pearl-67-s-ryan-street-852",
+      "top_vrbo_ref_id": "67320337",
+      "top_score": 0.264,
+      "shortlist_count": 9,
+      "geo_distance_meters": 14.0841
+    },
+    {
+      "external_listing_id": "watercolor-seabreeze-5-bluestem-lane-1279",
+      "top_vrbo_ref_id": "73026781",
+      "top_score": 0.264,
+      "shortlist_count": 1,
+      "geo_distance_meters": 142.0974
+    },
+    {
+      "external_listing_id": "watercolor-watercolor-me-happy-1267-western-lake-drive-1173",
+      "top_vrbo_ref_id": "36353284",
+      "top_score": 0.2639,
+      "shortlist_count": 9,
+      "geo_distance_meters": 143.5314
+    },
+    {
+      "external_listing_id": "watercolor-11-watercolor-blvd-w-201-1162",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.2635,
+      "shortlist_count": 6,
+      "geo_distance_meters": 85.6152
+    },
+    {
+      "external_listing_id": "dune-allen-sol-sisters-119-baird-road-356",
+      "top_vrbo_ref_id": "27157778",
+      "top_score": 0.2634,
+      "shortlist_count": 7,
+      "geo_distance_meters": 104.4824
+    },
+    {
+      "external_listing_id": "watercolor-beachside-17-1848-e-co-hwy-30a-1145",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2634,
+      "shortlist_count": 2,
+      "geo_distance_meters": 97.8898
+    },
+    {
+      "external_listing_id": "seacrest-beach-our-blue-beso-58-cobia-run-east-189",
+      "top_vrbo_ref_id": "72284203",
+      "top_score": 0.2631,
+      "shortlist_count": 11,
+      "geo_distance_meters": 78.5445
+    },
+    {
+      "external_listing_id": "seagrove-seaglass-22-camelot-lane-822",
+      "top_vrbo_ref_id": "108403432",
+      "top_score": 0.2631,
+      "shortlist_count": 14,
+      "geo_distance_meters": 85.9592
+    },
+    {
+      "external_listing_id": "seagrove-beach-no-worries-61-n-ryan-st-225",
+      "top_vrbo_ref_id": "21666454",
+      "top_score": 0.263,
+      "shortlist_count": 13,
+      "geo_distance_meters": 118.1827
+    },
+    {
+      "external_listing_id": "watercolor-a-coastal-indulgence-89-running-oak-circle-1316",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.263,
+      "shortlist_count": 6,
+      "geo_distance_meters": 109.8809
+    },
+    {
+      "external_listing_id": "watersound-bella-vista-81-south-watch-tower-1367",
+      "top_vrbo_ref_id": "27384074",
+      "top_score": 0.263,
+      "shortlist_count": 3,
+      "geo_distance_meters": 64.3448
+    },
+    {
+      "external_listing_id": "rosemary-beach-171-e-kingston-road-715",
+      "top_vrbo_ref_id": "102108659",
+      "top_score": 0.2628,
+      "shortlist_count": 18,
+      "geo_distance_meters": 65.915
+    },
+    {
+      "external_listing_id": "watercolor-sunny-lane-282-spartina-circle-1225",
+      "top_vrbo_ref_id": "78696966",
+      "top_score": 0.2625,
+      "shortlist_count": 7,
+      "geo_distance_meters": 21.5117
+    },
+    {
+      "external_listing_id": "watercolor-happy-ours-18-mistflower-lane-1206",
+      "top_vrbo_ref_id": "107859721",
+      "top_score": 0.2624,
+      "shortlist_count": 2,
+      "geo_distance_meters": 107.5384
+    },
+    {
+      "external_listing_id": "watercolor-97-running-oak-1323",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.2622,
+      "shortlist_count": 7,
+      "geo_distance_meters": 126.4208
+    },
+    {
+      "external_listing_id": "watercolor-our-happy-place-12-blazing-star-drive-3008",
+      "top_vrbo_ref_id": "125177431",
+      "top_score": 0.2621,
+      "shortlist_count": 1,
+      "geo_distance_meters": 108.814
+    },
+    {
+      "external_listing_id": "watercolor-ohana-1680-county-hwy-30a-unit-302-1301",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.2619,
+      "shortlist_count": 4,
+      "geo_distance_meters": 85.5187
+    },
+    {
+      "external_listing_id": "rosemary-beach-the-salty-rose-49-hamilton-lane-carriage-house-746",
+      "top_vrbo_ref_id": "88765444",
+      "top_score": 0.2618,
+      "shortlist_count": 10,
+      "geo_distance_meters": 131.414
+    },
+    {
+      "external_listing_id": "watercolor-188-spartina-circle-1205",
+      "top_vrbo_ref_id": "121327810",
+      "top_score": 0.2618,
+      "shortlist_count": 6,
+      "geo_distance_meters": 50.4635
+    },
+    {
+      "external_listing_id": "watercolor-yolo-800-western-lake-1302",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2618,
+      "shortlist_count": 3,
+      "geo_distance_meters": 10.7
+    },
+    {
+      "external_listing_id": "watercolor-72-buttercup-street-1291",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.2617,
+      "shortlist_count": 8,
+      "geo_distance_meters": 72.0398
+    },
+    {
+      "external_listing_id": "watercolor-buttercup-bliss-127-buttercup-street-1175",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2616,
+      "shortlist_count": 5,
+      "geo_distance_meters": 126.4158
+    },
+    {
+      "external_listing_id": "watersound-97-s-founders-lane-1373",
+      "top_vrbo_ref_id": "27384074",
+      "top_score": 0.2615,
+      "shortlist_count": 3,
+      "geo_distance_meters": 114.4222
+    },
+    {
+      "external_listing_id": "watercolor-all-decked-out-425-west-lake-forest-1259",
+      "top_vrbo_ref_id": "92606368",
+      "top_score": 0.2614,
+      "shortlist_count": 6,
+      "geo_distance_meters": 105.1559
+    },
+    {
+      "external_listing_id": "watercolor-beachside-3-1848-e-co-hwy-30a-1148",
+      "top_vrbo_ref_id": "53331761",
+      "top_score": 0.2614,
+      "shortlist_count": 2,
+      "geo_distance_meters": 39.3525
+    },
+    {
+      "external_listing_id": "seaside-sisters-three-by-the-sea-2056-e-county-highway-30a-871",
+      "top_vrbo_ref_id": "105552962",
+      "top_score": 0.2613,
+      "shortlist_count": 7,
+      "geo_distance_meters": 91.5664
+    },
+    {
+      "external_listing_id": "watercolor-outta-the-blue-32-bluestem-lane-1238",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.2613,
+      "shortlist_count": 2,
+      "geo_distance_meters": 140.0274
+    },
+    {
+      "external_listing_id": "watersound-41-n-founders-lane-1355",
+      "top_vrbo_ref_id": "127171443",
+      "top_score": 0.2612,
+      "shortlist_count": 2,
+      "geo_distance_meters": 27.8432
+    },
+    {
+      "external_listing_id": "watersound-73-s-founders-lane-1365",
+      "top_vrbo_ref_id": "127171443",
+      "top_score": 0.2612,
+      "shortlist_count": 3,
+      "geo_distance_meters": 77.7796
+    },
+    {
+      "external_listing_id": "grayton-beach-four-fish-cottage-20-cottage-street-169",
+      "top_vrbo_ref_id": "21716320",
+      "top_score": 0.2611,
+      "shortlist_count": 6,
+      "geo_distance_meters": 11.035
+    },
+    {
+      "external_listing_id": "seaside-the-truman-house-31-natchez-street-2962",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.261,
+      "shortlist_count": 5,
+      "geo_distance_meters": 145.2505
+    },
+    {
+      "external_listing_id": "watercolor-far-niente-120-flatwood-street-1169",
+      "top_vrbo_ref_id": "73026781",
+      "top_score": 0.2608,
+      "shortlist_count": 4,
+      "geo_distance_meters": 114.4899
+    },
+    {
+      "external_listing_id": "watercolor-the-place-to-be-8-crossvine-circle-1317",
+      "top_vrbo_ref_id": "107600028",
+      "top_score": 0.2607,
+      "shortlist_count": 2,
+      "geo_distance_meters": 103.6007
+    },
+    {
+      "external_listing_id": "seagrove-beach-liberty-by-the-sea-68-chelsea-loop-road-853",
+      "top_vrbo_ref_id": "21666454",
+      "top_score": 0.26,
+      "shortlist_count": 14,
+      "geo_distance_meters": 147.8783
+    },
+    {
+      "external_listing_id": "watercolor-79-dandelion-1297",
+      "top_vrbo_ref_id": "22128458",
+      "top_score": 0.26,
+      "shortlist_count": 3,
+      "geo_distance_meters": 121.6432
+    },
+    {
+      "external_listing_id": "grayton-beach-grayton-bliss-120-banfill-street-167",
+      "top_vrbo_ref_id": "21709361",
+      "top_score": 0.2596,
+      "shortlist_count": 10,
+      "geo_distance_meters": 129.0786
+    },
+    {
+      "external_listing_id": "watercolor-family-thyme-1295-western-lake-drive-1180",
+      "top_vrbo_ref_id": "21699208",
+      "top_score": 0.2596,
+      "shortlist_count": 7,
+      "geo_distance_meters": 68.9612
+    },
+    {
+      "external_listing_id": "watercolor-36-mist-flower-1248",
+      "top_vrbo_ref_id": "107859721",
+      "top_score": 0.2594,
+      "shortlist_count": 6,
+      "geo_distance_meters": 69.522
+    },
+    {
+      "external_listing_id": "seaside-sea-ya-real-soon-73-odessa-street-873",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2593,
+      "shortlist_count": 8,
+      "geo_distance_meters": 79.8895
+    },
+    {
+      "external_listing_id": "seaside-sister-2-125-quincy-circle-unit-b-869",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.2593,
+      "shortlist_count": 2,
+      "geo_distance_meters": 96.83
+    },
+    {
+      "external_listing_id": "rosemary-beach-savannah-loft-5-main-street-unit-1c-755",
+      "top_vrbo_ref_id": "100791798",
+      "top_score": 0.259,
+      "shortlist_count": 15,
+      "geo_distance_meters": 79.9887
+    },
+    {
+      "external_listing_id": "watercolor-beachfront-21-1848-e-co-hwy-30a-1146",
+      "top_vrbo_ref_id": "53331761",
+      "top_score": 0.259,
+      "shortlist_count": 2,
+      "geo_distance_meters": 85.4596
+    },
+    {
+      "external_listing_id": "watercolor-pelicans-by-the-sea-30-watercolor-blvd-north-301-1233",
+      "top_vrbo_ref_id": "78392517",
+      "top_score": 0.2588,
+      "shortlist_count": 4,
+      "geo_distance_meters": 95.9963
+    },
+    {
+      "external_listing_id": "rosemary-beach-memories-on-water-325-west-water-street-carriage-house-735",
+      "top_vrbo_ref_id": "112498513",
+      "top_score": 0.2584,
+      "shortlist_count": 30,
+      "geo_distance_meters": 78.3548
+    },
+    {
+      "external_listing_id": "rosemary-beach-pura-vida-174-round-road-716",
+      "top_vrbo_ref_id": "45732331",
+      "top_score": 0.2584,
+      "shortlist_count": 18,
+      "geo_distance_meters": 82.7621
+    },
+    {
+      "external_listing_id": "seagrove-time-well-spent-109-santa-clara-street-801",
+      "top_vrbo_ref_id": "99932567",
+      "top_score": 0.2584,
+      "shortlist_count": 6,
+      "geo_distance_meters": 26.7939
+    },
+    {
+      "external_listing_id": "watercolor-104-buttercup-street-1156",
+      "top_vrbo_ref_id": "78392517",
+      "top_score": 0.2583,
+      "shortlist_count": 8,
+      "geo_distance_meters": 123.3726
+    },
+    {
+      "external_listing_id": "watercolor-113-pond-cypress-way-1164",
+      "top_vrbo_ref_id": "78696966",
+      "top_score": 0.2583,
+      "shortlist_count": 4,
+      "geo_distance_meters": 117.9402
+    },
+    {
+      "external_listing_id": "rosemary-beach-pura-vida-174-round-road-carriage-house-717",
+      "top_vrbo_ref_id": "64695746",
+      "top_score": 0.2582,
+      "shortlist_count": 18,
+      "geo_distance_meters": 70.9047
+    },
+    {
+      "external_listing_id": "watercolor-100-flatwood-street-2952",
+      "top_vrbo_ref_id": "73026781",
+      "top_score": 0.2582,
+      "shortlist_count": 5,
+      "geo_distance_meters": 98.7779
+    },
+    {
+      "external_listing_id": "dune-allen-dancing-in-the-sand-15-fort-panic-road-359",
+      "top_vrbo_ref_id": "118285158",
+      "top_score": 0.2581,
+      "shortlist_count": 1,
+      "geo_distance_meters": 45.1477
+    },
+    {
+      "external_listing_id": "seaside-sister-1-125-quincy-circle-unit-a-868",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.2581,
+      "shortlist_count": 2,
+      "geo_distance_meters": 96.3115
+    },
+    {
+      "external_listing_id": "watercolor-69-running-oak-circle-1289",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.2581,
+      "shortlist_count": 8,
+      "geo_distance_meters": 123.6969
+    },
+    {
+      "external_listing_id": "seagrove-beach-sea-arbor-2940-east-county-highway-30a-2998",
+      "top_vrbo_ref_id": "119767715",
+      "top_score": 0.2578,
+      "shortlist_count": 12,
+      "geo_distance_meters": 122.1946
+    },
+    {
+      "external_listing_id": "watercolor-summer-house-memory-26-mist-flower-lane-1221",
+      "top_vrbo_ref_id": "107859721",
+      "top_score": 0.2575,
+      "shortlist_count": 6,
+      "geo_distance_meters": 79.2148
+    },
+    {
+      "external_listing_id": "watercolor-37-royal-fern-way-1251",
+      "top_vrbo_ref_id": "83056963",
+      "top_score": 0.2573,
+      "shortlist_count": 1,
+      "geo_distance_meters": 93.7492
+    },
+    {
+      "external_listing_id": "seagrove-sunset-sands-3325-east-co-hwy-30a-833",
+      "top_vrbo_ref_id": "70554230",
+      "top_score": 0.257,
+      "shortlist_count": 12,
+      "geo_distance_meters": 150.5447
+    },
+    {
+      "external_listing_id": "watercolor-mint-julep-378-western-lake-drive-1250",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.257,
+      "shortlist_count": 2,
+      "geo_distance_meters": 52.3903
+    },
+    {
+      "external_listing_id": "seagrove-beach-feeling-tipsea-67-montigo-avenue-851",
+      "top_vrbo_ref_id": "99932567",
+      "top_score": 0.2569,
+      "shortlist_count": 8,
+      "geo_distance_meters": 122.1435
+    },
+    {
+      "external_listing_id": "watercolor-1337-western-lake-drive-1185",
+      "top_vrbo_ref_id": "21699208",
+      "top_score": 0.2569,
+      "shortlist_count": 6,
+      "geo_distance_meters": 139.1087
+    },
+    {
+      "external_listing_id": "watercolor-nostra-vita-335-needlerush-drive-1239",
+      "top_vrbo_ref_id": "95796753",
+      "top_score": 0.2568,
+      "shortlist_count": 3,
+      "geo_distance_meters": 81.1738
+    },
+    {
+      "external_listing_id": "watercolor-louisiana-purchase-95-dandelion-drive-1322",
+      "top_vrbo_ref_id": "22128458",
+      "top_score": 0.2567,
+      "shortlist_count": 1,
+      "geo_distance_meters": 59.9276
+    },
+    {
+      "external_listing_id": "inlet-beach-somewhere-in-the-sun-15-pompano-street-172",
+      "top_vrbo_ref_id": "107045566",
+      "top_score": 0.2566,
+      "shortlist_count": 2,
+      "geo_distance_meters": 37.9988
+    },
+    {
+      "external_listing_id": "watercolor-sea-n-is-believ-en-153-silver-laurel-way-1201",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.2565,
+      "shortlist_count": 5,
+      "geo_distance_meters": 15.2325
+    },
+    {
+      "external_listing_id": "seagrove-beach-34-seagrove-village-dr-220",
+      "top_vrbo_ref_id": "32888557",
+      "top_score": 0.2563,
+      "shortlist_count": 4,
+      "geo_distance_meters": 118.4587
+    },
+    {
+      "external_listing_id": "watercolor-11-watercolor-blvd-w-102-1161",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.2563,
+      "shortlist_count": 5,
+      "geo_distance_meters": 89.4856
+    },
+    {
+      "external_listing_id": "watercolor-magnolia-house-592-western-lake-drive-247",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.2563,
+      "shortlist_count": 4,
+      "geo_distance_meters": 136.2162
+    },
+    {
+      "external_listing_id": "seagrove-our-happy-place-177-san-roy-rd-816",
+      "top_vrbo_ref_id": "117194986",
+      "top_score": 0.2562,
+      "shortlist_count": 1,
+      "geo_distance_meters": 148.3468
+    },
+    {
+      "external_listing_id": "watercolor-384-red-cedar-way-1253",
+      "top_vrbo_ref_id": "74511199",
+      "top_score": 0.256,
+      "shortlist_count": 7,
+      "geo_distance_meters": 113.0027
+    },
+    {
+      "external_listing_id": "seacrest-beach-the-silver-palm-30-silver-maple-drive-2960",
+      "top_vrbo_ref_id": "94223410",
+      "top_score": 0.2558,
+      "shortlist_count": 8,
+      "geo_distance_meters": 52.3987
+    },
+    {
+      "external_listing_id": "dune-allen-white-starlight-5465-west-county-highway-30a-360",
+      "top_vrbo_ref_id": "21706313",
+      "top_score": 0.2556,
+      "shortlist_count": 3,
+      "geo_distance_meters": 49.4816
+    },
+    {
+      "external_listing_id": "watercolor-changes-in-attitude-124-spartina-circle-1172",
+      "top_vrbo_ref_id": "107600028",
+      "top_score": 0.2555,
+      "shortlist_count": 6,
+      "geo_distance_meters": 32.0188
+    },
+    {
+      "external_listing_id": "watersound-moonstone-10-tidepool-lane-1329",
+      "top_vrbo_ref_id": "126166757",
+      "top_score": 0.2554,
+      "shortlist_count": 2,
+      "geo_distance_meters": 56.825
+    },
+    {
+      "external_listing_id": "watercolor-casa-de-buttercup-120-buttercup-street-1168",
+      "top_vrbo_ref_id": "78392517",
+      "top_score": 0.2553,
+      "shortlist_count": 6,
+      "geo_distance_meters": 147.4067
+    },
+    {
+      "external_listing_id": "watercolor-30clay-1303-western-lake-drive-1182",
+      "top_vrbo_ref_id": "57272527",
+      "top_score": 0.2551,
+      "shortlist_count": 5,
+      "geo_distance_meters": 91.7017
+    },
+    {
+      "external_listing_id": "watercolor-southside-serenity-1680-e-county-hwy-30a-102-1299",
+      "top_vrbo_ref_id": "78392517",
+      "top_score": 0.2551,
+      "shortlist_count": 4,
+      "geo_distance_meters": 93.0978
+    },
+    {
+      "external_listing_id": "watersound-17-keel-court-1334",
+      "top_vrbo_ref_id": "126166757",
+      "top_score": 0.2551,
+      "shortlist_count": 2,
+      "geo_distance_meters": 52.8051
+    },
+    {
+      "external_listing_id": "seaside-640-suite-magnolia-ii-forest-street-234",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.2547,
+      "shortlist_count": 4,
+      "geo_distance_meters": 84.2527
+    },
+    {
+      "external_listing_id": "watercolor-big-view-ii-431-east-royal-fern-way-1260",
+      "top_vrbo_ref_id": "112894312",
+      "top_score": 0.2544,
+      "shortlist_count": 1,
+      "geo_distance_meters": 147.9023
+    },
+    {
+      "external_listing_id": "seacrest-beach-heaven-on-30a-145-clareon-drive-771",
+      "top_vrbo_ref_id": "124829823",
+      "top_score": 0.2539,
+      "shortlist_count": 3,
+      "geo_distance_meters": 114.6879
+    },
+    {
+      "external_listing_id": "watercolor-quinnessential-cottage-22-winterberry-circle-1215",
+      "top_vrbo_ref_id": "100746045",
+      "top_score": 0.2535,
+      "shortlist_count": 1,
+      "geo_distance_meters": 29.7361
+    },
+    {
+      "external_listing_id": "watersound-eureka-at-watersound-69-w-yacht-pond-lane-1364",
+      "top_vrbo_ref_id": "126166757",
+      "top_score": 0.2533,
+      "shortlist_count": 1,
+      "geo_distance_meters": 142.6527
+    },
+    {
+      "external_listing_id": "seagrove-beach-please-327-eastern-lake-road-main-house-831",
+      "top_vrbo_ref_id": "24074594",
+      "top_score": 0.2531,
+      "shortlist_count": 17,
+      "geo_distance_meters": 56.3259
+    },
+    {
+      "external_listing_id": "watercolor-the-cottage-on-scrub-oak-235-scrub-oak-circle-1217",
+      "top_vrbo_ref_id": "95796753",
+      "top_score": 0.253,
+      "shortlist_count": 5,
+      "geo_distance_meters": 143.9043
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-olive-at-the-beach-122-sand-dunes-137",
+      "top_vrbo_ref_id": "125420139",
+      "top_score": 0.2529,
+      "shortlist_count": 8,
+      "geo_distance_meters": 86.2895
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-sandpiper-blue-43-coastal-grove-way-unit-a-2827",
+      "top_vrbo_ref_id": "61403806",
+      "top_score": 0.2529,
+      "shortlist_count": 9,
+      "geo_distance_meters": 97.3296
+    },
+    {
+      "external_listing_id": "rosemary-beach-blue-door-cottage-121-round-road-carriage-house-703",
+      "top_vrbo_ref_id": "120752174",
+      "top_score": 0.2529,
+      "shortlist_count": 14,
+      "geo_distance_meters": 130.2225
+    },
+    {
+      "external_listing_id": "seacrest-beach-gotta-lovitt-150-walton-gulfview-drive-772",
+      "top_vrbo_ref_id": "33980196",
+      "top_score": 0.2528,
+      "shortlist_count": 4,
+      "geo_distance_meters": 23.5241
+    },
+    {
+      "external_listing_id": "watercolor-34-crossvine-circle-1241",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.2528,
+      "shortlist_count": 3,
+      "geo_distance_meters": 119.4074
+    },
+    {
+      "external_listing_id": "seagrove-pura-vida-167-san-roy-rd-814",
+      "top_vrbo_ref_id": "117194986",
+      "top_score": 0.2527,
+      "shortlist_count": 1,
+      "geo_distance_meters": 135.1154
+    },
+    {
+      "external_listing_id": "watercolor-27-watercolor-blvd-w-102-1222",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.2527,
+      "shortlist_count": 6,
+      "geo_distance_meters": 62.4453
+    },
+    {
+      "external_listing_id": "watercolor-62-royal-fern-way-248",
+      "top_vrbo_ref_id": "89855255",
+      "top_score": 0.2527,
+      "shortlist_count": 2,
+      "geo_distance_meters": 136.312
+    },
+    {
+      "external_listing_id": "seagrove-endless-view-74-majestica-circle-858",
+      "top_vrbo_ref_id": "126471070",
+      "top_score": 0.2525,
+      "shortlist_count": 6,
+      "geo_distance_meters": 99.6695
+    },
+    {
+      "external_listing_id": "watercolor-10-lyonia-lane-1159",
+      "top_vrbo_ref_id": "22128458",
+      "top_score": 0.2525,
+      "shortlist_count": 1,
+      "geo_distance_meters": 88.6107
+    },
+    {
+      "external_listing_id": "watersound-rose-hall-11-compass-rose-way-1330",
+      "top_vrbo_ref_id": "127171443",
+      "top_score": 0.2524,
+      "shortlist_count": 2,
+      "geo_distance_meters": 56.3679
+    },
+    {
+      "external_listing_id": "seaside-640-suite-magnolia-i-forest-street-232",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.2523,
+      "shortlist_count": 4,
+      "geo_distance_meters": 84.2527
+    },
+    {
+      "external_listing_id": "watercolor-478-east-royal-fern-1271",
+      "top_vrbo_ref_id": "112894312",
+      "top_score": 0.2523,
+      "shortlist_count": 1,
+      "geo_distance_meters": 99.6813
+    },
+    {
+      "external_listing_id": "watercolor-fins-up-1640-e-co-hwy-30a-101-1254",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.2523,
+      "shortlist_count": 3,
+      "geo_distance_meters": 56.032
+    },
+    {
+      "external_listing_id": "watersound-10-compass-point-way-1328",
+      "top_vrbo_ref_id": "127171443",
+      "top_score": 0.2517,
+      "shortlist_count": 1,
+      "geo_distance_meters": 128.2407
+    },
+    {
+      "external_listing_id": "watercolor-1640-e-county-hwy-30a-102-1255",
+      "top_vrbo_ref_id": "78392517",
+      "top_score": 0.2516,
+      "shortlist_count": 3,
+      "geo_distance_meters": 84.4955
+    },
+    {
+      "external_listing_id": "watercolor-peaceful-pause-435-west-lake-forest-1262",
+      "top_vrbo_ref_id": "92606368",
+      "top_score": 0.2515,
+      "shortlist_count": 6,
+      "geo_distance_meters": 120.3357
+    },
+    {
+      "external_listing_id": "watercolor-over-under-45-watercolor-blvd-w-104-1266",
+      "top_vrbo_ref_id": "72978057",
+      "top_score": 0.2512,
+      "shortlist_count": 1,
+      "geo_distance_meters": 97.4148
+    },
+    {
+      "external_listing_id": "watercolor-seacolor-838-western-lake-drive-1308",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.2512,
+      "shortlist_count": 5,
+      "geo_distance_meters": 115.3737
+    },
+    {
+      "external_listing_id": "seacrest-beach-barefoot-bungalow-87-the-greenway-loop-196",
+      "top_vrbo_ref_id": "97038479",
+      "top_score": 0.2511,
+      "shortlist_count": 20,
+      "geo_distance_meters": 138.3323
+    },
+    {
+      "external_listing_id": "watercolor-hello-sunshine-20-blazing-star-1209",
+      "top_vrbo_ref_id": "125177431",
+      "top_score": 0.2511,
+      "shortlist_count": 2,
+      "geo_distance_meters": 100.1354
+    },
+    {
+      "external_listing_id": "watersound-83-west-salt-box-lane-1368",
+      "top_vrbo_ref_id": "126166757",
+      "top_score": 0.2511,
+      "shortlist_count": 3,
+      "geo_distance_meters": 108.6546
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-seas-the-day-108-gulfview-way-3028",
+      "top_vrbo_ref_id": "66256721",
+      "top_score": 0.2507,
+      "shortlist_count": 4,
+      "geo_distance_meters": 42.8199
+    },
+    {
+      "external_listing_id": "watercolor-believing-for-47-royal-fern-way-1273",
+      "top_vrbo_ref_id": "83056963",
+      "top_score": 0.2504,
+      "shortlist_count": 1,
+      "geo_distance_meters": 75.5232
+    },
+    {
+      "external_listing_id": "watercolor-sea-haven-55-running-oak-circle-1275",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.2504,
+      "shortlist_count": 8,
+      "geo_distance_meters": 125.3474
+    },
+    {
+      "external_listing_id": "watercolor-37-winterberry-circle-1252",
+      "top_vrbo_ref_id": "100746045",
+      "top_score": 0.2503,
+      "shortlist_count": 1,
+      "geo_distance_meters": 96.4724
+    },
+    {
+      "external_listing_id": "seacrest-beach-pura-vida-43-trigger-trail-east-188",
+      "top_vrbo_ref_id": "47014257",
+      "top_score": 0.2502,
+      "shortlist_count": 11,
+      "geo_distance_meters": 109.1812
+    },
+    {
+      "external_listing_id": "seagrove-beach-bonita-by-mar-80-montigo-avenue-862",
+      "top_vrbo_ref_id": "123829372",
+      "top_score": 0.2502,
+      "shortlist_count": 5,
+      "geo_distance_meters": 15.6797
+    },
+    {
+      "external_listing_id": "seacrest-beach-elysee-court-85-elysee-court-793",
+      "top_vrbo_ref_id": "77967117",
+      "top_score": 0.2496,
+      "shortlist_count": 2,
+      "geo_distance_meters": 77.3308
+    },
+    {
+      "external_listing_id": "dune-allen-allen-overlook-98-woodward-drive-362",
+      "top_vrbo_ref_id": "27157778",
+      "top_score": 0.2495,
+      "shortlist_count": 10,
+      "geo_distance_meters": 137.3363
+    },
+    {
+      "external_listing_id": "watersound-27-compass-rose-way-1350",
+      "top_vrbo_ref_id": "127171443",
+      "top_score": 0.2495,
+      "shortlist_count": 2,
+      "geo_distance_meters": 72.5716
+    },
+    {
+      "external_listing_id": "seagrove-beach-please-327-eastern-lake-road-829",
+      "top_vrbo_ref_id": "108403432",
+      "top_score": 0.2494,
+      "shortlist_count": 16,
+      "geo_distance_meters": 46.8876
+    },
+    {
+      "external_listing_id": "seagrove-seaside-views-320-w-grove-ave-828",
+      "top_vrbo_ref_id": "108051498",
+      "top_score": 0.2493,
+      "shortlist_count": 21,
+      "geo_distance_meters": 132.3161
+    },
+    {
+      "external_listing_id": "seagrove-beach-30a-poolside-paradise-71-santa-clara-street-226",
+      "top_vrbo_ref_id": "99932567",
+      "top_score": 0.2492,
+      "shortlist_count": 6,
+      "geo_distance_meters": 3.2893
+    },
+    {
+      "external_listing_id": "watercolor-10-watercolor-blvd-e-301-1153",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2492,
+      "shortlist_count": 2,
+      "geo_distance_meters": 137.7756
+    },
+    {
+      "external_listing_id": "watercolor-sea-amigos-46-watercolor-blvd-e-102-245",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.2492,
+      "shortlist_count": 6,
+      "geo_distance_meters": 99.0676
+    },
+    {
+      "external_listing_id": "seagrove-a-little-salty-140-canal-street-807",
+      "top_vrbo_ref_id": "63675804",
+      "top_score": 0.249,
+      "shortlist_count": 7,
+      "geo_distance_meters": 146.3667
+    },
+    {
+      "external_listing_id": "seagrove-utopian-village-3319-east-county-highway-30a-832",
+      "top_vrbo_ref_id": "33691935",
+      "top_score": 0.2485,
+      "shortlist_count": 7,
+      "geo_distance_meters": 67.3842
+    },
+    {
+      "external_listing_id": "seacrest-beach-158-geoff-wilder-774",
+      "top_vrbo_ref_id": "55201642",
+      "top_score": 0.2483,
+      "shortlist_count": 15,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "watersound-425-coopersmith-lane-1356",
+      "top_vrbo_ref_id": "127171443",
+      "top_score": 0.2483,
+      "shortlist_count": 2,
+      "geo_distance_meters": 74.2322
+    },
+    {
+      "external_listing_id": "rosemary-beach-jolly-roger-35-town-hall-road-carriage-house-2979",
+      "top_vrbo_ref_id": "112498513",
+      "top_score": 0.2482,
+      "shortlist_count": 22,
+      "geo_distance_meters": 144.6271
+    },
+    {
+      "external_listing_id": "watercolor-just-dandy-167-dandelion-drive-1204",
+      "top_vrbo_ref_id": "22128458",
+      "top_score": 0.2474,
+      "shortlist_count": 1,
+      "geo_distance_meters": 42.4707
+    },
+    {
+      "external_listing_id": "watercolor-1785-e-county-hwy-30a-302-1311",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2472,
+      "shortlist_count": 2,
+      "geo_distance_meters": 69.3937
+    },
+    {
+      "external_listing_id": "watercolor-415-west-lake-forest-drive-1257",
+      "top_vrbo_ref_id": "123813979",
+      "top_score": 0.2471,
+      "shortlist_count": 6,
+      "geo_distance_meters": 101.5444
+    },
+    {
+      "external_listing_id": "watercolor-ken-s-cottage-221-lake-forest-drive-1212",
+      "top_vrbo_ref_id": "121327810",
+      "top_score": 0.247,
+      "shortlist_count": 4,
+      "geo_distance_meters": 43.5649
+    },
+    {
+      "external_listing_id": "seacrest-beach-183-geoff-wilder-lane-777",
+      "top_vrbo_ref_id": "124352961",
+      "top_score": 0.2461,
+      "shortlist_count": 24,
+      "geo_distance_meters": 84.7007
+    },
+    {
+      "external_listing_id": "seagrove-beach-sully-s-by-the-sea-435-montigo-avenue-n-842",
+      "top_vrbo_ref_id": "103075054",
+      "top_score": 0.2461,
+      "shortlist_count": 1,
+      "geo_distance_meters": 109.64
+    },
+    {
+      "external_listing_id": "watersound-summer-wind-40-watch-tower-lane-1354",
+      "top_vrbo_ref_id": "27384074",
+      "top_score": 0.2461,
+      "shortlist_count": 3,
+      "geo_distance_meters": 122.4258
+    },
+    {
+      "external_listing_id": "seagrove-beach-218-s-gulf-drive-821",
+      "top_vrbo_ref_id": "119766646",
+      "top_score": 0.246,
+      "shortlist_count": 6,
+      "geo_distance_meters": 1.0173
+    },
+    {
+      "external_listing_id": "seagrove-sunset-grove-30a-69-e-grove-ave-2139",
+      "top_vrbo_ref_id": "87497120",
+      "top_score": 0.2457,
+      "shortlist_count": 6,
+      "geo_distance_meters": 106.1531
+    },
+    {
+      "external_listing_id": "grayton-beach-magnolia-dream-205-magnolia-street-412",
+      "top_vrbo_ref_id": "59964748",
+      "top_score": 0.2456,
+      "shortlist_count": 10,
+      "geo_distance_meters": 145.6117
+    },
+    {
+      "external_listing_id": "seagrove-23-palms-431-eastern-lake-rd-841",
+      "top_vrbo_ref_id": "123070691",
+      "top_score": 0.2454,
+      "shortlist_count": 6,
+      "geo_distance_meters": 99.4975
+    },
+    {
+      "external_listing_id": "seagrove-beach-wine-d-down-498-eastern-lake-rd-845",
+      "top_vrbo_ref_id": "123070691",
+      "top_score": 0.2452,
+      "shortlist_count": 5,
+      "geo_distance_meters": 111.6467
+    },
+    {
+      "external_listing_id": "watersound-life-by-the-sea-36-n-founders-lane-1352",
+      "top_vrbo_ref_id": "127171443",
+      "top_score": 0.2452,
+      "shortlist_count": 1,
+      "geo_distance_meters": 102.174
+    },
+    {
+      "external_listing_id": "watercolor-fun-times-1660-county-hwy-30-a-unit-102-1281",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.245,
+      "shortlist_count": 4,
+      "geo_distance_meters": 61.7302
+    },
+    {
+      "external_listing_id": "seagrove-coast-is-clear-35-camellia-street-837",
+      "top_vrbo_ref_id": "95388266",
+      "top_score": 0.2446,
+      "shortlist_count": 13,
+      "geo_distance_meters": 35.3843
+    },
+    {
+      "external_listing_id": "watercolor-20-goldenrod-circle-301-1207",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.2446,
+      "shortlist_count": 3,
+      "geo_distance_meters": 143.6276
+    },
+    {
+      "external_listing_id": "rosemary-beach-the-salty-rose-49-hamilton-lane-main-house-747",
+      "top_vrbo_ref_id": "88765444",
+      "top_score": 0.2442,
+      "shortlist_count": 10,
+      "geo_distance_meters": 131.414
+    },
+    {
+      "external_listing_id": "rosemary-mercado-3c-82-s-barrett-sq-753",
+      "top_vrbo_ref_id": "111653408",
+      "top_score": 0.2442,
+      "shortlist_count": 18,
+      "geo_distance_meters": 130.8899
+    },
+    {
+      "external_listing_id": "watercolor-128-silver-laurel-way-1179",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.244,
+      "shortlist_count": 4,
+      "geo_distance_meters": 55.1325
+    },
+    {
+      "external_listing_id": "watersound-the-pearl-of-watersound-130-coopersmith-lane-1331",
+      "top_vrbo_ref_id": "126166757",
+      "top_score": 0.2437,
+      "shortlist_count": 2,
+      "geo_distance_meters": 147.2018
+    },
+    {
+      "external_listing_id": "seacrest-beach-villa-paradiso-193-geoff-wilder-lane-2973",
+      "top_vrbo_ref_id": "124352961",
+      "top_score": 0.2436,
+      "shortlist_count": 23,
+      "geo_distance_meters": 54.6974
+    },
+    {
+      "external_listing_id": "seagrove-sago-sands-202-3668-east-county-hwy-30a-unit-202-215",
+      "top_vrbo_ref_id": "31862904",
+      "top_score": 0.2435,
+      "shortlist_count": 2,
+      "geo_distance_meters": 79.6161
+    },
+    {
+      "external_listing_id": "grayton-beach-absolutely-grayton-309-defuniak-street-414",
+      "top_vrbo_ref_id": "18980007",
+      "top_score": 0.2433,
+      "shortlist_count": 2,
+      "geo_distance_meters": 56.819
+    },
+    {
+      "external_listing_id": "seagrove-beach-salty-cottage-30-chelsea-loop-road-2821",
+      "top_vrbo_ref_id": "67320337",
+      "top_score": 0.2432,
+      "shortlist_count": 12,
+      "geo_distance_meters": 78.8336
+    },
+    {
+      "external_listing_id": "seagrove-beach-3036-east-county-highway-30a-2996",
+      "top_vrbo_ref_id": "107898750",
+      "top_score": 0.2427,
+      "shortlist_count": 7,
+      "geo_distance_meters": 95.4181
+    },
+    {
+      "external_listing_id": "watercolor-92-needlerush-drive-1320",
+      "top_vrbo_ref_id": "113514628",
+      "top_score": 0.2426,
+      "shortlist_count": 4,
+      "geo_distance_meters": 130.7607
+    },
+    {
+      "external_listing_id": "watercolor-isle-be-back-151-mystic-cobalt-1199",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.2423,
+      "shortlist_count": 4,
+      "geo_distance_meters": 123.1468
+    },
+    {
+      "external_listing_id": "watersound-seaglass-152-e-yacht-pond-lane-1333",
+      "top_vrbo_ref_id": "123357400",
+      "top_score": 0.2421,
+      "shortlist_count": 2,
+      "geo_distance_meters": 133.1193
+    },
+    {
+      "external_listing_id": "seagrove-beach-wild-blue-119-dune-estates-blvd-1441",
+      "top_vrbo_ref_id": "114593590",
+      "top_score": 0.2419,
+      "shortlist_count": 3,
+      "geo_distance_meters": 57.429
+    },
+    {
+      "external_listing_id": "seaside-a-ritz-sea-inn-27-quincy-circle-231",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2417,
+      "shortlist_count": 6,
+      "geo_distance_meters": 146.1508
+    },
+    {
+      "external_listing_id": "seagrove-beach-bon-villa-102-dalton-drive-205",
+      "top_vrbo_ref_id": "112145271",
+      "top_score": 0.2415,
+      "shortlist_count": 9,
+      "geo_distance_meters": 72.4017
+    },
+    {
+      "external_listing_id": "watersound-beach-blessings-39-w-yacht-pond-lane-1353",
+      "top_vrbo_ref_id": "126166757",
+      "top_score": 0.2414,
+      "shortlist_count": 1,
+      "geo_distance_meters": 121.8755
+    },
+    {
+      "external_listing_id": "grayton-beach-bahama-breeze-148-gulf-shore-drive-407",
+      "top_vrbo_ref_id": "21717510",
+      "top_score": 0.2411,
+      "shortlist_count": 4,
+      "geo_distance_meters": 77.6487
+    },
+    {
+      "external_listing_id": "seagrove-sun-sational-76-brown-street-859",
+      "top_vrbo_ref_id": "108403432",
+      "top_score": 0.2411,
+      "shortlist_count": 10,
+      "geo_distance_meters": 133.9875
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-bewitching-dunes-10-n-spooky-lane-57",
+      "top_vrbo_ref_id": "113198373",
+      "top_score": 0.2407,
+      "shortlist_count": 2,
+      "geo_distance_meters": 77.7972
+    },
+    {
+      "external_listing_id": "blue-mountain-spooky-blues-48-n-spooky-lane-154",
+      "top_vrbo_ref_id": "27166803",
+      "top_score": 0.2399,
+      "shortlist_count": 4,
+      "geo_distance_meters": 45.952
+    },
+    {
+      "external_listing_id": "dune-allen-boogie-s-bellagio-11-e-seahorse-circle-357",
+      "top_vrbo_ref_id": "109334821",
+      "top_score": 0.2399,
+      "shortlist_count": 3,
+      "geo_distance_meters": 72.8098
+    },
+    {
+      "external_listing_id": "watercolor-come-and-beach-it-87-wisteria-way-1314",
+      "top_vrbo_ref_id": "83056963",
+      "top_score": 0.2399,
+      "shortlist_count": 5,
+      "geo_distance_meters": 82.735
+    },
+    {
+      "external_listing_id": "watercolor-happy-place-6-watercolor-blvd-s-204-1280",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.2397,
+      "shortlist_count": 4,
+      "geo_distance_meters": 130.7931
+    },
+    {
+      "external_listing_id": "seagrove-beach-mcdunes-81-chivas-lane-863",
+      "top_vrbo_ref_id": "114593590",
+      "top_score": 0.2396,
+      "shortlist_count": 2,
+      "geo_distance_meters": 97.196
+    },
+    {
+      "external_listing_id": "watercolor-oh-happy-day-890-western-lake-drive-1315",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.2391,
+      "shortlist_count": 3,
+      "geo_distance_meters": 28.1873
+    },
+    {
+      "external_listing_id": "watersound-compass-point-ii-101-37-compass-pt-way-1392",
+      "top_vrbo_ref_id": "127171443",
+      "top_score": 0.239,
+      "shortlist_count": 1,
+      "geo_distance_meters": 129.6355
+    },
+    {
+      "external_listing_id": "seagrove-st-charles-45-camellia-street-843",
+      "top_vrbo_ref_id": "95388266",
+      "top_score": 0.2387,
+      "shortlist_count": 14,
+      "geo_distance_meters": 42.5083
+    },
+    {
+      "external_listing_id": "watercolor-30-watercolor-boulevard-unit-201-243",
+      "top_vrbo_ref_id": "78392517",
+      "top_score": 0.2386,
+      "shortlist_count": 4,
+      "geo_distance_meters": 93.779
+    },
+    {
+      "external_listing_id": "watercolor-114-royal-fern-way-236",
+      "top_vrbo_ref_id": "83056963",
+      "top_score": 0.2385,
+      "shortlist_count": 1,
+      "geo_distance_meters": 51.4675
+    },
+    {
+      "external_listing_id": "rosemary-beach-a-shore-thing-143-west-water-street-main-house-711",
+      "top_vrbo_ref_id": "122888926",
+      "top_score": 0.2383,
+      "shortlist_count": 10,
+      "geo_distance_meters": 139.2118
+    },
+    {
+      "external_listing_id": "watercolor-serenity-path-695-western-lake-drive-1287",
+      "top_vrbo_ref_id": "91352039",
+      "top_score": 0.2379,
+      "shortlist_count": 3,
+      "geo_distance_meters": 75.9256
+    },
+    {
+      "external_listing_id": "seacrest-beach-lost-shaker-of-salt-8718-e-county-hwy-30a-unit-a-795",
+      "top_vrbo_ref_id": "112894587",
+      "top_score": 0.2378,
+      "shortlist_count": 4,
+      "geo_distance_meters": 52.3083
+    },
+    {
+      "external_listing_id": "rosemary-beach-mr-sanders-122-west-kingston-road-carriage-house-706",
+      "top_vrbo_ref_id": "88765444",
+      "top_score": 0.2376,
+      "shortlist_count": 10,
+      "geo_distance_meters": 140.927
+    },
+    {
+      "external_listing_id": "watercolor-1735-e-county-hwy-30a-305-1244",
+      "top_vrbo_ref_id": "33704823",
+      "top_score": 0.2371,
+      "shortlist_count": 4,
+      "geo_distance_meters": 132.6701
+    },
+    {
+      "external_listing_id": "watersound-77-shore-bridge-circle-1366",
+      "top_vrbo_ref_id": "126752938",
+      "top_score": 0.2371,
+      "shortlist_count": 1,
+      "geo_distance_meters": 70.7159
+    },
+    {
+      "external_listing_id": "rosemary-beach-sea-dog-35-town-hall-road-main-house-2978",
+      "top_vrbo_ref_id": "21660542",
+      "top_score": 0.237,
+      "shortlist_count": 2,
+      "geo_distance_meters": 150.4986
+    },
+    {
+      "external_listing_id": "seaside-suite-magnolia-i-ii-640-forest-street-233",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.2368,
+      "shortlist_count": 4,
+      "geo_distance_meters": 84.2527
+    },
+    {
+      "external_listing_id": "seagrove-beach-blue-iris-139-brown-street-213",
+      "top_vrbo_ref_id": "72598865",
+      "top_score": 0.2367,
+      "shortlist_count": 7,
+      "geo_distance_meters": 110.4083
+    },
+    {
+      "external_listing_id": "seagrove-beach-seabelle-on-30a-239-sand-oaks-circle-219",
+      "top_vrbo_ref_id": "33656118",
+      "top_score": 0.2367,
+      "shortlist_count": 5,
+      "geo_distance_meters": 149.797
+    },
+    {
+      "external_listing_id": "dune-allen-cloud-nine-146-woodward-drive-358",
+      "top_vrbo_ref_id": "107426620",
+      "top_score": 0.2366,
+      "shortlist_count": 7,
+      "geo_distance_meters": 69.7839
+    },
+    {
+      "external_listing_id": "rosemary-beach-mr-sanders-122-west-kingston-road-main-house-707",
+      "top_vrbo_ref_id": "124784872",
+      "top_score": 0.2365,
+      "shortlist_count": 10,
+      "geo_distance_meters": 0.3999
+    },
+    {
+      "external_listing_id": "seacrest-beach-boho-rose-401-clareon-drive-186",
+      "top_vrbo_ref_id": "125351213",
+      "top_score": 0.2363,
+      "shortlist_count": 1,
+      "geo_distance_meters": 91.4339
+    },
+    {
+      "external_listing_id": "seagrove-beach-i-sea-stars-120-n-ryan-street-208",
+      "top_vrbo_ref_id": "72598865",
+      "top_score": 0.2362,
+      "shortlist_count": 4,
+      "geo_distance_meters": 30.7384
+    },
+    {
+      "external_listing_id": "seagrove-beach-villa-sienna-430-beachfront-trail-840",
+      "top_vrbo_ref_id": "21715677",
+      "top_score": 0.2361,
+      "shortlist_count": 3,
+      "geo_distance_meters": 58.8236
+    },
+    {
+      "external_listing_id": "seacrest-beach-waterhouse-102-8377-e-co-hwy-30a-202",
+      "top_vrbo_ref_id": "73761329",
+      "top_score": 0.2359,
+      "shortlist_count": 3,
+      "geo_distance_meters": 112.7729
+    },
+    {
+      "external_listing_id": "seagrove-beach-la-maison-bleue-127-lakewood-drive-212",
+      "top_vrbo_ref_id": "102594564",
+      "top_score": 0.2359,
+      "shortlist_count": 3,
+      "geo_distance_meters": 51.6606
+    },
+    {
+      "external_listing_id": "grayton-beach-graytness-168-grayton-village-road-410",
+      "top_vrbo_ref_id": "114395246",
+      "top_score": 0.2355,
+      "shortlist_count": 4,
+      "geo_distance_meters": 100.4388
+    },
+    {
+      "external_listing_id": "rosemary-beach-mary-rose-45-abaco-lane-main-house-741",
+      "top_vrbo_ref_id": "59823163",
+      "top_score": 0.2354,
+      "shortlist_count": 3,
+      "geo_distance_meters": 121.4416
+    },
+    {
+      "external_listing_id": "watercolor-99-mystic-cobalt-street-1326",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2353,
+      "shortlist_count": 4,
+      "geo_distance_meters": 143.3613
+    },
+    {
+      "external_listing_id": "seaside-lemon-tree-181-smolian-circle-870",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.235,
+      "shortlist_count": 2,
+      "geo_distance_meters": 110.4257
+    },
+    {
+      "external_listing_id": "seagrove-beach-the-happy-seahorse-83-brown-st-228",
+      "top_vrbo_ref_id": "72598865",
+      "top_score": 0.2348,
+      "shortlist_count": 8,
+      "geo_distance_meters": 112.6724
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-143-seaward-drive-60",
+      "top_vrbo_ref_id": "34326660",
+      "top_score": 0.2347,
+      "shortlist_count": 6,
+      "geo_distance_meters": 112.1902
+    },
+    {
+      "external_listing_id": "watercolor-good-times-4-watercolor-boulevard-south-201-2337",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.2347,
+      "shortlist_count": 4,
+      "geo_distance_meters": 114.7391
+    },
+    {
+      "external_listing_id": "watercolor-attitude-adjustment-45-watercolor-blvd-w-103-1265",
+      "top_vrbo_ref_id": "72978057",
+      "top_score": 0.2345,
+      "shortlist_count": 1,
+      "geo_distance_meters": 97.4148
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-beachin-on-porpoise-53-porpoise-street-79",
+      "top_vrbo_ref_id": "66966347",
+      "top_score": 0.2344,
+      "shortlist_count": 1,
+      "geo_distance_meters": 127.199
+    },
+    {
+      "external_listing_id": "rosemary-flats-2f-coco-pucci-104-north-barrett-square-752",
+      "top_vrbo_ref_id": "111653408",
+      "top_score": 0.2344,
+      "shortlist_count": 11,
+      "geo_distance_meters": 106.7612
+    },
+    {
+      "external_listing_id": "seagrove-beach-mia-s-place-22-south-gulf-drive-217",
+      "top_vrbo_ref_id": "112308246",
+      "top_score": 0.2341,
+      "shortlist_count": 4,
+      "geo_distance_meters": 146.0037
+    },
+    {
+      "external_listing_id": "dune-allen-palms-of-dune-allen-301-4961-w-county-rd-30a-unit-301-2995",
+      "top_vrbo_ref_id": "83595355",
+      "top_score": 0.2338,
+      "shortlist_count": 5,
+      "geo_distance_meters": 91.4487
+    },
+    {
+      "external_listing_id": "seagrove-how-sweet-it-is-15-lake-vista-lane-811",
+      "top_vrbo_ref_id": "126471070",
+      "top_score": 0.2338,
+      "shortlist_count": 1,
+      "geo_distance_meters": 133.6923
+    },
+    {
+      "external_listing_id": "grayton-beach-grayt-dreams-and-graytness-158-grayton-village-road-2982",
+      "top_vrbo_ref_id": "114395246",
+      "top_score": 0.2337,
+      "shortlist_count": 5,
+      "geo_distance_meters": 87.0885
+    },
+    {
+      "external_listing_id": "watersound-sunkissed-220-salt-box-lane-252",
+      "top_vrbo_ref_id": "92316538",
+      "top_score": 0.2334,
+      "shortlist_count": 1,
+      "geo_distance_meters": 138.6649
+    },
+    {
+      "external_listing_id": "seagrove-beach-sailfish-on-brown-122-brown-street-210",
+      "top_vrbo_ref_id": "125088003",
+      "top_score": 0.2331,
+      "shortlist_count": 9,
+      "geo_distance_meters": 118.2339
+    },
+    {
+      "external_listing_id": "seagrove-beach-sand-dollar-retreat-73-sand-dollar-court-227",
+      "top_vrbo_ref_id": "117420639",
+      "top_score": 0.2326,
+      "shortlist_count": 6,
+      "geo_distance_meters": 28.7955
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-surf-shack-34-seaward-drive-72",
+      "top_vrbo_ref_id": "100741837",
+      "top_score": 0.2325,
+      "shortlist_count": 7,
+      "geo_distance_meters": 75.5451
+    },
+    {
+      "external_listing_id": "seagrove-crabb-shack-162-chivas-lane-813",
+      "top_vrbo_ref_id": "114593590",
+      "top_score": 0.2324,
+      "shortlist_count": 2,
+      "geo_distance_meters": 135.332
+    },
+    {
+      "external_listing_id": "watercolor-turtles-on-the-move-261-needlerush-drive-1220",
+      "top_vrbo_ref_id": "70943587",
+      "top_score": 0.2323,
+      "shortlist_count": 2,
+      "geo_distance_meters": 55.4998
+    },
+    {
+      "external_listing_id": "watercolor-143-dandelion-drive-1194",
+      "top_vrbo_ref_id": "22128458",
+      "top_score": 0.2321,
+      "shortlist_count": 1,
+      "geo_distance_meters": 29.3131
+    },
+    {
+      "external_listing_id": "seagrove-beach-kicking-back-95-chivas-lane-865",
+      "top_vrbo_ref_id": "114593590",
+      "top_score": 0.232,
+      "shortlist_count": 2,
+      "geo_distance_meters": 84.8233
+    },
+    {
+      "external_listing_id": "rosemary-beach-a-shore-thing-143-west-water-street-709",
+      "top_vrbo_ref_id": "122888926",
+      "top_score": 0.2317,
+      "shortlist_count": 10,
+      "geo_distance_meters": 139.2118
+    },
+    {
+      "external_listing_id": "seagrove-beach-white-azaela-77-azalea-st-860",
+      "top_vrbo_ref_id": "95388266",
+      "top_score": 0.2316,
+      "shortlist_count": 9,
+      "geo_distance_meters": 140.6466
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-hidden-lake-condominium-3986-west-county-highway-30a-unit-233-2989",
+      "top_vrbo_ref_id": "120510635",
+      "top_score": 0.2315,
+      "shortlist_count": 4,
+      "geo_distance_meters": 38.6932
+    },
+    {
+      "external_listing_id": "seacrest-beach-villas-at-sunset-beach-c202-kyma-797",
+      "top_vrbo_ref_id": "119321331",
+      "top_score": 0.2314,
+      "shortlist_count": 6,
+      "geo_distance_meters": 101.4528
+    },
+    {
+      "external_listing_id": "seagrove-beach-the-long-exhale-83-south-lake-drive-3002",
+      "top_vrbo_ref_id": "112308246",
+      "top_score": 0.2313,
+      "shortlist_count": 2,
+      "geo_distance_meters": 86.3473
+    },
+    {
+      "external_listing_id": "seaside-heaven-sent-621-forest-street-872",
+      "top_vrbo_ref_id": "33705105",
+      "top_score": 0.2312,
+      "shortlist_count": 4,
+      "geo_distance_meters": 66.7129
+    },
+    {
+      "external_listing_id": "watercolor-147-scrub-oak-circle-1197",
+      "top_vrbo_ref_id": "70943587",
+      "top_score": 0.2312,
+      "shortlist_count": 3,
+      "geo_distance_meters": 116.5244
+    },
+    {
+      "external_listing_id": "dune-allen-heron-on-oyster-lake-5456-west-county-highway-30a-2923",
+      "top_vrbo_ref_id": "21706313",
+      "top_score": 0.231,
+      "shortlist_count": 2,
+      "geo_distance_meters": 130.9598
+    },
+    {
+      "external_listing_id": "seagrove-beach-dixieland-delight-27-seawinds-court-2915",
+      "top_vrbo_ref_id": "99674595",
+      "top_score": 0.2306,
+      "shortlist_count": 10,
+      "geo_distance_meters": 59.6078
+    },
+    {
+      "external_listing_id": "seacrest-beach-waterhouse-condo-203-8377-east-county-highway-30a-203-2921",
+      "top_vrbo_ref_id": "73761329",
+      "top_score": 0.2304,
+      "shortlist_count": 3,
+      "geo_distance_meters": 109.9062
+    },
+    {
+      "external_listing_id": "seagrove-beach-please-327-eastern-lake-road-carriage-house-830",
+      "top_vrbo_ref_id": "108403432",
+      "top_score": 0.2304,
+      "shortlist_count": 17,
+      "geo_distance_meters": 45.1382
+    },
+    {
+      "external_listing_id": "seagrove-beach-sandpiper-beach-house-126-n-ryan-street-211",
+      "top_vrbo_ref_id": "72598865",
+      "top_score": 0.2302,
+      "shortlist_count": 4,
+      "geo_distance_meters": 32.1064
+    },
+    {
+      "external_listing_id": "seagrove-beach-wouldn-t-it-be-nice-90-brown-street-864",
+      "top_vrbo_ref_id": "125088003",
+      "top_score": 0.2302,
+      "shortlist_count": 7,
+      "geo_distance_meters": 118.1506
+    },
+    {
+      "external_listing_id": "seagrove-beach-one-putt-paradise-59-montigo-ave-224",
+      "top_vrbo_ref_id": "123829372",
+      "top_score": 0.2297,
+      "shortlist_count": 10,
+      "geo_distance_meters": 70.5205
+    },
+    {
+      "external_listing_id": "seagrove-off-the-clock-181-eastern-lake-road-817",
+      "top_vrbo_ref_id": "21666454",
+      "top_score": 0.2296,
+      "shortlist_count": 9,
+      "geo_distance_meters": 77.77
+    },
+    {
+      "external_listing_id": "seagrove-shore-beats-work-151-dalton-drive-809",
+      "top_vrbo_ref_id": "125088003",
+      "top_score": 0.2296,
+      "shortlist_count": 6,
+      "geo_distance_meters": 114.148
+    },
+    {
+      "external_listing_id": "seagrove-belle-plage-517-eastern-lake-rd-848",
+      "top_vrbo_ref_id": "123070691",
+      "top_score": 0.2293,
+      "shortlist_count": 4,
+      "geo_distance_meters": 102.125
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-better-on-betty-145-betty-st-61",
+      "top_vrbo_ref_id": "123048705",
+      "top_score": 0.2291,
+      "shortlist_count": 1,
+      "geo_distance_meters": 112.3905
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-sunrise-cottage-125-seaward-drive-59",
+      "top_vrbo_ref_id": "100741837",
+      "top_score": 0.2288,
+      "shortlist_count": 6,
+      "geo_distance_meters": 130.4217
+    },
+    {
+      "external_listing_id": "watercolor-1650-e-county-hwy-30a-301-1274",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.2288,
+      "shortlist_count": 4,
+      "geo_distance_meters": 74.4298
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-one-more-day-64-s-spooky-lane-82",
+      "top_vrbo_ref_id": "42478967",
+      "top_score": 0.2286,
+      "shortlist_count": 4,
+      "geo_distance_meters": 96.4144
+    },
+    {
+      "external_listing_id": "seagrove-beach-the-legacy-3880-east-county-highway-30-a-401-867",
+      "top_vrbo_ref_id": "106503561",
+      "top_score": 0.2284,
+      "shortlist_count": 3,
+      "geo_distance_meters": 139.3205
+    },
+    {
+      "external_listing_id": "seacrest-beach-60-walton-gulfview-drive-785",
+      "top_vrbo_ref_id": "33980196",
+      "top_score": 0.2282,
+      "shortlist_count": 5,
+      "geo_distance_meters": 113.4221
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-sea-suite-499-old-beach-road-76",
+      "top_vrbo_ref_id": "49314360",
+      "top_score": 0.2277,
+      "shortlist_count": 1,
+      "geo_distance_meters": 31.5389
+    },
+    {
+      "external_listing_id": "watercolor-59-mystic-cobalt-street-1278",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2271,
+      "shortlist_count": 1,
+      "geo_distance_meters": 94.2945
+    },
+    {
+      "external_listing_id": "rosemary-beach-firefly-45-n-green-turtle-lane-main-house-744",
+      "top_vrbo_ref_id": "20139561",
+      "top_score": 0.2269,
+      "shortlist_count": 1,
+      "geo_distance_meters": 116.6265
+    },
+    {
+      "external_listing_id": "seagrove-beach-the-salty-pelican-158-brown-street-810",
+      "top_vrbo_ref_id": "125088003",
+      "top_score": 0.2266,
+      "shortlist_count": 5,
+      "geo_distance_meters": 138.251
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-art-of-the-ocean-60-grande-beach-drive-81",
+      "top_vrbo_ref_id": "88663543",
+      "top_score": 0.2255,
+      "shortlist_count": 3,
+      "geo_distance_meters": 82.6653
+    },
+    {
+      "external_listing_id": "blue-mountain-off-season-461-matt-s-way-151",
+      "top_vrbo_ref_id": "125611920",
+      "top_score": 0.2255,
+      "shortlist_count": 4,
+      "geo_distance_meters": 62.0973
+    },
+    {
+      "external_listing_id": "seacrest-beach-waterhouse-201-8377-e-co-hwy-30a-unit-201-203",
+      "top_vrbo_ref_id": "73761329",
+      "top_score": 0.2255,
+      "shortlist_count": 4,
+      "geo_distance_meters": 146.07
+    },
+    {
+      "external_listing_id": "watercolor-3-sisters-on-the-beach-93-park-row-lane-1321",
+      "top_vrbo_ref_id": "21714654",
+      "top_score": 0.2246,
+      "shortlist_count": 1,
+      "geo_distance_meters": 79.9322
+    },
+    {
+      "external_listing_id": "seacrest-beach-30a-state-of-mine-8377-e-co-hwy-30a-unit-101-201",
+      "top_vrbo_ref_id": "99453878",
+      "top_score": 0.2238,
+      "shortlist_count": 4,
+      "geo_distance_meters": 147.8603
+    },
+    {
+      "external_listing_id": "rosemary-beach-firefly-45-n-green-turtle-lane-742",
+      "top_vrbo_ref_id": "20139561",
+      "top_score": 0.2237,
+      "shortlist_count": 1,
+      "geo_distance_meters": 116.7352
+    },
+    {
+      "external_listing_id": "seagrove-beach-modern-coastal-16-south-lake-drive-3035",
+      "top_vrbo_ref_id": "112308246",
+      "top_score": 0.2231,
+      "shortlist_count": 2,
+      "geo_distance_meters": 83.5109
+    },
+    {
+      "external_listing_id": "seagrove-seasons-in-the-sun-140-dalton-drive-808",
+      "top_vrbo_ref_id": "125088003",
+      "top_score": 0.2228,
+      "shortlist_count": 7,
+      "geo_distance_meters": 129.372
+    },
+    {
+      "external_listing_id": "seagrove-beach-viridian-302-2743-e-co-hwy-30a-unit-302-800",
+      "top_vrbo_ref_id": "33707307",
+      "top_score": 0.2227,
+      "shortlist_count": 9,
+      "geo_distance_meters": 115.3257
+    },
+    {
+      "external_listing_id": "seagrove-beach-casa-blanco-86-san-roy-road-carriage-house-3022",
+      "top_vrbo_ref_id": "94734348",
+      "top_score": 0.2223,
+      "shortlist_count": 3,
+      "geo_distance_meters": 42.0104
+    },
+    {
+      "external_listing_id": "blue-mountain-omg-by-the-sea-29-shell-seekers-cove-70",
+      "top_vrbo_ref_id": "34326660",
+      "top_score": 0.2221,
+      "shortlist_count": 3,
+      "geo_distance_meters": 98.1731
+    },
+    {
+      "external_listing_id": "blue-mtn-19-sandcastle-court-68",
+      "top_vrbo_ref_id": "88728418",
+      "top_score": 0.222,
+      "shortlist_count": 1,
+      "geo_distance_meters": 35.251
+    },
+    {
+      "external_listing_id": "rosemary-beach-seachelle-15-st-augustine-unit-15d-754",
+      "top_vrbo_ref_id": "21713930",
+      "top_score": 0.222,
+      "shortlist_count": 2,
+      "geo_distance_meters": 45.0932
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-breezes-189-old-beach-road-67",
+      "top_vrbo_ref_id": "123048705",
+      "top_score": 0.2219,
+      "shortlist_count": 2,
+      "geo_distance_meters": 36.1849
+    },
+    {
+      "external_listing_id": "blue-mountain-bella-vita-unit-b304-157",
+      "top_vrbo_ref_id": "101262239",
+      "top_score": 0.2218,
+      "shortlist_count": 5,
+      "geo_distance_meters": 98.8683
+    },
+    {
+      "external_listing_id": "rosemary-beach-sea-dog-and-jolly-roger-35-town-hall-road-main-and-carriage-house-2977",
+      "top_vrbo_ref_id": "33949606",
+      "top_score": 0.2217,
+      "shortlist_count": 2,
+      "geo_distance_meters": 142.3549
+    },
+    {
+      "external_listing_id": "watercolor-resting-beach-space-121-winterberry-circle-1170",
+      "top_vrbo_ref_id": "100746045",
+      "top_score": 0.2217,
+      "shortlist_count": 1,
+      "geo_distance_meters": 138.546
+    },
+    {
+      "external_listing_id": "seagrove-beach-crystal-gulf-view-561-eastern-lake-road-304-2953",
+      "top_vrbo_ref_id": "123070691",
+      "top_score": 0.2216,
+      "shortlist_count": 5,
+      "geo_distance_meters": 64.796
+    },
+    {
+      "external_listing_id": "watercolor-paradise-found-43-silk-grass-1263",
+      "top_vrbo_ref_id": "70943587",
+      "top_score": 0.2204,
+      "shortlist_count": 2,
+      "geo_distance_meters": 72.371
+    },
+    {
+      "external_listing_id": "blue-mountain-seatime-160-seaward-drive-63",
+      "top_vrbo_ref_id": "100741837",
+      "top_score": 0.2202,
+      "shortlist_count": 7,
+      "geo_distance_meters": 124.7052
+    },
+    {
+      "external_listing_id": "seagrove-beach-summer-by-the-sea-4341-e-county-hwy-30a-unit-b401-230",
+      "top_vrbo_ref_id": "127124240",
+      "top_score": 0.2194,
+      "shortlist_count": 7,
+      "geo_distance_meters": 142.6462
+    },
+    {
+      "external_listing_id": "seagrove-chivallionare-138-chivas-lane-806",
+      "top_vrbo_ref_id": "114593590",
+      "top_score": 0.2188,
+      "shortlist_count": 2,
+      "geo_distance_meters": 104.7207
+    },
+    {
+      "external_listing_id": "grayton-beach-grayt-dreams-158-grayton-village-road-409",
+      "top_vrbo_ref_id": "114395246",
+      "top_score": 0.2185,
+      "shortlist_count": 3,
+      "geo_distance_meters": 102.464
+    },
+    {
+      "external_listing_id": "blue-mountain-casa-verde-41-gulf-point-74",
+      "top_vrbo_ref_id": "120361053",
+      "top_score": 0.2175,
+      "shortlist_count": 3,
+      "geo_distance_meters": 115.6321
+    },
+    {
+      "external_listing_id": "seagrove-blue-moon-lagoon-349-south-gulf-drive-835",
+      "top_vrbo_ref_id": "34370616",
+      "top_score": 0.2172,
+      "shortlist_count": 2,
+      "geo_distance_meters": 116.3779
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-wales-tale-369-old-beach-road-73",
+      "top_vrbo_ref_id": "123169537",
+      "top_score": 0.2169,
+      "shortlist_count": 1,
+      "geo_distance_meters": 33.5786
+    },
+    {
+      "external_listing_id": "seagrove-beach-reposado-7-dalton-drive-861",
+      "top_vrbo_ref_id": "75631860",
+      "top_score": 0.2169,
+      "shortlist_count": 2,
+      "geo_distance_meters": 111.1459
+    },
+    {
+      "external_listing_id": "grayton-beach-casa-sombra-cottage-36-garfield-street-171",
+      "top_vrbo_ref_id": "18980007",
+      "top_score": 0.2163,
+      "shortlist_count": 1,
+      "geo_distance_meters": 119.882
+    },
+    {
+      "external_listing_id": "inlet-beach-hastings-40-walton-magnolia-lane-unit-a1-173",
+      "top_vrbo_ref_id": "31863089",
+      "top_score": 0.2159,
+      "shortlist_count": 3,
+      "geo_distance_meters": 118.1918
+    },
+    {
+      "external_listing_id": "watercolor-105-park-row-lane-1157",
+      "top_vrbo_ref_id": "21714654",
+      "top_score": 0.2152,
+      "shortlist_count": 1,
+      "geo_distance_meters": 59.5354
+    },
+    {
+      "external_listing_id": "seagrove-beach-avalon-sunset-240-lakeview-drive-825",
+      "top_vrbo_ref_id": "123907784",
+      "top_score": 0.2148,
+      "shortlist_count": 3,
+      "geo_distance_meters": 97.7445
+    },
+    {
+      "external_listing_id": "seagrove-hidden-oasis-128-montigo-ave-804",
+      "top_vrbo_ref_id": "123829372",
+      "top_score": 0.2148,
+      "shortlist_count": 4,
+      "geo_distance_meters": 63.327
+    },
+    {
+      "external_listing_id": "seagrove-beach-vacay-all-day-169-brown-street-214",
+      "top_vrbo_ref_id": "72598865",
+      "top_score": 0.2139,
+      "shortlist_count": 3,
+      "geo_distance_meters": 81.5014
+    },
+    {
+      "external_listing_id": "watersound-you-are-my-sunshine-215-salt-box-lane-1338",
+      "top_vrbo_ref_id": "92316538",
+      "top_score": 0.2138,
+      "shortlist_count": 1,
+      "geo_distance_meters": 146.9805
+    },
+    {
+      "external_listing_id": "seagrove-our-southern-charm-701-eastern-lake-road-854",
+      "top_vrbo_ref_id": "21666454",
+      "top_score": 0.2137,
+      "shortlist_count": 8,
+      "geo_distance_meters": 127.7959
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-178-buddy-street-140",
+      "top_vrbo_ref_id": "123048705",
+      "top_score": 0.2136,
+      "shortlist_count": 1,
+      "geo_distance_meters": 106.0689
+    },
+    {
+      "external_listing_id": "seagrove-our-southern-charm-701-eastern-lake-road-upper-level-856",
+      "top_vrbo_ref_id": "23618666",
+      "top_score": 0.2134,
+      "shortlist_count": 8,
+      "geo_distance_meters": 110.1463
+    },
+    {
+      "external_listing_id": "rosemary-beach-the-palms-cottage-32-n-cartagena-lane-737",
+      "top_vrbo_ref_id": "64565235",
+      "top_score": 0.2124,
+      "shortlist_count": 1,
+      "geo_distance_meters": 106.6793
+    },
+    {
+      "external_listing_id": "seagrove-a-place-in-the-sun-235-lake-vista-lane-824",
+      "top_vrbo_ref_id": "78362620",
+      "top_score": 0.2123,
+      "shortlist_count": 5,
+      "geo_distance_meters": 110.8341
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-beached-wales-521-old-beach-road-78",
+      "top_vrbo_ref_id": "49314360",
+      "top_score": 0.2114,
+      "shortlist_count": 2,
+      "geo_distance_meters": 10.3078
+    },
+    {
+      "external_listing_id": "blue-mountain-66-s-spooky-lane-83",
+      "top_vrbo_ref_id": "42478967",
+      "top_score": 0.2112,
+      "shortlist_count": 4,
+      "geo_distance_meters": 75.2345
+    },
+    {
+      "external_listing_id": "prominence-salty-bottom-bungaleaux-309-milestone-dr-a-654",
+      "top_vrbo_ref_id": "60055445",
+      "top_score": 0.2112,
+      "shortlist_count": 1,
+      "geo_distance_meters": 97.7357
+    },
+    {
+      "external_listing_id": "seagrove-beach-sea-nest-la-vie-191-sand-oaks-circle-819",
+      "top_vrbo_ref_id": "78362620",
+      "top_score": 0.2111,
+      "shortlist_count": 2,
+      "geo_distance_meters": 53.142
+    },
+    {
+      "external_listing_id": "watercolor-350-red-cedar-way-1245",
+      "top_vrbo_ref_id": "21704839",
+      "top_score": 0.2111,
+      "shortlist_count": 1,
+      "geo_distance_meters": 94.8259
+    },
+    {
+      "external_listing_id": "blue-mountain-30a-all-day-beach-2046-w-county-highway-30a-m2420-156",
+      "top_vrbo_ref_id": "120361053",
+      "top_score": 0.2108,
+      "shortlist_count": 3,
+      "geo_distance_meters": 132.114
+    },
+    {
+      "external_listing_id": "seagrove-beach-10-palms-30a-70-montigo-avenue-2914",
+      "top_vrbo_ref_id": "123829372",
+      "top_score": 0.2108,
+      "shortlist_count": 5,
+      "geo_distance_meters": 33.1245
+    },
+    {
+      "external_listing_id": "seacrest-beach-waterhouse-404-8377-e-co-hwy-30a-unit-404-204",
+      "top_vrbo_ref_id": "33135387",
+      "top_score": 0.2103,
+      "shortlist_count": 4,
+      "geo_distance_meters": 69.3875
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-latitude-adjustment-505-old-beach-road-77",
+      "top_vrbo_ref_id": "49314360",
+      "top_score": 0.21,
+      "shortlist_count": 1,
+      "geo_distance_meters": 22.4249
+    },
+    {
+      "external_listing_id": "seagrove-our-southern-charm-701-eastern-lake-road-lower-level-855",
+      "top_vrbo_ref_id": "21666454",
+      "top_score": 0.2097,
+      "shortlist_count": 8,
+      "geo_distance_meters": 127.7959
+    },
+    {
+      "external_listing_id": "seacrest-beach-magnolia-mermaid-18-olivia-lane-3033",
+      "top_vrbo_ref_id": "73761329",
+      "top_score": 0.2096,
+      "shortlist_count": 2,
+      "geo_distance_meters": 97.0617
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-mint-to-be-110-gulf-point-58",
+      "top_vrbo_ref_id": "120361053",
+      "top_score": 0.2094,
+      "shortlist_count": 6,
+      "geo_distance_meters": 100.6915
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-serenity-dunes-299-old-beach-road-69",
+      "top_vrbo_ref_id": "123169537",
+      "top_score": 0.2037,
+      "shortlist_count": 1,
+      "geo_distance_meters": 120.3572
+    },
+    {
+      "external_listing_id": "rosemary-beach-firefly-45-n-green-turtle-lane-carriage-house-743",
+      "top_vrbo_ref_id": "20139561",
+      "top_score": 0.2005,
+      "shortlist_count": 1,
+      "geo_distance_meters": 116.6265
+    },
+    {
+      "external_listing_id": "seagrove-beach-tide-together-85-n-ryan-street-229",
+      "top_vrbo_ref_id": "73568457",
+      "top_score": 0.1992,
+      "shortlist_count": 2,
+      "geo_distance_meters": 65.899
+    },
+    {
+      "external_listing_id": "seagrove-beach-southern-chateau-71-chivas-lane-857",
+      "top_vrbo_ref_id": "112739830",
+      "top_score": 0.1984,
+      "shortlist_count": 2,
+      "geo_distance_meters": 26.6244
+    },
+    {
+      "external_listing_id": "seagrove-beach-blue-heron-hideaway-205-south-lake-drive-820",
+      "top_vrbo_ref_id": "125074013",
+      "top_score": 0.1982,
+      "shortlist_count": 3,
+      "geo_distance_meters": 151.4801
+    },
+    {
+      "external_listing_id": "seagrove-beach-whake-up-172-chivas-lane-815",
+      "top_vrbo_ref_id": "126816970",
+      "top_score": 0.1969,
+      "shortlist_count": 1,
+      "geo_distance_meters": 73.0452
+    },
+    {
+      "external_listing_id": "watercolor-20-goldenrod-circle-302-1208",
+      "top_vrbo_ref_id": "21714654",
+      "top_score": 0.1968,
+      "shortlist_count": 1,
+      "geo_distance_meters": 49.1021
+    },
+    {
+      "external_listing_id": "seacrest-beach-seawall-84-a-street-195",
+      "top_vrbo_ref_id": "110996303",
+      "top_score": 0.1967,
+      "shortlist_count": 2,
+      "geo_distance_meters": 145.102
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-belle-vue-at-cypress-breeze-17-breezeway-blvd-66",
+      "top_vrbo_ref_id": "56968734",
+      "top_score": 0.1956,
+      "shortlist_count": 1,
+      "geo_distance_meters": 107.0949
+    },
+    {
+      "external_listing_id": "seagrove-beach-51-bramble-lane-223",
+      "top_vrbo_ref_id": "112517058",
+      "top_score": 0.1954,
+      "shortlist_count": 2,
+      "geo_distance_meters": 126.5693
+    },
+    {
+      "external_listing_id": "seagrove-beach-it-s-all-about-the-views-15-chivas-lane-410a-866",
+      "top_vrbo_ref_id": "127193230",
+      "top_score": 0.1954,
+      "shortlist_count": 7,
+      "geo_distance_meters": 139.5229
+    },
+    {
+      "external_listing_id": "seagrove-beach-coco-flamingo-3880-east-county-highway-30-a-301-3004",
+      "top_vrbo_ref_id": "100879794",
+      "top_score": 0.1931,
+      "shortlist_count": 1,
+      "geo_distance_meters": 19.7948
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-drift-away-on-30a-35-kriss-court-2932",
+      "top_vrbo_ref_id": "126967763",
+      "top_score": 0.1909,
+      "shortlist_count": 1,
+      "geo_distance_meters": 145.3369
+    },
+    {
+      "external_listing_id": "watersound-19-creek-bridge-way-1335",
+      "top_vrbo_ref_id": "33092228",
+      "top_score": 0.1892,
+      "shortlist_count": 1,
+      "geo_distance_meters": 103.8978
+    },
+    {
+      "external_listing_id": "rosemary-beach-25-s-belize-lane-730",
+      "top_vrbo_ref_id": "41267554",
+      "top_score": 0.1882,
+      "shortlist_count": 2,
+      "geo_distance_meters": 126.6095
+    },
+    {
+      "external_listing_id": "blue-mtn-adagio-unit-b-405-2421-w-hwy-30a-19",
+      "top_vrbo_ref_id": "101262239",
+      "top_score": 0.1875,
+      "shortlist_count": 1,
+      "geo_distance_meters": 143.1662
+    },
+    {
+      "external_listing_id": "blue-mtn-adagio-unit-b-103-2421-w-hwy-30a-17",
+      "top_vrbo_ref_id": "101262239",
+      "top_score": 0.1863,
+      "shortlist_count": 1,
+      "geo_distance_meters": 140.6434
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-coastal-haven-197-satinwood-drive-143",
+      "top_vrbo_ref_id": "113271565",
+      "top_score": 0.1858,
+      "shortlist_count": 1,
+      "geo_distance_meters": 53.4199
+    },
+    {
+      "external_listing_id": "blue-mountain-beach-the-salty-longhorn-254-blue-lake-road-146",
+      "top_vrbo_ref_id": "119408641",
+      "top_score": 0.1856,
+      "shortlist_count": 1,
+      "geo_distance_meters": 38.5709
+    },
+    {
+      "external_listing_id": "blue-mtn-adagio-unit-b-304-2421-w-hwy-30a-18",
+      "top_vrbo_ref_id": "101262239",
+      "top_score": 0.1851,
+      "shortlist_count": 1,
+      "geo_distance_meters": 138.4826
+    },
+    {
+      "external_listing_id": "inlet-beach-inlet-views-28-west-park-place-avenue-3007",
+      "top_vrbo_ref_id": "112594188",
+      "top_score": 0.1846,
+      "shortlist_count": 1,
+      "geo_distance_meters": 126.7698
+    },
+    {
+      "external_listing_id": "blue-mtn-adagio-unit-a-103-2421-w-hwy-30a-16",
+      "top_vrbo_ref_id": "101262239",
+      "top_score": 0.1827,
+      "shortlist_count": 1,
+      "geo_distance_meters": 142.2221
+    },
+    {
+      "external_listing_id": "blue-mtn-adagio-unit-c-102-2421-w-hwy-30a-20",
+      "top_vrbo_ref_id": "101262239",
+      "top_score": 0.1815,
+      "shortlist_count": 1,
+      "geo_distance_meters": 141.9219
+    },
+    {
+      "external_listing_id": "seagrove-beach-dunes-of-seagrove-51-chivas-lane-305c-2819",
+      "top_vrbo_ref_id": "33486502",
+      "top_score": 0.1812,
+      "shortlist_count": 4,
+      "geo_distance_meters": 115.6823
+    },
+    {
+      "external_listing_id": "watersound-high-tide-260-gulf-bridge-lane-3003",
+      "top_vrbo_ref_id": "33092228",
+      "top_score": 0.1735,
+      "shortlist_count": 1,
+      "geo_distance_meters": 125.322
+    },
+    {
+      "external_listing_id": "prominence-rose-on-30a-106-east-milestone-drive-unit-c-3011",
+      "top_vrbo_ref_id": "76015460",
+      "top_score": 0.1599,
+      "shortlist_count": 1,
+      "geo_distance_meters": 54.5346
+    },
+    {
+      "external_listing_id": "seacrest-beach-amazing-grace-8915-e-co-hwy-30a-796",
+      "top_vrbo_ref_id": "33704545",
+      "top_score": 0.1584,
+      "shortlist_count": 1,
+      "geo_distance_meters": 61.2143
+    }
+  ],
+  "unmatched_no_candidates": [
+    "blue-mountain-beach-charmed-water-oasis-at-30a-190-walnut-street-142",
+    "blue-mountain-beach-liberty-hill-cottage-11-lanier-ln-136",
+    "blue-mountain-beach-rosa-mimosa-482-hidden-lake-way-153",
+    "blue-mountain-beach-worlds-away-on-30a-100-snapper-street-2930",
+    "blue-mtn-adagio-unit-c-405-2421-w-hwy-30a-21",
+    "dune-allen-lazy-days-912-allen-loop-drive-165",
+    "grayton-beach-clam-i-am-101-lydia-avenue-166",
+    "grayton-beach-fair-dinkum-157-savelle-drive-408",
+    "grayton-beach-resting-beach-face-277-barton-s-way-170",
+    "grayton-beach-serenity-by-the-sea-98-savelle-drive-420",
+    "inlet-beach-barefoot-blue-98-n-winston-lane-472",
+    "inlet-beach-barefoot-blue-carriage-98-n-winston-lane-473",
+    "inlet-beach-barefoot-blue-main-house-98-n-winston-lane-474",
+    "naturewalk-unwind-by-the-gulf-897-sandgrass-way-177",
+    "rosemary-beach-grand-terre-18-n-green-turtle-lane-carriage-house-721",
+    "rosemary-beach-grand-terre-18-n-green-turtle-lane-main-and-carriage-house-720",
+    "rosemary-beach-grand-terre-18-n-green-turtle-lane-main-house-722",
+    "rosemary-beach-the-ville-98-west-long-green-road-2916",
+    "seacrest-beach-30a-ocean-beachfront-8220-e-co-hwy-30a-unit-a-789",
+    "seacrest-beach-30a-ocean-beachfront-and-30a-sandy-beachfront-8220-e-county-hwy-30a-units-a-b-790",
+    "seacrest-beach-30a-sandy-beachfront-8220-e-county-hwy-30a-unit-b-791",
+    "seacrest-beach-44-brenda-lane-main-house-783",
+    "seacrest-beach-beachhouse44-44-brenda-lane-781",
+    "seacrest-beach-casa-bella-8045-e-county-hwy-30a-788",
+    "seacrest-beach-clearwater-views-90-endless-summer-way-197",
+    "seacrest-beach-how-sweet-it-is-59-w-endless-summer-way-190",
+    "seacrest-beach-lucky-sevens-77-endless-summer-way-w-194",
+    "seacrest-beach-ocean-pearl-7999-e-co-hwy-30a-786",
+    "seacrest-beach-on-the-beach-8028-e-county-hwy-30a-787",
+    "seacrest-beach-shorely-from-heaven-434-beach-bike-way-2980",
+    "seacrest-beach-the-sea-shak-41-green-street-780",
+    "seacrest-beach-toro-azul-59-green-st-784",
+    "seagrove-beach-8-hiker-8-hiker-street-2997",
+    "seagrove-beach-mississippi-queen-350-forest-street-836",
+    "seagrove-sarayu-187-san-roy-rd-818",
+    "watercolor-132-pine-needle-way-1184",
+    "watercolor-29-calamint-court-1230",
+    "watercolor-36-lyonia-lane-1247",
+    "watercolor-4-by-the-sea-154-pine-needle-way-1202",
+    "watercolor-sea-breeze-9-lyonia-lane-251",
+    "watercolor-seven-saturdays-24-pine-needle-1219",
+    "watercolor-sunshine-and-saltwater-69-pine-needle-way-1288",
+    "watercolor-white-sands-and-suntans-34-pine-needle-way-1242",
+    "watersound-148-coopersmith-lane-1332",
+    "watersound-238-salt-box-lane-1345",
+    "watersound-24-n-lake-bridge-lane-1346",
+    "watersound-290-salt-box-lane-254",
+    "watersound-30-a-ok-265-salt-box-lane-1349",
+    "watersound-37-compass-point-way-unit-109-256",
+    "watersound-37-compass-point-way-unit-110-257",
+    "watersound-45-tidal-bridge-way-1357",
+    "watersound-61-compass-point-way-1362",
+    "watersound-98-compass-point-way-1374",
+    "watersound-99-compass-point-way-s-203-1393",
+    "watersound-99-compass-point-way-s-207-259",
+    "watersound-99-compass-point-way-s-301-1395",
+    "watersound-99-compass-point-way-s-304-1396",
+    "watersound-99-compass-point-way-s-305-1397",
+    "watersound-a-winterpast-by-the-sea-37-compass-point-way-unit-425-2335",
+    "watersound-at-the-waters-edge-337-bridge-lane-s-b101-1375",
+    "watersound-bunny-s-cottage-225-salt-box-lane-1342",
+    "watersound-compass-point-ii-421-southern-roots-37-compass-pt-way-1398",
+    "watersound-compass-point-ii-422-1399",
+    "watersound-crossings-429-s-bridge-lane-unit-320a-1386",
+    "watersound-crossings-a-317-429-bridge-lane-1384",
+    "watersound-crossings-a-323-429-bridge-lane-1387",
+    "watersound-crossings-a-428-100-s-bridge-lane-1390",
+    "watersound-crossings-above-it-all-penthouse-337-south-bridge-lane-unit-422b-2981",
+    "watersound-crossings-b-107-100-s-bridge-lane-1381",
+    "watersound-crossings-c-102-100-s-bridge-lane-1377",
+    "watersound-crossings-c-103-100-s-bridge-lane-1378",
+    "watersound-crossings-c-105-shore-thing-100-s-bridge-lane-1380",
+    "watersound-crossings-c-107-100-s-bridge-lane-1382",
+    "watersound-crossings-c-112-100-s-bridge-lane-1383",
+    "watersound-crossings-c-317-100-s-bridge-lane-1385",
+    "watersound-crossings-c-427-100-s-bridge-lane-1389",
+    "watersound-crossings-c-428-100-s-bridge-lane-1391",
+    "watersound-dunesview-99-compass-point-way-s-202-258",
+    "watersound-happy-dunes-99-compass-point-way-s-208-1394",
+    "watersound-seabatical-230-salt-box-lane-1343",
+    "watersound-serenity-breeze-224-e-yacht-pond-lane-1341",
+    "watersound-siena-by-the-sea-224-gulf-bridge-lane-1340",
+    "watersound-the-crossings-unit-106c-100-s-bridge-lane-106c-255",
+    "watersound-time-of-your-life-86-compass-point-way-1370",
+    "watersound-west-captain-s-tower-21-clove-hitch-lane-2935",
+    "watersound-yachtpond-lane-210-yacht-pond-lane-1337",
+    "watersound-you-are-my-sunshine-261-salt-box-lane-1348"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

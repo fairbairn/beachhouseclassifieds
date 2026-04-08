@@ -1,0 +1,166 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:29:15.821Z",
+    "adapter_key": "stayat30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 37,
+    "matched": 0,
+    "unmatched": 37,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "stepping-stone-main-house",
+      "top_vrbo_ref_id": "108142584",
+      "top_score": 0.5753,
+      "shortlist_count": 19,
+      "geo_distance_meters": 1.8641
+    },
+    {
+      "external_listing_id": "second-wind",
+      "top_vrbo_ref_id": "67624405",
+      "top_score": 0.4009,
+      "shortlist_count": 9,
+      "geo_distance_meters": 2.7646
+    },
+    {
+      "external_listing_id": "palms-by-the-sea",
+      "top_vrbo_ref_id": "59963259",
+      "top_score": 0.2991,
+      "shortlist_count": 2,
+      "geo_distance_meters": 71.2885
+    },
+    {
+      "external_listing_id": "sea-sanctuary",
+      "top_vrbo_ref_id": "21660542",
+      "top_score": 0.2826,
+      "shortlist_count": 17,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "front-porch-sitting",
+      "top_vrbo_ref_id": "45567887",
+      "top_score": 0.2666,
+      "shortlist_count": 3,
+      "geo_distance_meters": 26.4312
+    },
+    {
+      "external_listing_id": "recovery-room",
+      "top_vrbo_ref_id": "87565806",
+      "top_score": 0.2561,
+      "shortlist_count": 2,
+      "geo_distance_meters": 112.437
+    },
+    {
+      "external_listing_id": "serenity-by-the-sea",
+      "top_vrbo_ref_id": "115975667",
+      "top_score": 0.2553,
+      "shortlist_count": 26,
+      "geo_distance_meters": 73.553
+    },
+    {
+      "external_listing_id": "sunshine-shack",
+      "top_vrbo_ref_id": "97038479",
+      "top_score": 0.2534,
+      "shortlist_count": 2,
+      "geo_distance_meters": 73.0607
+    },
+    {
+      "external_listing_id": "sunkissed--salty",
+      "top_vrbo_ref_id": "125970965",
+      "top_score": 0.2367,
+      "shortlist_count": 5,
+      "geo_distance_meters": 73.7152
+    },
+    {
+      "external_listing_id": "vitamin-sea",
+      "top_vrbo_ref_id": "84348349",
+      "top_score": 0.2254,
+      "shortlist_count": 9,
+      "geo_distance_meters": 130.7615
+    },
+    {
+      "external_listing_id": "sun-stone",
+      "top_vrbo_ref_id": "88649524",
+      "top_score": 0.2034,
+      "shortlist_count": 3,
+      "geo_distance_meters": 129.9668
+    },
+    {
+      "external_listing_id": "key-lime-cottage",
+      "top_vrbo_ref_id": "100654808",
+      "top_score": 0.187,
+      "shortlist_count": 2,
+      "geo_distance_meters": 119.8921
+    },
+    {
+      "external_listing_id": "sea-9-at-the-palms",
+      "top_vrbo_ref_id": "100194796",
+      "top_score": 0.1864,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "seagrove-shores",
+      "top_vrbo_ref_id": "100257854",
+      "top_score": 0.1766,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "the-good-life",
+      "top_vrbo_ref_id": "101334295",
+      "top_score": 0.1764,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    }
+  ],
+  "unmatched_no_candidates": [
+    "5199-beachwalk",
+    "amberjack",
+    "beach-legasea",
+    "bella-vista",
+    "blue-fin",
+    "blue-grouper",
+    "coastal-chateau",
+    "coastal-view",
+    "coastal-vista",
+    "coral-cay",
+    "dogwood-bungalow",
+    "emerald-grande-west-1129",
+    "emerald-hill-21",
+    "lakeside-villa",
+    "paradise-cove",
+    "playa-maya",
+    "playa-maya-carriage-house",
+    "sandy-knickers",
+    "sea-vous-play",
+    "stepping-stone-carriage-house",
+    "stepping-stone-main-and-carriage-house",
+    "the-sandcastle-at-bluewater-landing"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

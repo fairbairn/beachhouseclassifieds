@@ -1,0 +1,50 @@
+{
+  "adapter": {
+    "adapter_name": "royaldestinations",
+    "slug_name": "seabreeze",
+    "external_listing_id": "seabreeze",
+    "detail_url": "https://www.royaldestinations.com/30a-vacation-rentals/seabreeze?rcav%5Bbegin%5D=11%2F21%2F2026&rcav%5Bend%5D=11%2F28%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=314&rcav%5BIDs%5D%5B8%5D%5B0%5D=1376-266543&eid=314"
+  },
+  "vrbo": {
+    "ref_id": "73761329",
+    "source_listing_id": "2585966",
+    "url": "https://www.vrbo.com/2585966?dateless=true&x_pwa=1&rfrr=HSR&pwa_ts=1774467445431&referrerUrl=aHR0cHM6Ly93d3cudnJiby5jb20vSG90ZWwtU2VhcmNo&useRewards=true&adults=2&regionId=183118&destination=Santa+Rosa+Beach%2C+Florida%2C+United+States+of+America&destType=MARKET&neighborhoodId=553248635077613214&latLong=30.396032%2C-86.228828&privacyTrackingState=CAN_NOT_TRACK&bed_count_ge=6&property_type_group=house&sort=RECOMMENDED&userIntent=&expediaPropertyId=73761329",
+    "property_name": "Seabreeze 30A: Luxe 5BR w/ Pool & Beach Access – Barclé"
+  },
+  "deduced": {
+    "address": {
+      "adapter_address": "76 SEABREEZE TRL Inlet Beach FL",
+      "vrbo_display": "Rosemary Beach, FL",
+      "vrbo_city": "Rosemary Beach"
+    },
+    "geo": {
+      "adapter_latitude": 30.2917053,
+      "adapter_longitude": -86.0508819,
+      "vrbo_latitude": 30.291115,
+      "vrbo_longitude": -86.049683,
+      "distance_meters": 132.5099
+    }
+  },
+  "match": {
+    "confidence_score": 0.6053,
+    "confidence_label": "low",
+    "scoring_breakdown": {
+      "name_similarity": 0.98,
+      "description_overlap": 0.41,
+      "slug_description_signal": 1,
+      "address_signal": 0,
+      "city_signal": 0,
+      "bed_bath_signal": 0.8667,
+      "geo_signal": 0.95
+    },
+    "notes": [
+      "Top score selected from shortlist of 5 VRBO candidates for seabreeze.",
+      "Score gap vs second candidate: 0.1881."
+    ]
+  },
+  "prototype": {
+    "status": "matched",
+    "matched_at": "2026-04-08",
+    "artifact_version": 4
+  }
+}

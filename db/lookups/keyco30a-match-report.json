@@ -1,0 +1,2265 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:22:41.171Z",
+    "adapter_key": "keyco30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 390,
+    "matched": 0,
+    "unmatched": 390,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "dRlLHV0RuD",
+      "top_vrbo_ref_id": "103863051",
+      "top_score": 0.5129,
+      "shortlist_count": 15,
+      "geo_distance_meters": 4.5566
+    },
+    {
+      "external_listing_id": "lSpzEsbIn7",
+      "top_vrbo_ref_id": "124561244",
+      "top_score": 0.5084,
+      "shortlist_count": 16,
+      "geo_distance_meters": 11.5065
+    },
+    {
+      "external_listing_id": "6J7AiZDyGz",
+      "top_vrbo_ref_id": "112700203",
+      "top_score": 0.5024,
+      "shortlist_count": 6,
+      "geo_distance_meters": 42.5815
+    },
+    {
+      "external_listing_id": "KaFdk7nUJe",
+      "top_vrbo_ref_id": "110922850",
+      "top_score": 0.4964,
+      "shortlist_count": 14,
+      "geo_distance_meters": 5.1132
+    },
+    {
+      "external_listing_id": "6wj0qUgAkG",
+      "top_vrbo_ref_id": "24074594",
+      "top_score": 0.4952,
+      "shortlist_count": 18,
+      "geo_distance_meters": 3.2472
+    },
+    {
+      "external_listing_id": "LNusohGLGS",
+      "top_vrbo_ref_id": "126867024",
+      "top_score": 0.4952,
+      "shortlist_count": 5,
+      "geo_distance_meters": 40.3384
+    },
+    {
+      "external_listing_id": "O1PGS8jdmv",
+      "top_vrbo_ref_id": "109808719",
+      "top_score": 0.4952,
+      "shortlist_count": 15,
+      "geo_distance_meters": 6.4804
+    },
+    {
+      "external_listing_id": "VfThe6wZNG",
+      "top_vrbo_ref_id": "97044601",
+      "top_score": 0.4952,
+      "shortlist_count": 19,
+      "geo_distance_meters": 18.0765
+    },
+    {
+      "external_listing_id": "u10ReCLVOH",
+      "top_vrbo_ref_id": "115823480",
+      "top_score": 0.494,
+      "shortlist_count": 17,
+      "geo_distance_meters": 30.3363
+    },
+    {
+      "external_listing_id": "1CQRFYfvEm",
+      "top_vrbo_ref_id": "119738955",
+      "top_score": 0.4928,
+      "shortlist_count": 36,
+      "geo_distance_meters": 23.4693
+    },
+    {
+      "external_listing_id": "NuaYu0EAJM",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.4928,
+      "shortlist_count": 4,
+      "geo_distance_meters": 8.0936
+    },
+    {
+      "external_listing_id": "W4BPkI3k2C",
+      "top_vrbo_ref_id": "90751898",
+      "top_score": 0.4892,
+      "shortlist_count": 6,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "TM5x804BMR",
+      "top_vrbo_ref_id": "110922852",
+      "top_score": 0.488,
+      "shortlist_count": 3,
+      "geo_distance_meters": 19.0197
+    },
+    {
+      "external_listing_id": "m3wIZx3ldf",
+      "top_vrbo_ref_id": "92898826",
+      "top_score": 0.488,
+      "shortlist_count": 12,
+      "geo_distance_meters": 27.161
+    },
+    {
+      "external_listing_id": "HCuT6aaJQL",
+      "top_vrbo_ref_id": "112242340",
+      "top_score": 0.4868,
+      "shortlist_count": 25,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "QplrSFbTGq",
+      "top_vrbo_ref_id": "127180448",
+      "top_score": 0.4868,
+      "shortlist_count": 17,
+      "geo_distance_meters": 3.9251
+    },
+    {
+      "external_listing_id": "1SQOhQztVd",
+      "top_vrbo_ref_id": "110478605",
+      "top_score": 0.4856,
+      "shortlist_count": 21,
+      "geo_distance_meters": 38.7005
+    },
+    {
+      "external_listing_id": "h3qb3sESRL",
+      "top_vrbo_ref_id": "123906930",
+      "top_score": 0.4856,
+      "shortlist_count": 6,
+      "geo_distance_meters": 0.3999
+    },
+    {
+      "external_listing_id": "nQujdwE1ew",
+      "top_vrbo_ref_id": "110066580",
+      "top_score": 0.4856,
+      "shortlist_count": 6,
+      "geo_distance_meters": 54.1574
+    },
+    {
+      "external_listing_id": "yWkkrer1hS",
+      "top_vrbo_ref_id": "87702834",
+      "top_score": 0.4856,
+      "shortlist_count": 6,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "XHKeHPQQb5",
+      "top_vrbo_ref_id": "123420098",
+      "top_score": 0.4844,
+      "shortlist_count": 16,
+      "geo_distance_meters": 4.5377
+    },
+    {
+      "external_listing_id": "I7TVfAHe5A",
+      "top_vrbo_ref_id": "110478612",
+      "top_score": 0.4832,
+      "shortlist_count": 20,
+      "geo_distance_meters": 33.4783
+    },
+    {
+      "external_listing_id": "Tl0c9oc9XU",
+      "top_vrbo_ref_id": "112472064",
+      "top_score": 0.4832,
+      "shortlist_count": 30,
+      "geo_distance_meters": 9.0295
+    },
+    {
+      "external_listing_id": "LaFdWHbmMJ",
+      "top_vrbo_ref_id": "125460273",
+      "top_score": 0.4806,
+      "shortlist_count": 4,
+      "geo_distance_meters": 146.4715
+    },
+    {
+      "external_listing_id": "ioyUrnqnoO",
+      "top_vrbo_ref_id": "107424914",
+      "top_score": 0.4796,
+      "shortlist_count": 8,
+      "geo_distance_meters": 37.1551
+    },
+    {
+      "external_listing_id": "3YaQlUO5Cb",
+      "top_vrbo_ref_id": "126812483",
+      "top_score": 0.4784,
+      "shortlist_count": 4,
+      "geo_distance_meters": 2.4632
+    },
+    {
+      "external_listing_id": "R2hGOxcE5B",
+      "top_vrbo_ref_id": "103966148",
+      "top_score": 0.4784,
+      "shortlist_count": 16,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "bvjAHjEFK9",
+      "top_vrbo_ref_id": "74213543",
+      "top_score": 0.4784,
+      "shortlist_count": 12,
+      "geo_distance_meters": 14.1001
+    },
+    {
+      "external_listing_id": "OxvU7f3oiP",
+      "top_vrbo_ref_id": "76774718",
+      "top_score": 0.4772,
+      "shortlist_count": 6,
+      "geo_distance_meters": 47.6503
+    },
+    {
+      "external_listing_id": "bU9MDHTZp7",
+      "top_vrbo_ref_id": "87497120",
+      "top_score": 0.476,
+      "shortlist_count": 12,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "Ji0XLcP07V",
+      "top_vrbo_ref_id": "124818626",
+      "top_score": 0.4748,
+      "shortlist_count": 5,
+      "geo_distance_meters": 1.6746
+    },
+    {
+      "external_listing_id": "gj0IyQh4aw",
+      "top_vrbo_ref_id": "83914225",
+      "top_score": 0.4748,
+      "shortlist_count": 15,
+      "geo_distance_meters": 0.3841
+    },
+    {
+      "external_listing_id": "mWlYGOOnep",
+      "top_vrbo_ref_id": "89666447",
+      "top_score": 0.4736,
+      "shortlist_count": 5,
+      "geo_distance_meters": 38.7367
+    },
+    {
+      "external_listing_id": "VqkXcgnrmw",
+      "top_vrbo_ref_id": "127180448",
+      "top_score": 0.4724,
+      "shortlist_count": 30,
+      "geo_distance_meters": 66.3919
+    },
+    {
+      "external_listing_id": "hfQ0bZSUdz",
+      "top_vrbo_ref_id": "93668585",
+      "top_score": 0.4724,
+      "shortlist_count": 23,
+      "geo_distance_meters": 21.7185
+    },
+    {
+      "external_listing_id": "kNZlH5dwyG",
+      "top_vrbo_ref_id": "75631860",
+      "top_score": 0.4724,
+      "shortlist_count": 13,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "mdqLvSaDtp",
+      "top_vrbo_ref_id": "65583297",
+      "top_score": 0.4724,
+      "shortlist_count": 12,
+      "geo_distance_meters": 19.0967
+    },
+    {
+      "external_listing_id": "0msG5OkdD7",
+      "top_vrbo_ref_id": "74501654",
+      "top_score": 0.4712,
+      "shortlist_count": 15,
+      "geo_distance_meters": 4.9632
+    },
+    {
+      "external_listing_id": "bZBBIIWcq1",
+      "top_vrbo_ref_id": "97044597",
+      "top_score": 0.4712,
+      "shortlist_count": 18,
+      "geo_distance_meters": 8.4508
+    },
+    {
+      "external_listing_id": "UDBFLkfPox",
+      "top_vrbo_ref_id": "63081580",
+      "top_score": 0.4688,
+      "shortlist_count": 14,
+      "geo_distance_meters": 18.7007
+    },
+    {
+      "external_listing_id": "pw8VhDkT3w",
+      "top_vrbo_ref_id": "33248860",
+      "top_score": 0.467,
+      "shortlist_count": 29,
+      "geo_distance_meters": 6.2983
+    },
+    {
+      "external_listing_id": "EHBs2D1l4k",
+      "top_vrbo_ref_id": "120757048",
+      "top_score": 0.4664,
+      "shortlist_count": 18,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "KzYwvDpXEl",
+      "top_vrbo_ref_id": "91776630",
+      "top_score": 0.4664,
+      "shortlist_count": 9,
+      "geo_distance_meters": 19.4166
+    },
+    {
+      "external_listing_id": "jVNftKxyRi",
+      "top_vrbo_ref_id": "110066572",
+      "top_score": 0.4652,
+      "shortlist_count": 26,
+      "geo_distance_meters": 47.4629
+    },
+    {
+      "external_listing_id": "8mXvc7cVtg",
+      "top_vrbo_ref_id": "84117256",
+      "top_score": 0.4604,
+      "shortlist_count": 21,
+      "geo_distance_meters": 10.0342
+    },
+    {
+      "external_listing_id": "aY5qvURSZS",
+      "top_vrbo_ref_id": "76192792",
+      "top_score": 0.4568,
+      "shortlist_count": 8,
+      "geo_distance_meters": 1.1725
+    },
+    {
+      "external_listing_id": "szICVNovDb",
+      "top_vrbo_ref_id": "112686934",
+      "top_score": 0.446,
+      "shortlist_count": 25,
+      "geo_distance_meters": 64.7622
+    },
+    {
+      "external_listing_id": "GL70hhUH5v",
+      "top_vrbo_ref_id": "103863051",
+      "top_score": 0.4456,
+      "shortlist_count": 15,
+      "geo_distance_meters": 4.5566
+    },
+    {
+      "external_listing_id": "ptkLZemKjE",
+      "top_vrbo_ref_id": "65364624",
+      "top_score": 0.4448,
+      "shortlist_count": 4,
+      "geo_distance_meters": 8.3307
+    },
+    {
+      "external_listing_id": "K6zqNf3PBl",
+      "top_vrbo_ref_id": "115705913",
+      "top_score": 0.443,
+      "shortlist_count": 20,
+      "geo_distance_meters": 1.2818
+    },
+    {
+      "external_listing_id": "01PA1tg0yW",
+      "top_vrbo_ref_id": "106451177",
+      "top_score": 0.4412,
+      "shortlist_count": 23,
+      "geo_distance_meters": 39.8927
+    },
+    {
+      "external_listing_id": "s6dIXfZfcs",
+      "top_vrbo_ref_id": "97374384",
+      "top_score": 0.4376,
+      "shortlist_count": 26,
+      "geo_distance_meters": 4.196
+    },
+    {
+      "external_listing_id": "gmQzxn5aY8",
+      "top_vrbo_ref_id": "112582794",
+      "top_score": 0.3268,
+      "shortlist_count": 30,
+      "geo_distance_meters": 77.7607
+    },
+    {
+      "external_listing_id": "MwrQYOd0K7",
+      "top_vrbo_ref_id": "123963999",
+      "top_score": 0.3131,
+      "shortlist_count": 13,
+      "geo_distance_meters": 17.2376
+    },
+    {
+      "external_listing_id": "saFLRWkUXZ",
+      "top_vrbo_ref_id": "95523008",
+      "top_score": 0.3016,
+      "shortlist_count": 2,
+      "geo_distance_meters": 70.4274
+    },
+    {
+      "external_listing_id": "HGsQiG1J26",
+      "top_vrbo_ref_id": "110478605",
+      "top_score": 0.299,
+      "shortlist_count": 14,
+      "geo_distance_meters": 139.2201
+    },
+    {
+      "external_listing_id": "3Za69uXqGk",
+      "top_vrbo_ref_id": "99436560",
+      "top_score": 0.2902,
+      "shortlist_count": 7,
+      "geo_distance_meters": 0.2224
+    },
+    {
+      "external_listing_id": "KWTAx9fvsZ",
+      "top_vrbo_ref_id": "38194538",
+      "top_score": 0.2817,
+      "shortlist_count": 19,
+      "geo_distance_meters": 118.7081
+    },
+    {
+      "external_listing_id": "mALlXtf2DT",
+      "top_vrbo_ref_id": "120837284",
+      "top_score": 0.2774,
+      "shortlist_count": 4,
+      "geo_distance_meters": 140.9705
+    },
+    {
+      "external_listing_id": "oX0nN3xQTj",
+      "top_vrbo_ref_id": "59964748",
+      "top_score": 0.2756,
+      "shortlist_count": 12,
+      "geo_distance_meters": 144.372
+    },
+    {
+      "external_listing_id": "eF4RSYCSo2",
+      "top_vrbo_ref_id": "70418512",
+      "top_score": 0.2754,
+      "shortlist_count": 4,
+      "geo_distance_meters": 141.4173
+    },
+    {
+      "external_listing_id": "iIGwnEfZ3m",
+      "top_vrbo_ref_id": "108540710",
+      "top_score": 0.2728,
+      "shortlist_count": 26,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "l49SlFc3Rf",
+      "top_vrbo_ref_id": "65583297",
+      "top_score": 0.2696,
+      "shortlist_count": 10,
+      "geo_distance_meters": 67.0675
+    },
+    {
+      "external_listing_id": "f8DCDgSH5G",
+      "top_vrbo_ref_id": "110922852",
+      "top_score": 0.268,
+      "shortlist_count": 2,
+      "geo_distance_meters": 51.3124
+    },
+    {
+      "external_listing_id": "YjE4hyYCyb",
+      "top_vrbo_ref_id": "89855255",
+      "top_score": 0.2661,
+      "shortlist_count": 7,
+      "geo_distance_meters": 96.3852
+    },
+    {
+      "external_listing_id": "rf5Of5OW6R",
+      "top_vrbo_ref_id": "126953813",
+      "top_score": 0.2646,
+      "shortlist_count": 7,
+      "geo_distance_meters": 127.6916
+    },
+    {
+      "external_listing_id": "Ew20XBfrMv",
+      "top_vrbo_ref_id": "63081580",
+      "top_score": 0.2624,
+      "shortlist_count": 20,
+      "geo_distance_meters": 76.6004
+    },
+    {
+      "external_listing_id": "q66dh2xig0",
+      "top_vrbo_ref_id": "109355010",
+      "top_score": 0.2618,
+      "shortlist_count": 3,
+      "geo_distance_meters": 20.625
+    },
+    {
+      "external_listing_id": "YlhVDq4ED4",
+      "top_vrbo_ref_id": "119120209",
+      "top_score": 0.2591,
+      "shortlist_count": 4,
+      "geo_distance_meters": 91.0799
+    },
+    {
+      "external_listing_id": "QnogSSPAca",
+      "top_vrbo_ref_id": "70554230",
+      "top_score": 0.2584,
+      "shortlist_count": 10,
+      "geo_distance_meters": 60.1569
+    },
+    {
+      "external_listing_id": "XVJJE5Qz6t",
+      "top_vrbo_ref_id": "91213986",
+      "top_score": 0.2524,
+      "shortlist_count": 40,
+      "geo_distance_meters": 82.6728
+    },
+    {
+      "external_listing_id": "pxkngW52aC",
+      "top_vrbo_ref_id": "125271949",
+      "top_score": 0.2522,
+      "shortlist_count": 4,
+      "geo_distance_meters": 83.8501
+    },
+    {
+      "external_listing_id": "rhslh4ks42",
+      "top_vrbo_ref_id": "125382602",
+      "top_score": 0.2508,
+      "shortlist_count": 7,
+      "geo_distance_meters": 105.6512
+    },
+    {
+      "external_listing_id": "Bba2jbWk2m",
+      "top_vrbo_ref_id": "110922852",
+      "top_score": 0.25,
+      "shortlist_count": 2,
+      "geo_distance_meters": 68.4801
+    },
+    {
+      "external_listing_id": "hcAlBO1KNe",
+      "top_vrbo_ref_id": "33704823",
+      "top_score": 0.2474,
+      "shortlist_count": 4,
+      "geo_distance_meters": 95.5985
+    },
+    {
+      "external_listing_id": "p9liogMW81",
+      "top_vrbo_ref_id": "27849065",
+      "top_score": 0.2469,
+      "shortlist_count": 6,
+      "geo_distance_meters": 124.6043
+    },
+    {
+      "external_listing_id": "VBSBHZwH76",
+      "top_vrbo_ref_id": "33703520",
+      "top_score": 0.2462,
+      "shortlist_count": 1,
+      "geo_distance_meters": 37.0481
+    },
+    {
+      "external_listing_id": "dDlqvHzXEO",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2439,
+      "shortlist_count": 2,
+      "geo_distance_meters": 118.7519
+    },
+    {
+      "external_listing_id": "eDrykbDEEb",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.2435,
+      "shortlist_count": 4,
+      "geo_distance_meters": 49.6727
+    },
+    {
+      "external_listing_id": "5VBl4E8Jot",
+      "top_vrbo_ref_id": "126799846",
+      "top_score": 0.2433,
+      "shortlist_count": 9,
+      "geo_distance_meters": 146.8746
+    },
+    {
+      "external_listing_id": "1tIIy9tM7r",
+      "top_vrbo_ref_id": "120510635",
+      "top_score": 0.2408,
+      "shortlist_count": 3,
+      "geo_distance_meters": 67.0817
+    },
+    {
+      "external_listing_id": "CnadL2EH2Q",
+      "top_vrbo_ref_id": "87908523",
+      "top_score": 0.2408,
+      "shortlist_count": 7,
+      "geo_distance_meters": 115.2386
+    },
+    {
+      "external_listing_id": "CxIyXY1sBJ",
+      "top_vrbo_ref_id": "90889207",
+      "top_score": 0.2388,
+      "shortlist_count": 19,
+      "geo_distance_meters": 3.282
+    },
+    {
+      "external_listing_id": "PEI5CE6ybb",
+      "top_vrbo_ref_id": "109334821",
+      "top_score": 0.238,
+      "shortlist_count": 4,
+      "geo_distance_meters": 98.1415
+    },
+    {
+      "external_listing_id": "GCFYESitWQ",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.2364,
+      "shortlist_count": 17,
+      "geo_distance_meters": 112.6565
+    },
+    {
+      "external_listing_id": "8eLXhkc5MF",
+      "top_vrbo_ref_id": "63870434",
+      "top_score": 0.2356,
+      "shortlist_count": 11,
+      "geo_distance_meters": 0.7657
+    },
+    {
+      "external_listing_id": "9MLH8icUqM",
+      "top_vrbo_ref_id": "70554230",
+      "top_score": 0.2352,
+      "shortlist_count": 14,
+      "geo_distance_meters": 111.5478
+    },
+    {
+      "external_listing_id": "GeOfEUjiBW",
+      "top_vrbo_ref_id": "120265209",
+      "top_score": 0.2352,
+      "shortlist_count": 20,
+      "geo_distance_meters": 111.6438
+    },
+    {
+      "external_listing_id": "tSVPppCLOW",
+      "top_vrbo_ref_id": "90163277",
+      "top_score": 0.2352,
+      "shortlist_count": 25,
+      "geo_distance_meters": 20.8736
+    },
+    {
+      "external_listing_id": "yUD9srtri8",
+      "top_vrbo_ref_id": "21666454",
+      "top_score": 0.2348,
+      "shortlist_count": 10,
+      "geo_distance_meters": 64.4072
+    },
+    {
+      "external_listing_id": "TUWfu4w74j",
+      "top_vrbo_ref_id": "120265209",
+      "top_score": 0.234,
+      "shortlist_count": 30,
+      "geo_distance_meters": 98.6346
+    },
+    {
+      "external_listing_id": "kCQWTKrXZD",
+      "top_vrbo_ref_id": "87742668",
+      "top_score": 0.2328,
+      "shortlist_count": 9,
+      "geo_distance_meters": 2.769
+    },
+    {
+      "external_listing_id": "iylsN4QIxC",
+      "top_vrbo_ref_id": "36122676",
+      "top_score": 0.2327,
+      "shortlist_count": 4,
+      "geo_distance_meters": 92.1437
+    },
+    {
+      "external_listing_id": "LsBaC9lLwl",
+      "top_vrbo_ref_id": "76966634",
+      "top_score": 0.232,
+      "shortlist_count": 14,
+      "geo_distance_meters": 90.7934
+    },
+    {
+      "external_listing_id": "oq1jJP4KPQ",
+      "top_vrbo_ref_id": "125382602",
+      "top_score": 0.2316,
+      "shortlist_count": 11,
+      "geo_distance_meters": 119.3903
+    },
+    {
+      "external_listing_id": "xdMxIjB7Eq",
+      "top_vrbo_ref_id": "125351213",
+      "top_score": 0.2316,
+      "shortlist_count": 1,
+      "geo_distance_meters": 98.7917
+    },
+    {
+      "external_listing_id": "s891QCha00",
+      "top_vrbo_ref_id": "109334821",
+      "top_score": 0.2306,
+      "shortlist_count": 5,
+      "geo_distance_meters": 78.2148
+    },
+    {
+      "external_listing_id": "SIOD94svvi",
+      "top_vrbo_ref_id": "102707184",
+      "top_score": 0.2304,
+      "shortlist_count": 9,
+      "geo_distance_meters": 117.6433
+    },
+    {
+      "external_listing_id": "OZ0kgCharC",
+      "top_vrbo_ref_id": "33656118",
+      "top_score": 0.2303,
+      "shortlist_count": 1,
+      "geo_distance_meters": 113.4838
+    },
+    {
+      "external_listing_id": "kmOMo6VL6P",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2296,
+      "shortlist_count": 7,
+      "geo_distance_meters": 30.0281
+    },
+    {
+      "external_listing_id": "3JrHQ65NGo",
+      "top_vrbo_ref_id": "108540710",
+      "top_score": 0.2294,
+      "shortlist_count": 21,
+      "geo_distance_meters": 123.0773
+    },
+    {
+      "external_listing_id": "tTIAVhGKKY",
+      "top_vrbo_ref_id": "95796753",
+      "top_score": 0.2294,
+      "shortlist_count": 5,
+      "geo_distance_meters": 149.1595
+    },
+    {
+      "external_listing_id": "wAFpVVf9Y1",
+      "top_vrbo_ref_id": "123812455",
+      "top_score": 0.2292,
+      "shortlist_count": 3,
+      "geo_distance_meters": 37.5954
+    },
+    {
+      "external_listing_id": "wspIkGxoFm",
+      "top_vrbo_ref_id": "75284949",
+      "top_score": 0.2291,
+      "shortlist_count": 17,
+      "geo_distance_meters": 17.7696
+    },
+    {
+      "external_listing_id": "D490hDPZP5",
+      "top_vrbo_ref_id": "34464223",
+      "top_score": 0.228,
+      "shortlist_count": 3,
+      "geo_distance_meters": 53.8498
+    },
+    {
+      "external_listing_id": "ci6ka1l5rq",
+      "top_vrbo_ref_id": "33667882",
+      "top_score": 0.228,
+      "shortlist_count": 4,
+      "geo_distance_meters": 47.3842
+    },
+    {
+      "external_listing_id": "ZmVFpWPTyN",
+      "top_vrbo_ref_id": "94223410",
+      "top_score": 0.2268,
+      "shortlist_count": 8,
+      "geo_distance_meters": 46.1514
+    },
+    {
+      "external_listing_id": "uppxlOOK3s",
+      "top_vrbo_ref_id": "117577378",
+      "top_score": 0.2268,
+      "shortlist_count": 6,
+      "geo_distance_meters": 114.3047
+    },
+    {
+      "external_listing_id": "j0G0BFK2Aw",
+      "top_vrbo_ref_id": "125382602",
+      "top_score": 0.2266,
+      "shortlist_count": 11,
+      "geo_distance_meters": 137.3102
+    },
+    {
+      "external_listing_id": "4iAJlfsEzU",
+      "top_vrbo_ref_id": "125351213",
+      "top_score": 0.2256,
+      "shortlist_count": 1,
+      "geo_distance_meters": 84.345
+    },
+    {
+      "external_listing_id": "OJPsF3x4WZ",
+      "top_vrbo_ref_id": "68695051",
+      "top_score": 0.2256,
+      "shortlist_count": 4,
+      "geo_distance_meters": 57.2764
+    },
+    {
+      "external_listing_id": "pxD9XNsLJh",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.2256,
+      "shortlist_count": 28,
+      "geo_distance_meters": 117.0817
+    },
+    {
+      "external_listing_id": "9f32dedcHi",
+      "top_vrbo_ref_id": "125271949",
+      "top_score": 0.2244,
+      "shortlist_count": 5,
+      "geo_distance_meters": 111.4645
+    },
+    {
+      "external_listing_id": "EiJcpKgQxW",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.2244,
+      "shortlist_count": 15,
+      "geo_distance_meters": 104.5129
+    },
+    {
+      "external_listing_id": "KtTvibAslr",
+      "top_vrbo_ref_id": "68695051",
+      "top_score": 0.2244,
+      "shortlist_count": 6,
+      "geo_distance_meters": 89.1093
+    },
+    {
+      "external_listing_id": "0f8BJBdkFZ",
+      "top_vrbo_ref_id": "103597016",
+      "top_score": 0.224,
+      "shortlist_count": 13,
+      "geo_distance_meters": 113.8025
+    },
+    {
+      "external_listing_id": "35aMoUqNxD",
+      "top_vrbo_ref_id": "94734348",
+      "top_score": 0.2232,
+      "shortlist_count": 5,
+      "geo_distance_meters": 69.0118
+    },
+    {
+      "external_listing_id": "JMbbbuUiLf",
+      "top_vrbo_ref_id": "112582794",
+      "top_score": 0.2232,
+      "shortlist_count": 47,
+      "geo_distance_meters": 65.1387
+    },
+    {
+      "external_listing_id": "TFyaYZVoCi",
+      "top_vrbo_ref_id": "121552259",
+      "top_score": 0.2232,
+      "shortlist_count": 31,
+      "geo_distance_meters": 107.1899
+    },
+    {
+      "external_listing_id": "XFAeuQ0bWk",
+      "top_vrbo_ref_id": "67416510",
+      "top_score": 0.2232,
+      "shortlist_count": 10,
+      "geo_distance_meters": 111.9358
+    },
+    {
+      "external_listing_id": "qLNviCnaNU",
+      "top_vrbo_ref_id": "120265209",
+      "top_score": 0.2232,
+      "shortlist_count": 23,
+      "geo_distance_meters": 63.175
+    },
+    {
+      "external_listing_id": "HouelBoBW2",
+      "top_vrbo_ref_id": "102707184",
+      "top_score": 0.222,
+      "shortlist_count": 13,
+      "geo_distance_meters": 85.3894
+    },
+    {
+      "external_listing_id": "LHmNnlavGO",
+      "top_vrbo_ref_id": "104410893",
+      "top_score": 0.222,
+      "shortlist_count": 15,
+      "geo_distance_meters": 76.5267
+    },
+    {
+      "external_listing_id": "jXIQN3azyg",
+      "top_vrbo_ref_id": "111627029",
+      "top_score": 0.222,
+      "shortlist_count": 5,
+      "geo_distance_meters": 70.4401
+    },
+    {
+      "external_listing_id": "vTaVE5sKKg",
+      "top_vrbo_ref_id": "113892388",
+      "top_score": 0.222,
+      "shortlist_count": 31,
+      "geo_distance_meters": 6.569
+    },
+    {
+      "external_listing_id": "wUfmt96qPY",
+      "top_vrbo_ref_id": "88649524",
+      "top_score": 0.222,
+      "shortlist_count": 3,
+      "geo_distance_meters": 106.2446
+    },
+    {
+      "external_listing_id": "xPT4G29ErB",
+      "top_vrbo_ref_id": "57272527",
+      "top_score": 0.222,
+      "shortlist_count": 9,
+      "geo_distance_meters": 117.3024
+    },
+    {
+      "external_listing_id": "xiNZN32RWY",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.222,
+      "shortlist_count": 21,
+      "geo_distance_meters": 66.5186
+    },
+    {
+      "external_listing_id": "1GPhyPUkBe",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.2208,
+      "shortlist_count": 6,
+      "geo_distance_meters": 87.8134
+    },
+    {
+      "external_listing_id": "4AT1VkTUbm",
+      "top_vrbo_ref_id": "89820997",
+      "top_score": 0.2208,
+      "shortlist_count": 13,
+      "geo_distance_meters": 80.2088
+    },
+    {
+      "external_listing_id": "5AgPB8iSaD",
+      "top_vrbo_ref_id": "33483262",
+      "top_score": 0.2208,
+      "shortlist_count": 8,
+      "geo_distance_meters": 61.3183
+    },
+    {
+      "external_listing_id": "C6CbvYmt5u",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.2208,
+      "shortlist_count": 5,
+      "geo_distance_meters": 84.8022
+    },
+    {
+      "external_listing_id": "G7vC4Rbtzq",
+      "top_vrbo_ref_id": "115705913",
+      "top_score": 0.2208,
+      "shortlist_count": 16,
+      "geo_distance_meters": 48.8956
+    },
+    {
+      "external_listing_id": "OgOMpF0JuX",
+      "top_vrbo_ref_id": "94734348",
+      "top_score": 0.2208,
+      "shortlist_count": 3,
+      "geo_distance_meters": 109.6575
+    },
+    {
+      "external_listing_id": "h6fpJT9FWp",
+      "top_vrbo_ref_id": "111627029",
+      "top_score": 0.2208,
+      "shortlist_count": 2,
+      "geo_distance_meters": 54.2196
+    },
+    {
+      "external_listing_id": "nBTK8L8qfw",
+      "top_vrbo_ref_id": "110922852",
+      "top_score": 0.2208,
+      "shortlist_count": 3,
+      "geo_distance_meters": 20.7427
+    },
+    {
+      "external_listing_id": "pADwRW32kJ",
+      "top_vrbo_ref_id": "124829823",
+      "top_score": 0.2208,
+      "shortlist_count": 6,
+      "geo_distance_meters": 76.9647
+    },
+    {
+      "external_listing_id": "FILkICogaF",
+      "top_vrbo_ref_id": "122101001",
+      "top_score": 0.2206,
+      "shortlist_count": 9,
+      "geo_distance_meters": 144.0395
+    },
+    {
+      "external_listing_id": "HlKG3AOwoF",
+      "top_vrbo_ref_id": "68695051",
+      "top_score": 0.2206,
+      "shortlist_count": 3,
+      "geo_distance_meters": 139.4939
+    },
+    {
+      "external_listing_id": "BJe2Vh0XVk",
+      "top_vrbo_ref_id": "33492067",
+      "top_score": 0.2196,
+      "shortlist_count": 2,
+      "geo_distance_meters": 98.719
+    },
+    {
+      "external_listing_id": "HwEYNR3QvZ",
+      "top_vrbo_ref_id": "115994683",
+      "top_score": 0.2196,
+      "shortlist_count": 10,
+      "geo_distance_meters": 79.3278
+    },
+    {
+      "external_listing_id": "hsHnaTko1i",
+      "top_vrbo_ref_id": "115994683",
+      "top_score": 0.2196,
+      "shortlist_count": 15,
+      "geo_distance_meters": 33.7109
+    },
+    {
+      "external_listing_id": "YEKaV6mcnq",
+      "top_vrbo_ref_id": "125351213",
+      "top_score": 0.2194,
+      "shortlist_count": 1,
+      "geo_distance_meters": 139.3698
+    },
+    {
+      "external_listing_id": "obiWJiIAeh",
+      "top_vrbo_ref_id": "68695051",
+      "top_score": 0.2194,
+      "shortlist_count": 2,
+      "geo_distance_meters": 122.3024
+    },
+    {
+      "external_listing_id": "E9zg4OtvwY",
+      "top_vrbo_ref_id": "124352961",
+      "top_score": 0.2184,
+      "shortlist_count": 10,
+      "geo_distance_meters": 91.9644
+    },
+    {
+      "external_listing_id": "XHbCGAwvfP",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2184,
+      "shortlist_count": 4,
+      "geo_distance_meters": 44.1597
+    },
+    {
+      "external_listing_id": "fFF3GOZrWi",
+      "top_vrbo_ref_id": "60055445",
+      "top_score": 0.2184,
+      "shortlist_count": 1,
+      "geo_distance_meters": 51.2258
+    },
+    {
+      "external_listing_id": "hb2VKkLy7L",
+      "top_vrbo_ref_id": "123552398",
+      "top_score": 0.2184,
+      "shortlist_count": 19,
+      "geo_distance_meters": 66.5523
+    },
+    {
+      "external_listing_id": "lUvFacKxOq",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.2184,
+      "shortlist_count": 17,
+      "geo_distance_meters": 92.5713
+    },
+    {
+      "external_listing_id": "rsjY5uZ6k2",
+      "top_vrbo_ref_id": "116645575",
+      "top_score": 0.2184,
+      "shortlist_count": 9,
+      "geo_distance_meters": 137.5221
+    },
+    {
+      "external_listing_id": "7MLQ9LlkHd",
+      "top_vrbo_ref_id": "70554230",
+      "top_score": 0.2182,
+      "shortlist_count": 15,
+      "geo_distance_meters": 149.9041
+    },
+    {
+      "external_listing_id": "AK6anO1L4N",
+      "top_vrbo_ref_id": "126812483",
+      "top_score": 0.2182,
+      "shortlist_count": 1,
+      "geo_distance_meters": 144.579
+    },
+    {
+      "external_listing_id": "XA6gkAAWcS",
+      "top_vrbo_ref_id": "124528908",
+      "top_score": 0.2172,
+      "shortlist_count": 19,
+      "geo_distance_meters": 91.2981
+    },
+    {
+      "external_listing_id": "jBosnr4qiI",
+      "top_vrbo_ref_id": "33654218",
+      "top_score": 0.2172,
+      "shortlist_count": 13,
+      "geo_distance_meters": 99.0789
+    },
+    {
+      "external_listing_id": "SDuJivKJQG",
+      "top_vrbo_ref_id": "123070691",
+      "top_score": 0.216,
+      "shortlist_count": 13,
+      "geo_distance_meters": 103.5445
+    },
+    {
+      "external_listing_id": "T7zbdtkSsN",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.216,
+      "shortlist_count": 17,
+      "geo_distance_meters": 89.9793
+    },
+    {
+      "external_listing_id": "TmWTpMtYW2",
+      "top_vrbo_ref_id": "124829823",
+      "top_score": 0.216,
+      "shortlist_count": 5,
+      "geo_distance_meters": 82.6752
+    },
+    {
+      "external_listing_id": "eRNY9PvTRh",
+      "top_vrbo_ref_id": "91776630",
+      "top_score": 0.216,
+      "shortlist_count": 8,
+      "geo_distance_meters": 68.096
+    },
+    {
+      "external_listing_id": "8OLC8jLBfI",
+      "top_vrbo_ref_id": "100741837",
+      "top_score": 0.2148,
+      "shortlist_count": 8,
+      "geo_distance_meters": 72.7907
+    },
+    {
+      "external_listing_id": "FK9hV8cvrd",
+      "top_vrbo_ref_id": "33703520",
+      "top_score": 0.2148,
+      "shortlist_count": 3,
+      "geo_distance_meters": 91.9058
+    },
+    {
+      "external_listing_id": "GEsm1BIIMF",
+      "top_vrbo_ref_id": "127251154",
+      "top_score": 0.2148,
+      "shortlist_count": 2,
+      "geo_distance_meters": 118.1893
+    },
+    {
+      "external_listing_id": "H6u5zLWQ5s",
+      "top_vrbo_ref_id": "22721064",
+      "top_score": 0.2148,
+      "shortlist_count": 19,
+      "geo_distance_meters": 16.3451
+    },
+    {
+      "external_listing_id": "SomIuXLyWk",
+      "top_vrbo_ref_id": "121231882",
+      "top_score": 0.2148,
+      "shortlist_count": 8,
+      "geo_distance_meters": 15.8558
+    },
+    {
+      "external_listing_id": "zrSKc4jrZW",
+      "top_vrbo_ref_id": "33654218",
+      "top_score": 0.2148,
+      "shortlist_count": 19,
+      "geo_distance_meters": 82.2842
+    },
+    {
+      "external_listing_id": "Qo2mgv53is",
+      "top_vrbo_ref_id": "33703520",
+      "top_score": 0.2146,
+      "shortlist_count": 2,
+      "geo_distance_meters": 146.8292
+    },
+    {
+      "external_listing_id": "3zJ1WBo8hz",
+      "top_vrbo_ref_id": "127251154",
+      "top_score": 0.2136,
+      "shortlist_count": 3,
+      "geo_distance_meters": 82.8836
+    },
+    {
+      "external_listing_id": "8SnwDN1h9S",
+      "top_vrbo_ref_id": "127251154",
+      "top_score": 0.2136,
+      "shortlist_count": 1,
+      "geo_distance_meters": 109.8175
+    },
+    {
+      "external_listing_id": "kJt1cphY7Q",
+      "top_vrbo_ref_id": "127251154",
+      "top_score": 0.2136,
+      "shortlist_count": 3,
+      "geo_distance_meters": 99.2432
+    },
+    {
+      "external_listing_id": "tRZbHWVu0x",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2136,
+      "shortlist_count": 6,
+      "geo_distance_meters": 87.6616
+    },
+    {
+      "external_listing_id": "7i1LCDm563",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2134,
+      "shortlist_count": 11,
+      "geo_distance_meters": 140.1869
+    },
+    {
+      "external_listing_id": "7ogHf6xUOF",
+      "top_vrbo_ref_id": "33703520",
+      "top_score": 0.2124,
+      "shortlist_count": 2,
+      "geo_distance_meters": 76.2828
+    },
+    {
+      "external_listing_id": "8hqizTIQLu",
+      "top_vrbo_ref_id": "110613250",
+      "top_score": 0.2124,
+      "shortlist_count": 6,
+      "geo_distance_meters": 70.7625
+    },
+    {
+      "external_listing_id": "pUFmRmHQ8z",
+      "top_vrbo_ref_id": "122101001",
+      "top_score": 0.2124,
+      "shortlist_count": 14,
+      "geo_distance_meters": 105.9316
+    },
+    {
+      "external_listing_id": "wHRCjDSVCA",
+      "top_vrbo_ref_id": "34383416",
+      "top_score": 0.2123,
+      "shortlist_count": 3,
+      "geo_distance_meters": 100.8307
+    },
+    {
+      "external_listing_id": "3BOgm5V6nM",
+      "top_vrbo_ref_id": "87565806",
+      "top_score": 0.2112,
+      "shortlist_count": 2,
+      "geo_distance_meters": 97.3029
+    },
+    {
+      "external_listing_id": "9Y3Vp7VRc8",
+      "top_vrbo_ref_id": "56548895",
+      "top_score": 0.2112,
+      "shortlist_count": 6,
+      "geo_distance_meters": 21.7365
+    },
+    {
+      "external_listing_id": "CiAZ0Rrd7B",
+      "top_vrbo_ref_id": "126242191",
+      "top_score": 0.2112,
+      "shortlist_count": 5,
+      "geo_distance_meters": 112.1356
+    },
+    {
+      "external_listing_id": "PzpzUHE5tB",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.2112,
+      "shortlist_count": 8,
+      "geo_distance_meters": 80.7575
+    },
+    {
+      "external_listing_id": "RCSZnuO9kC",
+      "top_vrbo_ref_id": "104410893",
+      "top_score": 0.2112,
+      "shortlist_count": 22,
+      "geo_distance_meters": 51.2106
+    },
+    {
+      "external_listing_id": "ckshD0y8kX",
+      "top_vrbo_ref_id": "73026781",
+      "top_score": 0.2112,
+      "shortlist_count": 1,
+      "geo_distance_meters": 93.2022
+    },
+    {
+      "external_listing_id": "jHfC0ufr6a",
+      "top_vrbo_ref_id": "125351213",
+      "top_score": 0.2112,
+      "shortlist_count": 1,
+      "geo_distance_meters": 53.7938
+    },
+    {
+      "external_listing_id": "p8nNFbiQ8S",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.2112,
+      "shortlist_count": 6,
+      "geo_distance_meters": 88.1502
+    },
+    {
+      "external_listing_id": "qED2ASRN5t",
+      "top_vrbo_ref_id": "69752125",
+      "top_score": 0.2112,
+      "shortlist_count": 4,
+      "geo_distance_meters": 65.0456
+    },
+    {
+      "external_listing_id": "vOjc0GK5XM",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.2112,
+      "shortlist_count": 4,
+      "geo_distance_meters": 57.5983
+    },
+    {
+      "external_listing_id": "hftIvNk9Zq",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.211,
+      "shortlist_count": 8,
+      "geo_distance_meters": 131.7969
+    },
+    {
+      "external_listing_id": "7nTHMEf3Ao",
+      "top_vrbo_ref_id": "97015055",
+      "top_score": 0.21,
+      "shortlist_count": 3,
+      "geo_distance_meters": 93.0931
+    },
+    {
+      "external_listing_id": "7xVnoZ5LvW",
+      "top_vrbo_ref_id": "87565806",
+      "top_score": 0.21,
+      "shortlist_count": 1,
+      "geo_distance_meters": 68.3059
+    },
+    {
+      "external_listing_id": "APcB6PUzMy",
+      "top_vrbo_ref_id": "105135603",
+      "top_score": 0.21,
+      "shortlist_count": 9,
+      "geo_distance_meters": 80.5521
+    },
+    {
+      "external_listing_id": "WPZo5UH2P3",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.21,
+      "shortlist_count": 7,
+      "geo_distance_meters": 79.5094
+    },
+    {
+      "external_listing_id": "wPRAHlgUAm",
+      "top_vrbo_ref_id": "119120209",
+      "top_score": 0.21,
+      "shortlist_count": 2,
+      "geo_distance_meters": 112.6637
+    },
+    {
+      "external_listing_id": "D8aiRuZWrr",
+      "top_vrbo_ref_id": "114593590",
+      "top_score": 0.2098,
+      "shortlist_count": 2,
+      "geo_distance_meters": 121.4031
+    },
+    {
+      "external_listing_id": "dM5QE9zMvt",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2098,
+      "shortlist_count": 8,
+      "geo_distance_meters": 133.8665
+    },
+    {
+      "external_listing_id": "4YpUc96npl",
+      "top_vrbo_ref_id": "126344910",
+      "top_score": 0.2088,
+      "shortlist_count": 1,
+      "geo_distance_meters": 102.8602
+    },
+    {
+      "external_listing_id": "CU4t8VCYXh",
+      "top_vrbo_ref_id": "112709015",
+      "top_score": 0.2088,
+      "shortlist_count": 7,
+      "geo_distance_meters": 61.1242
+    },
+    {
+      "external_listing_id": "DXBaDfSCUk",
+      "top_vrbo_ref_id": "126242191",
+      "top_score": 0.2088,
+      "shortlist_count": 8,
+      "geo_distance_meters": 99.4802
+    },
+    {
+      "external_listing_id": "DhDSAcPpHz",
+      "top_vrbo_ref_id": "60055445",
+      "top_score": 0.2088,
+      "shortlist_count": 2,
+      "geo_distance_meters": 85.2368
+    },
+    {
+      "external_listing_id": "Gae9UaGwV1",
+      "top_vrbo_ref_id": "76774718",
+      "top_score": 0.2088,
+      "shortlist_count": 6,
+      "geo_distance_meters": 118.2635
+    },
+    {
+      "external_listing_id": "hQ5RnOWKo5",
+      "top_vrbo_ref_id": "88629411",
+      "top_score": 0.2088,
+      "shortlist_count": 3,
+      "geo_distance_meters": 54.1317
+    },
+    {
+      "external_listing_id": "rCMKrcv2B0",
+      "top_vrbo_ref_id": "38431309",
+      "top_score": 0.2088,
+      "shortlist_count": 15,
+      "geo_distance_meters": 44.9066
+    },
+    {
+      "external_listing_id": "0DoiihehVc",
+      "top_vrbo_ref_id": "80580882",
+      "top_score": 0.2086,
+      "shortlist_count": 2,
+      "geo_distance_meters": 151.7929
+    },
+    {
+      "external_listing_id": "4ReStlAYKU",
+      "top_vrbo_ref_id": "27336547",
+      "top_score": 0.2086,
+      "shortlist_count": 3,
+      "geo_distance_meters": 130.6025
+    },
+    {
+      "external_listing_id": "518TjGTFZh",
+      "top_vrbo_ref_id": "125252629",
+      "top_score": 0.2086,
+      "shortlist_count": 5,
+      "geo_distance_meters": 134.4944
+    },
+    {
+      "external_listing_id": "fsE3zEdWlr",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.2082,
+      "shortlist_count": 3,
+      "geo_distance_meters": 123.1573
+    },
+    {
+      "external_listing_id": "8Y0dHes4Mm",
+      "top_vrbo_ref_id": "123835013",
+      "top_score": 0.2076,
+      "shortlist_count": 4,
+      "geo_distance_meters": 61.4364
+    },
+    {
+      "external_listing_id": "HdqEiDQHBZ",
+      "top_vrbo_ref_id": "66256721",
+      "top_score": 0.2076,
+      "shortlist_count": 3,
+      "geo_distance_meters": 15.3936
+    },
+    {
+      "external_listing_id": "KLUf1mZQvq",
+      "top_vrbo_ref_id": "112894587",
+      "top_score": 0.2076,
+      "shortlist_count": 1,
+      "geo_distance_meters": 106.0526
+    },
+    {
+      "external_listing_id": "dQ2adfD5De",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.2076,
+      "shortlist_count": 6,
+      "geo_distance_meters": 88.287
+    },
+    {
+      "external_listing_id": "kUbaGTrxAo",
+      "top_vrbo_ref_id": "59849411",
+      "top_score": 0.2076,
+      "shortlist_count": 5,
+      "geo_distance_meters": 115.864
+    },
+    {
+      "external_listing_id": "sv0Sx4ZFDd",
+      "top_vrbo_ref_id": "60055445",
+      "top_score": 0.2076,
+      "shortlist_count": 1,
+      "geo_distance_meters": 51.2258
+    },
+    {
+      "external_listing_id": "zK5BHVI1JW",
+      "top_vrbo_ref_id": "114132477",
+      "top_score": 0.2076,
+      "shortlist_count": 16,
+      "geo_distance_meters": 2.2762
+    },
+    {
+      "external_listing_id": "YoMSPRueSs",
+      "top_vrbo_ref_id": "58994594",
+      "top_score": 0.2074,
+      "shortlist_count": 8,
+      "geo_distance_meters": 124.766
+    },
+    {
+      "external_listing_id": "uaBBLwJ7S5",
+      "top_vrbo_ref_id": "122441627",
+      "top_score": 0.2074,
+      "shortlist_count": 3,
+      "geo_distance_meters": 97.4361
+    },
+    {
+      "external_listing_id": "v4TH8CeEZs",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2074,
+      "shortlist_count": 8,
+      "geo_distance_meters": 121.0636
+    },
+    {
+      "external_listing_id": "6aVIEuV7xB",
+      "top_vrbo_ref_id": "122813614",
+      "top_score": 0.2064,
+      "shortlist_count": 7,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "CC2TLVvKxr",
+      "top_vrbo_ref_id": "127124240",
+      "top_score": 0.2064,
+      "shortlist_count": 5,
+      "geo_distance_meters": 74.844
+    },
+    {
+      "external_listing_id": "hkuWaAP7aW",
+      "top_vrbo_ref_id": "124829823",
+      "top_score": 0.2064,
+      "shortlist_count": 6,
+      "geo_distance_meters": 95.1381
+    },
+    {
+      "external_listing_id": "kaIaVH7cXg",
+      "top_vrbo_ref_id": "124819116",
+      "top_score": 0.2064,
+      "shortlist_count": 3,
+      "geo_distance_meters": 2.8188
+    },
+    {
+      "external_listing_id": "77PDSYXWWY",
+      "top_vrbo_ref_id": "126752938",
+      "top_score": 0.2062,
+      "shortlist_count": 2,
+      "geo_distance_meters": 131.9677
+    },
+    {
+      "external_listing_id": "86oFE3eb4q",
+      "top_vrbo_ref_id": "94912900",
+      "top_score": 0.2055,
+      "shortlist_count": 7,
+      "geo_distance_meters": 29.8068
+    },
+    {
+      "external_listing_id": "0iWttTkL1R",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.2052,
+      "shortlist_count": 5,
+      "geo_distance_meters": 56.7261
+    },
+    {
+      "external_listing_id": "3MU7Nqmgk4",
+      "top_vrbo_ref_id": "124204708",
+      "top_score": 0.2052,
+      "shortlist_count": 11,
+      "geo_distance_meters": 85.2414
+    },
+    {
+      "external_listing_id": "RmI8D7CVfH",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.2052,
+      "shortlist_count": 4,
+      "geo_distance_meters": 116.1328
+    },
+    {
+      "external_listing_id": "UCcl2NqljX",
+      "top_vrbo_ref_id": "20140008",
+      "top_score": 0.2052,
+      "shortlist_count": 8,
+      "geo_distance_meters": 32.2349
+    },
+    {
+      "external_listing_id": "ijG0DEC73H",
+      "top_vrbo_ref_id": "123552398",
+      "top_score": 0.2052,
+      "shortlist_count": 15,
+      "geo_distance_meters": 87.3759
+    },
+    {
+      "external_listing_id": "3XfUL3CaLm",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.205,
+      "shortlist_count": 8,
+      "geo_distance_meters": 120.0956
+    },
+    {
+      "external_listing_id": "NmNGseqxZ4",
+      "top_vrbo_ref_id": "125351213",
+      "top_score": 0.205,
+      "shortlist_count": 1,
+      "geo_distance_meters": 128.1613
+    },
+    {
+      "external_listing_id": "Gz8wLwe2oO",
+      "top_vrbo_ref_id": "63330327",
+      "top_score": 0.204,
+      "shortlist_count": 3,
+      "geo_distance_meters": 40.0849
+    },
+    {
+      "external_listing_id": "anfyGaCxnG",
+      "top_vrbo_ref_id": "111625053",
+      "top_score": 0.204,
+      "shortlist_count": 4,
+      "geo_distance_meters": 113.2477
+    },
+    {
+      "external_listing_id": "gzJCxMjvxl",
+      "top_vrbo_ref_id": "111627029",
+      "top_score": 0.204,
+      "shortlist_count": 2,
+      "geo_distance_meters": 47.8164
+    },
+    {
+      "external_listing_id": "iFwcNCnJGH",
+      "top_vrbo_ref_id": "39034133",
+      "top_score": 0.204,
+      "shortlist_count": 4,
+      "geo_distance_meters": 86.8604
+    },
+    {
+      "external_listing_id": "0wAUdJPzRO",
+      "top_vrbo_ref_id": "58994594",
+      "top_score": 0.2038,
+      "shortlist_count": 9,
+      "geo_distance_meters": 129.538
+    },
+    {
+      "external_listing_id": "XwDlhEeKII",
+      "top_vrbo_ref_id": "125611920",
+      "top_score": 0.2038,
+      "shortlist_count": 5,
+      "geo_distance_meters": 141.1401
+    },
+    {
+      "external_listing_id": "ZHu3HViMhP",
+      "top_vrbo_ref_id": "73026781",
+      "top_score": 0.2038,
+      "shortlist_count": 1,
+      "geo_distance_meters": 133.0917
+    },
+    {
+      "external_listing_id": "j4l16b84rb",
+      "top_vrbo_ref_id": "102707184",
+      "top_score": 0.2038,
+      "shortlist_count": 11,
+      "geo_distance_meters": 141.6875
+    },
+    {
+      "external_listing_id": "Cdba8UWwIN",
+      "top_vrbo_ref_id": "58994594",
+      "top_score": 0.2028,
+      "shortlist_count": 7,
+      "geo_distance_meters": 88.9215
+    },
+    {
+      "external_listing_id": "UU8zPcvUEB",
+      "top_vrbo_ref_id": "126242191",
+      "top_score": 0.2028,
+      "shortlist_count": 5,
+      "geo_distance_meters": 114.5166
+    },
+    {
+      "external_listing_id": "w8SK74teN5",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2028,
+      "shortlist_count": 9,
+      "geo_distance_meters": 104.6296
+    },
+    {
+      "external_listing_id": "7jY3TzDgso",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.2026,
+      "shortlist_count": 4,
+      "geo_distance_meters": 139.5062
+    },
+    {
+      "external_listing_id": "9Yl4CLH2hp",
+      "top_vrbo_ref_id": "59664319",
+      "top_score": 0.2016,
+      "shortlist_count": 13,
+      "geo_distance_meters": 80.3169
+    },
+    {
+      "external_listing_id": "P4ApBg2oow",
+      "top_vrbo_ref_id": "33644237",
+      "top_score": 0.2016,
+      "shortlist_count": 9,
+      "geo_distance_meters": 116.0688
+    },
+    {
+      "external_listing_id": "QtBzFw6E3d",
+      "top_vrbo_ref_id": "104804215",
+      "top_score": 0.2016,
+      "shortlist_count": 5,
+      "geo_distance_meters": 11.0363
+    },
+    {
+      "external_listing_id": "Xkcawn4DZt",
+      "top_vrbo_ref_id": "124302066",
+      "top_score": 0.2016,
+      "shortlist_count": 2,
+      "geo_distance_meters": 70.6388
+    },
+    {
+      "external_listing_id": "ghQRk9ViuF",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2016,
+      "shortlist_count": 8,
+      "geo_distance_meters": 98.8676
+    },
+    {
+      "external_listing_id": "iQO1V6kkBu",
+      "top_vrbo_ref_id": "116468497",
+      "top_score": 0.2016,
+      "shortlist_count": 3,
+      "geo_distance_meters": 98.8387
+    },
+    {
+      "external_listing_id": "voUJX10PrF",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2016,
+      "shortlist_count": 2,
+      "geo_distance_meters": 38.3944
+    },
+    {
+      "external_listing_id": "pDHWCV9Hby",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.2014,
+      "shortlist_count": 2,
+      "geo_distance_meters": 147.0574
+    },
+    {
+      "external_listing_id": "wqXyWeerLb",
+      "top_vrbo_ref_id": "106702071",
+      "top_score": 0.2014,
+      "shortlist_count": 2,
+      "geo_distance_meters": 134.5478
+    },
+    {
+      "external_listing_id": "0vlR4E0T0g",
+      "top_vrbo_ref_id": "20140022",
+      "top_score": 0.2004,
+      "shortlist_count": 2,
+      "geo_distance_meters": 17.871
+    },
+    {
+      "external_listing_id": "A2Z2b4dQrq",
+      "top_vrbo_ref_id": "124110128",
+      "top_score": 0.2004,
+      "shortlist_count": 2,
+      "geo_distance_meters": 20.6917
+    },
+    {
+      "external_listing_id": "Epxam259iA",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2004,
+      "shortlist_count": 9,
+      "geo_distance_meters": 41.0649
+    },
+    {
+      "external_listing_id": "kakJQH2sH0",
+      "top_vrbo_ref_id": "33657789",
+      "top_score": 0.2004,
+      "shortlist_count": 9,
+      "geo_distance_meters": 68.5078
+    },
+    {
+      "external_listing_id": "nWkawqaiCJ",
+      "top_vrbo_ref_id": "112894587",
+      "top_score": 0.2004,
+      "shortlist_count": 1,
+      "geo_distance_meters": 101.4085
+    },
+    {
+      "external_listing_id": "qlj0dBnAul",
+      "top_vrbo_ref_id": "20140022",
+      "top_score": 0.2004,
+      "shortlist_count": 4,
+      "geo_distance_meters": 25.8979
+    },
+    {
+      "external_listing_id": "ItLKvUz49v",
+      "top_vrbo_ref_id": "21715677",
+      "top_score": 0.1992,
+      "shortlist_count": 5,
+      "geo_distance_meters": 52.8367
+    },
+    {
+      "external_listing_id": "qMgh336ZNc",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.1992,
+      "shortlist_count": 5,
+      "geo_distance_meters": 74.7588
+    },
+    {
+      "external_listing_id": "EDr3GuDTkZ",
+      "top_vrbo_ref_id": "125270071",
+      "top_score": 0.199,
+      "shortlist_count": 3,
+      "geo_distance_meters": 125.3028
+    },
+    {
+      "external_listing_id": "w1ACAyUqw3",
+      "top_vrbo_ref_id": "120509275",
+      "top_score": 0.199,
+      "shortlist_count": 6,
+      "geo_distance_meters": 140.1871
+    },
+    {
+      "external_listing_id": "0wnbHkgblW",
+      "top_vrbo_ref_id": "124943608",
+      "top_score": 0.198,
+      "shortlist_count": 7,
+      "geo_distance_meters": 33.6978
+    },
+    {
+      "external_listing_id": "Z5CH7BQk8z",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.198,
+      "shortlist_count": 2,
+      "geo_distance_meters": 71.5957
+    },
+    {
+      "external_listing_id": "PJ0knjGXtH",
+      "top_vrbo_ref_id": "126242191",
+      "top_score": 0.1978,
+      "shortlist_count": 8,
+      "geo_distance_meters": 124.6999
+    },
+    {
+      "external_listing_id": "xPkJwz2YTa",
+      "top_vrbo_ref_id": "112894312",
+      "top_score": 0.1978,
+      "shortlist_count": 1,
+      "geo_distance_meters": 132.185
+    },
+    {
+      "external_listing_id": "6JGnXj4nF2",
+      "top_vrbo_ref_id": "121866659",
+      "top_score": 0.1968,
+      "shortlist_count": 1,
+      "geo_distance_meters": 84.5258
+    },
+    {
+      "external_listing_id": "BbzVmPb1g6",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.1968,
+      "shortlist_count": 4,
+      "geo_distance_meters": 78.1298
+    },
+    {
+      "external_listing_id": "MlQmMCYQyK",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1968,
+      "shortlist_count": 5,
+      "geo_distance_meters": 73.667
+    },
+    {
+      "external_listing_id": "NZbKOgeMaF",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1968,
+      "shortlist_count": 4,
+      "geo_distance_meters": 18.7561
+    },
+    {
+      "external_listing_id": "hxGRzBBjRy",
+      "top_vrbo_ref_id": "27528872",
+      "top_score": 0.1968,
+      "shortlist_count": 3,
+      "geo_distance_meters": 111.525
+    },
+    {
+      "external_listing_id": "yPdVDOGEKO",
+      "top_vrbo_ref_id": "110922850",
+      "top_score": 0.1968,
+      "shortlist_count": 14,
+      "geo_distance_meters": 89.9376
+    },
+    {
+      "external_listing_id": "YrzncrikSM",
+      "top_vrbo_ref_id": "21692378",
+      "top_score": 0.1956,
+      "shortlist_count": 3,
+      "geo_distance_meters": 86.866
+    },
+    {
+      "external_listing_id": "ty1DRa9V5E",
+      "top_vrbo_ref_id": "59940889",
+      "top_score": 0.1956,
+      "shortlist_count": 7,
+      "geo_distance_meters": 68.5769
+    },
+    {
+      "external_listing_id": "A1q8Hr46IB",
+      "top_vrbo_ref_id": "126248864",
+      "top_score": 0.1954,
+      "shortlist_count": 4,
+      "geo_distance_meters": 146.4991
+    },
+    {
+      "external_listing_id": "TMM53Fxxkx",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.1954,
+      "shortlist_count": 8,
+      "geo_distance_meters": 120.0956
+    },
+    {
+      "external_listing_id": "qQjenaMsXw",
+      "top_vrbo_ref_id": "73674281",
+      "top_score": 0.1947,
+      "shortlist_count": 3,
+      "geo_distance_meters": 95.9287
+    },
+    {
+      "external_listing_id": "Ly8N5BH7Bi",
+      "top_vrbo_ref_id": "125947276",
+      "top_score": 0.1944,
+      "shortlist_count": 6,
+      "geo_distance_meters": 54.0547
+    },
+    {
+      "external_listing_id": "q63f98wdY3",
+      "top_vrbo_ref_id": "122441627",
+      "top_score": 0.1942,
+      "shortlist_count": 2,
+      "geo_distance_meters": 122.8156
+    },
+    {
+      "external_listing_id": "tkXF1xuveM",
+      "top_vrbo_ref_id": "64566719",
+      "top_score": 0.1942,
+      "shortlist_count": 3,
+      "geo_distance_meters": 55.2541
+    },
+    {
+      "external_listing_id": "GHMGbpTdhc",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1932,
+      "shortlist_count": 2,
+      "geo_distance_meters": 108.3748
+    },
+    {
+      "external_listing_id": "t2qQG5X0Jr",
+      "top_vrbo_ref_id": "21709750",
+      "top_score": 0.1932,
+      "shortlist_count": 4,
+      "geo_distance_meters": 105.5741
+    },
+    {
+      "external_listing_id": "4ABO7up34v",
+      "top_vrbo_ref_id": "124819116",
+      "top_score": 0.192,
+      "shortlist_count": 2,
+      "geo_distance_meters": 95.2226
+    },
+    {
+      "external_listing_id": "fHTxKcaoW7",
+      "top_vrbo_ref_id": "101528312",
+      "top_score": 0.192,
+      "shortlist_count": 1,
+      "geo_distance_meters": 105.5225
+    },
+    {
+      "external_listing_id": "vjWnrAozzX",
+      "top_vrbo_ref_id": "65364624",
+      "top_score": 0.192,
+      "shortlist_count": 4,
+      "geo_distance_meters": 116.2145
+    },
+    {
+      "external_listing_id": "xBiBBgCdNR",
+      "top_vrbo_ref_id": "74841360",
+      "top_score": 0.192,
+      "shortlist_count": 2,
+      "geo_distance_meters": 77.2299
+    },
+    {
+      "external_listing_id": "jiFJkw64bE",
+      "top_vrbo_ref_id": "100402250",
+      "top_score": 0.1918,
+      "shortlist_count": 4,
+      "geo_distance_meters": 133.6571
+    },
+    {
+      "external_listing_id": "2eWKkqkRnH",
+      "top_vrbo_ref_id": "125351213",
+      "top_score": 0.1908,
+      "shortlist_count": 1,
+      "geo_distance_meters": 97.9203
+    },
+    {
+      "external_listing_id": "oyEDWBmdjV",
+      "top_vrbo_ref_id": "87908523",
+      "top_score": 0.1906,
+      "shortlist_count": 1,
+      "geo_distance_meters": 143.8453
+    },
+    {
+      "external_listing_id": "5DzdRIv2cV",
+      "top_vrbo_ref_id": "66175749",
+      "top_score": 0.1896,
+      "shortlist_count": 4,
+      "geo_distance_meters": 110.5119
+    },
+    {
+      "external_listing_id": "OBjA6OQc52",
+      "top_vrbo_ref_id": "27336547",
+      "top_score": 0.1896,
+      "shortlist_count": 5,
+      "geo_distance_meters": 55.4046
+    },
+    {
+      "external_listing_id": "cQ37YCpvxw",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1896,
+      "shortlist_count": 6,
+      "geo_distance_meters": 103.343
+    },
+    {
+      "external_listing_id": "32kQQDvlt6",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.1894,
+      "shortlist_count": 3,
+      "geo_distance_meters": 123.1633
+    },
+    {
+      "external_listing_id": "54txKL1MAU",
+      "top_vrbo_ref_id": "125439727",
+      "top_score": 0.1884,
+      "shortlist_count": 1,
+      "geo_distance_meters": 102.9777
+    },
+    {
+      "external_listing_id": "BXAJvOy4lR",
+      "top_vrbo_ref_id": "125947276",
+      "top_score": 0.1882,
+      "shortlist_count": 5,
+      "geo_distance_meters": 136.9516
+    },
+    {
+      "external_listing_id": "UgVEZkixMo",
+      "top_vrbo_ref_id": "125299257",
+      "top_score": 0.1882,
+      "shortlist_count": 1,
+      "geo_distance_meters": 121.8039
+    },
+    {
+      "external_listing_id": "XgnPEYCmdY",
+      "top_vrbo_ref_id": "18980007",
+      "top_score": 0.1882,
+      "shortlist_count": 1,
+      "geo_distance_meters": 137.865
+    },
+    {
+      "external_listing_id": "U6nIrocgxk",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.1872,
+      "shortlist_count": 5,
+      "geo_distance_meters": 113.9516
+    },
+    {
+      "external_listing_id": "jxOZBGgukA",
+      "top_vrbo_ref_id": "96905724",
+      "top_score": 0.187,
+      "shortlist_count": 2,
+      "geo_distance_meters": 150.407
+    },
+    {
+      "external_listing_id": "v0bAcoHWTR",
+      "top_vrbo_ref_id": "23089078",
+      "top_score": 0.187,
+      "shortlist_count": 4,
+      "geo_distance_meters": 128.3389
+    },
+    {
+      "external_listing_id": "ERoQeuxxBQ",
+      "top_vrbo_ref_id": "34579050",
+      "top_score": 0.186,
+      "shortlist_count": 7,
+      "geo_distance_meters": 64.8515
+    },
+    {
+      "external_listing_id": "72OwNmAMjG",
+      "top_vrbo_ref_id": "125097999",
+      "top_score": 0.1858,
+      "shortlist_count": 2,
+      "geo_distance_meters": 130.5321
+    },
+    {
+      "external_listing_id": "WpZEhIFCGk",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1848,
+      "shortlist_count": 2,
+      "geo_distance_meters": 78.3176
+    },
+    {
+      "external_listing_id": "jFj9GuF6Iz",
+      "top_vrbo_ref_id": "124943608",
+      "top_score": 0.1848,
+      "shortlist_count": 6,
+      "geo_distance_meters": 41.9579
+    },
+    {
+      "external_listing_id": "Ofm8Od5qgv",
+      "top_vrbo_ref_id": "126799859",
+      "top_score": 0.1846,
+      "shortlist_count": 2,
+      "geo_distance_meters": 143.9693
+    },
+    {
+      "external_listing_id": "lDmcP4EGv2",
+      "top_vrbo_ref_id": "123027446",
+      "top_score": 0.1834,
+      "shortlist_count": 2,
+      "geo_distance_meters": 136.7472
+    },
+    {
+      "external_listing_id": "mEQ634kDn8",
+      "top_vrbo_ref_id": "105552962",
+      "top_score": 0.1824,
+      "shortlist_count": 2,
+      "geo_distance_meters": 79.6411
+    },
+    {
+      "external_listing_id": "boDFy9C52W",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.1798,
+      "shortlist_count": 3,
+      "geo_distance_meters": 143.5325
+    },
+    {
+      "external_listing_id": "Xnz2e9BPMc",
+      "top_vrbo_ref_id": "21701361",
+      "top_score": 0.1764,
+      "shortlist_count": 1,
+      "geo_distance_meters": 103.3309
+    },
+    {
+      "external_listing_id": "UdtRhuyPUX",
+      "top_vrbo_ref_id": "90256983",
+      "top_score": 0.174,
+      "shortlist_count": 1,
+      "geo_distance_meters": 90.8968
+    },
+    {
+      "external_listing_id": "h1KknRi1gQ",
+      "top_vrbo_ref_id": "76015460",
+      "top_score": 0.1644,
+      "shortlist_count": 1,
+      "geo_distance_meters": 48.1954
+    }
+  ],
+  "unmatched_no_candidates": [
+    "00jYcCmEWz",
+    "126arf33yO",
+    "1KrkSHGyqz",
+    "20BEvzYiOa",
+    "3MwAKn8OfT",
+    "4QCiaIECyR",
+    "4VxKLxnCvG",
+    "50pEvezDXO",
+    "5IelGrlUXb",
+    "5yTxblzC79",
+    "6wsTpSYAyn",
+    "7IAcIWNgOv",
+    "7k6UkxeyRq",
+    "7npLO4dIDr",
+    "9A47tfUSSs",
+    "AYAXlT1lF3",
+    "Ac2O0U0Muh",
+    "AnciwHVprv",
+    "C5Prq37zhn",
+    "CcbVh3qCAO",
+    "DQgonE41gE",
+    "DsGbnp2963",
+    "E1RVUUTCrF",
+    "E3Xo58OBQw",
+    "FACoD7FNfa",
+    "GEA1yJfqsU",
+    "GEcmmrVxzl",
+    "H1NundVIhR",
+    "IVSnr8BlTg",
+    "JqHDbqQ0Fs",
+    "KQDefMQpTl",
+    "KUZTH9NRxc",
+    "LZdPyhLVA6",
+    "Lu1oGP17Q0",
+    "M9L2xcz3ho",
+    "NBKF6ju7dn",
+    "OeYPQOz1R3",
+    "QNVda9RFxI",
+    "RZeXyQdDW4",
+    "T7oKSHaLmC",
+    "WrqhQ4qnFd",
+    "XzbSHQpaVW",
+    "Y11HbMGYNr",
+    "Y5AQyVFy0K",
+    "YYRmBRDQNI",
+    "Z6REFtVggL",
+    "a0x4AUiqmW",
+    "a7ZxMXSbLA",
+    "asClHCWRL6",
+    "blthUQb9wN",
+    "dN0Kgah0BK",
+    "e0UklzlPau",
+    "e6wX97PaIt",
+    "emHBQu8i3y",
+    "i4pO6UMDXQ",
+    "iGW5IB6s66",
+    "ilEjRQGjTr",
+    "kEOSi0OR1y",
+    "kfKZ19BHT8",
+    "lcsWCqVCb0",
+    "lxFZKFlwJV",
+    "o837dcYhTL",
+    "onl93U4bsG",
+    "ox1lXp4joB",
+    "pqWm9xdM3P",
+    "q6BOPaUQRh",
+    "qFs7CeHpwI",
+    "qZkKIjBMGa",
+    "rGiGU9ejoB",
+    "tWVKjQfXBI",
+    "uFUyhQOiKO",
+    "unup6euhqM",
+    "vGFN2ehahB",
+    "w6K7IAAPxN",
+    "wKvePi3FGM",
+    "wUljJEG2Zw",
+    "whviW32pOe",
+    "wk8XakKYPl",
+    "xHVFXAADkb",
+    "xJwENpv9LZ",
+    "xxCZGEXqTS",
+    "xxwcm4HWN1",
+    "ylhc6aA0Wy",
+    "yp3ilxEJWZ"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

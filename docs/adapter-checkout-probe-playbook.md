@@ -76,3 +76,19 @@ $$
 $$
 
 Also expose confidence fields from assumption sample count and recency.
+
+## VRBO Probe WIP Note
+
+Current status for `src/lib/vrbo/vrbo-checkout-probe.mjs`:
+
+1. We confirmed VRBO GraphQL traffic on detail page load already includes pricing signals without requiring a CTA click.
+2. `AncillaryPropertyOffersQuery` appears earlier in the load sequence and its response includes `lodgingPrepareCheckout.action.totalPrice.amount`.
+3. A later multi-operation GraphQL batch (`ShoppingBannersQuery`, `SingleOfferQuery`, `CancellationPolicyInfoQuery`) also returns structures containing total pricing values.
+4. This supports an on-load interception strategy: navigate to the dated detail URL, watch GraphQL `fetch`/XHR traffic, parse matching operation responses, and extract normalized totals.
+
+Implementation direction:
+
+1. Treat button-click automation as fallback only.
+2. Capture and parse GraphQL responses during initial page load.
+3. Prioritize `AncillaryPropertyOffersQuery` response extraction first, then reconcile with later pricing responses when present.
+4. Continue recording diagnostics for challenge pages, proxy health, and missing-price reasons.

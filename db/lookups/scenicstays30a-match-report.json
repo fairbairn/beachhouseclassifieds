@@ -1,0 +1,202 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:28:05.814Z",
+    "adapter_key": "scenicstays30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 44,
+    "matched": 2,
+    "unmatched": 42,
+    "high_confidence_0_95_plus": 1
+  },
+  "matched": [
+    {
+      "external_listing_id": "13-lake-district-lane",
+      "vrbo_ref_id": "66902191",
+      "vrbo_source_listing_id": "2285662",
+      "score": 0.98,
+      "confidence_label": "exact",
+      "shortlist_count": 3,
+      "geo_distance_meters": 0.3302
+    },
+    {
+      "external_listing_id": "southern-style",
+      "vrbo_ref_id": "99563282",
+      "vrbo_source_listing_id": "3650383",
+      "score": 0.65,
+      "confidence_label": "low",
+      "shortlist_count": 4,
+      "geo_distance_meters": 0.0222
+    }
+  ],
+  "unmatched": [
+    {
+      "external_listing_id": "pure-joy-stunning-three-story-home-with-carriage",
+      "top_vrbo_ref_id": "60083524",
+      "top_score": 0.594,
+      "shortlist_count": 7,
+      "geo_distance_meters": 0.2666
+    },
+    {
+      "external_listing_id": "private-pool-in-a-gated-community",
+      "top_vrbo_ref_id": "122783763",
+      "top_score": 0.4563,
+      "shortlist_count": 8,
+      "geo_distance_meters": 0.0585
+    },
+    {
+      "external_listing_id": "248-beach-bike-way",
+      "top_vrbo_ref_id": "104019462",
+      "top_score": 0.2362,
+      "shortlist_count": 15,
+      "geo_distance_meters": 131.5097
+    },
+    {
+      "external_listing_id": "barefoot-bungalow",
+      "top_vrbo_ref_id": "113448323",
+      "top_score": 0.2338,
+      "shortlist_count": 10,
+      "geo_distance_meters": 134.836
+    },
+    {
+      "external_listing_id": "374-gulfview-circle",
+      "top_vrbo_ref_id": "104276629",
+      "top_score": 0.2213,
+      "shortlist_count": 6,
+      "geo_distance_meters": 72.0759
+    },
+    {
+      "external_listing_id": "283-lakeview-drive",
+      "top_vrbo_ref_id": "94734348",
+      "top_score": 0.2172,
+      "shortlist_count": 3,
+      "geo_distance_meters": 109.1806
+    },
+    {
+      "external_listing_id": "169-lakeview-drive",
+      "top_vrbo_ref_id": "125270071",
+      "top_score": 0.2076,
+      "shortlist_count": 2,
+      "geo_distance_meters": 103.095
+    },
+    {
+      "external_listing_id": "kerihil-south",
+      "top_vrbo_ref_id": "91451344",
+      "top_score": 0.2052,
+      "shortlist_count": 13,
+      "geo_distance_meters": 112.9064
+    },
+    {
+      "external_listing_id": "vizcaya-1001",
+      "top_vrbo_ref_id": "120435036",
+      "top_score": 0.2052,
+      "shortlist_count": 8,
+      "geo_distance_meters": 139.6436
+    },
+    {
+      "external_listing_id": "high-pointe-resort-432",
+      "top_vrbo_ref_id": "126379514",
+      "top_score": 0.204,
+      "shortlist_count": 4,
+      "geo_distance_meters": 56.8765
+    },
+    {
+      "external_listing_id": "blue-mountain-view",
+      "top_vrbo_ref_id": "21691814",
+      "top_score": 0.2026,
+      "shortlist_count": 6,
+      "geo_distance_meters": 147.0129
+    },
+    {
+      "external_listing_id": "my-blue-sky",
+      "top_vrbo_ref_id": "100426360",
+      "top_score": 0.1956,
+      "shortlist_count": 3,
+      "geo_distance_meters": 104.3659
+    },
+    {
+      "external_listing_id": "80-blue-sky",
+      "top_vrbo_ref_id": "120361053",
+      "top_score": 0.1954,
+      "shortlist_count": 3,
+      "geo_distance_meters": 148.7951
+    },
+    {
+      "external_listing_id": "sea-blessings",
+      "top_vrbo_ref_id": "127523437",
+      "top_score": 0.1944,
+      "shortlist_count": 3,
+      "geo_distance_meters": 95.9066
+    },
+    {
+      "external_listing_id": "tutti-frutti",
+      "top_vrbo_ref_id": "33560470",
+      "top_score": 0.1944,
+      "shortlist_count": 3,
+      "geo_distance_meters": 91.0024
+    },
+    {
+      "external_listing_id": "casa-fiesta-golf-cart-included-pet-friendly",
+      "top_vrbo_ref_id": "60617472",
+      "top_score": 0.186,
+      "shortlist_count": 1,
+      "geo_distance_meters": 108.2449
+    },
+    {
+      "external_listing_id": "catch-a-wave",
+      "top_vrbo_ref_id": "113271565",
+      "top_score": 0.1752,
+      "shortlist_count": 1,
+      "geo_distance_meters": 22.6185
+    }
+  ],
+  "unmatched_no_candidates": [
+    "116-gulfside-way",
+    "17-trigger-trail-west",
+    "barefoot-haven",
+    "bermuda-sunset",
+    "blessing-on-the-beach",
+    "blue-sky",
+    "blues-beach-bungalow",
+    "casa-indigo-pet-friendly",
+    "destiny-by-the-sea",
+    "emerald-fantasea",
+    "emerald-flamingo",
+    "harvest-haven-navarre-beach",
+    "here-at-last",
+    "hidden-jewel-with-a-pool",
+    "laguna-loafin",
+    "navarre-wanna-leave-3-bedroom",
+    "pelican-paradise",
+    "pelican-paradise-unit-a",
+    "pelican-paradise-unit-b",
+    "serenity-now",
+    "stealing-happy-hours",
+    "take-it-eeaasy",
+    "the-drift-away",
+    "twente-toes",
+    "villa-paradise"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

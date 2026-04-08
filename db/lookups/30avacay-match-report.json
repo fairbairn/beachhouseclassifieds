@@ -1,0 +1,790 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:16:01.317Z",
+    "adapter_key": "30avacay",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 115,
+    "matched": 0,
+    "unmatched": 115,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "seacrest---fantasea",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.5476,
+      "shortlist_count": 20,
+      "geo_distance_meters": 0.0222
+    },
+    {
+      "external_listing_id": "inlet---beeby-the-sea",
+      "top_vrbo_ref_id": "107741081",
+      "top_score": 0.5464,
+      "shortlist_count": 10,
+      "geo_distance_meters": 32.9167
+    },
+    {
+      "external_listing_id": "watercolor---spartina",
+      "top_vrbo_ref_id": "29634022",
+      "top_score": 0.5231,
+      "shortlist_count": 13,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "inlet---70-pinecrest",
+      "top_vrbo_ref_id": "48233256",
+      "top_score": 0.4709,
+      "shortlist_count": 4,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seagrove---texas-tide",
+      "top_vrbo_ref_id": "28896818",
+      "top_score": 0.4373,
+      "shortlist_count": 9,
+      "geo_distance_meters": 0.048
+    },
+    {
+      "external_listing_id": "seacrest---sweet-caroline-30a",
+      "top_vrbo_ref_id": "126568004",
+      "top_score": 0.389,
+      "shortlist_count": 17,
+      "geo_distance_meters": 48.0817
+    },
+    {
+      "external_listing_id": "seacrest---sand-dollar-getaway",
+      "top_vrbo_ref_id": "72284203",
+      "top_score": 0.3672,
+      "shortlist_count": 16,
+      "geo_distance_meters": 119.9394
+    },
+    {
+      "external_listing_id": "seagrove---239-dogwood",
+      "top_vrbo_ref_id": "61460602",
+      "top_score": 0.3607,
+      "shortlist_count": 12,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seagrove---121-live-oak",
+      "top_vrbo_ref_id": "59664319",
+      "top_score": 0.3533,
+      "shortlist_count": 18,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seacrest---flip-flop-happy",
+      "top_vrbo_ref_id": "28896447",
+      "top_score": 0.3188,
+      "shortlist_count": 19,
+      "geo_distance_meters": 0.0578
+    },
+    {
+      "external_listing_id": "bmb---seacliffs-13",
+      "top_vrbo_ref_id": "105135603",
+      "top_score": 0.3158,
+      "shortlist_count": 6,
+      "geo_distance_meters": 146.5938
+    },
+    {
+      "external_listing_id": "seagrove---beach-digs",
+      "top_vrbo_ref_id": "59664319",
+      "top_score": 0.3155,
+      "shortlist_count": 13,
+      "geo_distance_meters": 128.7054
+    },
+    {
+      "external_listing_id": "seacrest---hidden-gem",
+      "top_vrbo_ref_id": "70418512",
+      "top_score": 0.3143,
+      "shortlist_count": 8,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seacrest---captains-choice",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.3124,
+      "shortlist_count": 13,
+      "geo_distance_meters": 70.7353
+    },
+    {
+      "external_listing_id": "seacrest---oyster-manor",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.3112,
+      "shortlist_count": 23,
+      "geo_distance_meters": 72.2767
+    },
+    {
+      "external_listing_id": "bmb---bmt-3a",
+      "top_vrbo_ref_id": "107827509",
+      "top_score": 0.3098,
+      "shortlist_count": 2,
+      "geo_distance_meters": 145.9828
+    },
+    {
+      "external_listing_id": "seacrest---turtle-cove",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.3076,
+      "shortlist_count": 7,
+      "geo_distance_meters": 64.0121
+    },
+    {
+      "external_listing_id": "bmb---bmv-4a",
+      "top_vrbo_ref_id": "107827509",
+      "top_score": 0.3066,
+      "shortlist_count": 2,
+      "geo_distance_meters": 149.8363
+    },
+    {
+      "external_listing_id": "inlet---mia-vista-mare",
+      "top_vrbo_ref_id": "74671400",
+      "top_score": 0.3064,
+      "shortlist_count": 16,
+      "geo_distance_meters": 3.3798
+    },
+    {
+      "external_listing_id": "bmb---bmv-11",
+      "top_vrbo_ref_id": "107827509",
+      "top_score": 0.3052,
+      "shortlist_count": 3,
+      "geo_distance_meters": 118.2196
+    },
+    {
+      "external_listing_id": "bmb---bmt-3b",
+      "top_vrbo_ref_id": "107827509",
+      "top_score": 0.305,
+      "shortlist_count": 2,
+      "geo_distance_meters": 145.9828
+    },
+    {
+      "external_listing_id": "seacrest-w---blue-tide-1b",
+      "top_vrbo_ref_id": "113035864",
+      "top_score": 0.304,
+      "shortlist_count": 4,
+      "geo_distance_meters": 146.4459
+    },
+    {
+      "external_listing_id": "seacrest---hello-sunshine",
+      "top_vrbo_ref_id": "111509940",
+      "top_score": 0.3026,
+      "shortlist_count": 22,
+      "geo_distance_meters": 135.1221
+    },
+    {
+      "external_listing_id": "seagrove---buying-time",
+      "top_vrbo_ref_id": "29664581",
+      "top_score": 0.2997,
+      "shortlist_count": 5,
+      "geo_distance_meters": 0.04
+    },
+    {
+      "external_listing_id": "seagrove---30a-sun-joy",
+      "top_vrbo_ref_id": "122775133",
+      "top_score": 0.2943,
+      "shortlist_count": 2,
+      "geo_distance_meters": 17.7061
+    },
+    {
+      "external_listing_id": "bmb---bmv-15",
+      "top_vrbo_ref_id": "88663543",
+      "top_score": 0.2906,
+      "shortlist_count": 3,
+      "geo_distance_meters": 112.474
+    },
+    {
+      "external_listing_id": "watercolor---29-silk-mh--ch",
+      "top_vrbo_ref_id": "111627029",
+      "top_score": 0.2843,
+      "shortlist_count": 2,
+      "geo_distance_meters": 0.0556
+    },
+    {
+      "external_listing_id": "watersound---87-plimsoll",
+      "top_vrbo_ref_id": "121723789",
+      "top_score": 0.2811,
+      "shortlist_count": 2,
+      "geo_distance_meters": 140.5251
+    },
+    {
+      "external_listing_id": "bmb---bmv-4b",
+      "top_vrbo_ref_id": "107827509",
+      "top_score": 0.2804,
+      "shortlist_count": 2,
+      "geo_distance_meters": 149.8363
+    },
+    {
+      "external_listing_id": "seagrove---seagroves-pearl",
+      "top_vrbo_ref_id": "91020686",
+      "top_score": 0.2795,
+      "shortlist_count": 10,
+      "geo_distance_meters": 14.4037
+    },
+    {
+      "external_listing_id": "rosemary---54-main-st",
+      "top_vrbo_ref_id": "111653408",
+      "top_score": 0.2764,
+      "shortlist_count": 24,
+      "geo_distance_meters": 100.7755
+    },
+    {
+      "external_listing_id": "bmb---bmv-14",
+      "top_vrbo_ref_id": "88663543",
+      "top_score": 0.2736,
+      "shortlist_count": 2,
+      "geo_distance_meters": 140.082
+    },
+    {
+      "external_listing_id": "prominence---the-30-way",
+      "top_vrbo_ref_id": "33703520",
+      "top_score": 0.2712,
+      "shortlist_count": 3,
+      "geo_distance_meters": 57.7082
+    },
+    {
+      "external_listing_id": "seacrest---catch-of-the-day",
+      "top_vrbo_ref_id": "97038479",
+      "top_score": 0.2701,
+      "shortlist_count": 17,
+      "geo_distance_meters": 95.6907
+    },
+    {
+      "external_listing_id": "inlet---beeby-the-dunes",
+      "top_vrbo_ref_id": "45574009",
+      "top_score": 0.2698,
+      "shortlist_count": 15,
+      "geo_distance_meters": 78.9703
+    },
+    {
+      "external_listing_id": "watercolor---29-silk-ch",
+      "top_vrbo_ref_id": "111627029",
+      "top_score": 0.2688,
+      "shortlist_count": 2,
+      "geo_distance_meters": 1.1284
+    },
+    {
+      "external_listing_id": "seagrove---hammock",
+      "top_vrbo_ref_id": "103075054",
+      "top_score": 0.2679,
+      "shortlist_count": 4,
+      "geo_distance_meters": 87.1054
+    },
+    {
+      "external_listing_id": "seagrove---134-dogwood",
+      "top_vrbo_ref_id": "78172993",
+      "top_score": 0.2652,
+      "shortlist_count": 19,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "seacrest---166-blue-crab",
+      "top_vrbo_ref_id": "70418512",
+      "top_score": 0.2632,
+      "shortlist_count": 9,
+      "geo_distance_meters": 23.4329
+    },
+    {
+      "external_listing_id": "inlet---beeby-the-sand",
+      "top_vrbo_ref_id": "74671400",
+      "top_score": 0.2627,
+      "shortlist_count": 17,
+      "geo_distance_meters": 41.2237
+    },
+    {
+      "external_listing_id": "watersound---19-half-moon",
+      "top_vrbo_ref_id": "33659568",
+      "top_score": 0.2625,
+      "shortlist_count": 3,
+      "geo_distance_meters": 115.783
+    },
+    {
+      "external_listing_id": "seagrove---17-sugar-sand-lane",
+      "top_vrbo_ref_id": "38719651",
+      "top_score": 0.2606,
+      "shortlist_count": 9,
+      "geo_distance_meters": 34.8204
+    },
+    {
+      "external_listing_id": "inlet---little-beach-chickee",
+      "top_vrbo_ref_id": "74671400",
+      "top_score": 0.2603,
+      "shortlist_count": 17,
+      "geo_distance_meters": 80.2621
+    },
+    {
+      "external_listing_id": "inlet---beeby-the-shore",
+      "top_vrbo_ref_id": "74671400",
+      "top_score": 0.2591,
+      "shortlist_count": 17,
+      "geo_distance_meters": 77.5623
+    },
+    {
+      "external_listing_id": "rosemary--sandy-biscuits",
+      "top_vrbo_ref_id": "102108659",
+      "top_score": 0.2579,
+      "shortlist_count": 13,
+      "geo_distance_meters": 68.0128
+    },
+    {
+      "external_listing_id": "watercolor---29-silk-mh",
+      "top_vrbo_ref_id": "111627029",
+      "top_score": 0.2568,
+      "shortlist_count": 2,
+      "geo_distance_meters": 1.1284
+    },
+    {
+      "external_listing_id": "inlet---beeby-the-ocean",
+      "top_vrbo_ref_id": "74671400",
+      "top_score": 0.2567,
+      "shortlist_count": 15,
+      "geo_distance_meters": 62.8725
+    },
+    {
+      "external_listing_id": "seagrove---sago-sands-b",
+      "top_vrbo_ref_id": "31862904",
+      "top_score": 0.2531,
+      "shortlist_count": 2,
+      "geo_distance_meters": 61.2659
+    },
+    {
+      "external_listing_id": "seacrest---sea-grace",
+      "top_vrbo_ref_id": "48632258",
+      "top_score": 0.2485,
+      "shortlist_count": 3,
+      "geo_distance_meters": 71.1527
+    },
+    {
+      "external_listing_id": "watercolor---4-wc-blvd-202",
+      "top_vrbo_ref_id": "78392517",
+      "top_score": 0.2463,
+      "shortlist_count": 4,
+      "geo_distance_meters": 103.6554
+    },
+    {
+      "external_listing_id": "bmb---404-gulf-view",
+      "top_vrbo_ref_id": "107827509",
+      "top_score": 0.245,
+      "shortlist_count": 2,
+      "geo_distance_meters": 149.8363
+    },
+    {
+      "external_listing_id": "bmb--sea-la-vie",
+      "top_vrbo_ref_id": "107827509",
+      "top_score": 0.245,
+      "shortlist_count": 2,
+      "geo_distance_meters": 149.8363
+    },
+    {
+      "external_listing_id": "grayton---reflect-a",
+      "top_vrbo_ref_id": "107827509",
+      "top_score": 0.245,
+      "shortlist_count": 2,
+      "geo_distance_meters": 149.8363
+    },
+    {
+      "external_listing_id": "grayton---reflect-b",
+      "top_vrbo_ref_id": "107827509",
+      "top_score": 0.245,
+      "shortlist_count": 2,
+      "geo_distance_meters": 149.8363
+    },
+    {
+      "external_listing_id": "seagrove---the-hammocks",
+      "top_vrbo_ref_id": "74869758",
+      "top_score": 0.2428,
+      "shortlist_count": 3,
+      "geo_distance_meters": 44.4585
+    },
+    {
+      "external_listing_id": "seacrest---113-geoff-wilder",
+      "top_vrbo_ref_id": "33506850",
+      "top_score": 0.2401,
+      "shortlist_count": 17,
+      "geo_distance_meters": 18.6389
+    },
+    {
+      "external_listing_id": "seacrest-w---8-wisteria",
+      "top_vrbo_ref_id": "33668818",
+      "top_score": 0.2399,
+      "shortlist_count": 3,
+      "geo_distance_meters": 41.6647
+    },
+    {
+      "external_listing_id": "seagrove---281-elm-street",
+      "top_vrbo_ref_id": "123806390",
+      "top_score": 0.2396,
+      "shortlist_count": 2,
+      "geo_distance_meters": 71.4799
+    },
+    {
+      "external_listing_id": "bmb--seas-the-day",
+      "top_vrbo_ref_id": "101486634",
+      "top_score": 0.2386,
+      "shortlist_count": 3,
+      "geo_distance_meters": 92.7372
+    },
+    {
+      "external_listing_id": "seagrove---sunnys-place",
+      "top_vrbo_ref_id": "28896818",
+      "top_score": 0.2371,
+      "shortlist_count": 6,
+      "geo_distance_meters": 135.2323
+    },
+    {
+      "external_listing_id": "seagrove---the-blue-dolphin",
+      "top_vrbo_ref_id": "123562904",
+      "top_score": 0.2351,
+      "shortlist_count": 1,
+      "geo_distance_meters": 41.8594
+    },
+    {
+      "external_listing_id": "seagrove---sidecar-apartment",
+      "top_vrbo_ref_id": "29664581",
+      "top_score": 0.234,
+      "shortlist_count": 3,
+      "geo_distance_meters": 27.6832
+    },
+    {
+      "external_listing_id": "seagrove---70-cinnamon-fern",
+      "top_vrbo_ref_id": "93114285",
+      "top_score": 0.2316,
+      "shortlist_count": 2,
+      "geo_distance_meters": 57.6639
+    },
+    {
+      "external_listing_id": "seagrove---407-wood-beach-dr",
+      "top_vrbo_ref_id": "101960985",
+      "top_score": 0.2306,
+      "shortlist_count": 10,
+      "geo_distance_meters": 68.7753
+    },
+    {
+      "external_listing_id": "bmb---casavocado",
+      "top_vrbo_ref_id": "42478967",
+      "top_score": 0.2292,
+      "shortlist_count": 6,
+      "geo_distance_meters": 102.4416
+    },
+    {
+      "external_listing_id": "seacrest---bumblebee-cottage",
+      "top_vrbo_ref_id": "122101001",
+      "top_score": 0.2274,
+      "shortlist_count": 2,
+      "geo_distance_meters": 145.1342
+    },
+    {
+      "external_listing_id": "bmb---san-remo-301",
+      "top_vrbo_ref_id": "42478967",
+      "top_score": 0.2266,
+      "shortlist_count": 6,
+      "geo_distance_meters": 132.7511
+    },
+    {
+      "external_listing_id": "seagrove---90-cassine-way",
+      "top_vrbo_ref_id": "126482630",
+      "top_score": 0.2265,
+      "shortlist_count": 7,
+      "geo_distance_meters": 142.6967
+    },
+    {
+      "external_listing_id": "seagrove---25-kristi",
+      "top_vrbo_ref_id": "78362620",
+      "top_score": 0.2255,
+      "shortlist_count": 2,
+      "geo_distance_meters": 85.1121
+    },
+    {
+      "external_listing_id": "seacrest-w---beachwalk",
+      "top_vrbo_ref_id": "122441627",
+      "top_score": 0.2254,
+      "shortlist_count": 5,
+      "geo_distance_meters": 86.3615
+    },
+    {
+      "external_listing_id": "bmb---emerald-retreat",
+      "top_vrbo_ref_id": "42478967",
+      "top_score": 0.2244,
+      "shortlist_count": 6,
+      "geo_distance_meters": 70.6266
+    },
+    {
+      "external_listing_id": "bmb--driftwood-dreams",
+      "top_vrbo_ref_id": "101387163",
+      "top_score": 0.2244,
+      "shortlist_count": 4,
+      "geo_distance_meters": 84.9754
+    },
+    {
+      "external_listing_id": "bmb---132-emerald",
+      "top_vrbo_ref_id": "113518929",
+      "top_score": 0.2232,
+      "shortlist_count": 7,
+      "geo_distance_meters": 58.6306
+    },
+    {
+      "external_listing_id": "bmb---seaglass",
+      "top_vrbo_ref_id": "101486634",
+      "top_score": 0.2219,
+      "shortlist_count": 4,
+      "geo_distance_meters": 100.235
+    },
+    {
+      "external_listing_id": "seacrest---the-wellington",
+      "top_vrbo_ref_id": "124352961",
+      "top_score": 0.2217,
+      "shortlist_count": 16,
+      "geo_distance_meters": 125.6449
+    },
+    {
+      "external_listing_id": "seagrove---46-eastern-lake",
+      "top_vrbo_ref_id": "127124240",
+      "top_score": 0.2183,
+      "shortlist_count": 3,
+      "geo_distance_meters": 80.3019
+    },
+    {
+      "external_listing_id": "bmb---beach-music-30a",
+      "top_vrbo_ref_id": "66966347",
+      "top_score": 0.2172,
+      "shortlist_count": 2,
+      "geo_distance_meters": 117.8322
+    },
+    {
+      "external_listing_id": "seagrove-beachside-villas-133",
+      "top_vrbo_ref_id": "94734348",
+      "top_score": 0.217,
+      "shortlist_count": 4,
+      "geo_distance_meters": 143.9734
+    },
+    {
+      "external_listing_id": "prominence---sugar-wave",
+      "top_vrbo_ref_id": "31432195",
+      "top_score": 0.2161,
+      "shortlist_count": 1,
+      "geo_distance_meters": 129.7442
+    },
+    {
+      "external_listing_id": "seacrest---beach-blessing",
+      "top_vrbo_ref_id": "123838340",
+      "top_score": 0.2158,
+      "shortlist_count": 5,
+      "geo_distance_meters": 135.0963
+    },
+    {
+      "external_listing_id": "seacrest-w---blue-tide-9b",
+      "top_vrbo_ref_id": "122441627",
+      "top_score": 0.2158,
+      "shortlist_count": 2,
+      "geo_distance_meters": 90.3675
+    },
+    {
+      "external_listing_id": "seagrove-beachside-villas-723",
+      "top_vrbo_ref_id": "94734348",
+      "top_score": 0.2146,
+      "shortlist_count": 4,
+      "geo_distance_meters": 143.9734
+    },
+    {
+      "external_listing_id": "bmb---the-turquoise-turtle",
+      "top_vrbo_ref_id": "66966347",
+      "top_score": 0.2145,
+      "shortlist_count": 2,
+      "geo_distance_meters": 136.5475
+    },
+    {
+      "external_listing_id": "seagrove---103-s-gulf-dr",
+      "top_vrbo_ref_id": "112308246",
+      "top_score": 0.2126,
+      "shortlist_count": 3,
+      "geo_distance_meters": 61.0379
+    },
+    {
+      "external_listing_id": "inlet---serene-inlet",
+      "top_vrbo_ref_id": "31863089",
+      "top_score": 0.2085,
+      "shortlist_count": 3,
+      "geo_distance_meters": 127.7617
+    },
+    {
+      "external_listing_id": "seacrest-w---margaritaville",
+      "top_vrbo_ref_id": "76506298",
+      "top_score": 0.2074,
+      "shortlist_count": 1,
+      "geo_distance_meters": 146.9039
+    },
+    {
+      "external_listing_id": "seagrove-beachside-villas-1231",
+      "top_vrbo_ref_id": "126816970",
+      "top_score": 0.2064,
+      "shortlist_count": 2,
+      "geo_distance_meters": 33.8067
+    },
+    {
+      "external_listing_id": "gulf-place---beach-burrow",
+      "top_vrbo_ref_id": "88649524",
+      "top_score": 0.2055,
+      "shortlist_count": 3,
+      "geo_distance_meters": 117.2042
+    },
+    {
+      "external_listing_id": "grayton---bula-house",
+      "top_vrbo_ref_id": "45745927",
+      "top_score": 0.2052,
+      "shortlist_count": 3,
+      "geo_distance_meters": 88.3296
+    },
+    {
+      "external_listing_id": "seagrove---commodore-retreat-202",
+      "top_vrbo_ref_id": "123070691",
+      "top_score": 0.1992,
+      "shortlist_count": 5,
+      "geo_distance_meters": 51.8355
+    },
+    {
+      "external_listing_id": "seagrove---casa-del-mare",
+      "top_vrbo_ref_id": "111929818",
+      "top_score": 0.1983,
+      "shortlist_count": 6,
+      "geo_distance_meters": 56.2317
+    },
+    {
+      "external_listing_id": "seacrest---high-pointe---434",
+      "top_vrbo_ref_id": "34330073",
+      "top_score": 0.198,
+      "shortlist_count": 4,
+      "geo_distance_meters": 111.8778
+    },
+    {
+      "external_listing_id": "seacrest-w---inconseavable",
+      "top_vrbo_ref_id": "125970965",
+      "top_score": 0.1978,
+      "shortlist_count": 2,
+      "geo_distance_meters": 151.6852
+    },
+    {
+      "external_listing_id": "bmb---the-crest-9",
+      "top_vrbo_ref_id": "105135603",
+      "top_score": 0.1968,
+      "shortlist_count": 7,
+      "geo_distance_meters": 103.7756
+    },
+    {
+      "external_listing_id": "seagrove---heidiway",
+      "top_vrbo_ref_id": "29664581",
+      "top_score": 0.1968,
+      "shortlist_count": 7,
+      "geo_distance_meters": 91.675
+    },
+    {
+      "external_listing_id": "gulf-place---caribbean-107",
+      "top_vrbo_ref_id": "88649524",
+      "top_score": 0.194,
+      "shortlist_count": 3,
+      "geo_distance_meters": 117.2042
+    },
+    {
+      "external_listing_id": "seacrest-w---blue-tide-7a",
+      "top_vrbo_ref_id": "33135387",
+      "top_score": 0.1932,
+      "shortlist_count": 2,
+      "geo_distance_meters": 106.576
+    },
+    {
+      "external_listing_id": "gulf-place---gulf-place-103",
+      "top_vrbo_ref_id": "88649524",
+      "top_score": 0.1863,
+      "shortlist_count": 3,
+      "geo_distance_meters": 117.2042
+    },
+    {
+      "external_listing_id": "bmb---vitamin-sea-at-adagio",
+      "top_vrbo_ref_id": "113667823",
+      "top_score": 0.186,
+      "shortlist_count": 3,
+      "geo_distance_meters": 76.8324
+    },
+    {
+      "external_listing_id": "seagrove---52-dune-rosemary",
+      "top_vrbo_ref_id": "124110128",
+      "top_score": 0.186,
+      "shortlist_count": 3,
+      "geo_distance_meters": 79.7547
+    },
+    {
+      "external_listing_id": "dune-allen---match-pointe",
+      "top_vrbo_ref_id": "110066574",
+      "top_score": 0.1834,
+      "shortlist_count": 2,
+      "geo_distance_meters": 131.4353
+    },
+    {
+      "external_listing_id": "seagrove---castaway",
+      "top_vrbo_ref_id": "124832055",
+      "top_score": 0.18,
+      "shortlist_count": 3,
+      "geo_distance_meters": 89.8938
+    },
+    {
+      "external_listing_id": "bmb---red-vill-219",
+      "top_vrbo_ref_id": "113054015",
+      "top_score": 0.1776,
+      "shortlist_count": 2,
+      "geo_distance_meters": 119.1058
+    },
+    {
+      "external_listing_id": "seacrest-w---blanca-estate",
+      "top_vrbo_ref_id": "33704545",
+      "top_score": 0.1644,
+      "shortlist_count": 1,
+      "geo_distance_meters": 87.3469
+    },
+    {
+      "external_listing_id": "seacrest-w---casita-blanca",
+      "top_vrbo_ref_id": "33704545",
+      "top_score": 0.162,
+      "shortlist_count": 1,
+      "geo_distance_meters": 101.5005
+    },
+    {
+      "external_listing_id": "seacrest-w-hacienda-blanca",
+      "top_vrbo_ref_id": "33704545",
+      "top_score": 0.1608,
+      "shortlist_count": 1,
+      "geo_distance_meters": 87.3469
+    }
+  ],
+  "unmatched_no_candidates": [
+    "rosemary---26-falmouth-ln",
+    "seacrest---bella-bella",
+    "seacrest---coconut-cottage",
+    "seacrest---saltwater-gospel",
+    "seacrest-w---fort-grace",
+    "seacrest-w---palms-3",
+    "seacrest-w---palms-5",
+    "seacrest-w--nestled-inn",
+    "watercolor---35-lyonia"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

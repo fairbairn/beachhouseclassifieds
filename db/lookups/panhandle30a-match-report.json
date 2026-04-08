@@ -1,0 +1,395 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:23:51.711Z",
+    "adapter_key": "panhandle30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 51,
+    "matched": 0,
+    "unmatched": 51,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "30a-beach-house-harlies-house",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2482,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-blue-marlin",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2468,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-townhomes-c103",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2459,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-blue-crab-cottage",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2423,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-the-hemingway",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2403,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-beach-bikin",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2391,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-whatcha-dune",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2389,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-townhomes-c104-the-salty-dog",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2382,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-beach-ball",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.235,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-coconut-cottage",
+      "top_vrbo_ref_id": "100129522",
+      "top_score": 0.2277,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-serenity",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.227,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-casa-brisa",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2258,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-seagrove-escape",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2209,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-pelicans-rest",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2197,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-beach-please",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.217,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-mermaids-grotto",
+      "top_vrbo_ref_id": "101333039",
+      "top_score": 0.2168,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "cottages-at-eastern-lake-sea-la-vie",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2158,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-walking-on-sunshine",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.215,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-cruisn-and-sailn",
+      "top_vrbo_ref_id": "101333039",
+      "top_score": 0.2144,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-33-sunset",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2143,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-beach-ready",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2143,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-townhomes-b101",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2135,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-sel-la-vie",
+      "top_vrbo_ref_id": "101333039",
+      "top_score": 0.212,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-connecticut-yankee",
+      "top_vrbo_ref_id": "101333039",
+      "top_score": 0.2077,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-land-of-ahhhs",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2076,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-coastal-allure",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2065,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-paradise-valle",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2064,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-summer-lovin-at-treetop",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2063,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-mias-beach-house-at-treetop",
+      "top_vrbo_ref_id": "101185252",
+      "top_score": 0.2053,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-dune-allen-beach-house-dream-chaser",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.205,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-caspian-sea-duction",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2025,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-beach-bayou",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2022,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-seacrest-serenity",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2021,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-scissortail-at-treetop",
+      "top_vrbo_ref_id": "101824831",
+      "top_score": 0.2013,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-under-the-palms",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.2011,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "gulf-vista-8",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2005,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-sweet-17",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.2004,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-saltwater-cottage",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.1991,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-sanibel",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.199,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-vitamin-sea",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.1979,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-mar-chiquita",
+      "top_vrbo_ref_id": "101824831",
+      "top_score": 0.1968,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-mira-bella",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.1968,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-cozinest-at-treetop",
+      "top_vrbo_ref_id": "101161225",
+      "top_score": 0.1944,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-mermaids-of-magnolia",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.1905,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-30a-wonderland-at-treetop",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.1901,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-sunset-beach-house-villa-infinity",
+      "top_vrbo_ref_id": "101824831",
+      "top_score": 0.1899,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-suite-escape",
+      "top_vrbo_ref_id": "101333039",
+      "top_score": 0.1847,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-georgia-peach-at-the-beach",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.1846,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-beach-please-and-under-the-palms",
+      "top_vrbo_ref_id": "101094160",
+      "top_score": 0.1804,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "30a-beach-house-dream-by-the-sea",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.1744,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    },
+    {
+      "external_listing_id": "magnolia-cottages-paradise-by-the-pool",
+      "top_vrbo_ref_id": "100721204",
+      "top_score": 0.1731,
+      "shortlist_count": 40,
+      "geo_distance_meters": null
+    }
+  ],
+  "unmatched_no_candidates": [],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

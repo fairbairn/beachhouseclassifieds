@@ -1,0 +1,1411 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:22:36.875Z",
+    "adapter_key": "homeownerscollection30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 208,
+    "matched": 0,
+    "unmatched": 208,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "curphey-cottage-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2548,
+      "shortlist_count": 7,
+      "geo_distance_meters": 32.3544
+    },
+    {
+      "external_listing_id": "risas-cottage",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.2519,
+      "shortlist_count": 4,
+      "geo_distance_meters": 113.9839
+    },
+    {
+      "external_listing_id": "you-me-and-sea-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.2519,
+      "shortlist_count": 13,
+      "geo_distance_meters": 66.9548
+    },
+    {
+      "external_listing_id": "sea-two-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.2459,
+      "shortlist_count": 7,
+      "geo_distance_meters": 84.0241
+    },
+    {
+      "external_listing_id": "oyster-cottage-cottage",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.2445,
+      "shortlist_count": 4,
+      "geo_distance_meters": 130.4417
+    },
+    {
+      "external_listing_id": "el-dorado-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.2399,
+      "shortlist_count": 3,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "beachfront-7-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.2375,
+      "shortlist_count": 7,
+      "geo_distance_meters": 98.4029
+    },
+    {
+      "external_listing_id": "reve-de-mer-3-lockoff-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2349,
+      "shortlist_count": 11,
+      "geo_distance_meters": 135.6616
+    },
+    {
+      "external_listing_id": "seabiscuit-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2327,
+      "shortlist_count": 4,
+      "geo_distance_meters": 62.0977
+    },
+    {
+      "external_listing_id": "karibu-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2303,
+      "shortlist_count": 9,
+      "geo_distance_meters": 28.0563
+    },
+    {
+      "external_listing_id": "southern-splendor-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2289,
+      "shortlist_count": 7,
+      "geo_distance_meters": 139.4857
+    },
+    {
+      "external_listing_id": "heavy-water-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2277,
+      "shortlist_count": 7,
+      "geo_distance_meters": 135.541
+    },
+    {
+      "external_listing_id": "drift-away-main-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.227,
+      "shortlist_count": 10,
+      "geo_distance_meters": 121.2858
+    },
+    {
+      "external_listing_id": "beautiful-day-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.2258,
+      "shortlist_count": 5,
+      "geo_distance_meters": 138.6018
+    },
+    {
+      "external_listing_id": "natchez-house-cottage",
+      "top_vrbo_ref_id": "21709655",
+      "top_score": 0.2257,
+      "shortlist_count": 5,
+      "geo_distance_meters": 59.6477
+    },
+    {
+      "external_listing_id": "midsummer-nights-dream-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2256,
+      "shortlist_count": 7,
+      "geo_distance_meters": 2.6494
+    },
+    {
+      "external_listing_id": "roof-cottage",
+      "top_vrbo_ref_id": "21709655",
+      "top_score": 0.2256,
+      "shortlist_count": 5,
+      "geo_distance_meters": 40.4942
+    },
+    {
+      "external_listing_id": "empty-pockets-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2248,
+      "shortlist_count": 10,
+      "geo_distance_meters": 102.8217
+    },
+    {
+      "external_listing_id": "cherished-sea-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.2231,
+      "shortlist_count": 2,
+      "geo_distance_meters": 118.4354
+    },
+    {
+      "external_listing_id": "high-rustler-and-oak-creek-annie-cottage",
+      "top_vrbo_ref_id": "21709655",
+      "top_score": 0.223,
+      "shortlist_count": 5,
+      "geo_distance_meters": 59.6477
+    },
+    {
+      "external_listing_id": "lemonade-stand-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2223,
+      "shortlist_count": 7,
+      "geo_distance_meters": 94.1399
+    },
+    {
+      "external_listing_id": "grace-sea-cottage",
+      "top_vrbo_ref_id": "91352039",
+      "top_score": 0.2219,
+      "shortlist_count": 4,
+      "geo_distance_meters": 112.1029
+    },
+    {
+      "external_listing_id": "savannah-cabana-cottage",
+      "top_vrbo_ref_id": "21709750",
+      "top_score": 0.2219,
+      "shortlist_count": 7,
+      "geo_distance_meters": 24.4188
+    },
+    {
+      "external_listing_id": "reve-de-mer-2-lockoff-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2218,
+      "shortlist_count": 11,
+      "geo_distance_meters": 135.6616
+    },
+    {
+      "external_listing_id": "moonshine-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2212,
+      "shortlist_count": 7,
+      "geo_distance_meters": 45.5248
+    },
+    {
+      "external_listing_id": "honahlea-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2196,
+      "shortlist_count": 7,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "key-lime-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2196,
+      "shortlist_count": 9,
+      "geo_distance_meters": 47.146
+    },
+    {
+      "external_listing_id": "bridgeport-cottage",
+      "top_vrbo_ref_id": "20143892",
+      "top_score": 0.2195,
+      "shortlist_count": 13,
+      "geo_distance_meters": 57.1398
+    },
+    {
+      "external_listing_id": "seaspell-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2184,
+      "shortlist_count": 7,
+      "geo_distance_meters": 75.6442
+    },
+    {
+      "external_listing_id": "hakuna-matata-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2183,
+      "shortlist_count": 8,
+      "geo_distance_meters": 23.7598
+    },
+    {
+      "external_listing_id": "moon-tower-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2178,
+      "shortlist_count": 6,
+      "geo_distance_meters": 125.4646
+    },
+    {
+      "external_listing_id": "dream-come-true-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2176,
+      "shortlist_count": 7,
+      "geo_distance_meters": 79.4426
+    },
+    {
+      "external_listing_id": "homecoming-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2172,
+      "shortlist_count": 3,
+      "geo_distance_meters": 53.0208
+    },
+    {
+      "external_listing_id": "persimmon-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2172,
+      "shortlist_count": 10,
+      "geo_distance_meters": 97.6495
+    },
+    {
+      "external_listing_id": "londons-bungalow-cottage",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.216,
+      "shortlist_count": 4,
+      "geo_distance_meters": 116.7079
+    },
+    {
+      "external_listing_id": "villa-whimsey-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.216,
+      "shortlist_count": 13,
+      "geo_distance_meters": 99.5436
+    },
+    {
+      "external_listing_id": "lemon-drop-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2158,
+      "shortlist_count": 11,
+      "geo_distance_meters": 129.9722
+    },
+    {
+      "external_listing_id": "reve-de-mer-1-lockoff-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.215,
+      "shortlist_count": 11,
+      "geo_distance_meters": 135.6616
+    },
+    {
+      "external_listing_id": "celebration-cottage",
+      "top_vrbo_ref_id": "31758255",
+      "top_score": 0.2148,
+      "shortlist_count": 8,
+      "geo_distance_meters": 51.6882
+    },
+    {
+      "external_listing_id": "duet-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2148,
+      "shortlist_count": 7,
+      "geo_distance_meters": 74.7328
+    },
+    {
+      "external_listing_id": "reve-de-mer-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2146,
+      "shortlist_count": 11,
+      "geo_distance_meters": 133.1268
+    },
+    {
+      "external_listing_id": "key-west-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2136,
+      "shortlist_count": 6,
+      "geo_distance_meters": 82.2842
+    },
+    {
+      "external_listing_id": "wrinkle-time-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2136,
+      "shortlist_count": 5,
+      "geo_distance_meters": 91.506
+    },
+    {
+      "external_listing_id": "plum-lazy-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.2135,
+      "shortlist_count": 2,
+      "geo_distance_meters": 103.9896
+    },
+    {
+      "external_listing_id": "lawn-cottage",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.2134,
+      "shortlist_count": 6,
+      "geo_distance_meters": 63.2332
+    },
+    {
+      "external_listing_id": "oasis-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2133,
+      "shortlist_count": 7,
+      "geo_distance_meters": 145.2976
+    },
+    {
+      "external_listing_id": "sea-pearl-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2124,
+      "shortlist_count": 4,
+      "geo_distance_meters": 87.3512
+    },
+    {
+      "external_listing_id": "wave-wheat-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.2124,
+      "shortlist_count": 8,
+      "geo_distance_meters": 102.8208
+    },
+    {
+      "external_listing_id": "banana-republic-cottage",
+      "top_vrbo_ref_id": "21709655",
+      "top_score": 0.2112,
+      "shortlist_count": 5,
+      "geo_distance_meters": 65.4471
+    },
+    {
+      "external_listing_id": "cherry-on-top-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2112,
+      "shortlist_count": 4,
+      "geo_distance_meters": 44.4547
+    },
+    {
+      "external_listing_id": "jasper-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2112,
+      "shortlist_count": 10,
+      "geo_distance_meters": 99.5777
+    },
+    {
+      "external_listing_id": "sabbatical-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.2112,
+      "shortlist_count": 1,
+      "geo_distance_meters": 62.6427
+    },
+    {
+      "external_listing_id": "old-natchez-compound-cottage",
+      "top_vrbo_ref_id": "21709655",
+      "top_score": 0.2101,
+      "shortlist_count": 5,
+      "geo_distance_meters": 59.6477
+    },
+    {
+      "external_listing_id": "answered-prayers-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2096,
+      "shortlist_count": 4,
+      "geo_distance_meters": 109.6224
+    },
+    {
+      "external_listing_id": "hula-hut-cottage",
+      "top_vrbo_ref_id": "31758255",
+      "top_score": 0.2088,
+      "shortlist_count": 7,
+      "geo_distance_meters": 50.3383
+    },
+    {
+      "external_listing_id": "timeless-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2086,
+      "shortlist_count": 7,
+      "geo_distance_meters": 150.8339
+    },
+    {
+      "external_listing_id": "suite-magnolia-combo-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2085,
+      "shortlist_count": 4,
+      "geo_distance_meters": 134.5462
+    },
+    {
+      "external_listing_id": "southern-comfort-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.2076,
+      "shortlist_count": 9,
+      "geo_distance_meters": 105.5014
+    },
+    {
+      "external_listing_id": "station-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2076,
+      "shortlist_count": 6,
+      "geo_distance_meters": 115.6839
+    },
+    {
+      "external_listing_id": "tush-sand-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2076,
+      "shortlist_count": 8,
+      "geo_distance_meters": 88.5385
+    },
+    {
+      "external_listing_id": "our-place-sea-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2074,
+      "shortlist_count": 4,
+      "geo_distance_meters": 123.03
+    },
+    {
+      "external_listing_id": "blue-suede-shoes-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.2064,
+      "shortlist_count": 6,
+      "geo_distance_meters": 97.7387
+    },
+    {
+      "external_listing_id": "greenpeace-cottage",
+      "top_vrbo_ref_id": "31758255",
+      "top_score": 0.2064,
+      "shortlist_count": 6,
+      "geo_distance_meters": 47.1558
+    },
+    {
+      "external_listing_id": "happily-ever-after-tower-cottage",
+      "top_vrbo_ref_id": "20143892",
+      "top_score": 0.2064,
+      "shortlist_count": 2,
+      "geo_distance_meters": 68.3064
+    },
+    {
+      "external_listing_id": "mellow-yellow-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.2064,
+      "shortlist_count": 11,
+      "geo_distance_meters": 70.8271
+    },
+    {
+      "external_listing_id": "its-always-sunny-cottage",
+      "top_vrbo_ref_id": "77985045",
+      "top_score": 0.2062,
+      "shortlist_count": 5,
+      "geo_distance_meters": 125.3441
+    },
+    {
+      "external_listing_id": "admiral-booms-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2052,
+      "shortlist_count": 4,
+      "geo_distance_meters": 118.5866
+    },
+    {
+      "external_listing_id": "brigadoon-cottage",
+      "top_vrbo_ref_id": "91352039",
+      "top_score": 0.2052,
+      "shortlist_count": 6,
+      "geo_distance_meters": 111.29
+    },
+    {
+      "external_listing_id": "kaya-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2052,
+      "shortlist_count": 4,
+      "geo_distance_meters": 50.3451
+    },
+    {
+      "external_listing_id": "pinetucket-combo-cottage",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.2052,
+      "shortlist_count": 4,
+      "geo_distance_meters": 116.7079
+    },
+    {
+      "external_listing_id": "moonlight-hug-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.2051,
+      "shortlist_count": 2,
+      "geo_distance_meters": 51.2605
+    },
+    {
+      "external_listing_id": "perfectly-chilled-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.205,
+      "shortlist_count": 9,
+      "geo_distance_meters": 120.5346
+    },
+    {
+      "external_listing_id": "plum-lucky-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.2041,
+      "shortlist_count": 2,
+      "geo_distance_meters": 103.9896
+    },
+    {
+      "external_listing_id": "dream-catcher-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.204,
+      "shortlist_count": 5,
+      "geo_distance_meters": 54.2886
+    },
+    {
+      "external_listing_id": "gulfview-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.204,
+      "shortlist_count": 2,
+      "geo_distance_meters": 85.6591
+    },
+    {
+      "external_listing_id": "happily-ever-after-3-cottage",
+      "top_vrbo_ref_id": "20143892",
+      "top_score": 0.204,
+      "shortlist_count": 2,
+      "geo_distance_meters": 68.3064
+    },
+    {
+      "external_listing_id": "our-place-sun-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.204,
+      "shortlist_count": 1,
+      "geo_distance_meters": 110.3087
+    },
+    {
+      "external_listing_id": "sweet-jasmine-cottage",
+      "top_vrbo_ref_id": "21709750",
+      "top_score": 0.2037,
+      "shortlist_count": 5,
+      "geo_distance_meters": 67.7202
+    },
+    {
+      "external_listing_id": "tide-together-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.2035,
+      "shortlist_count": 2,
+      "geo_distance_meters": 112.2531
+    },
+    {
+      "external_listing_id": "above-crowd-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.2028,
+      "shortlist_count": 1,
+      "geo_distance_meters": 85.0421
+    },
+    {
+      "external_listing_id": "cork-whine-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.2028,
+      "shortlist_count": 3,
+      "geo_distance_meters": 61.3467
+    },
+    {
+      "external_listing_id": "greenback-cottage",
+      "top_vrbo_ref_id": "56548895",
+      "top_score": 0.2028,
+      "shortlist_count": 7,
+      "geo_distance_meters": 94.9504
+    },
+    {
+      "external_listing_id": "my-three-sons-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2028,
+      "shortlist_count": 4,
+      "geo_distance_meters": 115.2351
+    },
+    {
+      "external_listing_id": "pinetucket-cottage",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.2028,
+      "shortlist_count": 4,
+      "geo_distance_meters": 116.7079
+    },
+    {
+      "external_listing_id": "sandy-toes-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2028,
+      "shortlist_count": 4,
+      "geo_distance_meters": 61.292
+    },
+    {
+      "external_listing_id": "side-paradise-cottage",
+      "top_vrbo_ref_id": "31758255",
+      "top_score": 0.2028,
+      "shortlist_count": 6,
+      "geo_distance_meters": 42.5321
+    },
+    {
+      "external_listing_id": "parkside-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.2026,
+      "shortlist_count": 2,
+      "geo_distance_meters": 146.3912
+    },
+    {
+      "external_listing_id": "bloomsbury-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2016,
+      "shortlist_count": 4,
+      "geo_distance_meters": 85.9101
+    },
+    {
+      "external_listing_id": "fleur-de-lis-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.2016,
+      "shortlist_count": 4,
+      "geo_distance_meters": 39.8793
+    },
+    {
+      "external_listing_id": "poppins-place-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2016,
+      "shortlist_count": 4,
+      "geo_distance_meters": 118.5885
+    },
+    {
+      "external_listing_id": "salty-dogs-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.2016,
+      "shortlist_count": 1,
+      "geo_distance_meters": 102.4686
+    },
+    {
+      "external_listing_id": "southern-exposure-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.2016,
+      "shortlist_count": 4,
+      "geo_distance_meters": 56.3435
+    },
+    {
+      "external_listing_id": "toes-water-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2016,
+      "shortlist_count": 8,
+      "geo_distance_meters": 97.5821
+    },
+    {
+      "external_listing_id": "wean-back-and-wewax-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2016,
+      "shortlist_count": 1,
+      "geo_distance_meters": 40.5792
+    },
+    {
+      "external_listing_id": "gimme-shelter-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.2014,
+      "shortlist_count": 6,
+      "geo_distance_meters": 137.7689
+    },
+    {
+      "external_listing_id": "mondays-child-cottage",
+      "top_vrbo_ref_id": "20143892",
+      "top_score": 0.2014,
+      "shortlist_count": 7,
+      "geo_distance_meters": 131.9484
+    },
+    {
+      "external_listing_id": "simplicity-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2014,
+      "shortlist_count": 4,
+      "geo_distance_meters": 146.9183
+    },
+    {
+      "external_listing_id": "suite-magnolia-i-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2014,
+      "shortlist_count": 4,
+      "geo_distance_meters": 134.5462
+    },
+    {
+      "external_listing_id": "sight-sea-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.2008,
+      "shortlist_count": 1,
+      "geo_distance_meters": 82.3863
+    },
+    {
+      "external_listing_id": "splendor-sand-cottage",
+      "top_vrbo_ref_id": "20140008",
+      "top_score": 0.2005,
+      "shortlist_count": 1,
+      "geo_distance_meters": 27.4508
+    },
+    {
+      "external_listing_id": "about-time-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.2004,
+      "shortlist_count": 3,
+      "geo_distance_meters": 85.4804
+    },
+    {
+      "external_listing_id": "fleur-de-lis-2-lockoff-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.2004,
+      "shortlist_count": 4,
+      "geo_distance_meters": 39.8793
+    },
+    {
+      "external_listing_id": "time-out-of-time-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.2004,
+      "shortlist_count": 6,
+      "geo_distance_meters": 88.8988
+    },
+    {
+      "external_listing_id": "toye-cottage-cottage",
+      "top_vrbo_ref_id": "32702795",
+      "top_score": 0.2004,
+      "shortlist_count": 8,
+      "geo_distance_meters": 119.4723
+    },
+    {
+      "external_listing_id": "secret-garden-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2002,
+      "shortlist_count": 3,
+      "geo_distance_meters": 148.75
+    },
+    {
+      "external_listing_id": "sunrise-cottage",
+      "top_vrbo_ref_id": "21709750",
+      "top_score": 0.2,
+      "shortlist_count": 5,
+      "geo_distance_meters": 64.3037
+    },
+    {
+      "external_listing_id": "mojo-biblio-cottage",
+      "top_vrbo_ref_id": "91352039",
+      "top_score": 0.1992,
+      "shortlist_count": 5,
+      "geo_distance_meters": 108.6053
+    },
+    {
+      "external_listing_id": "saratoga-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.1992,
+      "shortlist_count": 5,
+      "geo_distance_meters": 74.2316
+    },
+    {
+      "external_listing_id": "savannah-sands-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.1992,
+      "shortlist_count": 5,
+      "geo_distance_meters": 46.1421
+    },
+    {
+      "external_listing_id": "sip-n-dip-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.1992,
+      "shortlist_count": 1,
+      "geo_distance_meters": 62.7441
+    },
+    {
+      "external_listing_id": "two-road-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1992,
+      "shortlist_count": 3,
+      "geo_distance_meters": 61.3467
+    },
+    {
+      "external_listing_id": "big-pink-2-bedroom-lockoff-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.199,
+      "shortlist_count": 2,
+      "geo_distance_meters": 128.3453
+    },
+    {
+      "external_listing_id": "latitude-adjustment-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1988,
+      "shortlist_count": 4,
+      "geo_distance_meters": 119.9934
+    },
+    {
+      "external_listing_id": "teachers-lounge-cottage",
+      "top_vrbo_ref_id": "21714316",
+      "top_score": 0.1986,
+      "shortlist_count": 3,
+      "geo_distance_meters": 143.3856
+    },
+    {
+      "external_listing_id": "knotty-nature-and-feeling-tipsea-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.198,
+      "shortlist_count": 2,
+      "geo_distance_meters": 29.9722
+    },
+    {
+      "external_listing_id": "somewhere-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.198,
+      "shortlist_count": 2,
+      "geo_distance_meters": 41.7734
+    },
+    {
+      "external_listing_id": "lady-on-the-beach-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1978,
+      "shortlist_count": 2,
+      "geo_distance_meters": 123.6474
+    },
+    {
+      "external_listing_id": "almost-heaven-cottage",
+      "top_vrbo_ref_id": "83307073",
+      "top_score": 0.1968,
+      "shortlist_count": 15,
+      "geo_distance_meters": 96.0075
+    },
+    {
+      "external_listing_id": "beach-music-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.1968,
+      "shortlist_count": 1,
+      "geo_distance_meters": 110.0904
+    },
+    {
+      "external_listing_id": "cabana-babe-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.1968,
+      "shortlist_count": 1,
+      "geo_distance_meters": 93.7927
+    },
+    {
+      "external_listing_id": "dreamboat-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.1968,
+      "shortlist_count": 1,
+      "geo_distance_meters": 60.0468
+    },
+    {
+      "external_listing_id": "fernleigh-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.1968,
+      "shortlist_count": 3,
+      "geo_distance_meters": 74.4212
+    },
+    {
+      "external_listing_id": "little-feet-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1968,
+      "shortlist_count": 5,
+      "geo_distance_meters": 48.9992
+    },
+    {
+      "external_listing_id": "luck-would-have-it-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1966,
+      "shortlist_count": 2,
+      "geo_distance_meters": 127.4025
+    },
+    {
+      "external_listing_id": "hide-away-cottage",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.1959,
+      "shortlist_count": 10,
+      "geo_distance_meters": 94.387
+    },
+    {
+      "external_listing_id": "blessings-by-the-sea-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1956,
+      "shortlist_count": 1,
+      "geo_distance_meters": 61.9638
+    },
+    {
+      "external_listing_id": "cabana-fever-cottage",
+      "top_vrbo_ref_id": "123119298",
+      "top_score": 0.1956,
+      "shortlist_count": 1,
+      "geo_distance_meters": 105.2795
+    },
+    {
+      "external_listing_id": "dune-house-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.1956,
+      "shortlist_count": 7,
+      "geo_distance_meters": 37.0767
+    },
+    {
+      "external_listing_id": "feeling-tipsea-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.1956,
+      "shortlist_count": 2,
+      "geo_distance_meters": 29.9722
+    },
+    {
+      "external_listing_id": "lucys-hideaway-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.1956,
+      "shortlist_count": 2,
+      "geo_distance_meters": 86.1538
+    },
+    {
+      "external_listing_id": "happily-ever-after-cottage",
+      "top_vrbo_ref_id": "20143892",
+      "top_score": 0.1955,
+      "shortlist_count": 2,
+      "geo_distance_meters": 68.3064
+    },
+    {
+      "external_listing_id": "once-upon-tide-ii-cottage",
+      "top_vrbo_ref_id": "21709750",
+      "top_score": 0.1954,
+      "shortlist_count": 9,
+      "geo_distance_meters": 145.3825
+    },
+    {
+      "external_listing_id": "suite-magnolia-ii-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.1954,
+      "shortlist_count": 4,
+      "geo_distance_meters": 134.5462
+    },
+    {
+      "external_listing_id": "waterstar-cottage",
+      "top_vrbo_ref_id": "31758255",
+      "top_score": 0.1954,
+      "shortlist_count": 4,
+      "geo_distance_meters": 150.6531
+    },
+    {
+      "external_listing_id": "beachside-kiss-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1944,
+      "shortlist_count": 2,
+      "geo_distance_meters": 51.2605
+    },
+    {
+      "external_listing_id": "bewildered-no-more-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.1944,
+      "shortlist_count": 1,
+      "geo_distance_meters": 85.0421
+    },
+    {
+      "external_listing_id": "big-pink-1-bedroom-lockoff-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1944,
+      "shortlist_count": 2,
+      "geo_distance_meters": 59.0359
+    },
+    {
+      "external_listing_id": "knotty-nature-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.1944,
+      "shortlist_count": 2,
+      "geo_distance_meters": 117.9632
+    },
+    {
+      "external_listing_id": "o-happy-day-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.1944,
+      "shortlist_count": 7,
+      "geo_distance_meters": 59.2933
+    },
+    {
+      "external_listing_id": "sunset-dreams-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1944,
+      "shortlist_count": 3,
+      "geo_distance_meters": 61.3467
+    },
+    {
+      "external_listing_id": "wave-wand-cottage",
+      "top_vrbo_ref_id": "21709750",
+      "top_score": 0.1944,
+      "shortlist_count": 7,
+      "geo_distance_meters": 16.9565
+    },
+    {
+      "external_listing_id": "whatcha-dune-cottage",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.1944,
+      "shortlist_count": 4,
+      "geo_distance_meters": 66.9703
+    },
+    {
+      "external_listing_id": "belle-vernon-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1942,
+      "shortlist_count": 2,
+      "geo_distance_meters": 125.3073
+    },
+    {
+      "external_listing_id": "more-perfect-view-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.1932,
+      "shortlist_count": 1,
+      "geo_distance_meters": 85.0421
+    },
+    {
+      "external_listing_id": "once-upon-tide-cottage",
+      "top_vrbo_ref_id": "46978572",
+      "top_score": 0.1932,
+      "shortlist_count": 9,
+      "geo_distance_meters": 97.8429
+    },
+    {
+      "external_listing_id": "pitter-patter-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1932,
+      "shortlist_count": 5,
+      "geo_distance_meters": 53.6074
+    },
+    {
+      "external_listing_id": "sweet-pea-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1932,
+      "shortlist_count": 3,
+      "geo_distance_meters": 70.1288
+    },
+    {
+      "external_listing_id": "waterside-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1932,
+      "shortlist_count": 5,
+      "geo_distance_meters": 92.5103
+    },
+    {
+      "external_listing_id": "admiral-booms-poppins-place-cottage",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.193,
+      "shortlist_count": 4,
+      "geo_distance_meters": 130.349
+    },
+    {
+      "external_listing_id": "gravy-cottage",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.193,
+      "shortlist_count": 3,
+      "geo_distance_meters": 122.9335
+    },
+    {
+      "external_listing_id": "ooh-la-la-cottage",
+      "top_vrbo_ref_id": "31758255",
+      "top_score": 0.193,
+      "shortlist_count": 10,
+      "geo_distance_meters": 138.9524
+    },
+    {
+      "external_listing_id": "bobby-ds-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.192,
+      "shortlist_count": 2,
+      "geo_distance_meters": 91.5642
+    },
+    {
+      "external_listing_id": "dragonfly-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.192,
+      "shortlist_count": 5,
+      "geo_distance_meters": 81.5747
+    },
+    {
+      "external_listing_id": "for-my-girls-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.192,
+      "shortlist_count": 4,
+      "geo_distance_meters": 18.3263
+    },
+    {
+      "external_listing_id": "lolos-patience-paid-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.192,
+      "shortlist_count": 2,
+      "geo_distance_meters": 92.1818
+    },
+    {
+      "external_listing_id": "sunny-bunny-cottage",
+      "top_vrbo_ref_id": "32702795",
+      "top_score": 0.192,
+      "shortlist_count": 13,
+      "geo_distance_meters": 83.3448
+    },
+    {
+      "external_listing_id": "tradewinds-cottage",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.192,
+      "shortlist_count": 4,
+      "geo_distance_meters": 98.0584
+    },
+    {
+      "external_listing_id": "dreamsicle-cottage",
+      "top_vrbo_ref_id": "115994683",
+      "top_score": 0.1918,
+      "shortlist_count": 5,
+      "geo_distance_meters": 120.3617
+    },
+    {
+      "external_listing_id": "sea-sabella-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1918,
+      "shortlist_count": 4,
+      "geo_distance_meters": 140.1846
+    },
+    {
+      "external_listing_id": "jojo-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1908,
+      "shortlist_count": 2,
+      "geo_distance_meters": 78.3167
+    },
+    {
+      "external_listing_id": "plum-crazy-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1908,
+      "shortlist_count": 2,
+      "geo_distance_meters": 103.9896
+    },
+    {
+      "external_listing_id": "days-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1906,
+      "shortlist_count": 2,
+      "geo_distance_meters": 144.538
+    },
+    {
+      "external_listing_id": "drift-away-suite-cottage",
+      "top_vrbo_ref_id": "124301439",
+      "top_score": 0.1906,
+      "shortlist_count": 10,
+      "geo_distance_meters": 121.2858
+    },
+    {
+      "external_listing_id": "arise-and-shine-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.1896,
+      "shortlist_count": 1,
+      "geo_distance_meters": 110.3087
+    },
+    {
+      "external_listing_id": "bingos-bungalow-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1896,
+      "shortlist_count": 4,
+      "geo_distance_meters": 28.8133
+    },
+    {
+      "external_listing_id": "alta-vista-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1894,
+      "shortlist_count": 2,
+      "geo_distance_meters": 123.0739
+    },
+    {
+      "external_listing_id": "green-gables-cottage",
+      "top_vrbo_ref_id": "20140008",
+      "top_score": 0.1894,
+      "shortlist_count": 4,
+      "geo_distance_meters": 121.5329
+    },
+    {
+      "external_listing_id": "peace-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1894,
+      "shortlist_count": 4,
+      "geo_distance_meters": 139.1508
+    },
+    {
+      "external_listing_id": "head-over-heals-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1889,
+      "shortlist_count": 2,
+      "geo_distance_meters": 120.0948
+    },
+    {
+      "external_listing_id": "allora-ii-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1884,
+      "shortlist_count": 2,
+      "geo_distance_meters": 78.5662
+    },
+    {
+      "external_listing_id": "carriage-house-cottage",
+      "top_vrbo_ref_id": "21709750",
+      "top_score": 0.1884,
+      "shortlist_count": 2,
+      "geo_distance_meters": 107.017
+    },
+    {
+      "external_listing_id": "hook-wine-and-sinker-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.1884,
+      "shortlist_count": 1,
+      "geo_distance_meters": 85.0421
+    },
+    {
+      "external_listing_id": "mis-b-haven-cottage",
+      "top_vrbo_ref_id": "20143892",
+      "top_score": 0.1884,
+      "shortlist_count": 10,
+      "geo_distance_meters": 14.5332
+    },
+    {
+      "external_listing_id": "musician-cottage",
+      "top_vrbo_ref_id": "35133905",
+      "top_score": 0.1884,
+      "shortlist_count": 3,
+      "geo_distance_meters": 60.9733
+    },
+    {
+      "external_listing_id": "drift-away-cottage",
+      "top_vrbo_ref_id": "21714316",
+      "top_score": 0.1883,
+      "shortlist_count": 10,
+      "geo_distance_meters": 107.7529
+    },
+    {
+      "external_listing_id": "way-back-cottage",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.1882,
+      "shortlist_count": 4,
+      "geo_distance_meters": 126.1648
+    },
+    {
+      "external_listing_id": "biscuits-cottage",
+      "top_vrbo_ref_id": "90831019",
+      "top_score": 0.1872,
+      "shortlist_count": 4,
+      "geo_distance_meters": 113.3165
+    },
+    {
+      "external_listing_id": "bowmans-place-cottage",
+      "top_vrbo_ref_id": "105552962",
+      "top_score": 0.1872,
+      "shortlist_count": 2,
+      "geo_distance_meters": 16.6043
+    },
+    {
+      "external_listing_id": "lime-house-cottage",
+      "top_vrbo_ref_id": "20143892",
+      "top_score": 0.1872,
+      "shortlist_count": 5,
+      "geo_distance_meters": 38.37
+    },
+    {
+      "external_listing_id": "happy-together-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1869,
+      "shortlist_count": 3,
+      "geo_distance_meters": 140.8819
+    },
+    {
+      "external_listing_id": "sanctuary-cottage",
+      "top_vrbo_ref_id": "68450249",
+      "top_score": 0.186,
+      "shortlist_count": 3,
+      "geo_distance_meters": 119.4626
+    },
+    {
+      "external_listing_id": "muse-paradise-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1848,
+      "shortlist_count": 1,
+      "geo_distance_meters": 84.2059
+    },
+    {
+      "external_listing_id": "allora-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1836,
+      "shortlist_count": 2,
+      "geo_distance_meters": 78.0853
+    },
+    {
+      "external_listing_id": "glorious-mornings-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.1836,
+      "shortlist_count": 1,
+      "geo_distance_meters": 76.8022
+    },
+    {
+      "external_listing_id": "lucky-charm-cottage",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.1824,
+      "shortlist_count": 4,
+      "geo_distance_meters": 115.6565
+    },
+    {
+      "external_listing_id": "vista-del-mar-cottage",
+      "top_vrbo_ref_id": "21709750",
+      "top_score": 0.1824,
+      "shortlist_count": 2,
+      "geo_distance_meters": 106.837
+    },
+    {
+      "external_listing_id": "little-lodge-cottage",
+      "top_vrbo_ref_id": "25065724",
+      "top_score": 0.1822,
+      "shortlist_count": 4,
+      "geo_distance_meters": 126.2063
+    },
+    {
+      "external_listing_id": "enchantment-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1813,
+      "shortlist_count": 2,
+      "geo_distance_meters": 129.4269
+    },
+    {
+      "external_listing_id": "sabbatical-lock-2-cottage",
+      "top_vrbo_ref_id": "100777362",
+      "top_score": 0.1812,
+      "shortlist_count": 1,
+      "geo_distance_meters": 62.6427
+    },
+    {
+      "external_listing_id": "stairway-heaven-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.18,
+      "shortlist_count": 2,
+      "geo_distance_meters": 82.7023
+    },
+    {
+      "external_listing_id": "rossi-house-cottage",
+      "top_vrbo_ref_id": "91057740",
+      "top_score": 0.1798,
+      "shortlist_count": 3,
+      "geo_distance_meters": 143.895
+    },
+    {
+      "external_listing_id": "seasuite-cottage",
+      "top_vrbo_ref_id": "20139815",
+      "top_score": 0.1786,
+      "shortlist_count": 1,
+      "geo_distance_meters": 147.4571
+    },
+    {
+      "external_listing_id": "slo-mocean-cottage",
+      "top_vrbo_ref_id": "20139815",
+      "top_score": 0.1737,
+      "shortlist_count": 1,
+      "geo_distance_meters": 147.4571
+    },
+    {
+      "external_listing_id": "elegance-cottage",
+      "top_vrbo_ref_id": "20144035",
+      "top_score": 0.1714,
+      "shortlist_count": 2,
+      "geo_distance_meters": 129.4269
+    }
+  ],
+  "unmatched_no_candidates": [
+    "center-stage-cottage",
+    "eversong-cottage",
+    "frosted-orange",
+    "gentle-breeze-cottage",
+    "gimme-shelter-lockoff-cottage",
+    "goodobbies-cottage",
+    "mamas-happy-cottage",
+    "morning-star-cottage",
+    "never-enough-cottage",
+    "peek-boo-cottage",
+    "shell-station-cottage",
+    "smore-cottage",
+    "sunsets-savannah-cottage",
+    "tupelo-honey-cottage"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

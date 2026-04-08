@@ -1,0 +1,451 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:20:26.167Z",
+    "adapter_key": "fivestar30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 63,
+    "matched": 9,
+    "unmatched": 54,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [
+    {
+      "external_listing_id": "dusk-til-dune",
+      "vrbo_ref_id": "90729768",
+      "vrbo_source_listing_id": "3204871",
+      "score": 0.6444,
+      "confidence_label": "low",
+      "shortlist_count": 6,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "the-second-sandbar",
+      "vrbo_ref_id": "65364624",
+      "vrbo_source_listing_id": "2226402",
+      "score": 0.6444,
+      "confidence_label": "low",
+      "shortlist_count": 4,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "30a-backyard-paradise",
+      "vrbo_ref_id": "103851601",
+      "vrbo_source_listing_id": "3938515",
+      "score": 0.6432,
+      "confidence_label": "low",
+      "shortlist_count": 26,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "just-b",
+      "vrbo_ref_id": "96160292",
+      "vrbo_source_listing_id": "3515561",
+      "score": 0.6432,
+      "confidence_label": "low",
+      "shortlist_count": 8,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "pompano-paradise",
+      "vrbo_ref_id": "106451177",
+      "vrbo_source_listing_id": "4073532",
+      "score": 0.6432,
+      "confidence_label": "low",
+      "shortlist_count": 18,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "ocean-52",
+      "vrbo_ref_id": "21691607",
+      "vrbo_source_listing_id": "780615",
+      "score": 0.6408,
+      "confidence_label": "low",
+      "shortlist_count": 11,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "deja-blue",
+      "vrbo_ref_id": "89666447",
+      "vrbo_source_listing_id": "3138178",
+      "score": 0.6396,
+      "confidence_label": "low",
+      "shortlist_count": 7,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "hey-jude",
+      "vrbo_ref_id": "111685279",
+      "vrbo_source_listing_id": "4344010",
+      "score": 0.6396,
+      "confidence_label": "low",
+      "shortlist_count": 10,
+      "geo_distance_meters": 29.7445
+    },
+    {
+      "external_listing_id": "dune-it-up",
+      "vrbo_ref_id": "36342663",
+      "vrbo_source_listing_id": "1622218",
+      "score": 0.636,
+      "confidence_label": "low",
+      "shortlist_count": 5,
+      "geo_distance_meters": 0
+    }
+  ],
+  "unmatched": [
+    {
+      "external_listing_id": "storks-nest",
+      "top_vrbo_ref_id": "21705837",
+      "top_score": 0.5729,
+      "shortlist_count": 4,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "the-grand-30a",
+      "top_vrbo_ref_id": "123581747",
+      "top_score": 0.5037,
+      "shortlist_count": 1,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "30a-retreat",
+      "top_vrbo_ref_id": "106933554",
+      "top_score": 0.476,
+      "shortlist_count": 5,
+      "geo_distance_meters": 117.6557
+    },
+    {
+      "external_listing_id": "the-point",
+      "top_vrbo_ref_id": "100426360",
+      "top_score": 0.3004,
+      "shortlist_count": 3,
+      "geo_distance_meters": 109.2313
+    },
+    {
+      "external_listing_id": "the-enclave-on-30a",
+      "top_vrbo_ref_id": "36342663",
+      "top_score": 0.2532,
+      "shortlist_count": 4,
+      "geo_distance_meters": 67.4933
+    },
+    {
+      "external_listing_id": "30a-monterey-place",
+      "top_vrbo_ref_id": "124339273",
+      "top_score": 0.2505,
+      "shortlist_count": 1,
+      "geo_distance_meters": 137.3778
+    },
+    {
+      "external_listing_id": "white-dunes",
+      "top_vrbo_ref_id": "38719651",
+      "top_score": 0.23,
+      "shortlist_count": 9,
+      "geo_distance_meters": 99.8312
+    },
+    {
+      "external_listing_id": "the-triple-crown",
+      "top_vrbo_ref_id": "123835013",
+      "top_score": 0.2267,
+      "shortlist_count": 7,
+      "geo_distance_meters": 58.308
+    },
+    {
+      "external_listing_id": "arrabella",
+      "top_vrbo_ref_id": "59857451",
+      "top_score": 0.2244,
+      "shortlist_count": 7,
+      "geo_distance_meters": 94.4667
+    },
+    {
+      "external_listing_id": "the-derby-at-the-beach",
+      "top_vrbo_ref_id": "27849065",
+      "top_score": 0.2183,
+      "shortlist_count": 7,
+      "geo_distance_meters": 84.5705
+    },
+    {
+      "external_listing_id": "vistas-esmeralda",
+      "top_vrbo_ref_id": "124814837",
+      "top_score": 0.2183,
+      "shortlist_count": 8,
+      "geo_distance_meters": 44.9671
+    },
+    {
+      "external_listing_id": "the-belvedere",
+      "top_vrbo_ref_id": "89666447",
+      "top_score": 0.2182,
+      "shortlist_count": 4,
+      "geo_distance_meters": 121.8745
+    },
+    {
+      "external_listing_id": "mystic-seas",
+      "top_vrbo_ref_id": "87565806",
+      "top_score": 0.217,
+      "shortlist_count": 2,
+      "geo_distance_meters": 130.3418
+    },
+    {
+      "external_listing_id": "the-sassy-seagull",
+      "top_vrbo_ref_id": "126850309",
+      "top_score": 0.216,
+      "shortlist_count": 5,
+      "geo_distance_meters": 115.8216
+    },
+    {
+      "external_listing_id": "indigo-breeze",
+      "top_vrbo_ref_id": "27157778",
+      "top_score": 0.2159,
+      "shortlist_count": 7,
+      "geo_distance_meters": 115.6865
+    },
+    {
+      "external_listing_id": "the-road-to-the-triple-crown",
+      "top_vrbo_ref_id": "123835013",
+      "top_score": 0.2151,
+      "shortlist_count": 6,
+      "geo_distance_meters": 72.6598
+    },
+    {
+      "external_listing_id": "the-preakness-at-the-beach",
+      "top_vrbo_ref_id": "123835013",
+      "top_score": 0.2148,
+      "shortlist_count": 7,
+      "geo_distance_meters": 58.315
+    },
+    {
+      "external_listing_id": "30a-coastal-breeze",
+      "top_vrbo_ref_id": "47008323",
+      "top_score": 0.2136,
+      "shortlist_count": 2,
+      "geo_distance_meters": 53.9114
+    },
+    {
+      "external_listing_id": "the-belmont-at-the-beach",
+      "top_vrbo_ref_id": "123835013",
+      "top_score": 0.2136,
+      "shortlist_count": 6,
+      "geo_distance_meters": 72.6598
+    },
+    {
+      "external_listing_id": "my-favorite-child",
+      "top_vrbo_ref_id": "120510635",
+      "top_score": 0.2121,
+      "shortlist_count": 4,
+      "geo_distance_meters": 141.3646
+    },
+    {
+      "external_listing_id": "a-gulf-dream",
+      "top_vrbo_ref_id": "88629411",
+      "top_score": 0.2112,
+      "shortlist_count": 3,
+      "geo_distance_meters": 47.0056
+    },
+    {
+      "external_listing_id": "aqua-paradise",
+      "top_vrbo_ref_id": "33935460",
+      "top_score": 0.21,
+      "shortlist_count": 14,
+      "geo_distance_meters": 45.7693
+    },
+    {
+      "external_listing_id": "palms-of-dune-allen-108",
+      "top_vrbo_ref_id": "83595355",
+      "top_score": 0.21,
+      "shortlist_count": 5,
+      "geo_distance_meters": 100.0204
+    },
+    {
+      "external_listing_id": "arena-blanca",
+      "top_vrbo_ref_id": "67382493",
+      "top_score": 0.2088,
+      "shortlist_count": 8,
+      "geo_distance_meters": 63.1323
+    },
+    {
+      "external_listing_id": "gulf-dreams",
+      "top_vrbo_ref_id": "113442205",
+      "top_score": 0.2088,
+      "shortlist_count": 5,
+      "geo_distance_meters": 60.8093
+    },
+    {
+      "external_listing_id": "southern-charm",
+      "top_vrbo_ref_id": "104019462",
+      "top_score": 0.2088,
+      "shortlist_count": 2,
+      "geo_distance_meters": 48.0881
+    },
+    {
+      "external_listing_id": "coastal-sunsets",
+      "top_vrbo_ref_id": "96463471",
+      "top_score": 0.2085,
+      "shortlist_count": 3,
+      "geo_distance_meters": 142.8246
+    },
+    {
+      "external_listing_id": "deep-blue",
+      "top_vrbo_ref_id": "27849065",
+      "top_score": 0.2076,
+      "shortlist_count": 7,
+      "geo_distance_meters": 112.2988
+    },
+    {
+      "external_listing_id": "laissez-faire",
+      "top_vrbo_ref_id": "67382493",
+      "top_score": 0.2076,
+      "shortlist_count": 6,
+      "geo_distance_meters": 56.9106
+    },
+    {
+      "external_listing_id": "beachfront-babes",
+      "top_vrbo_ref_id": "118285158",
+      "top_score": 0.2064,
+      "shortlist_count": 3,
+      "geo_distance_meters": 76.1896
+    },
+    {
+      "external_listing_id": "the-pelagic-blue",
+      "top_vrbo_ref_id": "53992352",
+      "top_score": 0.2052,
+      "shortlist_count": 5,
+      "geo_distance_meters": 119.712
+    },
+    {
+      "external_listing_id": "sandcastle-dunes",
+      "top_vrbo_ref_id": "126166757",
+      "top_score": 0.205,
+      "shortlist_count": 2,
+      "geo_distance_meters": 133.4631
+    },
+    {
+      "external_listing_id": "shell-shack",
+      "top_vrbo_ref_id": "88252411",
+      "top_score": 0.205,
+      "shortlist_count": 1,
+      "geo_distance_meters": 124.6332
+    },
+    {
+      "external_listing_id": "villa-rosa",
+      "top_vrbo_ref_id": "65364624",
+      "top_score": 0.205,
+      "shortlist_count": 3,
+      "geo_distance_meters": 85.053
+    },
+    {
+      "external_listing_id": "hermosa-manor",
+      "top_vrbo_ref_id": "21715677",
+      "top_score": 0.204,
+      "shortlist_count": 3,
+      "geo_distance_meters": 62.6045
+    },
+    {
+      "external_listing_id": "lillys-pad",
+      "top_vrbo_ref_id": "21692378",
+      "top_score": 0.2028,
+      "shortlist_count": 3,
+      "geo_distance_meters": 86.3304
+    },
+    {
+      "external_listing_id": "seaview-i-unit-300",
+      "top_vrbo_ref_id": "96544827",
+      "top_score": 0.2028,
+      "shortlist_count": 9,
+      "geo_distance_meters": 44.9706
+    },
+    {
+      "external_listing_id": "whispering-dunes",
+      "top_vrbo_ref_id": "101528312",
+      "top_score": 0.1992,
+      "shortlist_count": 1,
+      "geo_distance_meters": 104.3228
+    },
+    {
+      "external_listing_id": "driftwood",
+      "top_vrbo_ref_id": "38719651",
+      "top_score": 0.198,
+      "shortlist_count": 9,
+      "geo_distance_meters": 94.4181
+    },
+    {
+      "external_listing_id": "a-grand-view",
+      "top_vrbo_ref_id": "118285158",
+      "top_score": 0.1954,
+      "shortlist_count": 1,
+      "geo_distance_meters": 144.9361
+    },
+    {
+      "external_listing_id": "sun-sand-repeat",
+      "top_vrbo_ref_id": "96905724",
+      "top_score": 0.1942,
+      "shortlist_count": 2,
+      "geo_distance_meters": 148.0124
+    },
+    {
+      "external_listing_id": "hidden-lake-622",
+      "top_vrbo_ref_id": "27528872",
+      "top_score": 0.192,
+      "shortlist_count": 5,
+      "geo_distance_meters": 113.5637
+    },
+    {
+      "external_listing_id": "a-lil-beach-house",
+      "top_vrbo_ref_id": "118285158",
+      "top_score": 0.1908,
+      "shortlist_count": 1,
+      "geo_distance_meters": 69.7272
+    },
+    {
+      "external_listing_id": "dream-weaver",
+      "top_vrbo_ref_id": "34326660",
+      "top_score": 0.1908,
+      "shortlist_count": 4,
+      "geo_distance_meters": 94.7008
+    },
+    {
+      "external_listing_id": "dune-villas-2a",
+      "top_vrbo_ref_id": "31862904",
+      "top_score": 0.1896,
+      "shortlist_count": 2,
+      "geo_distance_meters": 40.7902
+    },
+    {
+      "external_listing_id": "inlet-getaway",
+      "top_vrbo_ref_id": "33704545",
+      "top_score": 0.18,
+      "shortlist_count": 1,
+      "geo_distance_meters": 87.2061
+    }
+  ],
+  "unmatched_no_candidates": [
+    "beach-baby",
+    "big-gus",
+    "endless-summer-dream",
+    "gulf-escape",
+    "poppylu",
+    "salt-grove-cottage",
+    "sandy-daze",
+    "seaside-reunion"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

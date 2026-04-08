@@ -1,0 +1,133 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:16:10.669Z",
+    "adapter_key": "beachblue",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 16,
+    "matched": 0,
+    "unmatched": 16,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "1654-146939",
+      "top_vrbo_ref_id": "23618666",
+      "top_score": 0.42,
+      "shortlist_count": 14,
+      "geo_distance_meters": 20.1742
+    },
+    {
+      "external_listing_id": "1654-92686",
+      "top_vrbo_ref_id": "21717510",
+      "top_score": 0.42,
+      "shortlist_count": 4,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "1654-92676",
+      "top_vrbo_ref_id": "21717510",
+      "top_score": 0.4176,
+      "shortlist_count": 4,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "1654-229600",
+      "top_vrbo_ref_id": "104804215",
+      "top_score": 0.3856,
+      "shortlist_count": 7,
+      "geo_distance_meters": 96.958
+    },
+    {
+      "external_listing_id": "1654-248654",
+      "top_vrbo_ref_id": "104804215",
+      "top_score": 0.3607,
+      "shortlist_count": 6,
+      "geo_distance_meters": 123.9887
+    },
+    {
+      "external_listing_id": "1654-135780",
+      "top_vrbo_ref_id": "57272527",
+      "top_score": 0.3505,
+      "shortlist_count": 5,
+      "geo_distance_meters": 93.3932
+    },
+    {
+      "external_listing_id": "1654-144150",
+      "top_vrbo_ref_id": "97038479",
+      "top_score": 0.3485,
+      "shortlist_count": 15,
+      "geo_distance_meters": 109.6079
+    },
+    {
+      "external_listing_id": "1654-275359",
+      "top_vrbo_ref_id": "127385309",
+      "top_score": 0.3064,
+      "shortlist_count": 1,
+      "geo_distance_meters": 60.495
+    },
+    {
+      "external_listing_id": "1654-248136",
+      "top_vrbo_ref_id": "112894587",
+      "top_score": 0.2915,
+      "shortlist_count": 1,
+      "geo_distance_meters": 104.177
+    },
+    {
+      "external_listing_id": "1654-196421",
+      "top_vrbo_ref_id": "112894587",
+      "top_score": 0.2848,
+      "shortlist_count": 1,
+      "geo_distance_meters": 108.2932
+    },
+    {
+      "external_listing_id": "1654-204248",
+      "top_vrbo_ref_id": "111895952",
+      "top_score": 0.2726,
+      "shortlist_count": 1,
+      "geo_distance_meters": 132.5387
+    },
+    {
+      "external_listing_id": "1654-115783",
+      "top_vrbo_ref_id": "111895952",
+      "top_score": 0.2702,
+      "shortlist_count": 1,
+      "geo_distance_meters": 132.5387
+    },
+    {
+      "external_listing_id": "1654-134245",
+      "top_vrbo_ref_id": "31432195",
+      "top_score": 0.1993,
+      "shortlist_count": 1,
+      "geo_distance_meters": 140.2915
+    }
+  ],
+  "unmatched_no_candidates": [
+    "1654-148358",
+    "1654-242789",
+    "1654-277538"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

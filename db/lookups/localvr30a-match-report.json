@@ -1,0 +1,232 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:22:44.206Z",
+    "adapter_key": "localvr30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 43,
+    "matched": 0,
+    "unmatched": 43,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "a-wave-from-it-all-bikes-lake-grill-6779f9add8897700117947b4",
+      "top_vrbo_ref_id": "112686934",
+      "top_score": 0.5976,
+      "shortlist_count": 26,
+      "geo_distance_meters": 2.4461
+    },
+    {
+      "external_listing_id": "oyster-lake-oasis-hot-tub-pool-lake-front-6957ed3caeefdd001468c161",
+      "top_vrbo_ref_id": "125676167",
+      "top_score": 0.5643,
+      "shortlist_count": 2,
+      "geo_distance_meters": 0.053
+    },
+    {
+      "external_listing_id": "30a-escape-walk-or-bike-to-the-beach-nearby-trails-and-grill-691b5bf75888ea0012855f69",
+      "top_vrbo_ref_id": "125027291",
+      "top_score": 0.5293,
+      "shortlist_count": 5,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "inlet-beach-retreat-shared-pool-and-beach-access-68daa5a10ad46f00112f6312",
+      "top_vrbo_ref_id": "127523437",
+      "top_score": 0.4943,
+      "shortlist_count": 15,
+      "geo_distance_meters": 0.0364
+    },
+    {
+      "external_listing_id": "30a-beach-retreat-gulf-views-pool-hot-tub-698a426120c9c10014c0dcdd",
+      "top_vrbo_ref_id": "123944842",
+      "top_score": 0.3248,
+      "shortlist_count": 5,
+      "geo_distance_meters": 102.7131
+    },
+    {
+      "external_listing_id": "modern-coastal-escape-with-fire-pit-and-pool-access-675cbb19758a380011fd944f",
+      "top_vrbo_ref_id": "91213986",
+      "top_score": 0.3146,
+      "shortlist_count": 4,
+      "geo_distance_meters": 33.0585
+    },
+    {
+      "external_listing_id": "inlet-beach-retreat-golf-cart-bikes-pool-684e0fed860c25001153cf69",
+      "top_vrbo_ref_id": "101333039",
+      "top_score": 0.3029,
+      "shortlist_count": 3,
+      "geo_distance_meters": 144.7883
+    },
+    {
+      "external_listing_id": "the-crab-house-golf-cart-bikes-6779fb7bf789d6001256e29a",
+      "top_vrbo_ref_id": "125351213",
+      "top_score": 0.3022,
+      "shortlist_count": 1,
+      "geo_distance_meters": 97.9203
+    },
+    {
+      "external_listing_id": "driftwood-place-newly-renovated-bikes-6779fa54e6dacf00112a2bac",
+      "top_vrbo_ref_id": "33668818",
+      "top_score": 0.2999,
+      "shortlist_count": 5,
+      "geo_distance_meters": 111.1813
+    },
+    {
+      "external_listing_id": "feeling-tip-sea-golf-cart-bikes-prominence-6779f931fc16d500122d18f2",
+      "top_vrbo_ref_id": "87565806",
+      "top_score": 0.2954,
+      "shortlist_count": 2,
+      "geo_distance_meters": 138.9159
+    },
+    {
+      "external_listing_id": "seacrest-beach-gem-w-shared-pool-and-game-room-67880d0353ba2a0012fd691c",
+      "top_vrbo_ref_id": "104019462",
+      "top_score": 0.2823,
+      "shortlist_count": 19,
+      "geo_distance_meters": 111.498
+    },
+    {
+      "external_listing_id": "shore-me-the-way-close-to-beach-bikes-6779f9e8a238c10011093d23",
+      "top_vrbo_ref_id": "33667882",
+      "top_score": 0.28,
+      "shortlist_count": 6,
+      "geo_distance_meters": 69.1745
+    },
+    {
+      "external_listing_id": "30a-beach-retreat-grill-bikes-and-pool-access-670966ffd52f950013a1bbfd",
+      "top_vrbo_ref_id": "44936230",
+      "top_score": 0.2752,
+      "shortlist_count": 3,
+      "geo_distance_meters": 51.2857
+    },
+    {
+      "external_listing_id": "mississippi-magnolia-3-br-3ba-walk-to-beach-6779f9bb34331500108fe28d",
+      "top_vrbo_ref_id": "124829823",
+      "top_score": 0.2673,
+      "shortlist_count": 6,
+      "geo_distance_meters": 100.5222
+    },
+    {
+      "external_listing_id": "santa-rosa-getaway-shared-pool-golf-cart-69a5c2f063280500121024d5",
+      "top_vrbo_ref_id": "91451344",
+      "top_score": 0.2626,
+      "shortlist_count": 12,
+      "geo_distance_meters": 115.7466
+    },
+    {
+      "external_listing_id": "the-story-house-walk-to-beach-pet-friendly-6779f9c99ebb610013141ea9",
+      "top_vrbo_ref_id": "124829823",
+      "top_score": 0.2608,
+      "shortlist_count": 6,
+      "geo_distance_meters": 76.9647
+    },
+    {
+      "external_listing_id": "30a-retreat-shared-pool-patio-w-grill-697bce21bd3afc00129271ec",
+      "top_vrbo_ref_id": "94641576",
+      "top_score": 0.2605,
+      "shortlist_count": 15,
+      "geo_distance_meters": 71.2251
+    },
+    {
+      "external_listing_id": "the-maine-squeeze-golf-cart-newly-renovated-6779fa3d9ebb6100131422c9",
+      "top_vrbo_ref_id": "125351213",
+      "top_score": 0.2512,
+      "shortlist_count": 1,
+      "geo_distance_meters": 113.2633
+    },
+    {
+      "external_listing_id": "blue-bird-beach-gulf-view-pool-6779f90068c10f0010a4aba2",
+      "top_vrbo_ref_id": "45979302",
+      "top_score": 0.2292,
+      "shortlist_count": 5,
+      "geo_distance_meters": 105.8426
+    },
+    {
+      "external_listing_id": "ebb-and-flow-luxe-beach-access-hot-tub-guest-suite-67fff22502fdee0013294d94",
+      "top_vrbo_ref_id": "33667882",
+      "top_score": 0.2148,
+      "shortlist_count": 1,
+      "geo_distance_meters": 52.7259
+    },
+    {
+      "external_listing_id": "30a-gem-fire-pit-modern-decor-682d10eb4f78580012c8e5e1",
+      "top_vrbo_ref_id": "113448323",
+      "top_score": 0.2121,
+      "shortlist_count": 3,
+      "geo_distance_meters": 143.2904
+    },
+    {
+      "external_listing_id": "luxe-coastal-escape-6br-w-pool-and-outdoor-lounge-68210ba79e520e001366ea1e",
+      "top_vrbo_ref_id": "111689156",
+      "top_score": 0.2065,
+      "shortlist_count": 1,
+      "geo_distance_meters": 100.0278
+    },
+    {
+      "external_listing_id": "seagrove-escape-refreshed-shared-pool-683ce746cf28b00010355a88",
+      "top_vrbo_ref_id": "125439727",
+      "top_score": 0.198,
+      "shortlist_count": 1,
+      "geo_distance_meters": 76.8309
+    },
+    {
+      "external_listing_id": "30a-coastal-retreat-private-pool-and-huge-deck-698ab296bc65580012edb2f4",
+      "top_vrbo_ref_id": "27528872",
+      "top_score": 0.1875,
+      "shortlist_count": 2,
+      "geo_distance_meters": 106.3957
+    },
+    {
+      "external_listing_id": "sea-change-private-pool-dog-friendly-6779f8f30dbde8001239f031",
+      "top_vrbo_ref_id": "78147194",
+      "top_score": 0.186,
+      "shortlist_count": 2,
+      "geo_distance_meters": 110.4218
+    }
+  ],
+  "unmatched_no_candidates": [
+    "30a-caspian-blue-carriage-house-pet-friendly-6779f955e6dacf00112a2295",
+    "30a-caspian-blue-golf-cart-bikes-shared-pool-6779f949afe1a10010b0eadd",
+    "8br-destin-escape-with-pool-and-game-room-67546fef23c1900012d5832c",
+    "after-dune-delight-pool-tennis-walk-to-beach-6779fa1fe6dacf00112a2845",
+    "amor-by-the-sea-lake-views-steps-from-pool-6779f98654a83800107e7353",
+    "b-coastal-near-cessna-landing-679d0434c4496d000ffef334",
+    "beach-retreat-gulf-view-private-beach-6779f90bfc16d500122d1750",
+    "caspian-blue-family-retreat-golf-cart-bikes-67a24b4ee419720013f29568",
+    "emerald-escape-private-pool-and-golf-cart-698478fdaac9f100126eff90",
+    "goin-coastal-pet-friendly-6-seater-golf-cart-6779fa495eff11001206b2d6",
+    "gulf-coast-retreat-with-pool-1-mile-to-beach-674e3ee2acd0240012a693d3",
+    "miramar-beach-escape-private-pool-hot-tub-69a9b95bb14cd200144e6aab",
+    "pcb-elevated-escape-steps-to-sand-shared-pool-69658b88959c6f00142cc50f",
+    "sea-esta-30a-beautiful-condo-close-to-beach-6779fa34e6dacf00112a29e5",
+    "sleeps-15-walk-to-beach-6-seat-golf-cart-698aad6d361845001b13955d",
+    "sleeps-15-walk-to-beach-golf-cart-698aa6adc938610013a57bb9",
+    "southern-tides-4br-4-5ba-sleeps-14-golf-cart-6779fa019ebb61001314205b",
+    "vitamin-sea-4br-4-5ba-golf-cart-pet-friendly-6779fac5113c93001249ce90"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

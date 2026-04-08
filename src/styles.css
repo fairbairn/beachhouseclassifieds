@@ -1,25 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-border: #e2e8f0;
-  --muted: #64748b;
-  --primary: #334155;
-  --primary-strong: #1f2937;
-  --danger: #b91c1c;
-}
-
-.dark {
-  --background: #0b1220;
-  --foreground: #e2e8f0;
-  --card: #111a2a;
-  --card-border: #253247;
-  --muted: #94a3b8;
-  --primary: #475569;
-  --primary-strong: #334155;
-  --danger: #f87171;
+  --background: #ffffff;
+  --foreground: #1a1a1a;
 }
 
 * {
@@ -29,9 +12,15 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top, #ecfeff 0%, var(--background) 28%);
+  background: var(--background);
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-family:
+    "Manrope",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    sans-serif;
 }
 
 a {
@@ -43,50 +32,19 @@ a:hover {
   text-decoration: underline;
 }
 
-input {
-  width: 100%;
-  margin-top: 0.35rem;
-  padding: 0.62rem 0.74rem;
-  border-radius: 0.58rem;
-  border: 1px solid var(--card-border);
-  background: var(--card);
-  color: var(--foreground);
+.app-main {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2rem;
 }
 
-button {
-  border: 0;
-  border-radius: 0.6rem;
-  padding: 0.62rem 0.92rem;
-  background: var(--primary);
-  color: #ffffff;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-button:hover {
-  background: var(--primary-strong);
-}
-
-button[disabled] {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.error-text {
-  color: var(--danger);
-}
-
-.field-error {
-  margin: 0.35rem 0 0;
-  font-size: 0.78rem;
-}
-
-.form-status {
+.app-main-home {
+  max-width: none;
   margin: 0;
-  font-size: 0.82rem;
-  color: var(--muted);
+  padding: 0;
 }
 
-.form-status.is-ready {
-  color: #059669;
+.app-main-login {
+  padding-top: 0;
+  padding-bottom: 0;
 }

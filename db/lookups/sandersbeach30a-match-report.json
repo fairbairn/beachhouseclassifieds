@@ -1,0 +1,539 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:25:57.811Z",
+    "adapter_key": "sandersbeach30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 74,
+    "matched": 0,
+    "unmatched": 74,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [],
+  "unmatched": [
+    {
+      "external_listing_id": "49-bluejack-street",
+      "top_vrbo_ref_id": "22718372",
+      "top_score": 0.5855,
+      "shortlist_count": 1,
+      "geo_distance_meters": 0.04
+    },
+    {
+      "external_listing_id": "25-rain-lily-lane",
+      "top_vrbo_ref_id": "115481695",
+      "top_score": 0.5688,
+      "shortlist_count": 5,
+      "geo_distance_meters": 0.0242
+    },
+    {
+      "external_listing_id": "410-pine-needle-way",
+      "top_vrbo_ref_id": "26841220",
+      "top_score": 0.5688,
+      "shortlist_count": 5,
+      "geo_distance_meters": 0.0222
+    },
+    {
+      "external_listing_id": "262-garfield-street",
+      "top_vrbo_ref_id": "20480796",
+      "top_score": 0.5556,
+      "shortlist_count": 14,
+      "geo_distance_meters": 3.5346
+    },
+    {
+      "external_listing_id": "izzy-b",
+      "top_vrbo_ref_id": "22864937",
+      "top_score": 0.5508,
+      "shortlist_count": 5,
+      "geo_distance_meters": 11.0054
+    },
+    {
+      "external_listing_id": "35-suzanne-drive",
+      "top_vrbo_ref_id": "63082409",
+      "top_score": 0.5472,
+      "shortlist_count": 5,
+      "geo_distance_meters": 0.0309
+    },
+    {
+      "external_listing_id": "25-lake-district-lane",
+      "top_vrbo_ref_id": "66902191",
+      "top_score": 0.4816,
+      "shortlist_count": 1,
+      "geo_distance_meters": 27.881
+    },
+    {
+      "external_listing_id": "grayton-station",
+      "top_vrbo_ref_id": "99383014",
+      "top_score": 0.4532,
+      "shortlist_count": 11,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "beach-bungalow",
+      "top_vrbo_ref_id": "100330659",
+      "top_score": 0.3388,
+      "shortlist_count": 10,
+      "geo_distance_meters": 0.0222
+    },
+    {
+      "external_listing_id": "blue-palmetto",
+      "top_vrbo_ref_id": "122874614",
+      "top_score": 0.3304,
+      "shortlist_count": 14,
+      "geo_distance_meters": 0.04
+    },
+    {
+      "external_listing_id": "70-scrub-oak-circle",
+      "top_vrbo_ref_id": "70943587",
+      "top_score": 0.2556,
+      "shortlist_count": 3,
+      "geo_distance_meters": 0.0334
+    },
+    {
+      "external_listing_id": "21-chanel-court",
+      "top_vrbo_ref_id": "67416510",
+      "top_score": 0.2545,
+      "shortlist_count": 6,
+      "geo_distance_meters": 92.9152
+    },
+    {
+      "external_listing_id": "12-viridian-park-drive",
+      "top_vrbo_ref_id": "91352039",
+      "top_score": 0.2522,
+      "shortlist_count": 2,
+      "geo_distance_meters": 130.2288
+    },
+    {
+      "external_listing_id": "672-western-lake-drive",
+      "top_vrbo_ref_id": "34464223",
+      "top_score": 0.2507,
+      "shortlist_count": 3,
+      "geo_distance_meters": 75.9542
+    },
+    {
+      "external_listing_id": "beach-please",
+      "top_vrbo_ref_id": "92466735",
+      "top_score": 0.2485,
+      "shortlist_count": 1,
+      "geo_distance_meters": 130.2349
+    },
+    {
+      "external_listing_id": "80-scrub-oak-circle",
+      "top_vrbo_ref_id": "70943587",
+      "top_score": 0.2472,
+      "shortlist_count": 4,
+      "geo_distance_meters": 18.5616
+    },
+    {
+      "external_listing_id": "southern-comfort",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.2459,
+      "shortlist_count": 4,
+      "geo_distance_meters": 105.4873
+    },
+    {
+      "external_listing_id": "slice-heaven-watercolor",
+      "top_vrbo_ref_id": "115481695",
+      "top_score": 0.2439,
+      "shortlist_count": 5,
+      "geo_distance_meters": 68.4132
+    },
+    {
+      "external_listing_id": "422-pine-needle-way",
+      "top_vrbo_ref_id": "26841220",
+      "top_score": 0.2436,
+      "shortlist_count": 4,
+      "geo_distance_meters": 19.8778
+    },
+    {
+      "external_listing_id": "5-pond-cypress-way",
+      "top_vrbo_ref_id": "126641901",
+      "top_score": 0.2435,
+      "shortlist_count": 6,
+      "geo_distance_meters": 109.7955
+    },
+    {
+      "external_listing_id": "31-bluejack-street",
+      "top_vrbo_ref_id": "70943587",
+      "top_score": 0.2424,
+      "shortlist_count": 4,
+      "geo_distance_meters": 111.1726
+    },
+    {
+      "external_listing_id": "75-east-summersweet-lane",
+      "top_vrbo_ref_id": "125177431",
+      "top_score": 0.2422,
+      "shortlist_count": 11,
+      "geo_distance_meters": 91.0381
+    },
+    {
+      "external_listing_id": "sea-you-next-time",
+      "top_vrbo_ref_id": "112894312",
+      "top_score": 0.2415,
+      "shortlist_count": 1,
+      "geo_distance_meters": 64.4581
+    },
+    {
+      "external_listing_id": "91-bluejack-street",
+      "top_vrbo_ref_id": "70943587",
+      "top_score": 0.2398,
+      "shortlist_count": 6,
+      "geo_distance_meters": 148.9144
+    },
+    {
+      "external_listing_id": "369-spartina-circle",
+      "top_vrbo_ref_id": "101949665",
+      "top_score": 0.2388,
+      "shortlist_count": 10,
+      "geo_distance_meters": 42.5268
+    },
+    {
+      "external_listing_id": "1217-western-lake-drive",
+      "top_vrbo_ref_id": "36353284",
+      "top_score": 0.2387,
+      "shortlist_count": 8,
+      "geo_distance_meters": 107.6762
+    },
+    {
+      "external_listing_id": "51-mistflower-lane",
+      "top_vrbo_ref_id": "115481695",
+      "top_score": 0.2376,
+      "shortlist_count": 5,
+      "geo_distance_meters": 106.9466
+    },
+    {
+      "external_listing_id": "99-pond-cypress-way",
+      "top_vrbo_ref_id": "126641901",
+      "top_score": 0.237,
+      "shortlist_count": 5,
+      "geo_distance_meters": 0.0294
+    },
+    {
+      "external_listing_id": "73-pond-cypress-circle",
+      "top_vrbo_ref_id": "126641901",
+      "top_score": 0.2363,
+      "shortlist_count": 4,
+      "geo_distance_meters": 54.8651
+    },
+    {
+      "external_listing_id": "goodness-and-mer-sea",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2336,
+      "shortlist_count": 4,
+      "geo_distance_meters": 119.4193
+    },
+    {
+      "external_listing_id": "53-muhly-circle",
+      "top_vrbo_ref_id": "112894312",
+      "top_score": 0.2319,
+      "shortlist_count": 1,
+      "geo_distance_meters": 19.37
+    },
+    {
+      "external_listing_id": "428-red-cedar-way",
+      "top_vrbo_ref_id": "26841220",
+      "top_score": 0.2314,
+      "shortlist_count": 7,
+      "geo_distance_meters": 126.1259
+    },
+    {
+      "external_listing_id": "271-red-cedar-way",
+      "top_vrbo_ref_id": "57272527",
+      "top_score": 0.2281,
+      "shortlist_count": 11,
+      "geo_distance_meters": 148.2833
+    },
+    {
+      "external_listing_id": "97-east-summersweet-lane",
+      "top_vrbo_ref_id": "125177431",
+      "top_score": 0.228,
+      "shortlist_count": 12,
+      "geo_distance_meters": 52.9091
+    },
+    {
+      "external_listing_id": "sippin-sunshine",
+      "top_vrbo_ref_id": "96727094",
+      "top_score": 0.2269,
+      "shortlist_count": 3,
+      "geo_distance_meters": 141.2007
+    },
+    {
+      "external_listing_id": "93-needlerush-drive",
+      "top_vrbo_ref_id": "113514628",
+      "top_score": 0.2256,
+      "shortlist_count": 4,
+      "geo_distance_meters": 85.0257
+    },
+    {
+      "external_listing_id": "salty-glass-cottage",
+      "top_vrbo_ref_id": "31758255",
+      "top_score": 0.2256,
+      "shortlist_count": 6,
+      "geo_distance_meters": 111.3831
+    },
+    {
+      "external_listing_id": "1735-east-co-hwy-30a-203",
+      "top_vrbo_ref_id": "22864937",
+      "top_score": 0.2244,
+      "shortlist_count": 4,
+      "geo_distance_meters": 98.6092
+    },
+    {
+      "external_listing_id": "176-red-cedar-way",
+      "top_vrbo_ref_id": "33483262",
+      "top_score": 0.2244,
+      "shortlist_count": 7,
+      "geo_distance_meters": 40.9846
+    },
+    {
+      "external_listing_id": "254-spartina-circle",
+      "top_vrbo_ref_id": "78696966",
+      "top_score": 0.2244,
+      "shortlist_count": 5,
+      "geo_distance_meters": 34.5869
+    },
+    {
+      "external_listing_id": "37-red-cedar-way",
+      "top_vrbo_ref_id": "78696966",
+      "top_score": 0.2244,
+      "shortlist_count": 9,
+      "geo_distance_meters": 95.7554
+    },
+    {
+      "external_listing_id": "43-sand-hill-circle",
+      "top_vrbo_ref_id": "70943587",
+      "top_score": 0.2244,
+      "shortlist_count": 2,
+      "geo_distance_meters": 93.7446
+    },
+    {
+      "external_listing_id": "beach-blessing",
+      "top_vrbo_ref_id": "125177431",
+      "top_score": 0.2232,
+      "shortlist_count": 12,
+      "geo_distance_meters": 95.708
+    },
+    {
+      "external_listing_id": "379-east-royal-fern-way",
+      "top_vrbo_ref_id": "27764575",
+      "top_score": 0.2224,
+      "shortlist_count": 1,
+      "geo_distance_meters": 103.0581
+    },
+    {
+      "external_listing_id": "72-needlerush-drive",
+      "top_vrbo_ref_id": "113514628",
+      "top_score": 0.222,
+      "shortlist_count": 4,
+      "geo_distance_meters": 118.1027
+    },
+    {
+      "external_listing_id": "22-flatwood-street",
+      "top_vrbo_ref_id": "115481695",
+      "top_score": 0.2206,
+      "shortlist_count": 5,
+      "geo_distance_meters": 126.8954
+    },
+    {
+      "external_listing_id": "349-needlerush-drive",
+      "top_vrbo_ref_id": "107859721",
+      "top_score": 0.2196,
+      "shortlist_count": 3,
+      "geo_distance_meters": 35.7224
+    },
+    {
+      "external_listing_id": "394-western-lake-drive",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2196,
+      "shortlist_count": 2,
+      "geo_distance_meters": 68.757
+    },
+    {
+      "external_listing_id": "cornercopia",
+      "top_vrbo_ref_id": "91284341",
+      "top_score": 0.2196,
+      "shortlist_count": 4,
+      "geo_distance_meters": 114.7035
+    },
+    {
+      "external_listing_id": "salty-seaplane",
+      "top_vrbo_ref_id": "26841220",
+      "top_score": 0.2194,
+      "shortlist_count": 5,
+      "geo_distance_meters": 128.0939
+    },
+    {
+      "external_listing_id": "142-mystic-cobalt-street",
+      "top_vrbo_ref_id": "34464223",
+      "top_score": 0.2184,
+      "shortlist_count": 3,
+      "geo_distance_meters": 49.7728
+    },
+    {
+      "external_listing_id": "406-red-cedar-way",
+      "top_vrbo_ref_id": "74511199",
+      "top_score": 0.2182,
+      "shortlist_count": 7,
+      "geo_distance_meters": 141.2884
+    },
+    {
+      "external_listing_id": "dolce-far-niente",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2172,
+      "shortlist_count": 3,
+      "geo_distance_meters": 42.5172
+    },
+    {
+      "external_listing_id": "9-running-oak-circle",
+      "top_vrbo_ref_id": "124204718",
+      "top_score": 0.217,
+      "shortlist_count": 3,
+      "geo_distance_meters": 134.1046
+    },
+    {
+      "external_listing_id": "2743-e-co-hwy-30a-unit-303",
+      "top_vrbo_ref_id": "33707307",
+      "top_score": 0.2166,
+      "shortlist_count": 8,
+      "geo_distance_meters": 131.6932
+    },
+    {
+      "external_listing_id": "124-sunset-ridge-lane",
+      "top_vrbo_ref_id": "33690945",
+      "top_score": 0.216,
+      "shortlist_count": 5,
+      "geo_distance_meters": 110.3199
+    },
+    {
+      "external_listing_id": "109-dandelion-drive",
+      "top_vrbo_ref_id": "22128458",
+      "top_score": 0.2137,
+      "shortlist_count": 1,
+      "geo_distance_meters": 54.6795
+    },
+    {
+      "external_listing_id": "184-east-royal-fern-way",
+      "top_vrbo_ref_id": "125879096",
+      "top_score": 0.2136,
+      "shortlist_count": 5,
+      "geo_distance_meters": 111.8076
+    },
+    {
+      "external_listing_id": "krakens-hideaway",
+      "top_vrbo_ref_id": "99436560",
+      "top_score": 0.2134,
+      "shortlist_count": 8,
+      "geo_distance_meters": 140.3355
+    },
+    {
+      "external_listing_id": "44-thicket-circle",
+      "top_vrbo_ref_id": "121327810",
+      "top_score": 0.213,
+      "shortlist_count": 2,
+      "geo_distance_meters": 124.7569
+    },
+    {
+      "external_listing_id": "20-tall-timber-court-0",
+      "top_vrbo_ref_id": "126733951",
+      "top_score": 0.2124,
+      "shortlist_count": 1,
+      "geo_distance_meters": 54.7499
+    },
+    {
+      "external_listing_id": "194-spartina-circle",
+      "top_vrbo_ref_id": "78696966",
+      "top_score": 0.2098,
+      "shortlist_count": 6,
+      "geo_distance_meters": 145.2021
+    },
+    {
+      "external_listing_id": "29-royal-fern-way",
+      "top_vrbo_ref_id": "83056963",
+      "top_score": 0.2089,
+      "shortlist_count": 1,
+      "geo_distance_meters": 113.2731
+    },
+    {
+      "external_listing_id": "daydream-believer",
+      "top_vrbo_ref_id": "102286195",
+      "top_score": 0.2088,
+      "shortlist_count": 3,
+      "geo_distance_meters": 58.1643
+    },
+    {
+      "external_listing_id": "157-sunflower-street",
+      "top_vrbo_ref_id": "92466735",
+      "top_score": 0.2086,
+      "shortlist_count": 8,
+      "geo_distance_meters": 140.2456
+    },
+    {
+      "external_listing_id": "sea-view-compass-point-ii",
+      "top_vrbo_ref_id": "127171443",
+      "top_score": 0.2026,
+      "shortlist_count": 1,
+      "geo_distance_meters": 144.6899
+    },
+    {
+      "external_listing_id": "179-pine-needle-way",
+      "top_vrbo_ref_id": "83056963",
+      "top_score": 0.2017,
+      "shortlist_count": 1,
+      "geo_distance_meters": 114.9286
+    },
+    {
+      "external_listing_id": "100-tumblehome-way",
+      "top_vrbo_ref_id": "101090171",
+      "top_score": 0.2004,
+      "shortlist_count": 3,
+      "geo_distance_meters": 38.6956
+    },
+    {
+      "external_listing_id": "65-pond-cypress-circle",
+      "top_vrbo_ref_id": "24469398",
+      "top_score": 0.1956,
+      "shortlist_count": 1,
+      "geo_distance_meters": 90.5175
+    },
+    {
+      "external_listing_id": "salty-dog-134-royal-fern-way",
+      "top_vrbo_ref_id": "83056963",
+      "top_score": 0.1945,
+      "shortlist_count": 1,
+      "geo_distance_meters": 82.1819
+    },
+    {
+      "external_listing_id": "wake-slow",
+      "top_vrbo_ref_id": "95796753",
+      "top_score": 0.1933,
+      "shortlist_count": 3,
+      "geo_distance_meters": 16.9367
+    }
+  ],
+  "unmatched_no_candidates": [
+    "295-salt-box-lane",
+    "442-east-royal-fern-way",
+    "46-pine-needle-way"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

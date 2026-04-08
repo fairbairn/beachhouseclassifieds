@@ -1,0 +1,162 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:15:46.863Z",
+    "adapter_key": "30abeach",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 17,
+    "matched": 2,
+    "unmatched": 15,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [
+    {
+      "external_listing_id": "426780",
+      "vrbo_ref_id": "33248860",
+      "vrbo_source_listing_id": "921006",
+      "score": 0.654,
+      "confidence_label": "low",
+      "shortlist_count": 27,
+      "geo_distance_meters": 6.6724
+    },
+    {
+      "external_listing_id": "426821",
+      "vrbo_ref_id": "33245087",
+      "vrbo_source_listing_id": "682160",
+      "score": 0.6359,
+      "confidence_label": "low",
+      "shortlist_count": 15,
+      "geo_distance_meters": 4.2481
+    }
+  ],
+  "unmatched": [
+    {
+      "external_listing_id": "807590",
+      "top_vrbo_ref_id": "100791798",
+      "top_score": 0.5692,
+      "shortlist_count": 20,
+      "geo_distance_meters": 10.017
+    },
+    {
+      "external_listing_id": "sweetgrass-cottage",
+      "top_vrbo_ref_id": "75699793",
+      "top_score": 0.4927,
+      "shortlist_count": 16,
+      "geo_distance_meters": 0.0585
+    },
+    {
+      "external_listing_id": "1029386",
+      "top_vrbo_ref_id": "123963999",
+      "top_score": 0.4167,
+      "shortlist_count": 14,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "936116",
+      "top_vrbo_ref_id": "59823163",
+      "top_score": 0.4069,
+      "shortlist_count": 19,
+      "geo_distance_meters": 107.58
+    },
+    {
+      "external_listing_id": "426830",
+      "top_vrbo_ref_id": "33245087",
+      "top_score": 0.3891,
+      "shortlist_count": 17,
+      "geo_distance_meters": 21.0864
+    },
+    {
+      "external_listing_id": "942596",
+      "top_vrbo_ref_id": "113139641",
+      "top_score": 0.3867,
+      "shortlist_count": 24,
+      "geo_distance_meters": 0.0564
+    },
+    {
+      "external_listing_id": "yayas-beach-carriage",
+      "top_vrbo_ref_id": "120752174",
+      "top_score": 0.3534,
+      "shortlist_count": 13,
+      "geo_distance_meters": 132.8819
+    },
+    {
+      "external_listing_id": "seagrove-beach-cottage",
+      "top_vrbo_ref_id": "70554230",
+      "top_score": 0.3524,
+      "shortlist_count": 10,
+      "geo_distance_meters": 60.4849
+    },
+    {
+      "external_listing_id": "426820",
+      "top_vrbo_ref_id": "99644788",
+      "top_score": 0.3306,
+      "shortlist_count": 1,
+      "geo_distance_meters": 60.3899
+    },
+    {
+      "external_listing_id": "antigua-blue",
+      "top_vrbo_ref_id": "100791798",
+      "top_score": 0.3304,
+      "shortlist_count": 20,
+      "geo_distance_meters": 104.1247
+    },
+    {
+      "external_listing_id": "crown-penthouse",
+      "top_vrbo_ref_id": "33245087",
+      "top_score": 0.3292,
+      "shortlist_count": 22,
+      "geo_distance_meters": 82.5392
+    },
+    {
+      "external_listing_id": "antigua-penthouse",
+      "top_vrbo_ref_id": "100791798",
+      "top_score": 0.3268,
+      "shortlist_count": 21,
+      "geo_distance_meters": 96.4628
+    },
+    {
+      "external_listing_id": "crown-studio",
+      "top_vrbo_ref_id": "33245087",
+      "top_score": 0.3256,
+      "shortlist_count": 22,
+      "geo_distance_meters": 83.9648
+    },
+    {
+      "external_listing_id": "orleans-2a",
+      "top_vrbo_ref_id": "33248860",
+      "top_score": 0.3232,
+      "shortlist_count": 2,
+      "geo_distance_meters": 111.9875
+    },
+    {
+      "external_listing_id": "941384",
+      "top_vrbo_ref_id": "33248860",
+      "top_score": 0.3098,
+      "shortlist_count": 2,
+      "geo_distance_meters": 106.0496
+    }
+  ],
+  "unmatched_no_candidates": [],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}

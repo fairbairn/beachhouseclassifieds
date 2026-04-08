@@ -1,0 +1,50 @@
+{
+  "adapter": {
+    "adapter_name": "royaldestinations",
+    "slug_name": "buena-vista",
+    "external_listing_id": "buena-vista",
+    "detail_url": "https://www.royaldestinations.com/30a-vacation-rentals/buena-vista?rcav%5Bbegin%5D=07%2F18%2F2026&rcav%5Bend%5D=07%2F25%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=319&rcav%5BIDs%5D%5B8%5D%5B0%5D=1376-144934&eid=319"
+  },
+  "vrbo": {
+    "ref_id": "22864759",
+    "source_listing_id": "1272771",
+    "url": "https://www.vrbo.com/1272771?dateless=true&x_pwa=1&rfrr=HSR&pwa_ts=1774467910502&referrerUrl=aHR0cHM6Ly93d3cudnJiby5jb20vSG90ZWwtU2VhcmNo&useRewards=true&adults=2&regionId=183118&destination=Santa+Rosa+Beach%2C+Florida%2C+United+States+of+America&destType=MARKET&neighborhoodId=156147&latLong=30.396032%2C-86.228828&privacyTrackingState=CAN_NOT_TRACK&bed_count_ge=10&property_type_group=house&sort=RECOMMENDED&userIntent=&expediaPropertyId=22864759",
+    "property_name": "Steps from Beach | Private Pool | Pet & Event Friendly– Buena Vista"
+  },
+  "deduced": {
+    "address": {
+      "adapter_address": "38 Santa Clara Street Santa Rosa Beach FL",
+      "vrbo_display": "Santa Rosa Beach, FL",
+      "vrbo_city": "Santa Rosa Beach"
+    },
+    "geo": {
+      "adapter_latitude": 30.315026,
+      "adapter_longitude": -86.1187838,
+      "vrbo_latitude": 30.315041,
+      "vrbo_longitude": -86.118819,
+      "distance_meters": 3.7681
+    }
+  },
+  "match": {
+    "confidence_score": 0.7932,
+    "confidence_label": "medium",
+    "scoring_breakdown": {
+      "name_similarity": 0.98,
+      "description_overlap": 0.99,
+      "slug_description_signal": 1,
+      "address_signal": 0,
+      "city_signal": 1,
+      "bed_bath_signal": 1,
+      "geo_signal": 1
+    },
+    "notes": [
+      "Top score selected from shortlist of 12 VRBO candidates for buena-vista.",
+      "Score gap vs second candidate: 0.4583."
+    ]
+  },
+  "prototype": {
+    "status": "matched",
+    "matched_at": "2026-04-08",
+    "artifact_version": 4
+  }
+}

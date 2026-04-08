@@ -1,0 +1,232 @@
+{
+  "metadata": {
+    "generated_at": "2026-04-08T03:20:18.525Z",
+    "adapter_key": "coastproperties30a",
+    "contract": "vrbo-adapter-match-v1",
+    "geocode_enabled": true
+  },
+  "procedure": {
+    "min_score": 0.6,
+    "min_margin": 0.01,
+    "deterministic_scoring": true,
+    "ranking": "geo-first shortlist then weighted confidence score",
+    "web_search_fallback": false,
+    "score_formula": {
+      "name_similarity": 0.3,
+      "address_signal": 0.2,
+      "city_signal": 0.1,
+      "description_overlap": 0.15,
+      "slug_description_signal": 0.1,
+      "bed_bath_signal": 0.1,
+      "geo_signal": 0.1
+    }
+  },
+  "totals": {
+    "scanned": 30,
+    "matched": 6,
+    "unmatched": 24,
+    "high_confidence_0_95_plus": 0
+  },
+  "matched": [
+    {
+      "external_listing_id": "will-o-mist-588138",
+      "vrbo_ref_id": "91073681",
+      "vrbo_source_listing_id": "3233666",
+      "score": 0.6561,
+      "confidence_label": "low",
+      "shortlist_count": 10,
+      "geo_distance_meters": 0.0385
+    },
+    {
+      "external_listing_id": "piece-of-paradise-577362",
+      "vrbo_ref_id": "90641709",
+      "vrbo_source_listing_id": "3199285",
+      "score": 0.6549,
+      "confidence_label": "low",
+      "shortlist_count": 23,
+      "geo_distance_meters": 0.0385
+    },
+    {
+      "external_listing_id": "redemption-751389",
+      "vrbo_ref_id": "102417604",
+      "vrbo_source_listing_id": "3857992",
+      "score": 0.6549,
+      "confidence_label": "low",
+      "shortlist_count": 25,
+      "geo_distance_meters": 1.5405
+    },
+    {
+      "external_listing_id": "shore-beats-work-803619",
+      "vrbo_ref_id": "100029284",
+      "vrbo_source_listing_id": "3686803",
+      "score": 0.6549,
+      "confidence_label": "low",
+      "shortlist_count": 23,
+      "geo_distance_meters": 0.0147
+    },
+    {
+      "external_listing_id": "the-hidden-pearl-577364",
+      "vrbo_ref_id": "89699803",
+      "vrbo_source_listing_id": "3141846",
+      "score": 0.6537,
+      "confidence_label": "low",
+      "shortlist_count": 20,
+      "geo_distance_meters": 0.0222
+    },
+    {
+      "external_listing_id": "poppy-s-cottage-817321",
+      "vrbo_ref_id": "101175555",
+      "vrbo_source_listing_id": "3771504",
+      "score": 0.6471,
+      "confidence_label": "low",
+      "shortlist_count": 22,
+      "geo_distance_meters": 4.5668
+    }
+  ],
+  "unmatched": [
+    {
+      "external_listing_id": "poppy-s-cottage-carriage-house-813141",
+      "top_vrbo_ref_id": "101175555",
+      "top_score": 0.5361,
+      "shortlist_count": 22,
+      "geo_distance_meters": 4.5668
+    },
+    {
+      "external_listing_id": "poppy-s-carriage-house-817202",
+      "top_vrbo_ref_id": "101175555",
+      "top_score": 0.4337,
+      "shortlist_count": 22,
+      "geo_distance_meters": 4.5668
+    },
+    {
+      "external_listing_id": "limelight-764362",
+      "top_vrbo_ref_id": "95841323",
+      "top_score": 0.4009,
+      "shortlist_count": 14,
+      "geo_distance_meters": 0.0384
+    },
+    {
+      "external_listing_id": "white-haven-485831",
+      "top_vrbo_ref_id": "71330333",
+      "top_score": 0.4009,
+      "shortlist_count": 6,
+      "geo_distance_meters": 0
+    },
+    {
+      "external_listing_id": "the-getaway-on-30a-478874",
+      "top_vrbo_ref_id": "108811709",
+      "top_score": 0.4001,
+      "shortlist_count": 1,
+      "geo_distance_meters": 84.7254
+    },
+    {
+      "external_listing_id": "the-escape-478779",
+      "top_vrbo_ref_id": "60437250",
+      "top_score": 0.3997,
+      "shortlist_count": 2,
+      "geo_distance_meters": 23.481
+    },
+    {
+      "external_listing_id": "meet-me-by-the-ocean-818664",
+      "top_vrbo_ref_id": "102038170",
+      "top_score": 0.3985,
+      "shortlist_count": 12,
+      "geo_distance_meters": 0.0384
+    },
+    {
+      "external_listing_id": "the-sugar-sand-shack-506270",
+      "top_vrbo_ref_id": "76611653",
+      "top_score": 0.3985,
+      "shortlist_count": 22,
+      "geo_distance_meters": 0.0484
+    },
+    {
+      "external_listing_id": "suite-dreams-on-30a-811380",
+      "top_vrbo_ref_id": "95841323",
+      "top_score": 0.3625,
+      "shortlist_count": 11,
+      "geo_distance_meters": 80.5401
+    },
+    {
+      "external_listing_id": "seas-the-day-590401",
+      "top_vrbo_ref_id": "66256721",
+      "top_score": 0.3434,
+      "shortlist_count": 4,
+      "geo_distance_meters": 102.0382
+    },
+    {
+      "external_listing_id": "call-me-the-breeze-485852",
+      "top_vrbo_ref_id": "108811709",
+      "top_score": 0.3389,
+      "shortlist_count": 1,
+      "geo_distance_meters": 147.9536
+    },
+    {
+      "external_listing_id": "once-upon-a-time-928666",
+      "top_vrbo_ref_id": "120752174",
+      "top_score": 0.3243,
+      "shortlist_count": 18,
+      "geo_distance_meters": 61.2793
+    },
+    {
+      "external_listing_id": "sun-kissed-498948",
+      "top_vrbo_ref_id": "101333039",
+      "top_score": 0.3208,
+      "shortlist_count": 2,
+      "geo_distance_meters": 132.4508
+    },
+    {
+      "external_listing_id": "beachy-keen-478882",
+      "top_vrbo_ref_id": "33560470",
+      "top_score": 0.3141,
+      "shortlist_count": 5,
+      "geo_distance_meters": 105.0588
+    },
+    {
+      "external_listing_id": "sun-kissed-shores-1026007",
+      "top_vrbo_ref_id": "108002518",
+      "top_score": 0.3139,
+      "shortlist_count": 7,
+      "geo_distance_meters": 107.0866
+    },
+    {
+      "external_listing_id": "blessed-for-shore-830709",
+      "top_vrbo_ref_id": "117420639",
+      "top_score": 0.3136,
+      "shortlist_count": 5,
+      "geo_distance_meters": 71.8555
+    },
+    {
+      "external_listing_id": "blessings-by-the-sea-1027242",
+      "top_vrbo_ref_id": "127029757",
+      "top_score": 0.2997,
+      "shortlist_count": 13,
+      "geo_distance_meters": 51.1686
+    },
+    {
+      "external_listing_id": "sea-suite-514612",
+      "top_vrbo_ref_id": "33657959",
+      "top_score": 0.2882,
+      "shortlist_count": 1,
+      "geo_distance_meters": 145.2124
+    },
+    {
+      "external_listing_id": "tranquil-tides-981697",
+      "top_vrbo_ref_id": "96654821",
+      "top_score": 0.2467,
+      "shortlist_count": 8,
+      "geo_distance_meters": 74.616
+    }
+  ],
+  "unmatched_no_candidates": [
+    "headquarters-by-the-sea-884991",
+    "lucky-beach-house-1019940",
+    "shore-to-please-979937",
+    "sugar-magnolia-815182",
+    "twisted-sister-1043811"
+  ],
+  "web_search": {
+    "attempts": 0,
+    "recovered_listing_ids": []
+  }
+}
