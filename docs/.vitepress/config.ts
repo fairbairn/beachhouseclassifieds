@@ -18,6 +18,14 @@ export default defineConfig({
             link: "/pricing-system-reference",
           },
           {
+            text: "Brand and Visual Direction",
+            link: "/brand-and-visual-direction",
+          },
+          {
+            text: "Site Structure and UI Map",
+            link: "/site-structure-and-ui-map",
+          },
+          {
             text: "Adapter Scrape and Extraction",
             link: "/adapter-scrape-and-extraction",
           },

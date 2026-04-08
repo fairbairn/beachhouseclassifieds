@@ -12,6 +12,8 @@ Welcome to the docs site scaffold.
 
 - Add feature docs as separate markdown files in this folder.
 - Keep architecture and setup docs updated as the project evolves.
+- Use [Brand and Visual Direction](./brand-and-visual-direction.md) for typography, color, messaging, CTA, and visual style decisions.
+- Use [Site Structure and UI Map](./site-structure-and-ui-map.md) for routes, page composition, and component ownership.
 - Use [Pricing and Conformance System Reference](./pricing-system-reference.md) as the hub for scrape, quote, cache, validation, and readiness workflows.
 - Use [Adapter Scrape and Extraction](./adapter-scrape-and-extraction.md) for how primary adapters discover, fetch, and normalize listing detail payloads.
 - Use [Quote Modules and Platform Strategy](./quote-modules-platform-strategy.md) for quote-sidecar behavior and stack-specific extraction strategy.

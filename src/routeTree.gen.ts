@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LogoutRouteImport } from './routes/logout'
+import { Route as LogoCaptureRouteImport } from './routes/logo-capture'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as IndexRouteImport } from './routes/index'
@@ -21,6 +22,11 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 const LogoutRoute = LogoutRouteImport.update({
   id: '/logout',
   path: '/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LogoCaptureRoute = LogoCaptureRouteImport.update({
+  id: '/logo-capture',
+  path: '/logo-capture',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/logo-capture': typeof LogoCaptureRoute
   '/logout': typeof LogoutRoute
   '/api/login': typeof ApiLoginRoute
   '/api/logout': typeof ApiLogoutRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/logo-capture': typeof LogoCaptureRoute
   '/logout': typeof LogoutRoute
   '/api/login': typeof ApiLoginRoute
   '/api/logout': typeof ApiLogoutRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/logo-capture': typeof LogoCaptureRoute
   '/logout': typeof LogoutRoute
   '/api/login': typeof ApiLoginRoute
   '/api/logout': typeof ApiLogoutRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/home'
     | '/login'
+    | '/logo-capture'
     | '/logout'
     | '/api/login'
     | '/api/logout'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/home'
     | '/login'
+    | '/logo-capture'
     | '/logout'
     | '/api/login'
     | '/api/logout'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/home'
     | '/login'
+    | '/logo-capture'
     | '/logout'
     | '/api/login'
     | '/api/logout'
@@ -127,6 +139,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HomeRoute: typeof HomeRoute
   LoginRoute: typeof LoginRoute
+  LogoCaptureRoute: typeof LogoCaptureRoute
   LogoutRoute: typeof LogoutRoute
   ApiLoginRoute: typeof ApiLoginRoute
   ApiLogoutRoute: typeof ApiLogoutRoute
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/logout'
       fullPath: '/logout'
       preLoaderRoute: typeof LogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/logo-capture': {
+      id: '/logo-capture'
+      path: '/logo-capture'
+      fullPath: '/logo-capture'
+      preLoaderRoute: typeof LogoCaptureRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -199,6 +219,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HomeRoute: HomeRoute,
   LoginRoute: LoginRoute,
+  LogoCaptureRoute: LogoCaptureRoute,
   LogoutRoute: LogoutRoute,
   ApiLoginRoute: ApiLoginRoute,
   ApiLogoutRoute: ApiLogoutRoute,

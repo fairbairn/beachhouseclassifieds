@@ -15,7 +15,7 @@ import {
   optionsResponse,
   parseJsonSafely,
 } from "@/core/http/api-http";
-import { auth } from "@/core/server/auth";
+import { isAuthRuntimeEnabled } from "@/core/server/auth-runtime-enabled";
 import {
   getHttpStatusForAppErrorCode,
   normalizeToAppErrorPayload,
@@ -32,6 +32,17 @@ export const Route = createFileRoute("/api/login")({
     handlers: {
       POST: async ({ request }) => {
         try {
+          if (!isAuthRuntimeEnabled()) {
+            return createAppErrorResponse(
+              {
+                code: "SERVICE_UNAVAILABLE",
+                message: USER_FACING_MESSAGES.auth.signInUnavailable,
+              },
+              503,
+            );
+          }
+
+          const { auth } = await import("@/core/server/auth");
           const body = (await request.json().catch(() => null)) as unknown;
           const parsedPayload = loginPayloadSchema.safeParse(body);
 

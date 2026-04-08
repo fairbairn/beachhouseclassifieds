@@ -40,8 +40,20 @@ export function HomeSavingsSection() {
             className="text-4xl leading-tight tracking-tight text-slate-900 md:text-6xl"
             style={{ fontFamily: "'Playfair Display', serif" }}
           >
-            Same <span className="text-[#2DD4BF]">Beach.</span> Same{" "}
-            <span className="text-[#2DD4BF]">House.</span>
+            Same{" "}
+            <span
+              className="text-[#2DD4BF]"
+              style={{ textShadow: "1px 2px 0 rgba(13,148,136,0.6)" }}
+            >
+              Beach.
+            </span>{" "}
+            Same{" "}
+            <span
+              className="text-[#2DD4BF]"
+              style={{ textShadow: "1px 2px 0 rgba(13,148,136,0.6)" }}
+            >
+              House.
+            </span>
             <br />
             <span>Spend on Memories, Not Markups.</span>
           </h3>

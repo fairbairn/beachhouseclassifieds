@@ -32,21 +32,23 @@ export function HomeLandingPage() {
   }, []);
 
   useEffect(() => {
-    const previousHtmlOverscrollY = document.documentElement.style.overscrollBehaviorY;
+    const previousHtmlOverscrollY =
+      document.documentElement.style.overscrollBehaviorY;
     const previousBodyOverscrollY = document.body.style.overscrollBehaviorY;
 
     document.documentElement.style.overscrollBehaviorY = "none";
     document.body.style.overscrollBehaviorY = "none";
 
     return () => {
-      document.documentElement.style.overscrollBehaviorY = previousHtmlOverscrollY;
+      document.documentElement.style.overscrollBehaviorY =
+        previousHtmlOverscrollY;
       document.body.style.overscrollBehaviorY = previousBodyOverscrollY;
     };
   }, []);
 
   return (
     <div
-      className="min-h-screen select-none bg-white text-[#1A1A1A]"
+      className="min-h-screen bg-white text-[#1A1A1A]"
       style={{ fontFamily: "'Manrope', sans-serif" }}
     >
       <HomeLandingNav isScrolled={isScrolled} />

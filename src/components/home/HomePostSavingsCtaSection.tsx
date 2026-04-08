@@ -1,10 +1,10 @@
-import { ArrowRight } from "lucide-react";
+import beachEntryTexture from "@/assets/images/beach-entry.png";
 import {
   HOME_ACTION_BUTTON_BASE,
   HOME_ACTION_BUTTON_LARGE_SIZE,
   HOME_ACTION_BUTTON_TEAL,
 } from "@/components/home/homeButtonStyles";
-import beachEntryTexture from "@/assets/images/beach-entry.png";
+import { ArrowRight } from "lucide-react";
 
 export function HomePostSavingsCtaSection() {
   return (
@@ -36,8 +36,8 @@ export function HomePostSavingsCtaSection() {
           home your family will remember forever.
         </h3>
         <p className="mx-auto mt-5 max-w-3xl text-lg text-slate-600 md:text-xl">
-          Find that special 30A home where your family can relax, reconnect, and make
-          this vacation one to remember.
+          Explore available vacation rentals, compare true stay totals, and book
+          the right home for your trip with confidence.
         </p>
 
         <div className="mt-10">
@@ -46,7 +46,11 @@ export function HomePostSavingsCtaSection() {
             className={`inline-flex items-center justify-center gap-2 ${HOME_ACTION_BUTTON_BASE} ${HOME_ACTION_BUTTON_LARGE_SIZE} ${HOME_ACTION_BUTTON_TEAL}`}
           >
             <span>EXPLORE THE COLLECTION</span>
-            <ArrowRight className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
+            <ArrowRight
+              className="h-4 w-4"
+              strokeWidth={2.25}
+              aria-hidden="true"
+            />
           </a>
         </div>
       </div>
