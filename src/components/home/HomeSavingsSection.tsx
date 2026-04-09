@@ -9,7 +9,11 @@ type HomeSavingsRow = {
   ourTotal: number;
 };
 
-const SAMPLE_ROWS: HomeSavingsRow[] = savingsTableRows;
+const HIDDEN_AREAS = new Set(["Alys Beach"]);
+
+const SAMPLE_ROWS: HomeSavingsRow[] = savingsTableRows.filter(
+  (row) => !HIDDEN_AREAS.has(row.area),
+);
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",

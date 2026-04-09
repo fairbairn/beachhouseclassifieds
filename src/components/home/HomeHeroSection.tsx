@@ -1,7 +1,3 @@
-type HomeHeroSectionProps = {
-  onPrimaryAction?: () => void;
-};
-
 function ArrowRightIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4.5 w-4.5">
@@ -17,7 +13,7 @@ function ArrowRightIcon() {
   );
 }
 
-export function HomeHeroSection({ onPrimaryAction }: HomeHeroSectionProps) {
+export function HomeHeroSection() {
   const heroBg = "https://30a.com/wp-content/uploads/2025/08/Alys-Beach-1.jpg";
 
   return (
@@ -34,13 +30,12 @@ export function HomeHeroSection({ onPrimaryAction }: HomeHeroSectionProps) {
             <span className="inline-block border-b-2 border-[#2DD4BF]/60 pb-2 text-sm font-bold tracking-wide text-white/60 uppercase md:text-lg">
               Over{" "}
               <span
-                className="inline-block text-[1.32em] leading-[0.9] align-[0.05em] font-semibold tracking-[0.01em] text-[#2DD4BF] md:text-[1.42em]"
+                className="inline-block align-[0.05em] text-[1.32em] leading-[0.9] font-semibold tracking-[0.01em] text-[#2DD4BF] md:text-[1.42em]"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 3,000+
               </span>{" "}
-              Vacation Homes,
-              Exclusively on 30A.
+              Vacation Homes, Exclusively on 30A.
             </span>
           </div>
 
@@ -85,16 +80,15 @@ export function HomeHeroSection({ onPrimaryAction }: HomeHeroSectionProps) {
           </p>
 
           <div className="flex flex-col items-center gap-4">
-            <button
-              type="button"
-              onClick={onPrimaryAction}
-              className="group flex items-center gap-4 rounded-2xl bg-white px-12 py-6 text-xs font-black tracking-[0.14em] text-black uppercase shadow-2xl transition-all hover:bg-white/90 md:text-sm"
+            <a
+              href="/discover"
+              className="group flex items-center gap-4 rounded-2xl bg-white px-12 py-6 text-xs font-black tracking-[0.14em] text-black! uppercase no-underline! shadow-[0_18px_40px_-22px_rgba(15,23,42,0.9)] transition-all duration-300 visited:text-black! visited:no-underline! hover:bg-[#f8fffd] hover:text-black! hover:no-underline! hover:shadow-[0_28px_62px_-20px_rgba(45,212,191,0.75)] focus:text-black! focus:no-underline! focus-visible:ring-4 focus-visible:ring-[#2DD4BF]/45 focus-visible:outline-none active:no-underline! md:text-sm"
             >
               Book Your Perfect Vacation Rental
               <span className="transition-transform group-hover:translate-x-1">
                 <ArrowRightIcon />
               </span>
-            </button>
+            </a>
             <p className="text-[10px] font-bold tracking-[0.2em] text-white/70 uppercase">
               Search across dates. Compare instantly. Decide confidently.
             </p>

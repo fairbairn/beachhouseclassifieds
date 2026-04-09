@@ -39,14 +39,18 @@ export const Route = createRootRoute({
       { property: "og:type", content: "website" },
       { property: "og:title", content: siteTitle },
       { property: "og:description", content: siteDescription },
-      { property: "og:url", content: `${siteUrl}/home` },
+      { property: "og:url", content: `${siteUrl}/` },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: siteTitle },
       { name: "twitter:description", content: siteDescription },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "canonical", href: `${siteUrl}/home` },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Manrope:wght@400;500;700;800&display=swap",
+      },
+      { rel: "canonical", href: `${siteUrl}/` },
       { rel: "icon", href: "/favicon.ico", sizes: "any" },
       {
         rel: "icon",
@@ -82,7 +86,12 @@ function RootDocument({ children }: { children: ReactNode }) {
     select: (state) => state.location.pathname,
   });
   const isLoginPage = pathname === "/login";
-  const isChromeFreePage = pathname === "/home" || pathname === "/logo-capture";
+  const isChromeFreePage =
+    pathname === "/" ||
+    pathname === "/home" ||
+    pathname === "/discover" ||
+    pathname === "/plan" ||
+    pathname === "/logo-capture";
   const header = isLoginPage ? (
     <LoginHeader appName={appName} />
   ) : isChromeFreePage ? null : (

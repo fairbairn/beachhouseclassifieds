@@ -42,7 +42,7 @@ export function HomePostSavingsCtaSection() {
 
         <div className="mt-10">
           <a
-            href="/login"
+            href="/discover"
             className={`inline-flex items-center justify-center gap-2 ${HOME_ACTION_BUTTON_BASE} ${HOME_ACTION_BUTTON_LARGE_SIZE} ${HOME_ACTION_BUTTON_TEAL}`}
           >
             <span>EXPLORE THE COLLECTION</span>

@@ -8,12 +8,12 @@ import {
 
 type HomeLandingNavProps = {
   isScrolled: boolean;
-  onPrimaryAction?: () => void;
+  preferDarkTopText?: boolean;
 };
 
 export function HomeLandingNav({
   isScrolled,
-  onPrimaryAction,
+  preferDarkTopText = false,
 }: HomeLandingNavProps) {
   return (
     <nav
@@ -39,7 +39,7 @@ export function HomeLandingNav({
         <div className="flex flex-col items-center">
           <span
             className={`text-5xl leading-none tracking-[0.06em] transition-colors duration-500 md:text-6xl ${
-              isScrolled ? "text-[#1f242b]" : "text-white"
+              isScrolled || preferDarkTopText ? "text-[#1f242b]" : "text-white"
             }`}
             style={{ fontFamily: "'Playfair Display', serif" }}
           >
@@ -47,7 +47,9 @@ export function HomeLandingNav({
           </span>
           <span
             className={`mt-1 text-[11px] font-bold tracking-[0.46em] uppercase transition-colors duration-500 md:text-xs ${
-              isScrolled ? "text-slate-500" : "text-white/80"
+              isScrolled || preferDarkTopText
+                ? "text-slate-500"
+                : "text-white/80"
             }`}
           >
             Collections
@@ -61,13 +63,12 @@ export function HomeLandingNav({
       </div>
 
       <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onPrimaryAction}
+        <a
+          href="/discover"
           className={`${HOME_ACTION_BUTTON_BASE} ${HOME_ACTION_BUTTON_STANDARD_SIZE} ${isScrolled ? HOME_ACTION_BUTTON_TEAL : HOME_ACTION_BUTTON_LIGHT}`}
         >
           Book Now
-        </button>
+        </a>
       </div>
     </nav>
   );

@@ -10,10 +10,10 @@ This is a living map of routes, page-level composition, and major UI components.
 
 ## Current Route Entry Points
 
-- Route redirect root: src/routes/index.tsx
-  - Redirects / to /home
-- Home route: src/routes/home.tsx
-  - Renders HomeLandingPage
+- Root route: src/routes/index.tsx
+  - Renders HomeLandingPage at /
+- Legacy home route: src/routes/home.tsx
+  - Redirects /home to /
 
 ## Home Page Composition
 

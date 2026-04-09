@@ -126,7 +126,7 @@ export function AppHeader({ appName, userName }: AppHeaderProps) {
     <header className="app-header">
       <div className={`${APP_CONTAINER_CLASS} app-header-inner`}>
         <div className="app-header-title">
-          <Link to="/home">{appName}</Link>
+          <Link to="/">{appName}</Link>
         </div>
 
         <nav className="starter-nav" aria-label="Primary">

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
 import type { FormEvent } from "react";
+import { useState } from "react";
 
 import { redirectIfSessionExists } from "@/core/auth/auth-guards";
 import { loginWithProxy } from "@/core/client/auth/auth-proxy";
@@ -57,7 +57,7 @@ function LoginPage() {
       return;
     }
 
-    await navigate({ to: "/home", replace: true });
+    await navigate({ to: "/", replace: true });
   }
 
   return (
