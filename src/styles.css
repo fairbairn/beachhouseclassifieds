@@ -73,3 +73,47 @@ a:hover {
 .discover-cards-scroll::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #0d9488 0%, #0f766e 100%);
 }
+
+.discover-date-picker .discover-range-middle,
+.discover-date-picker .discover-range-middle button,
+.discover-date-picker .discover-range-middle .discover-day-button {
+  color: #0f172a !important;
+  opacity: 1;
+}
+
+.discover-date-picker .discover-range-endpoint,
+.discover-date-picker .discover-range-endpoint button,
+.discover-date-picker .discover-range-endpoint .discover-day-button {
+  color: #ffffff !important;
+}
+
+.discover-date-picker td[data-range-middle="true"] button {
+  color: #0f172a !important;
+  opacity: 1 !important;
+}
+
+.discover-date-picker td[data-range-start="true"] button,
+.discover-date-picker td[data-range-end="true"] button {
+  color: #ffffff !important;
+}
+
+.discover-date-picker td[data-disabled="true"],
+.discover-date-picker .rdp-disabled {
+  color: #94a3b8 !important;
+  opacity: 0.5 !important;
+}
+
+.discover-date-picker td[data-disabled="true"] button,
+.discover-date-picker .rdp-disabled button,
+.discover-date-picker .rdp-disabled .discover-day-button {
+  color: #94a3b8 !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.discover-date-picker {
+  --rdp-animation_duration: 280ms;
+  --rdp-animation_timing: cubic-bezier(0.22, 1, 0.36, 1);
+}
