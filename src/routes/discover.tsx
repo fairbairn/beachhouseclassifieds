@@ -532,6 +532,22 @@ function formatBathrooms(value: number) {
   return value.toFixed(1).replace(/\.0$/, "");
 }
 
+function getTypicalPriceBounds(priceLabel: string) {
+  const values = Array.from(
+    priceLabel.matchAll(/\$([\d.]+)k/gi),
+    (match) => Number(match[1]) * 1000,
+  );
+
+  if (values.length === 0) {
+    return { low: 0, high: 0 };
+  }
+
+  return {
+    low: Math.min(...values),
+    high: Math.max(...values),
+  };
+}
+
 function getLocationPresentation(listing: (typeof sampleListings)[number]) {
   const isPlannedCommunity = known30ACommunities.includes(listing.community);
   const listedArea = listing.area.trim();
@@ -613,9 +629,25 @@ export const Route = createFileRoute("/discover")({
 });
 
 function DiscoverPage() {
+  type SortOption =
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
+
+  const sortOptions: Array<{ value: SortOption; label: string }> = [
+    { value: "recommended", label: "Recommended" },
+    { value: "price-low", label: "Price: Low to High" },
+    { value: "price-high", label: "Price: High to Low" },
+    { value: "sleeps-high", label: "Sleeps: High to Low" },
+    { value: "beach-pool-first", label: "Beachfront + Pool First" },
+  ];
+
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const googleMapRef = useRef<any>(null);
   const googleMapMarkerRef = useRef<any>(null);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -665,6 +697,23 @@ function DiscoverPage() {
   const [isAreasOpen, setIsAreasOpen] = useState(true);
   const [isCommunitiesOpen, setIsCommunitiesOpen] = useState(true);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(true);
+  const [cardsPerRow, setCardsPerRow] = useState<2 | 3 | 4>(3);
+  const [sortOption, setSortOption] = useState<SortOption>("recommended");
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!sortMenuRef.current?.contains(target)) {
+        setIsSortMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+    };
+  }, []);
 
   const guestCount = adults + children;
 
@@ -723,10 +772,65 @@ function DiscoverPage() {
     filterPool,
   ]);
 
-  const displayListings = useMemo(
-    () => [...sampleListings].sort((a, b) => a.name.localeCompare(b.name)),
-    [],
-  );
+  const baseDisplayListings = useMemo(() => {
+    const sortedListings = [...sampleListings].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    const targetMockCount = 96;
+
+    return Array.from({ length: targetMockCount }, (_, index) => {
+      const baseListing = sortedListings[index % sortedListings.length];
+      const cycle = Math.floor(index / sortedListings.length) + 1;
+
+      if (cycle === 1) {
+        return baseListing;
+      }
+
+      return {
+        ...baseListing,
+        id: `${baseListing.id}-sample-${cycle}`,
+        name: `${baseListing.name} ${cycle}`,
+      };
+    });
+  }, []);
+
+  const displayListings = useMemo(() => {
+    const listings = [...baseDisplayListings];
+
+    if (sortOption === "recommended") {
+      return listings;
+    }
+
+    if (sortOption === "price-low") {
+      return listings.sort((a, b) => {
+        const aPrice = getTypicalPriceBounds(a.typicalPrice).low;
+        const bPrice = getTypicalPriceBounds(b.typicalPrice).low;
+        return aPrice - bPrice;
+      });
+    }
+
+    if (sortOption === "price-high") {
+      return listings.sort((a, b) => {
+        const aPrice = getTypicalPriceBounds(a.typicalPrice).high;
+        const bPrice = getTypicalPriceBounds(b.typicalPrice).high;
+        return bPrice - aPrice;
+      });
+    }
+
+    if (sortOption === "sleeps-high") {
+      return listings.sort((a, b) => b.sleeps - a.sleeps);
+    }
+
+    return listings.sort((a, b) => {
+      if (a.beachfront !== b.beachfront) {
+        return Number(b.beachfront) - Number(a.beachfront);
+      }
+      if (a.privatePool !== b.privatePool) {
+        return Number(b.privatePool) - Number(a.privatePool);
+      }
+      return b.sleeps - a.sleeps;
+    });
+  }, [baseDisplayListings, sortOption]);
 
   const areaCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -778,6 +882,12 @@ function DiscoverPage() {
   }, [filtered]);
 
   const dateSummary = `${earliestDate || "Earliest?"} to ${latestDate || "Latest?"} • ${formatNights(nights)}`;
+  const listingGridClass =
+    cardsPerRow === 2
+      ? "xl:grid-cols-2"
+      : cardsPerRow === 3
+        ? "xl:grid-cols-2 2xl:grid-cols-3"
+        : "xl:grid-cols-3 2xl:grid-cols-4";
 
   const mapEmbedSrc = `https://maps.google.com/maps?q=${encodeURIComponent(`${mapTarget.lat},${mapTarget.lng}`)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
   const openInMapsHref = `https://www.google.com/maps/search/?api=1&query=${mapTarget.lat}%2C${mapTarget.lng}`;
@@ -912,7 +1022,7 @@ function DiscoverPage() {
               />
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2 xl:flex-nowrap">
               <button
                 type="button"
                 onClick={() => setShowAdvanced((current) => !current)}
@@ -937,6 +1047,77 @@ function DiscoverPage() {
               <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-sm font-semibold text-indigo-800">
                 Dates: {dateSummary}
               </span>
+              <div className="ml-auto flex items-center gap-2">
+                <div ref={sortMenuRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsSortMenuOpen((current) => !current)}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white pr-1 pl-2 text-xs font-semibold text-slate-700 shadow-[0_6px_18px_-16px_rgba(15,23,42,0.9)] transition hover:border-teal-200 hover:bg-teal-50/40 focus:border-teal-300 focus:ring-2 focus:ring-teal-100 focus:outline-none"
+                    aria-label="Sort listings"
+                    aria-haspopup="listbox"
+                    aria-expanded={isSortMenuOpen}
+                  >
+                    <ArrowUpDown className="h-3.5 w-3.5 text-slate-500" />
+                    <span>
+                      {
+                        sortOptions.find(
+                          (option) => option.value === sortOption,
+                        )?.label
+                      }
+                    </span>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 text-slate-500 transition-transform ${isSortMenuOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  {isSortMenuOpen ? (
+                    <div
+                      role="listbox"
+                      aria-label="Sort listings"
+                      className="absolute top-11 right-0 z-40 min-w-52 overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-[0_20px_40px_-20px_rgba(15,23,42,0.65)]"
+                    >
+                      {sortOptions.map((option) => {
+                        const isSelected = sortOption === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            onClick={() => {
+                              setSortOption(option.value);
+                              setIsSortMenuOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs font-semibold transition ${isSelected ? "bg-teal-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}
+                          >
+                            <span>{option.label}</span>
+                            {isSelected ? (
+                              <Check className="h-3.5 w-3.5" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-1">
+                  {[2, 3, 4].map((count) => {
+                    const isSelected = cardsPerRow === count;
+                    return (
+                      <button
+                        key={count}
+                        type="button"
+                        onClick={() => setCardsPerRow(count as 2 | 3 | 4)}
+                        className={`inline-flex h-7 items-center justify-center rounded-md px-2.5 text-xs font-semibold transition ${isSelected ? "bg-teal-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                        aria-pressed={isSelected}
+                        aria-label={`${count} cards per row`}
+                        title={`${count} cards per row`}
+                      >
+                        {count} cards
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div
@@ -1112,7 +1293,7 @@ function DiscoverPage() {
 
           <div className="relative z-0 min-h-0 self-start xl:h-full">
             <div className="pointer-events-none absolute -top-4 -right-1 -bottom-1 -left-1 z-0 rounded-2xl border border-white/35 bg-white/18 backdrop-blur-md xl:-top-24 xl:-right-2 xl:-left-2" />
-            <div className="relative z-10 h-full overflow-y-auto px-2 pb-6">
+            <div className="discover-cards-scroll relative z-10 h-full overflow-y-auto px-2 pb-6">
               {displayListings.length === 0 ? (
                 <div className="rounded-2xl border border-white/35 bg-white/90 p-8 text-center shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] backdrop-blur-sm">
                   <p className="text-lg font-semibold text-slate-900">
@@ -1124,7 +1305,7 @@ function DiscoverPage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+                <div className={`grid gap-4 ${listingGridClass}`}>
                   {displayListings.map((listing) => {
                     const isFavorite = favoriteIds.includes(listing.id);
                     const location = getLocationPresentation(listing);
@@ -1132,21 +1313,64 @@ function DiscoverPage() {
                     const communityHighlight = location.isPlannedCommunity
                       ? location.locationChip
                       : null;
+                    const isFourUpCardLayout = cardsPerRow === 4;
+                    const isTwoUpCardLayout = cardsPerRow === 2;
+                    const previewImages = isFourUpCardLayout
+                      ? listing.previewImages.slice(0, 1)
+                      : listing.previewImages.slice(0, 2);
+                    const twoUpPreviewImages = listing.previewImages.slice(
+                      0,
+                      4,
+                    );
+                    const leftPreviewImage =
+                      twoUpPreviewImages[0] ?? listing.previewImages[0];
+                    const rightQuadPreviewImages = [
+                      twoUpPreviewImages[1] ?? leftPreviewImage,
+                      twoUpPreviewImages[2] ?? leftPreviewImage,
+                      twoUpPreviewImages[3] ??
+                        twoUpPreviewImages[1] ??
+                        leftPreviewImage,
+                      twoUpPreviewImages[2] ??
+                        twoUpPreviewImages[1] ??
+                        leftPreviewImage,
+                    ];
                     return (
                       <article
                         key={listing.id}
                         className={`flex h-full flex-col rounded-2xl bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] ${listing.beachfront ? "border border-cyan-300 shadow-[0_0_0_1px_rgba(34,211,238,0.35),0_18px_36px_-24px_rgba(8,145,178,0.65)]" : "border border-slate-200"}`}
                       >
-                        <div className="mb-3 grid grid-cols-2 gap-2">
-                          {listing.previewImages.slice(0, 2).map((img, i) => (
+                        {isTwoUpCardLayout ? (
+                          <div className="mb-3 grid grid-cols-2 gap-2">
                             <img
-                              key={`${listing.id}-${i}`}
-                              src={img}
-                              alt={`${listing.name} preview ${i + 1}`}
-                              className="aspect-square rounded-lg object-cover"
+                              src={leftPreviewImage}
+                              alt={`${listing.name} preview 1`}
+                              className="aspect-square w-full rounded-lg object-cover"
                             />
-                          ))}
-                        </div>
+                            <div className="grid aspect-square grid-cols-2 grid-rows-2 gap-2">
+                              {rightQuadPreviewImages.map((img, i) => (
+                                <img
+                                  key={`${listing.id}-two-up-${i}`}
+                                  src={img}
+                                  alt={`${listing.name} preview ${i + 2}`}
+                                  className="h-full w-full rounded-lg object-cover"
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            className={`mb-3 ${isFourUpCardLayout ? "grid grid-cols-1" : "grid grid-cols-2 gap-2"}`}
+                          >
+                            {previewImages.map((img, i) => (
+                              <img
+                                key={`${listing.id}-${i}`}
+                                src={img}
+                                alt={`${listing.name} preview ${i + 1}`}
+                                className={`${isFourUpCardLayout ? "aspect-video w-full" : "aspect-square"} rounded-lg object-cover`}
+                              />
+                            ))}
+                          </div>
+                        )}
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <h2 className="truncate text-base font-semibold text-slate-900">
