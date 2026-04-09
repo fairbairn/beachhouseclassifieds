@@ -1,18 +1,21 @@
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Accessibility,
+  ArrowUpDown,
   CalendarDays,
+  CarFront,
   Check,
   ChevronDown,
   Dog,
   Droplets,
+  ExternalLink,
   Heart,
+  MapPin,
   Minus,
   Plus,
   SlidersHorizontal,
-  CarFront,
   Waves,
-  ArrowUpDown,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -20,6 +23,11 @@ import beachEntryTexture from "@/assets/images/beach-entry.png";
 import beachHomesTexture from "@/assets/images/beach-homes.jpg";
 import beachPathTexture from "@/assets/images/beach-path.jpg";
 import { HomeMarketingShell } from "@/components/home/HomeMarketingShell";
+
+const googleMapsApiKey =
+  (import.meta.env.GOOGLE_MAPS_JS_KEY as string | undefined) ??
+  (import.meta.env.GOOGLE_MAPS_API_KEY as string | undefined) ??
+  (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined);
 
 const sampleListings = [
   {
@@ -322,7 +330,48 @@ const known30ACommunities = [
   "Rosemary Beach",
 ];
 
-const homeHeroBackgroundImage = "https://30a.com/wp-content/uploads/2025/08/Alys-Beach-1.jpg";
+const communityBeachAreaMap: Record<string, string> = {
+  Seaside: "Seagrove Beach",
+  WaterColor: "Seagrove Beach",
+  "Seacrest Beach": "Seacrest Beach",
+  "Rosemary Beach": "Rosemary / Inlet Beach",
+  "Alys Beach": "Inlet Beach",
+  "WaterSound Beach": "Inlet Beach",
+  "Kaiya Beach Resort": "Inlet Beach",
+};
+
+const geoByCommunity: Record<string, { lat: number; lng: number }> = {
+  Seaside: { lat: 30.3234, lng: -86.1388 },
+  WaterColor: { lat: 30.3167, lng: -86.1394 },
+  Prominence: { lat: 30.2984, lng: -86.0783 },
+  "WaterSound West Beach": { lat: 30.3013, lng: -86.0958 },
+  "WaterSound Beach": { lat: 30.3028, lng: -86.0909 },
+  "Seacrest Beach": { lat: 30.2787, lng: -86.0345 },
+  "Rosemary Beach": { lat: 30.2759, lng: -86.0169 },
+  "Alys Beach": { lat: 30.2768, lng: -86.0472 },
+};
+
+const geoByArea: Record<string, { lat: number; lng: number }> = {
+  "Dune Allen Beach": { lat: 30.3606, lng: -86.2794 },
+  "Blue Mountain Beach": { lat: 30.3341, lng: -86.2142 },
+  "Grayton Beach": { lat: 30.3284, lng: -86.1676 },
+  "Seagrove Beach": { lat: 30.3131, lng: -86.1245 },
+  "Seacrest Beach": { lat: 30.2787, lng: -86.0345 },
+  "Rosemary / Inlet Beach": { lat: 30.2755, lng: -86.0129 },
+  "Inlet Beach": { lat: 30.2752, lng: -86.0088 },
+  "Santa Rosa Beach": { lat: 30.396, lng: -86.2288 },
+  WaterSound: { lat: 30.3005, lng: -86.0904 },
+  Seaside: { lat: 30.3234, lng: -86.1388 },
+};
+
+const geoByRegion: Record<string, { lat: number; lng: number }> = {
+  "West 30A": { lat: 30.3385, lng: -86.2114 },
+  "Central 30A": { lat: 30.317, lng: -86.1353 },
+  "East 30A": { lat: 30.2796, lng: -86.0298 },
+};
+
+const homeHeroBackgroundImage =
+  "https://30a.com/wp-content/uploads/2025/08/Alys-Beach-1.jpg";
 
 function GuestStepper({
   controlLabel,
@@ -438,7 +487,9 @@ function IconOptionBox({
         </span>
       ) : null}
       <span className="mb-1 text-teal-600">{icon}</span>
-      <span className="text-[11px] font-bold tracking-wide uppercase">{label}</span>
+      <span className="text-[11px] font-bold tracking-wide uppercase">
+        {label}
+      </span>
     </button>
   );
 }
@@ -471,6 +522,61 @@ function getAreaFromListing(listing: (typeof sampleListings)[number]) {
   }
 
   return "Central 30A";
+}
+
+function formatBathrooms(value: number) {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return value.toFixed(1).replace(/\.0$/, "");
+}
+
+function getLocationPresentation(listing: (typeof sampleListings)[number]) {
+  const isPlannedCommunity = known30ACommunities.includes(listing.community);
+  const listedArea = listing.area.trim();
+  const beachArea =
+    (communityBeachAreaMap[listing.community] ?? listedArea) || null;
+  const region = getAreaFromListing(listing);
+
+  if (isPlannedCommunity) {
+    return {
+      isPlannedCommunity: true,
+      locationChip: listing.community,
+      subline: beachArea ? `${beachArea} • ${region}` : region,
+    };
+  }
+
+  if (beachArea) {
+    return {
+      isPlannedCommunity: false,
+      locationChip: beachArea,
+      subline: region,
+    };
+  }
+
+  return {
+    isPlannedCommunity: false,
+    locationChip: region,
+    subline: region,
+  };
+}
+
+function getListingGeoTarget(listing: (typeof sampleListings)[number]) {
+  const location = getLocationPresentation(listing);
+  const region = getAreaFromListing(listing);
+
+  if (geoByCommunity[listing.community]) {
+    return geoByCommunity[listing.community];
+  }
+  if (geoByArea[location.locationChip]) {
+    return geoByArea[location.locationChip];
+  }
+  if (geoByArea[listing.area]) {
+    return geoByArea[listing.area];
+  }
+
+  return geoByRegion[region] ?? { lat: 30.3158, lng: -86.1186 };
 }
 
 function FacetSection({
@@ -507,10 +613,15 @@ export const Route = createFileRoute("/discover")({
 });
 
 function DiscoverPage() {
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const googleMapRef = useRef<any>(null);
+  const googleMapMarkerRef = useRef<any>(null);
+
   useEffect(() => {
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
-    const previousHtmlOverscroll = document.documentElement.style.overscrollBehavior;
+    const previousHtmlOverscroll =
+      document.documentElement.style.overscrollBehavior;
     const previousBodyOverscroll = document.body.style.overscrollBehavior;
 
     document.documentElement.style.overflow = "hidden";
@@ -521,7 +632,8 @@ function DiscoverPage() {
     return () => {
       document.documentElement.style.overflow = previousHtmlOverflow;
       document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.style.overscrollBehavior = previousHtmlOverscroll;
+      document.documentElement.style.overscrollBehavior =
+        previousHtmlOverscroll;
       document.body.style.overscrollBehavior = previousBodyOverscroll;
     };
   }, []);
@@ -545,6 +657,11 @@ function DiscoverPage() {
   const [filterAccessible, setFilterAccessible] = useState(false);
   const [filterElevator, setFilterElevator] = useState(false);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [mapTarget, setMapTarget] = useState({
+    lat: 30.3158,
+    lng: -86.1186,
+    label: "30A",
+  });
   const [isAreasOpen, setIsAreasOpen] = useState(true);
   const [isCommunitiesOpen, setIsCommunitiesOpen] = useState(true);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(true);
@@ -662,6 +779,69 @@ function DiscoverPage() {
 
   const dateSummary = `${earliestDate || "Earliest?"} to ${latestDate || "Latest?"} • ${formatNights(nights)}`;
 
+  const mapEmbedSrc = `https://maps.google.com/maps?q=${encodeURIComponent(`${mapTarget.lat},${mapTarget.lng}`)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
+  const openInMapsHref = `https://www.google.com/maps/search/?api=1&query=${mapTarget.lat}%2C${mapTarget.lng}`;
+
+  useEffect(() => {
+    if (!googleMapsApiKey || !mapContainerRef.current) {
+      return;
+    }
+
+    let disposed = false;
+
+    const initializeMap = async () => {
+      setOptions({
+        key: googleMapsApiKey,
+        v: "weekly",
+      });
+      await importLibrary("maps");
+
+      const googleMaps = (window as any).google?.maps;
+
+      if (disposed || !mapContainerRef.current || !googleMaps) {
+        return;
+      }
+
+      const center = { lat: mapTarget.lat, lng: mapTarget.lng };
+      const map = new googleMaps.Map(mapContainerRef.current, {
+        center,
+        zoom: 13,
+        disableDefaultUI: false,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        gestureHandling: "greedy",
+        scrollwheel: true,
+      });
+
+      const marker = new googleMaps.Marker({
+        map,
+        position: center,
+      });
+
+      googleMapRef.current = map;
+      googleMapMarkerRef.current = marker;
+    };
+
+    void initializeMap();
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = googleMapRef.current;
+    const marker = googleMapMarkerRef.current;
+    if (!map || !marker) {
+      return;
+    }
+
+    const nextCenter = { lat: mapTarget.lat, lng: mapTarget.lng };
+    map.panTo(nextCenter);
+    marker.setPosition(nextCenter);
+  }, [mapTarget]);
+
   return (
     <HomeMarketingShell
       preferDarkTopNavText={false}
@@ -680,7 +860,7 @@ function DiscoverPage() {
       <div className="pointer-events-none absolute inset-0 bg-slate-950/28" />
 
       <section className="relative z-10 mx-auto w-full max-w-475 space-y-6 xl:flex xl:h-[calc(100dvh-7rem)] xl:flex-col xl:gap-6 xl:space-y-0">
-        <header className="rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)]">
+        <header className="relative z-20 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)]">
           <div>
             <div className="grid gap-1.5 xl:grid-cols-[minmax(0,3.85fr)_minmax(9.5rem,1fr)_minmax(9.5rem,1fr)_minmax(8.5rem,0.84fr)_minmax(8.5rem,0.84fr)_minmax(8.5rem,0.84fr)] xl:items-end">
               <div className="relative">
@@ -745,7 +925,8 @@ function DiscoverPage() {
                 />
               </button>
               <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-semibold text-teal-800">
-                Filters: {minSleeps}+ sleeps • {minBedrooms}+ bd • {minBathrooms}+ ba • {minKingBeds}+ king • {minQueenBeds}+ queen
+                Filters: {minSleeps}+ sleeps • {minBedrooms}+ bd •{" "}
+                {minBathrooms}+ ba • {minKingBeds}+ king • {minQueenBeds}+ queen
                 {filterPool ? " • pool" : ""}
                 {filterBeachfront ? " • beachfront" : ""}
                 {filterGolfCart ? " • LSV" : ""}
@@ -929,80 +1110,126 @@ function DiscoverPage() {
             </FacetSection>
           </aside>
 
-          <div className="min-h-0 self-start xl:h-full">
-            <div className="h-full overflow-y-auto pr-2 pb-6">
+          <div className="relative z-0 min-h-0 self-start xl:h-full">
+            <div className="pointer-events-none absolute -top-4 -right-1 -bottom-1 -left-1 z-0 rounded-2xl border border-white/35 bg-white/18 backdrop-blur-md xl:-top-24 xl:-right-2 xl:-left-2" />
+            <div className="relative z-10 h-full overflow-y-auto px-2 pb-6">
               {displayListings.length === 0 ? (
                 <div className="rounded-2xl border border-white/35 bg-white/90 p-8 text-center shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] backdrop-blur-sm">
-                  <p className="text-lg font-semibold text-slate-900">No matches with current filters</p>
-                  <p className="mt-2 text-sm text-slate-600">Try lowering one or two filter thresholds, or toggle off a few icon filters to broaden results.</p>
+                  <p className="text-lg font-semibold text-slate-900">
+                    No matches with current filters
+                  </p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Try lowering one or two filter thresholds, or toggle off a
+                    few icon filters to broaden results.
+                  </p>
                 </div>
               ) : (
                 <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
                   {displayListings.map((listing) => {
                     const isFavorite = favoriteIds.includes(listing.id);
+                    const location = getLocationPresentation(listing);
+                    const listingTarget = getListingGeoTarget(listing);
+                    const communityHighlight = location.isPlannedCommunity
+                      ? location.locationChip
+                      : null;
                     return (
                       <article
                         key={listing.id}
-                        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)]"
+                        className={`flex h-full flex-col rounded-2xl bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] ${listing.beachfront ? "border border-cyan-300 shadow-[0_0_0_1px_rgba(34,211,238,0.35),0_18px_36px_-24px_rgba(8,145,178,0.65)]" : "border border-slate-200"}`}
                       >
-                      <div className="mb-4 grid grid-cols-2 gap-2">
-                        {listing.previewImages.slice(0, 2).map((img, i) => (
-                          <img
-                            key={`${listing.id}-${i}`}
-                            src={img}
-                            alt={`${listing.name} preview ${i + 1}`}
-                            className="aspect-square rounded-lg object-cover"
-                          />
-                        ))}
-                      </div>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h2 className="text-xl font-semibold text-slate-900">
-                            {listing.name}
-                          </h2>
-                          <p className="text-sm text-slate-500">
-                            {listing.area} • {listing.community}
-                          </p>
+                        <div className="mb-3 grid grid-cols-2 gap-2">
+                          {listing.previewImages.slice(0, 2).map((img, i) => (
+                            <img
+                              key={`${listing.id}-${i}`}
+                              src={img}
+                              alt={`${listing.name} preview ${i + 1}`}
+                              className="aspect-square rounded-lg object-cover"
+                            />
+                          ))}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setFavoriteIds((current) =>
-                              current.includes(listing.id)
-                                ? current.filter((id) => id !== listing.id)
-                                : [...current, listing.id],
-                            )
-                          }
-                          className={`inline-flex items-center justify-center rounded-full border p-2.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${isFavorite ? "border-teal-300 bg-teal-50 text-teal-600 hover:bg-teal-100" : "border-slate-300 text-slate-500 hover:border-teal-300 hover:text-teal-600"}`}
-                        >
-                          <Heart
-                            className="h-4.5 w-4.5"
-                            fill={isFavorite ? "currentColor" : "none"}
-                          />
-                        </button>
-                      </div>
-                      <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-slate-700">
-                        <p>{listing.bedrooms} bedrooms</p>
-                        <p>{listing.bathrooms} bathrooms</p>
-                        <p>{listing.kingBeds} king beds</p>
-                        <p>{listing.queenBeds} queen beds</p>
-                        <p>
-                          {listing.privatePool
-                            ? "Private pool"
-                            : "No private pool"}
-                        </p>
-                        <p>
-                          {listing.golfCart
-                            ? "Golf cart included"
-                            : "No golf cart"}
-                        </p>
-                      </div>
-                      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 text-sm">
-                        <span className="text-slate-500">Typical pricing</span>
-                        <strong className="text-slate-900">
-                          {listing.typicalPrice}
-                        </strong>
-                      </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h2 className="truncate text-base font-semibold text-slate-900">
+                              {listing.name}
+                            </h2>
+                            <p className="mt-0.5 text-xs font-medium text-slate-500">
+                              {location.subline}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setMapTarget({
+                                  lat: listingTarget.lat,
+                                  lng: listingTarget.lng,
+                                  label: listing.name,
+                                })
+                              }
+                              className="inline-flex items-center justify-center rounded-full border border-slate-300 p-2 text-slate-500 transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 hover:shadow-sm"
+                              aria-label={`Focus map on ${listing.name}`}
+                              title={`Focus map on ${listing.name}`}
+                            >
+                              <MapPin className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setFavoriteIds((current) =>
+                                  current.includes(listing.id)
+                                    ? current.filter((id) => id !== listing.id)
+                                    : [...current, listing.id],
+                                )
+                              }
+                              className={`inline-flex items-center justify-center rounded-full border p-2 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${isFavorite ? "border-teal-300 bg-teal-50 text-teal-600 hover:bg-teal-100" : "border-slate-300 text-slate-500 hover:border-teal-300 hover:text-teal-600"}`}
+                            >
+                              <Heart
+                                className="h-4 w-4"
+                                fill={isFavorite ? "currentColor" : "none"}
+                              />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-700">
+                            {listing.bedrooms} BR •{" "}
+                            {formatBathrooms(listing.bathrooms)} BA • Sleeps{" "}
+                            {listing.sleeps}
+                          </p>
+                          {communityHighlight ? (
+                            <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-100 px-2.5 py-1 text-[11px] font-bold text-indigo-900">
+                              {communityHighlight}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {listing.beachfront ? (
+                            <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-800">
+                              Beachfront
+                            </span>
+                          ) : null}
+                          {listing.privatePool ? (
+                            <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-800">
+                              Private Pool
+                            </span>
+                          ) : null}
+                          {listing.golfCart ? (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                              Golf Cart
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
+                          <span className="text-[11px] text-slate-500">
+                            Typical pricing
+                          </span>
+                          <strong className="text-xs text-slate-900">
+                            {listing.typicalPrice}
+                          </strong>
+                        </div>
                       </article>
                     );
                   })}
@@ -1012,17 +1239,36 @@ function DiscoverPage() {
           </div>
 
           <aside className="flex flex-col self-start rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] xl:sticky xl:top-28">
-            <p className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
-              Map View
-            </p>
-            <div className="relative mt-3 h-88 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-104 xl:h-[calc(100dvh-8.5rem)] xl:min-h-136 xl:max-h-232">
-              <iframe
-                title="30A map"
-                src="https://maps.google.com/maps?q=Seaside%20FL%20Post%20Office&t=&z=14&ie=UTF8&iwloc=&output=embed"
-                className="absolute inset-0 h-full w-full"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
+                Map View
+              </p>
+              <a
+                href={openInMapsHref}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-800 transition-colors hover:bg-cyan-100"
+              >
+                Open in Maps
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+            <div className="relative mt-3 h-88 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-104 xl:h-[calc(100dvh-8.5rem)] xl:max-h-232 xl:min-h-136">
+              {googleMapsApiKey ? (
+                <div
+                  ref={mapContainerRef}
+                  className="absolute inset-0 h-full w-full"
+                  aria-label="30A map"
+                />
+              ) : (
+                <iframe
+                  title="30A map"
+                  src={mapEmbedSrc}
+                  className="absolute inset-0 h-full w-full"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              )}
             </div>
           </aside>
         </div>

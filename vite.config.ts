@@ -43,6 +43,7 @@ const config = defineConfig(({ mode }) => {
   const isAnalyzeBuild = mode === "analyze";
 
   return {
+    envPrefix: ["VITE_", "GOOGLE_MAPS_API_KEY", "GOOGLE_MAPS_JS_KEY"],
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
