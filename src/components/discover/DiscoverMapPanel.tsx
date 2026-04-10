@@ -1,6 +1,6 @@
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { googleMapsApiKey } from "@/components/discover/discover-data";
 
@@ -125,11 +125,12 @@ export function DiscoverMapPanel({
   const zoomAnimationIntervalRef = useRef<number | null>(null);
   const pendingPanTimeoutRef = useRef<number | null>(null);
   const previousPinnedListingIdRef = useRef<string | undefined>(undefined);
+  const [mapReadyRevision, setMapReadyRevision] = useState(0);
 
   const mapEmbedSrc = `https://maps.google.com/maps?q=${encodeURIComponent(`${mapTarget.lat},${mapTarget.lng}`)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
   const openInMapsHref = `https://www.google.com/maps/search/?api=1&query=${mapTarget.lat}%2C${mapTarget.lng}`;
 
-  const clearFocusAnimation = () => {
+  const clearFocusAnimation = useCallback(() => {
     if (zoomAnimationIntervalRef.current !== null) {
       window.clearInterval(zoomAnimationIntervalRef.current);
       zoomAnimationIntervalRef.current = null;
@@ -138,7 +139,7 @@ export function DiscoverMapPanel({
       window.clearTimeout(pendingPanTimeoutRef.current);
       pendingPanTimeoutRef.current = null;
     }
-  };
+  }, []);
 
   const clearSecondaryMarkers = () => {
     markerListenerRef.current.forEach((listener) => listener.remove());
@@ -162,35 +163,33 @@ export function DiscoverMapPanel({
     }
   };
 
-  const animateZoom = (
-    map: GoogleMapInstance,
-    from: number,
-    to: number,
-    onDone?: () => void,
-  ) => {
-    if (from === to) {
-      onDone?.();
-      return;
-    }
-
-    const step = to > from ? 1 : -1;
-    let current = from;
-
-    clearFocusAnimation();
-    zoomAnimationIntervalRef.current = window.setInterval(() => {
-      current += step;
-      map.setZoom(current);
-      map.setMapTypeId(getMapTypeForZoom(current));
-
-      if ((step > 0 && current >= to) || (step < 0 && current <= to)) {
-        if (zoomAnimationIntervalRef.current !== null) {
-          window.clearInterval(zoomAnimationIntervalRef.current);
-          zoomAnimationIntervalRef.current = null;
-        }
+  const animateZoom = useCallback(
+    (map: GoogleMapInstance, from: number, to: number, onDone?: () => void) => {
+      if (from === to) {
         onDone?.();
+        return;
       }
-    }, ZOOM_STEP_DELAY_MS);
-  };
+
+      const step = to > from ? 1 : -1;
+      let current = from;
+
+      clearFocusAnimation();
+      zoomAnimationIntervalRef.current = window.setInterval(() => {
+        current += step;
+        map.setZoom(current);
+        map.setMapTypeId(getMapTypeForZoom(current));
+
+        if ((step > 0 && current >= to) || (step < 0 && current <= to)) {
+          if (zoomAnimationIntervalRef.current !== null) {
+            window.clearInterval(zoomAnimationIntervalRef.current);
+            zoomAnimationIntervalRef.current = null;
+          }
+          onDone?.();
+        }
+      }, ZOOM_STEP_DELAY_MS);
+    },
+    [clearFocusAnimation],
+  );
 
   useEffect(() => {
     if (!googleMapsApiKey || !mapContainerRef.current) {
@@ -237,7 +236,7 @@ export function DiscoverMapPanel({
       const marker = new googleMaps.Marker({
         map,
         position: center,
-        visible: Boolean(mapTarget.id),
+        visible: false,
       });
 
       const zoomListener = map.addListener("zoom_changed", () => {
@@ -249,6 +248,7 @@ export function DiscoverMapPanel({
       googleMapRef.current = map;
       googleMapMarkerRef.current = marker;
       googleMapsNamespaceRef.current = googleMaps;
+      setMapReadyRevision((current) => current + 1);
 
       if (disposed) {
         zoomListener.remove();
@@ -262,7 +262,7 @@ export function DiscoverMapPanel({
       clearFocusAnimation();
       clearSecondaryMarkers();
     };
-  }, []);
+  }, [clearFocusAnimation]);
 
   useEffect(() => {
     const map = googleMapRef.current;
@@ -299,7 +299,7 @@ export function DiscoverMapPanel({
     }
 
     applySecondaryMarkerIcons(map.getZoom());
-  }, [listings, mapTarget.id, onSelectListing]);
+  }, [listings, mapTarget.id, onSelectListing, mapReadyRevision]);
 
   useEffect(() => {
     const map = googleMapRef.current;
@@ -362,7 +362,7 @@ export function DiscoverMapPanel({
       map.panTo(nextCenter);
       previousPinnedListingIdRef.current = mapTarget.id;
     }
-  }, [mapTarget]);
+  }, [animateZoom, clearFocusAnimation, mapTarget, mapReadyRevision]);
 
   return (
     <aside className="flex flex-col self-start rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] xl:sticky xl:top-28">
