@@ -13,9 +13,12 @@ export const Route = createFileRoute("/api/discover/listings")({
   server: {
     handlers: {
       GET: async () => {
-        const listings = [...sampleListings].sort(
-          (a, b) => a.demoOrder - b.demoOrder,
-        );
+        const listings = [...sampleListings].sort((a, b) => {
+          if (a.demoOrder !== b.demoOrder) {
+            return a.demoOrder - b.demoOrder;
+          }
+          return a.id.localeCompare(b.id);
+        });
 
         return Response.json(
           { listings },
