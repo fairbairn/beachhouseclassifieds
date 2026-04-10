@@ -1,10 +1,6 @@
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
-<<<<<<< HEAD
 import { useCallback, useEffect, useRef, useState } from "react";
-=======
-import { useEffect, useRef, useState } from "react";
->>>>>>> refs/remotes/origin/master
 
 import { googleMapsApiKey } from "@/components/discover/discover-data";
 
@@ -30,10 +26,43 @@ type GoogleMarkerInstance = {
     handler: () => void,
   ) => GoogleMapsEventListener;
 };
+type GoogleAdvancedMarkerInstance = {
+  map: GoogleMapInstance | null;
+  position: LatLng;
+  content?: HTMLElement;
+  addEventListener?: (
+    eventName: "gmp-click",
+    handler: (event: unknown) => void,
+  ) => void;
+  removeEventListener?: (
+    eventName: "gmp-click",
+    handler: (event: unknown) => void,
+  ) => void;
+  addListener: (
+    eventName: "click",
+    handler: () => void,
+  ) => GoogleMapsEventListener;
+};
+type GooglePinElementInstance = {
+  element: HTMLElement;
+};
+type GoogleMapsMarkerNamespace = {
+  AdvancedMarkerElement: new (options: {
+    map?: GoogleMapInstance | null;
+    position?: LatLng;
+    title?: string;
+    content?: HTMLElement;
+    gmpClickable?: boolean;
+  }) => GoogleAdvancedMarkerInstance;
+  PinElement: new (options?: {
+    background?: string;
+    borderColor?: string;
+    glyphColor?: string;
+    glyph?: string;
+    scale?: number;
+  }) => GooglePinElementInstance;
+};
 type GoogleMapsNamespace = {
-  SymbolPath?: {
-    CIRCLE?: unknown;
-  };
   Map: new (
     container: HTMLDivElement,
     options: Record<string, unknown>,
@@ -50,6 +79,7 @@ const SATELLITE_ZOOM_THRESHOLD = 16;
 const CONTEXT_ZOOM = 13;
 const ZOOM_STEP_DELAY_MS = 80;
 const PAN_TO_NEW_PIN_DELAY_MS = 220;
+let mapsLoaderConfigured = false;
 
 function getMapTypeForZoom(zoom: number | undefined) {
   if (typeof zoom !== "number") {
@@ -58,32 +88,50 @@ function getMapTypeForZoom(zoom: number | undefined) {
   return zoom >= SATELLITE_ZOOM_THRESHOLD ? "satellite" : "roadmap";
 }
 
-function getSecondaryMarkerIcon(
-  googleMaps: GoogleMapsNamespace,
+function getSecondaryMarkerPinOptions(zoom: number | undefined) {
+  const highDetailZoom =
+    typeof zoom === "number" && zoom >= SATELLITE_ZOOM_THRESHOLD;
+
+  if (highDetailZoom) {
+    return {
+      background: "#a855f7",
+      borderColor: "#ffffff",
+      glyphColor: "#ffffff",
+      glyph: "\u2302",
+      scale: 1,
+    };
+  }
+
+  return {
+    background: "#a855f7",
+    borderColor: "#ffffff",
+    glyphColor: "#ffffff",
+    scale: 0.85,
+  };
+}
+
+function createSecondaryMarkerContent(
+  markerLibrary: GoogleMapsMarkerNamespace,
   zoom: number | undefined,
 ) {
   const highDetailZoom =
     typeof zoom === "number" && zoom >= SATELLITE_ZOOM_THRESHOLD;
 
   if (highDetailZoom) {
-    return {
-      path: "M -10 2 L 0 -8 L 10 2 L 10 12 L 3 12 L 3 6 L -3 6 L -3 12 L -10 12 Z",
-      fillColor: "#a855f7",
-      fillOpacity: 0.95,
-      strokeColor: "#ffffff",
-      strokeWeight: 1.8,
-      scale: 1,
-    };
+    const pin = new markerLibrary.PinElement(
+      getSecondaryMarkerPinOptions(zoom),
+    );
+    return pin.element;
   }
 
-  return {
-    path: googleMaps.SymbolPath?.CIRCLE,
-    scale: 6,
-    fillColor: "#a855f7",
-    fillOpacity: 0.92,
-    strokeColor: "#ffffff",
-    strokeWeight: 1.5,
-  };
+  const dot = document.createElement("div");
+  dot.style.width = "12px";
+  dot.style.height = "12px";
+  dot.style.borderRadius = "999px";
+  dot.style.background = "#a855f7";
+  dot.style.border = "1.5px solid #ffffff";
+  dot.style.boxShadow = "0 0 0 1px rgba(168,85,247,0.25)";
+  return dot;
 }
 
 export function DiscoverMapPanel({
@@ -120,12 +168,15 @@ export function DiscoverMapPanel({
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const googleMapRef = useRef<GoogleMapInstance | null>(null);
-  const googleMapMarkerRef = useRef<GoogleMarkerInstance | null>(null);
-  const googleMapSecondaryMarkerRef = useRef<Map<string, GoogleMarkerInstance>>(
-    new Map(),
-  );
-  const markerListenerRef = useRef<GoogleMapsEventListener[]>([]);
+  const googleMapMarkerRef = useRef<GoogleAdvancedMarkerInstance | null>(null);
+  const googleMapSecondaryMarkerRef = useRef<
+    Map<string, GoogleAdvancedMarkerInstance>
+  >(new Map());
+  const markerListenerRef = useRef<Array<() => void>>([]);
   const googleMapsNamespaceRef = useRef<GoogleMapsNamespace | null>(null);
+  const googleMapsMarkerNamespaceRef = useRef<GoogleMapsMarkerNamespace | null>(
+    null,
+  );
   const zoomAnimationIntervalRef = useRef<number | null>(null);
   const pendingPanTimeoutRef = useRef<number | null>(null);
   const previousPinnedListingIdRef = useRef<string | undefined>(undefined);
@@ -146,24 +197,43 @@ export function DiscoverMapPanel({
   }, []);
 
   const clearSecondaryMarkers = () => {
-    markerListenerRef.current.forEach((listener) => listener.remove());
+    markerListenerRef.current.forEach((cleanup) => cleanup());
     markerListenerRef.current = [];
 
     for (const marker of googleMapSecondaryMarkerRef.current.values()) {
-      marker.setMap(null);
+      marker.map = null;
     }
     googleMapSecondaryMarkerRef.current.clear();
   };
 
+  const registerAdvancedMarkerClick = (
+    marker: GoogleAdvancedMarkerInstance,
+    onClick: () => void,
+  ) => {
+    if (marker.addEventListener && marker.removeEventListener) {
+      const handler = () => {
+        onClick();
+      };
+      marker.addEventListener("gmp-click", handler);
+      return () => {
+        marker.removeEventListener?.("gmp-click", handler);
+      };
+    }
+
+    const listener = marker.addListener("click", onClick);
+    return () => {
+      listener.remove();
+    };
+  };
+
   const applySecondaryMarkerIcons = (zoom: number | undefined) => {
-    const googleMaps = googleMapsNamespaceRef.current;
-    if (!googleMaps) {
+    const markerLibrary = googleMapsMarkerNamespaceRef.current;
+    if (!markerLibrary) {
       return;
     }
 
-    const icon = getSecondaryMarkerIcon(googleMaps, zoom);
     for (const marker of googleMapSecondaryMarkerRef.current.values()) {
-      marker.setIcon(icon);
+      marker.content = createSecondaryMarkerContent(markerLibrary, zoom);
     }
   };
 
@@ -203,21 +273,33 @@ export function DiscoverMapPanel({
     let disposed = false;
 
     const initializeMap = async () => {
-      setOptions({
-        key: googleMapsApiKey,
-        v: "weekly",
-      });
+      if (!mapsLoaderConfigured) {
+        setOptions({
+          key: googleMapsApiKey,
+          v: "weekly",
+        });
+        mapsLoaderConfigured = true;
+      }
       await importLibrary("maps");
+      await importLibrary("marker");
 
       const googleMaps = (
         window as Window & {
           google?: {
-            maps?: GoogleMapsNamespace;
+            maps?: GoogleMapsNamespace & {
+              marker?: GoogleMapsMarkerNamespace;
+            };
           };
         }
       ).google?.maps;
+      const markerLibrary = googleMaps?.marker;
 
-      if (disposed || !mapContainerRef.current || !googleMaps) {
+      if (
+        disposed ||
+        !mapContainerRef.current ||
+        !googleMaps ||
+        !markerLibrary
+      ) {
         return;
       }
 
@@ -229,6 +311,7 @@ export function DiscoverMapPanel({
         center,
         zoom: 13,
         mapTypeId: "roadmap",
+        mapId: "DEMO_MAP_ID",
         disableDefaultUI: false,
         mapTypeControl: false,
         streetViewControl: false,
@@ -237,10 +320,18 @@ export function DiscoverMapPanel({
         scrollwheel: true,
       });
 
-      const marker = new googleMaps.Marker({
-        map,
+      const primaryPin = new markerLibrary.PinElement({
+        background: "#ef4444",
+        borderColor: "#ffffff",
+        glyphColor: "#ffffff",
+        scale: 1,
+      });
+
+      const marker = new markerLibrary.AdvancedMarkerElement({
+        map: null,
         position: center,
-        visible: false,
+        content: primaryPin.element,
+        gmpClickable: false,
       });
 
       const zoomListener = map.addListener("zoom_changed", () => {
@@ -252,6 +343,7 @@ export function DiscoverMapPanel({
       googleMapRef.current = map;
       googleMapMarkerRef.current = marker;
       googleMapsNamespaceRef.current = googleMaps;
+      googleMapsMarkerNamespaceRef.current = markerLibrary;
       setMapReadyRevision((current) => current + 1);
 
       if (disposed) {
@@ -270,8 +362,8 @@ export function DiscoverMapPanel({
 
   useEffect(() => {
     const map = googleMapRef.current;
-    const googleMaps = googleMapsNamespaceRef.current;
-    if (!map || !googleMaps) {
+    const markerLibrary = googleMapsMarkerNamespaceRef.current;
+    if (!map || !markerLibrary) {
       return;
     }
 
@@ -282,13 +374,15 @@ export function DiscoverMapPanel({
         continue;
       }
 
-      const marker = new googleMaps.Marker({
+      const marker = new markerLibrary.AdvancedMarkerElement({
         map,
         position: { lat: listing.lat, lng: listing.lng },
-        icon: getSecondaryMarkerIcon(googleMaps, map.getZoom()),
+        title: listing.name,
+        content: createSecondaryMarkerContent(markerLibrary, map.getZoom()),
+        gmpClickable: true,
       });
 
-      const listener = marker.addListener("click", () => {
+      const cleanup = registerAdvancedMarkerClick(marker, () => {
         onSelectListing({
           id: listing.id,
           lat: listing.lat,
@@ -298,7 +392,7 @@ export function DiscoverMapPanel({
         });
       });
 
-      markerListenerRef.current.push(listener);
+      markerListenerRef.current.push(cleanup);
       googleMapSecondaryMarkerRef.current.set(listing.id, marker);
     }
 
@@ -314,7 +408,7 @@ export function DiscoverMapPanel({
 
     if (!mapTarget.id) {
       previousPinnedListingIdRef.current = undefined;
-      marker.setVisible(false);
+      marker.map = null;
       clearFocusAnimation();
       map.panTo({ lat: mapTarget.lat, lng: mapTarget.lng });
       map.setZoom(mapTarget.zoom ?? CONTEXT_ZOOM);
@@ -322,10 +416,10 @@ export function DiscoverMapPanel({
       return;
     }
 
-    marker.setVisible(true);
+    marker.map = map;
 
     const nextCenter = { lat: mapTarget.lat, lng: mapTarget.lng };
-    marker.setPosition(nextCenter);
+    marker.position = nextCenter;
 
     if (typeof mapTarget.zoom === "number") {
       const currentZoom = map.getZoom() ?? CONTEXT_ZOOM;
@@ -366,11 +460,7 @@ export function DiscoverMapPanel({
       map.panTo(nextCenter);
       previousPinnedListingIdRef.current = mapTarget.id;
     }
-<<<<<<< HEAD
   }, [animateZoom, clearFocusAnimation, mapTarget, mapReadyRevision]);
-=======
-  }, [mapTarget, mapReadyRevision]);
->>>>>>> refs/remotes/origin/master
 
   return (
     <aside className="flex flex-col self-start rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] xl:sticky xl:top-28">
