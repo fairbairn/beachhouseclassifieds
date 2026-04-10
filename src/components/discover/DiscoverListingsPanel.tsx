@@ -44,11 +44,12 @@ export function DiscoverListingsPanel({
   };
 
   useEffect(() => {
-    if (!activeListingId || !cardsScrollRef.current) {
+    const scrollContainer = cardsScrollRef.current;
+    if (!activeListingId || !scrollContainer) {
       return;
     }
 
-    const targetCard = cardsScrollRef.current.querySelector<HTMLElement>(
+    const targetCard = scrollContainer.querySelector<HTMLElement>(
       `[data-listing-id="${activeListingId}"]`,
     );
 
@@ -56,7 +57,15 @@ export function DiscoverListingsPanel({
       return;
     }
 
-    targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
+    const targetCardTop = targetCard.offsetTop;
+    const targetCardHeight = targetCard.offsetHeight;
+    const nextTop =
+      targetCardTop - scrollContainer.clientHeight / 2 + targetCardHeight / 2;
+
+    scrollContainer.scrollTo({
+      top: Math.max(0, nextTop),
+      behavior: "smooth",
+    });
   }, [activeListingId, cardsPerRow]);
 
   const listingGridClass =
