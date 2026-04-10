@@ -63,9 +63,36 @@ export function DiscoverListingsPanel({
     const targetCardHeight = targetCard.offsetHeight;
     const nextTop =
       targetCardTop - scrollContainer.clientHeight / 2 + targetCardHeight / 2;
+    const clampedTop = Math.max(0, nextTop);
+    const currentTop = scrollContainer.scrollTop;
+    const distance = Math.abs(clampedTop - currentTop);
+
+    // For long jumps, snap close first, then do a brief smooth refinement.
+    if (distance > 520) {
+      const jumpOffset = Math.min(scrollContainer.clientHeight * 0.6, 420);
+      const nearTop =
+        clampedTop > currentTop
+          ? Math.max(0, clampedTop - jumpOffset)
+          : clampedTop + jumpOffset;
+
+      scrollContainer.scrollTo({
+        top: nearTop,
+      });
+
+      const rafId = window.requestAnimationFrame(() => {
+        scrollContainer.scrollTo({
+          top: clampedTop,
+          behavior: "smooth",
+        });
+      });
+
+      return () => {
+        window.cancelAnimationFrame(rafId);
+      };
+    }
 
     scrollContainer.scrollTo({
-      top: Math.max(0, nextTop),
+      top: clampedTop,
       behavior: "smooth",
     });
   }, [activeListingId, cardsPerRow]);
