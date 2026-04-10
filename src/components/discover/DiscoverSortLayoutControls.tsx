@@ -6,6 +6,8 @@ import {
   Heart,
   LayoutGrid,
   SlidersHorizontal,
+  Sparkles,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -56,6 +58,23 @@ export function DiscoverSortLayoutControls({
       document.removeEventListener("mousedown", closeOnOutsideClick);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isHelpMenuOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsHelpMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isHelpMenuOpen]);
 
   const openHelpMenu = () => {
     setIsHelpMenuOpen((current) => !current);
@@ -150,63 +169,82 @@ export function DiscoverSortLayoutControls({
           <span className="text-xl leading-none font-semibold">?</span>
         </button>
         {isHelpMenuOpen ? (
-          <div
-            role="dialog"
-            aria-label="How to search better"
-            className="absolute top-11 right-0 z-40 w-104 overflow-hidden rounded-xl border border-teal-100 bg-white/96 p-4 shadow-[0_22px_44px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm"
-          >
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-teal-200 bg-teal-50 text-teal-700">
-                <span className="text-base leading-none font-semibold">?</span>
-              </span>
-              <p
-                className="text-2xl font-semibold tracking-tight text-teal-800"
-                style={{ fontFamily: "'Playfair Display', serif" }}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <button
+              type="button"
+              aria-label="Close search tips"
+              className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
+              onClick={() => setIsHelpMenuOpen(false)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="How to search better"
+              className="relative z-10 w-[min(92vw,56rem)] overflow-hidden rounded-2xl border border-teal-100 bg-white/96 p-6 shadow-[0_30px_70px_-28px_rgba(15,23,42,0.58)] backdrop-blur-sm"
+            >
+              <button
+                type="button"
+                onClick={() => setIsHelpMenuOpen(false)}
+                className="absolute top-4 right-4 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800"
+                aria-label="Close search tips"
+                title="Close"
               >
-                Search Tips
+                <X className="h-4 w-4" />
+              </button>
+
+              <div className="flex items-center gap-3 pr-10">
+                <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-teal-200 bg-teal-50 text-teal-700 shadow-[0_12px_24px_-16px_rgba(13,148,136,0.8)]">
+                  <Sparkles className="h-5 w-5" />
+                </span>
+                <h3
+                  className="text-3xl font-semibold tracking-tight text-teal-800"
+                  style={{ fontFamily: "'Playfair Display', serif" }}
+                >
+                  Search Tips
+                </h3>
+              </div>
+              <p className="mt-4 text-base leading-7 font-semibold text-slate-700">
+                Small adjustments can unlock better matches quickly.
               </p>
+              <ul className="mt-4 space-y-2.5 text-base leading-7 text-slate-700">
+                <li className="flex items-start gap-2.5">
+                  <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                  </span>
+                  <span>
+                    Use a wider earliest-to-latest date window to reveal more
+                    consecutive-night availability.
+                  </span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-teal-200 bg-teal-50 text-teal-700">
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                  </span>
+                  <span>Refine filters to tighten your match quality.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 text-cyan-700">
+                    <ArrowUpDown className="h-3.5 w-3.5" />
+                  </span>
+                  <span>
+                    Sort by price or features first, then tighten filters as you
+                    learn what stands out.
+                  </span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700">
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  </span>
+                  <span>Switch card density to scan faster.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700">
+                    <Heart className="h-3.5 w-3.5" />
+                  </span>
+                  <span>Favorite top contenders as you go.</span>
+                </li>
+              </ul>
             </div>
-            <p className="mt-2 text-base leading-7 text-slate-600">
-              Small adjustments can unlock better matches quickly.
-            </p>
-            <ul className="mt-3 space-y-2.5 text-base leading-7 text-slate-700">
-              <li className="flex items-start gap-2.5">
-                <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                </span>
-                <span>
-                  Use a wider earliest-to-latest date window to reveal more
-                  consecutive-night availability.
-                </span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-teal-200 bg-teal-50 text-teal-700">
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                </span>
-                <span>Refine filters to tighten your match quality.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 text-cyan-700">
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                </span>
-                <span>
-                  Sort by price or features first, then tighten filters as you
-                  learn what stands out.
-                </span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700">
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                </span>
-                <span>Switch card density to scan faster.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700">
-                  <Heart className="h-3.5 w-3.5" />
-                </span>
-                <span>Favorite top contenders as you go.</span>
-              </li>
-            </ul>
           </div>
         ) : null}
       </div>

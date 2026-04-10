@@ -22,12 +22,16 @@ export function DiscoverListingsPanel({
   cardsPerRow,
   singleColumnCardVariant = 3,
   activeListingId,
+  favoriteIds,
+  onToggleFavorite,
   onFocusMap,
 }: {
   listings: ReadonlyArray<DiscoverListing>;
   cardsPerRow: 1 | 2 | 3 | 4;
   singleColumnCardVariant?: 3 | 4;
   activeListingId?: string;
+  favoriteIds: ReadonlyArray<string>;
+  onToggleFavorite: (listingId: string) => void;
   onFocusMap: (next: {
     id: string;
     lat: number;
@@ -36,8 +40,9 @@ export function DiscoverListingsPanel({
     zoom?: number;
   }) => void;
 }) {
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [isReturnToTopPulsing, setIsReturnToTopPulsing] = useState(false);
   const cardsScrollRef = useRef<HTMLDivElement | null>(null);
+  const explorePanelRef = useRef<HTMLDivElement | null>(null);
 
   const scrollToTop = () => {
     cardsScrollRef.current?.scrollTo({
@@ -97,6 +102,30 @@ export function DiscoverListingsPanel({
     });
   }, [activeListingId, cardsPerRow]);
 
+  useEffect(() => {
+    const panel = explorePanelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsReturnToTopPulsing(entry.isIntersecting);
+      },
+      {
+        root: cardsScrollRef.current,
+        threshold: 0.25,
+      },
+    );
+
+    observer.observe(panel);
+
+    return () => {
+      observer.disconnect();
+      setIsReturnToTopPulsing(false);
+    };
+  }, [cardsPerRow]);
+
   const listingGridClass =
     cardsPerRow === 1
       ? "xl:grid-cols-1"
@@ -111,7 +140,7 @@ export function DiscoverListingsPanel({
       <div className="pointer-events-none absolute -top-4 -right-1 -bottom-1 -left-1 z-0 rounded-2xl border border-white/35 bg-white/18 backdrop-blur-md xl:-top-24 xl:-right-2 xl:-left-2" />
       <div
         ref={cardsScrollRef}
-        className="discover-cards-scroll relative z-10 h-full overflow-y-auto px-2 pb-6"
+        className="discover-cards-scroll relative z-10 h-full overflow-y-auto px-2 pb-6 xl:-mt-6 xl:h-[calc(100%+1.5rem)] xl:pt-6"
       >
         <div id="discover-cards-top-anchor" aria-hidden="true" />
         {listings.length === 0 ? (
@@ -239,13 +268,7 @@ export function DiscoverListingsPanel({
                         </button>
                         <button
                           type="button"
-                          onClick={() =>
-                            setFavoriteIds((current) =>
-                              current.includes(listing.id)
-                                ? current.filter((id) => id !== listing.id)
-                                : [...current, listing.id],
-                            )
-                          }
+                          onClick={() => onToggleFavorite(listing.id)}
                           className={`inline-flex items-center justify-center rounded-full border p-2 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${isFavorite ? "border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100" : "border-slate-300 text-slate-500 hover:border-rose-300 hover:text-rose-600"}`}
                         >
                           <Heart
@@ -300,7 +323,10 @@ export function DiscoverListingsPanel({
               })}
             </div>
 
-            <div className="relative mb-18 overflow-hidden rounded-2xl border border-cyan-100 bg-white p-6 shadow-[0_28px_55px_-34px_rgba(6,182,212,0.55)]">
+            <div
+              ref={explorePanelRef}
+              className="relative mb-2 overflow-hidden rounded-2xl border border-cyan-100 bg-white p-6 shadow-[0_28px_55px_-34px_rgba(6,182,212,0.55)]"
+            >
               <div className="pointer-events-none absolute -top-14 -right-12 h-44 w-44 rounded-full bg-cyan-200/55 blur-2xl" />
               <div className="pointer-events-none absolute -bottom-14 -left-8 h-36 w-36 rounded-full bg-teal-200/55 blur-2xl" />
               <div className="relative">
@@ -319,9 +345,15 @@ export function DiscoverListingsPanel({
                   <button
                     type="button"
                     onClick={scrollToTop}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 transition hover:bg-cyan-100"
+                    className="relative inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-4 py-1.5 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100"
                   >
-                    <ArrowUp className="h-3.5 w-3.5" />
+                    {isReturnToTopPulsing ? (
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute -inset-0.5 animate-ping rounded-full border border-cyan-300/80"
+                      />
+                    ) : null}
+                    <ArrowUp className="h-4 w-4" />
                     Return to Top
                   </button>
                 </div>

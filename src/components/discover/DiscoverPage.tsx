@@ -20,6 +20,7 @@ import {
 import {
   homeHeroBackgroundImage,
   known30AAreas,
+  known30ABeachZones,
   known30ACommunities,
   sampleListings,
   type DiscoverListing,
@@ -27,6 +28,7 @@ import {
 import {
   formatNights,
   getAreaFromListing,
+  getBeachZoneFromListing,
   getListingGeoTarget,
   getTypicalPriceBounds,
 } from "@/components/discover/discover-utils";
@@ -127,6 +129,7 @@ export function DiscoverPage() {
   >(3);
   const [sortOption, setSortOption] = useState<SortOption>("recommended");
   const [fetchedListings, setFetchedListings] = useState<DiscoverListing[]>([]);
+  const [favoriteListingIds, setFavoriteListingIds] = useState<string[]>([]);
 
   useEffect(() => {
     const chooseVariant = () => {
@@ -372,6 +375,21 @@ export function DiscoverPage() {
     );
   }, [filtered]);
 
+  const beachCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    filtered.forEach((listing) => {
+      const beachZone = getBeachZoneFromListing(listing);
+      if (!beachZone || !known30ABeachZones.includes(beachZone)) {
+        return;
+      }
+      map.set(beachZone, (map.get(beachZone) ?? 0) + 1);
+    });
+
+    return known30ABeachZones.map(
+      (name) => [name, map.get(name) ?? 0] as const,
+    );
+  }, [filtered]);
+
   const featureCounts = useMemo(() => {
     let privatePoolCount = 0;
     let beachfrontCount = 0;
@@ -449,24 +467,50 @@ export function DiscoverPage() {
   const filtersSummary =
     activeFilterParts.length > 0 ? activeFilterParts.join(" • ") : "None";
 
+  const toggleFavoriteListing = useCallback((listingId: string) => {
+    setFavoriteListingIds((current) =>
+      current.includes(listingId)
+        ? current.filter((id) => id !== listingId)
+        : [...current, listingId],
+    );
+  }, []);
+
   return (
     <HomeMarketingShell
       preferDarkTopNavText={false}
+      showTopNav={false}
       showFooter={false}
       disableNavScrollEffect={true}
-      contentClassName="relative overflow-hidden px-4 pb-12 pt-28 md:px-10 md:pt-32 2xl:px-16"
+      contentClassName="relative overflow-hidden px-4 pb-12 pt-0 md:px-10 md:pt-0 2xl:px-16"
     >
       <div
-        className="pointer-events-none absolute inset-0"
+        className="pointer-events-none fixed inset-0 z-0"
         style={{
           backgroundImage: `url(${homeHeroBackgroundImage})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
       />
-      <div className="pointer-events-none absolute inset-0 bg-slate-950/28" />
+      <div className="pointer-events-none fixed inset-0 z-0 bg-slate-950/28" />
 
-      <section className="relative z-10 mx-auto w-full max-w-475 space-y-6 xl:flex xl:h-[calc(100dvh-7rem)] xl:flex-col xl:gap-6 xl:space-y-0">
+      <div className="fixed top-4 left-4 z-30 md:top-6 md:left-8">
+        <div className="px-2 py-1">
+          <div className="flex min-w-32 flex-col items-center">
+            <span
+              className="text-4xl leading-none tracking-[0.06em] text-white"
+              style={{ fontFamily: "'Playfair Display', serif" }}
+            >
+              30<span className="text-[#2DD4BF]">A</span>
+            </span>
+            <span className="mt-1 text-[10px] font-bold tracking-[0.42em] text-white uppercase">
+              Collections
+            </span>
+            <div className="mt-1 h-px w-28 bg-[#2DD4BF]" />
+          </div>
+        </div>
+      </div>
+
+      <section className="relative z-10 mx-auto mt-6 w-full max-w-475 space-y-6 xl:flex xl:h-[calc(100dvh-2rem)] xl:flex-col xl:gap-6 xl:space-y-0">
         <header className="relative z-20 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)]">
           <div>
             <div className="grid gap-1.5 xl:grid-cols-[minmax(0,3.85fr)_minmax(19rem,2fr)_minmax(8.5rem,0.84fr)_minmax(8.5rem,0.84fr)_minmax(8.5rem,0.84fr)] xl:items-end">
@@ -711,10 +755,15 @@ export function DiscoverPage() {
               </div>
             </div>
           </div>
+
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-full right-0 left-0 z-30 hidden h-9 bg-linear-to-b from-slate-950/24 via-slate-900/10 to-transparent blur-md xl:block"
+          />
         </header>
 
         <div
-          className={`grid gap-5 xl:min-h-0 xl:flex-1 ${
+          className={`grid gap-6 xl:min-h-0 xl:flex-1 ${
             isMapExpanded
               ? "xl:grid-cols-[240px_minmax(0,0.9fr)_minmax(0,2.1fr)] 2xl:grid-cols-[220px_minmax(0,0.85fr)_minmax(0,2.25fr)]"
               : "xl:grid-cols-[240px_minmax(0,1.45fr)_400px] 2xl:grid-cols-[220px_minmax(0,1.85fr)_340px]"
@@ -722,7 +771,9 @@ export function DiscoverPage() {
         >
           <DiscoverFacetSidebar
             listingCount={displayListings.length}
+            favoriteCount={favoriteListingIds.length}
             areaCounts={areaCounts}
+            beachCounts={beachCounts}
             communityCounts={communityCounts}
             featureCounts={featureCounts}
           />
@@ -732,6 +783,8 @@ export function DiscoverPage() {
             cardsPerRow={isMapExpanded ? 1 : cardsPerRow}
             singleColumnCardVariant={expandedSingleCardVariant}
             activeListingId={activeListingId}
+            favoriteIds={favoriteListingIds}
+            onToggleFavorite={toggleFavoriteListing}
             onFocusMap={handleFocusMap}
           />
 

@@ -8,6 +8,7 @@ type HomeMarketingShellProps = {
   children: ReactNode;
   contentClassName?: string;
   preferDarkTopNavText?: boolean;
+  showTopNav?: boolean;
   showFooter?: boolean;
   disableNavScrollEffect?: boolean;
 };
@@ -16,6 +17,7 @@ export function HomeMarketingShell({
   children,
   contentClassName,
   preferDarkTopNavText = false,
+  showTopNav = true,
   showFooter = true,
   disableNavScrollEffect = false,
 }: HomeMarketingShellProps) {
@@ -41,10 +43,12 @@ export function HomeMarketingShell({
       className="min-h-screen bg-white text-[#1A1A1A]"
       style={{ fontFamily: "'Manrope', sans-serif" }}
     >
-      <HomeLandingNav
-        isScrolled={isScrolled}
-        preferDarkTopText={preferDarkTopNavText}
-      />
+      {showTopNav ? (
+        <HomeLandingNav
+          isScrolled={isScrolled}
+          preferDarkTopText={preferDarkTopNavText}
+        />
+      ) : null}
       <div className={contentClassName}>{children}</div>
       {showFooter ? <HomeLandingFooter /> : null}
     </div>
