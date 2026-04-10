@@ -8,7 +8,7 @@ import {
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { DiscoverListing } from "@/components/discover/discover-data";
 import {
@@ -20,11 +20,19 @@ import {
 export function DiscoverListingsPanel({
   listings,
   cardsPerRow,
+  activeListingId,
   onFocusMap,
 }: {
   listings: ReadonlyArray<DiscoverListing>;
   cardsPerRow: 2 | 3 | 4;
-  onFocusMap: (next: { lat: number; lng: number; label: string }) => void;
+  activeListingId?: string;
+  onFocusMap: (next: {
+    id: string;
+    lat: number;
+    lng: number;
+    label: string;
+    zoom?: number;
+  }) => void;
 }) {
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const cardsScrollRef = useRef<HTMLDivElement | null>(null);
@@ -35,6 +43,22 @@ export function DiscoverListingsPanel({
     });
   };
 
+  useEffect(() => {
+    if (!activeListingId || !cardsScrollRef.current) {
+      return;
+    }
+
+    const targetCard = cardsScrollRef.current.querySelector<HTMLElement>(
+      `[data-listing-id="${activeListingId}"]`,
+    );
+
+    if (!targetCard) {
+      return;
+    }
+
+    targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeListingId, cardsPerRow]);
+
   const listingGridClass =
     cardsPerRow === 2
       ? "xl:grid-cols-2"
@@ -43,7 +67,7 @@ export function DiscoverListingsPanel({
         : "xl:grid-cols-3 2xl:grid-cols-4";
 
   return (
-    <div className="relative z-0 min-h-0 self-start xl:h-full">
+    <div className="relative z-0 min-h-0 xl:h-full">
       <div className="pointer-events-none absolute -top-4 -right-1 -bottom-1 -left-1 z-0 rounded-2xl border border-white/35 bg-white/18 backdrop-blur-md xl:-top-24 xl:-right-2 xl:-left-2" />
       <div
         ref={cardsScrollRef}
@@ -65,6 +89,7 @@ export function DiscoverListingsPanel({
             <div className={`grid gap-4 ${listingGridClass}`}>
               {listings.map((listing) => {
                 const isFavorite = favoriteIds.includes(listing.id);
+                const isPinned = activeListingId === listing.id;
                 const location = getLocationPresentation(listing);
                 const listingTarget = getListingGeoTarget(listing);
                 const communityHighlight = location.isPlannedCommunity
@@ -92,6 +117,7 @@ export function DiscoverListingsPanel({
                 return (
                   <article
                     key={listing.id}
+                    data-listing-id={listing.id}
                     className={`flex h-full flex-col rounded-2xl bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] ${listing.beachfront ? "border border-cyan-300 shadow-[0_0_0_1px_rgba(34,211,238,0.35),0_18px_36px_-24px_rgba(8,145,178,0.65)]" : "border border-slate-200"}`}
                   >
                     {isTwoUpCardLayout ? (
@@ -140,16 +166,33 @@ export function DiscoverListingsPanel({
                           type="button"
                           onClick={() =>
                             onFocusMap({
+                              id: listing.id,
                               lat: listingTarget.lat,
                               lng: listingTarget.lng,
                               label: listing.name,
+                              zoom: 19,
                             })
                           }
-                          className="inline-flex items-center justify-center rounded-full border border-slate-300 p-2 text-slate-500 transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 hover:shadow-sm"
+                          className={`inline-flex items-center justify-center rounded-full border p-2 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${
+                            isPinned
+                              ? "border-rose-500 bg-white text-rose-700 shadow-[0_0_0_2px_rgba(251,113,133,0.28),0_10px_20px_-12px_rgba(225,29,72,0.72)]"
+                              : "border-slate-300 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                          } relative`}
                           aria-label={`Focus map on ${listing.name}`}
                           title={`Focus map on ${listing.name}`}
+                          aria-pressed={isPinned}
                         >
-                          <MapPin className="h-4 w-4" />
+                          {isPinned ? (
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute -inset-1 animate-ping rounded-full border border-rose-400/75"
+                            />
+                          ) : null}
+                          <MapPin
+                            className={`h-4 w-4 ${isPinned ? "scale-110" : ""}`}
+                            fill="none"
+                            strokeWidth={isPinned ? 2.5 : 2}
+                          />
                         </button>
                         <button
                           type="button"
@@ -185,17 +228,17 @@ export function DiscoverListingsPanel({
 
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {listing.beachfront ? (
-                        <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-800">
-                          Beachfront
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                          Gulf Front
                         </span>
                       ) : null}
                       {listing.privatePool ? (
-                        <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-800">
+                        <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-800">
                           Private Pool
                         </span>
                       ) : null}
                       {listing.golfCart ? (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                        <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-800">
                           Golf Cart
                         </span>
                       ) : null}

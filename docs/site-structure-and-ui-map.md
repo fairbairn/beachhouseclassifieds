@@ -14,6 +14,10 @@ This is a living map of routes, page-level composition, and major UI components.
   - Renders HomeLandingPage at /
 - Legacy home route: src/routes/home.tsx
   - Redirects /home to /
+- Discover route: src/routes/discover.tsx
+  - Renders DiscoverPage at /discover
+- Discover listings API route: src/routes/api/discover/listings.tsx
+  - Returns demo listings payload for Discover client fetch
 
 ## Home Page Composition
 
@@ -39,6 +43,31 @@ This is a living map of routes, page-level composition, and major UI components.
 - HomePostSavingsCtaSection
   - Follow-on action block after comparison section.
 - HomeLandingFooter
+
+## Discover Page Composition
+
+- Page container: src/components/discover/DiscoverPage.tsx
+- Current surface map:
+  1. Search/filter command bar (query, date window, stay and guest steppers)
+  2. Advanced filter tray (threshold controls + feature toggles)
+  3. Left facet sidebar (Areas, Planned Communities, Property Features)
+  4. Center listings panel (card layouts, map focus actions, favorites, end-of-list guidance)
+  5. Right map panel (interactive map, focus animation, open-in-maps)
+
+## Discover Component Responsibilities
+
+- DiscoverPage
+  - Orchestrates filter state, sort mode, listing source selection, counts, and map target updates.
+- DiscoverFacetSidebar
+  - Renders collapsible count facets for area/community/features.
+- DiscoverListingsPanel
+  - Renders browse cards, card-level actions, and browse guidance panel.
+- DiscoverMapPanel
+  - Owns map lifecycle, marker updates, focus transitions, and map type switching.
+- DiscoverSortLayoutControls
+  - Owns sort dropdown, card density controls, and help popover.
+- discover-controls primitives
+  - Date range picker behavior and reusable steppers/facet section controls.
   - Legal/navigation utility links and copyright line.
 
 ## Data-Driven UI Elements

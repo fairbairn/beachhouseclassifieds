@@ -14,6 +14,7 @@ Welcome to the docs site scaffold.
 - Keep architecture and setup docs updated as the project evolves.
 - Use [Brand and Visual Direction](./brand-and-visual-direction.md) for typography, color, messaging, CTA, and visual style decisions.
 - Use [Site Structure and UI Map](./site-structure-and-ui-map.md) for routes, page composition, and component ownership.
+- Use [Discover Experience Reference](./discover-experience-reference.md) as the implementation contract for Discover panel layout, feature naming, map behavior, and demo data rules.
 - Use [Discovery Workspace and Planner Vision](./discovery-workspace-and-planner-vision.md) as the living product record for search UX, favoriting flow, route decisions, and planner boundaries.
 - Use [Pricing and Conformance System Reference](./pricing-system-reference.md) as the hub for scrape, quote, cache, validation, and readiness workflows.
 - Use [Adapter Scrape and Extraction](./adapter-scrape-and-extraction.md) for how primary adapters discover, fetch, and normalize listing detail payloads.

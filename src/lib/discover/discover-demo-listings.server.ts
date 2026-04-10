@@ -1,0 +1,328 @@
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+
+import type { DiscoverListing } from "@/components/discover/discover-data";
+
+const LISTINGS_DIR = path.resolve(process.cwd(), "db/listings");
+const TARGET_LISTING_COUNT = 96;
+
+type RawListing = {
+  id?: unknown;
+  name?: unknown;
+  address?: {
+    city?: unknown;
+    display?: unknown;
+  };
+  location?: {
+    title?: unknown;
+  };
+  coordinate?: {
+    latitude?: unknown;
+    longitude?: unknown;
+  };
+  gallery?: unknown;
+  highlights?: unknown;
+  spaces?: unknown;
+  policies?: {
+    items?: unknown;
+  };
+  calendarRates?: unknown;
+  description?: {
+    about?: {
+      items?: unknown;
+    };
+  };
+};
+
+let cachedListings: DiscoverListing[] | null = null;
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, "").trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function normalizeTextList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const output: string[] = [];
+  for (const item of value) {
+    if (typeof item === "string" && item.trim()) {
+      output.push(item.trim());
+      continue;
+    }
+
+    if (item && typeof item === "object") {
+      const nestedItems = Reflect.get(item, "items");
+      if (Array.isArray(nestedItems)) {
+        for (const nestedItem of nestedItems) {
+          if (typeof nestedItem === "string" && nestedItem.trim()) {
+            output.push(nestedItem.trim());
+          }
+          if (nestedItem && typeof nestedItem === "object") {
+            const nestedNestedItems = Reflect.get(nestedItem, "items");
+            if (Array.isArray(nestedNestedItems)) {
+              for (const deepValue of nestedNestedItems) {
+                if (typeof deepValue === "string" && deepValue.trim()) {
+                  output.push(deepValue.trim());
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return output;
+}
+
+function parseFirstMatchNumber(text: string, pattern: RegExp): number | null {
+  const matched = text.match(pattern);
+  if (!matched?.[1]) {
+    return null;
+  }
+  return toFiniteNumber(matched[1]);
+}
+
+function extractGalleryUrls(gallery: unknown): string[] {
+  if (!Array.isArray(gallery)) {
+    return [];
+  }
+
+  const urls = new Set<string>();
+  for (const item of gallery) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const url = asString(Reflect.get(item, "url"));
+    if (url) {
+      urls.add(url);
+    }
+  }
+
+  return Array.from(urls).slice(0, 4);
+}
+
+function inferBedsFromHighlights(lines: string[]): {
+  bedrooms: number | null;
+  bathrooms: number | null;
+  sleeps: number | null;
+  kingBeds: number;
+  queenBeds: number;
+} {
+  const text = lines.join("\n");
+
+  const bedrooms = parseFirstMatchNumber(text, /(\d+)\s*bedrooms?/i);
+  const sleeps = parseFirstMatchNumber(text, /sleeps\s*(\d+)/i);
+
+  let bathrooms = parseFirstMatchNumber(
+    text,
+    /(\d+(?:\.\d+)?)\+?\s*bathrooms?/i,
+  );
+
+  const spacesBathroomText = lines.find((line) => /bathrooms?/i.test(line));
+  if (spacesBathroomText) {
+    const fullBathrooms = parseFirstMatchNumber(
+      spacesBathroomText,
+      /(\d+(?:\.\d+)?)\s*bathrooms?/i,
+    );
+    const halfBathrooms = parseFirstMatchNumber(
+      spacesBathroomText,
+      /(\d+)\s*half\s*bathrooms?/i,
+    );
+
+    if (fullBathrooms !== null) {
+      bathrooms = fullBathrooms + (halfBathrooms ?? 0) * 0.5;
+    }
+  }
+
+  const kingBeds = Array.from(text.matchAll(/(\d+)\s*king\s*beds?/gi)).reduce(
+    (sum, match) => sum + Number(match[1]),
+    0,
+  );
+  const queenBeds = Array.from(text.matchAll(/(\d+)\s*queen\s*beds?/gi)).reduce(
+    (sum, match) => sum + Number(match[1]),
+    0,
+  );
+
+  return {
+    bedrooms,
+    bathrooms,
+    sleeps,
+    kingBeds,
+    queenBeds,
+  };
+}
+
+function extractPolicyText(items: unknown): string[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const out: string[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const nestedItems = Reflect.get(item, "items");
+    if (!Array.isArray(nestedItems)) {
+      continue;
+    }
+    for (const policyText of nestedItems) {
+      if (typeof policyText === "string" && policyText.trim()) {
+        out.push(policyText.trim());
+      }
+    }
+  }
+
+  return out;
+}
+
+function inferTypicalPriceLabel(raw: RawListing): string {
+  const rates = raw.calendarRates;
+  const values: number[] = [];
+
+  if (rates && typeof rates === "object") {
+    for (const value of Object.values(rates)) {
+      if (typeof value !== "string") {
+        continue;
+      }
+      const normalized = Number(value.replace(/[^\d.]/g, ""));
+      if (Number.isFinite(normalized) && normalized > 0) {
+        values.push(normalized);
+      }
+    }
+  }
+
+  if (values.length > 0) {
+    const nightlyLow = Math.min(...values);
+    const nightlyHigh = Math.max(...values);
+    const weeklyLow = (nightlyLow * 7) / 1000;
+    const weeklyHigh = (nightlyHigh * 7) / 1000;
+    return `$${weeklyLow.toFixed(1)}k - $${weeklyHigh.toFixed(1)}k`;
+  }
+
+  return "$5.0k - $8.0k";
+}
+
+function mapListing(raw: RawListing): DiscoverListing | null {
+  const id = asString(raw.id) ?? null;
+  const lat = toFiniteNumber(raw.coordinate?.latitude);
+  const lng = toFiniteNumber(raw.coordinate?.longitude);
+
+  if (!id || lat === null || lng === null) {
+    return null;
+  }
+
+  const highlights = normalizeTextList(raw.highlights);
+  const spaces = normalizeTextList(raw.spaces);
+  const descriptionLines = normalizeTextList(raw.description?.about?.items);
+  const allSignals = [...highlights, ...spaces, ...descriptionLines];
+
+  const inferred = inferBedsFromHighlights(allSignals);
+  const policyText = extractPolicyText(raw.policies?.items).join("\n");
+  const allText = allSignals.join("\n");
+
+  const bedrooms = Math.max(1, Math.round(inferred.bedrooms ?? 3));
+  const bathroomsRaw = inferred.bathrooms ?? Math.max(1, bedrooms - 1);
+  const bathrooms = Math.max(1, Math.round(bathroomsRaw * 2) / 2);
+  const sleeps = Math.max(bedrooms * 2, inferred.sleeps ?? bedrooms * 2);
+
+  const kingBeds =
+    inferred.kingBeds > 0
+      ? inferred.kingBeds
+      : Math.max(1, Math.floor(bedrooms / 2));
+  const queenBeds =
+    inferred.queenBeds > 0
+      ? inferred.queenBeds
+      : Math.max(0, bedrooms - kingBeds);
+
+  const area =
+    asString(raw.address?.city) ??
+    asString(raw.location?.title) ??
+    asString(raw.address?.display) ??
+    "30A";
+
+  const imageUrls = extractGalleryUrls(raw.gallery);
+  const hasPetsAllowed = /pets?\s+allowed|pet[-\s]?friendly/i.test(policyText);
+  const hasNoPets = /no\s+pets?\s+allowed|pets?\s+not\s+allowed/i.test(
+    policyText,
+  );
+
+  return {
+    id,
+    name: asString(raw.name) ?? `Listing ${id}`,
+    area,
+    community: area,
+    bedrooms,
+    bathrooms,
+    sleeps,
+    kingBeds,
+    queenBeds,
+    privatePool: /private\s+pool|\bpool\b/i.test(allText),
+    beachfront:
+      /beach\s?front|beachfront|oceanfront|waterfront|on\s+the\s+beach/i.test(
+        allText,
+      ),
+    golfCart: /golf\s*cart|\blsv\b/i.test(allText),
+    petsAllowed: hasNoPets ? false : hasPetsAllowed,
+    accessible: /wheelchair|accessible|step[-\s]?free|mobility/i.test(allText),
+    elevator: /\belevator\b|\blift\b/i.test(allText),
+    previewImages: imageUrls,
+    typicalPrice: inferTypicalPriceLabel(raw),
+    lat,
+    lng,
+  };
+}
+
+export async function getDiscoverDemoListings(): Promise<DiscoverListing[]> {
+  if (cachedListings) {
+    return cachedListings;
+  }
+
+  const fileNames = (await readdir(LISTINGS_DIR))
+    .filter((name) => name.endsWith(".json"))
+    .sort(
+      (a, b) =>
+        Number(a.replace(/\.json$/, "")) - Number(b.replace(/\.json$/, "")),
+    );
+
+  const output: DiscoverListing[] = [];
+  for (const fileName of fileNames) {
+    if (output.length >= TARGET_LISTING_COUNT) {
+      break;
+    }
+
+    const fullPath = path.join(LISTINGS_DIR, fileName);
+    try {
+      const rawText = await readFile(fullPath, "utf-8");
+      const parsed = JSON.parse(rawText) as RawListing;
+      const mapped = mapListing(parsed);
+      if (!mapped) {
+        continue;
+      }
+      output.push(mapped);
+    } catch {
+      // Skip malformed listing payloads and continue building the sample set.
+    }
+  }
+
+  cachedListings = output;
+  return output;
+}

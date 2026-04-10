@@ -10,7 +10,7 @@ import {
   Waves,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   DateRangeField,
@@ -22,10 +22,12 @@ import {
   known30AAreas,
   known30ACommunities,
   sampleListings,
+  type DiscoverListing,
 } from "@/components/discover/discover-data";
 import {
   formatNights,
   getAreaFromListing,
+  getListingGeoTarget,
   getTypicalPriceBounds,
 } from "@/components/discover/discover-utils";
 import { DiscoverFacetSidebar } from "@/components/discover/DiscoverFacetSidebar";
@@ -38,9 +40,10 @@ import {
 import { HomeMarketingShell } from "@/components/home/HomeMarketingShell";
 
 const defaultMapTarget = {
-  lat: 30.3158,
-  lng: -86.1186,
-  label: "30A",
+  lat: 30.3199786,
+  lng: -86.1377563,
+  label: "Seaside Amphitheater",
+  zoom: undefined as number | undefined,
 };
 
 export function DiscoverPage() {
@@ -112,50 +115,130 @@ export function DiscoverPage() {
   const [filterAccessible, setFilterAccessible] = useState(false);
   const [filterElevator, setFilterElevator] = useState(false);
   const [mapTarget, setMapTarget] = useState(defaultMapTarget);
+  const [activeListingId, setActiveListingId] = useState<string | undefined>(
+    undefined,
+  );
   const [cardsPerRow, setCardsPerRow] = useState<2 | 3 | 4>(3);
   const [sortOption, setSortOption] = useState<SortOption>("recommended");
+  const [fetchedListings, setFetchedListings] = useState<DiscoverListing[]>([]);
+
+  const clearPinnedListing = useCallback(() => {
+    setActiveListingId(undefined);
+    setMapTarget(() => ({
+      ...defaultMapTarget,
+      id: undefined,
+      zoom: 13,
+    }));
+  }, []);
+
+  const handleFocusMap = useCallback(
+    (next: {
+      id: string;
+      lat: number;
+      lng: number;
+      label: string;
+      zoom?: number;
+    }) => {
+      if (activeListingId === next.id) {
+        clearPinnedListing();
+        return;
+      }
+
+      setMapTarget(next);
+      setActiveListingId(next.id);
+    },
+    [activeListingId, clearPinnedListing],
+  );
+
+  const handleSelectListingFromMap = useCallback(
+    (next: {
+      id: string;
+      lat: number;
+      lng: number;
+      label: string;
+      zoom?: number;
+    }) => {
+      if (activeListingId === next.id) {
+        clearPinnedListing();
+        return;
+      }
+
+      setMapTarget(next);
+      setActiveListingId(next.id);
+    },
+    [activeListingId, clearPinnedListing],
+  );
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadListings = async () => {
+      try {
+        const response = await fetch("/api/discover/listings");
+        if (!response.ok || isCancelled) {
+          return;
+        }
+
+        const payload = (await response.json()) as { listings?: unknown };
+        if (!Array.isArray(payload.listings)) {
+          return;
+        }
+
+        setFetchedListings(payload.listings as DiscoverListing[]);
+      } catch {
+        // Keep local sample data fallback when fetch fails.
+      }
+    };
+
+    void loadListings();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  const sourceListings =
+    fetchedListings.length > 0 ? fetchedListings : sampleListings;
 
   const guestCount = adults + children;
 
   const filtered = useMemo(() => {
     const normalized = locationQuery.trim().toLowerCase();
 
-    return sampleListings
-      .filter((listing) => {
-        const locationBlob =
-          `${listing.area} ${listing.community} ${listing.name}`.toLowerCase();
-        const passesLocation =
-          normalized.length === 0 || locationBlob.includes(normalized);
-        const passesGuests = listing.sleeps >= guestCount;
-        const passesSleeps = listing.sleeps >= minSleeps;
-        const passesBedrooms = listing.bedrooms >= minBedrooms;
-        const passesBathrooms = listing.bathrooms >= minBathrooms;
-        const passesKingBeds = listing.kingBeds >= minKingBeds;
-        const passesQueenBeds = listing.queenBeds >= minQueenBeds;
-        const passesPool = !filterPool || listing.privatePool;
-        const passesBeachfront = !filterBeachfront || listing.beachfront;
-        const passesGolfCart = !filterGolfCart || listing.golfCart;
-        const passesPets = !filterPets || listing.petsAllowed;
-        const passesAccessible = !filterAccessible || listing.accessible;
-        const passesElevator = !filterElevator || listing.elevator;
+    return sourceListings.filter((listing) => {
+      const locationBlob =
+        `${listing.area} ${listing.community} ${listing.name}`.toLowerCase();
+      const passesLocation =
+        normalized.length === 0 || locationBlob.includes(normalized);
+      const passesGuests = listing.sleeps >= guestCount;
+      const passesSleeps = listing.sleeps >= minSleeps;
+      const passesBedrooms = listing.bedrooms >= minBedrooms;
+      const passesBathrooms = listing.bathrooms >= minBathrooms;
+      const passesKingBeds = listing.kingBeds >= minKingBeds;
+      const passesQueenBeds = listing.queenBeds >= minQueenBeds;
+      const passesPool = !filterPool || listing.privatePool;
+      const passesBeachfront = !filterBeachfront || listing.beachfront;
+      const passesGolfCart = !filterGolfCart || listing.golfCart;
+      const passesPets = !filterPets || listing.petsAllowed;
+      const passesAccessible = !filterAccessible || listing.accessible;
+      const passesElevator = !filterElevator || listing.elevator;
 
-        return (
-          passesLocation &&
-          passesGuests &&
-          passesSleeps &&
-          passesBedrooms &&
-          passesBathrooms &&
-          passesKingBeds &&
-          passesQueenBeds &&
-          passesPool &&
-          passesBeachfront &&
-          passesGolfCart &&
-          passesPets &&
-          passesAccessible &&
-          passesElevator
-        );
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      return (
+        passesLocation &&
+        passesGuests &&
+        passesSleeps &&
+        passesBedrooms &&
+        passesBathrooms &&
+        passesKingBeds &&
+        passesQueenBeds &&
+        passesPool &&
+        passesBeachfront &&
+        passesGolfCart &&
+        passesPets &&
+        passesAccessible &&
+        passesElevator
+      );
+    });
   }, [
     guestCount,
     locationQuery,
@@ -170,17 +253,16 @@ export function DiscoverPage() {
     filterGolfCart,
     filterPets,
     filterPool,
+    sourceListings,
   ]);
 
   const baseDisplayListings = useMemo(() => {
-    const sortedListings = [...sampleListings].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
+    const orderedListings = [...sourceListings];
     const targetMockCount = 96;
 
     return Array.from({ length: targetMockCount }, (_, index) => {
-      const baseListing = sortedListings[index % sortedListings.length];
-      const cycle = Math.floor(index / sortedListings.length) + 1;
+      const baseListing = orderedListings[index % orderedListings.length];
+      const cycle = Math.floor(index / orderedListings.length) + 1;
 
       if (cycle === 1) {
         return baseListing;
@@ -192,7 +274,7 @@ export function DiscoverPage() {
         name: `${baseListing.name} ${cycle}`,
       };
     });
-  }, []);
+  }, [sourceListings]);
 
   const displayListings = useMemo(() => {
     const listings = [...baseDisplayListings];
@@ -231,6 +313,20 @@ export function DiscoverPage() {
       return b.sleeps - a.sleeps;
     });
   }, [baseDisplayListings, sortOption]);
+
+  const mapListings = useMemo(
+    () =>
+      displayListings.map((listing) => {
+        const geoTarget = getListingGeoTarget(listing);
+        return {
+          id: listing.id,
+          name: listing.name,
+          lat: geoTarget.lat,
+          lng: geoTarget.lng,
+        };
+      }),
+    [displayListings],
+  );
 
   const areaCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -275,8 +371,8 @@ export function DiscoverPage() {
     });
 
     return [
+      { label: "Gulf Front", count: beachfrontCount },
       { label: "Private Pool", count: privatePoolCount },
-      { label: "Beach Front", count: beachfrontCount },
       { label: "Golf Cart", count: golfCartCount },
     ];
   }, [filtered]);
@@ -323,9 +419,9 @@ export function DiscoverPage() {
     minBathrooms > 0 ? `${minBathrooms}BA+` : null,
     minKingBeds > 0 ? `${minKingBeds}K+` : null,
     minQueenBeds > 0 ? `${minQueenBeds}Q+` : null,
-    filterBeachfront ? "Beachfront" : null,
-    filterPool ? "Pool" : null,
-    filterGolfCart ? "LSV" : null,
+    filterBeachfront ? "Gulf Front" : null,
+    filterPool ? "Private Pool" : null,
+    filterGolfCart ? "Golf Cart" : null,
     filterPets ? "Pets" : null,
     filterElevator ? "Elevator" : null,
     filterAccessible ? "Accessible" : null,
@@ -555,19 +651,19 @@ export function DiscoverPage() {
                     </div>
                     <div className="grid min-w-136 flex-1 grid-cols-6 gap-2">
                       <IconOptionBox
-                        label="Beachfront"
+                        label="Gulf Front"
                         selected={filterBeachfront}
                         onToggle={() => setFilterBeachfront((v) => !v)}
                         icon={<Waves className="h-5 w-5" />}
                       />
                       <IconOptionBox
-                        label="Pool"
+                        label="Private Pool"
                         selected={filterPool}
                         onToggle={() => setFilterPool((v) => !v)}
                         icon={<Droplets className="h-5 w-5" />}
                       />
                       <IconOptionBox
-                        label="LSV"
+                        label="Golf Cart"
                         selected={filterGolfCart}
                         onToggle={() => setFilterGolfCart((v) => !v)}
                         icon={<CarFront className="h-5 w-5" />}
@@ -609,10 +705,16 @@ export function DiscoverPage() {
           <DiscoverListingsPanel
             listings={displayListings}
             cardsPerRow={cardsPerRow}
-            onFocusMap={setMapTarget}
+            activeListingId={activeListingId}
+            onFocusMap={handleFocusMap}
           />
 
-          <DiscoverMapPanel mapTarget={mapTarget} />
+          <DiscoverMapPanel
+            mapTarget={mapTarget}
+            listings={mapListings}
+            onClearPin={clearPinnedListing}
+            onSelectListing={handleSelectListingFromMap}
+          />
         </div>
       </section>
     </HomeMarketingShell>

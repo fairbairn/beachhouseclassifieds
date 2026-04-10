@@ -92,6 +92,15 @@ export function getLocationPresentation(listing: DiscoverListing) {
 }
 
 export function getListingGeoTarget(listing: DiscoverListing) {
+  if (
+    Number.isFinite(listing.lat) &&
+    Number.isFinite(listing.lng) &&
+    listing.lat !== undefined &&
+    listing.lng !== undefined
+  ) {
+    return { lat: listing.lat, lng: listing.lng };
+  }
+
   const location = getLocationPresentation(listing);
   const region = getAreaFromListing(listing);
 

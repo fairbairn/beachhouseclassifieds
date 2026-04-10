@@ -18,6 +18,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiSessionRouteImport } from './routes/api/session'
 import { Route as ApiLogoutRouteImport } from './routes/api/logout'
 import { Route as ApiLoginRouteImport } from './routes/api/login'
+import { Route as ApiDiscoverListingsRouteImport } from './routes/api/discover/listings'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const LogoutRoute = LogoutRouteImport.update({
@@ -65,6 +66,11 @@ const ApiLoginRoute = ApiLoginRouteImport.update({
   path: '/api/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDiscoverListingsRoute = ApiDiscoverListingsRouteImport.update({
+  id: '/api/discover/listings',
+  path: '/api/discover/listings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/api/logout': typeof ApiLogoutRoute
   '/api/session': typeof ApiSessionRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/discover/listings': typeof ApiDiscoverListingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/api/logout': typeof ApiLogoutRoute
   '/api/session': typeof ApiSessionRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/discover/listings': typeof ApiDiscoverListingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/api/logout': typeof ApiLogoutRoute
   '/api/session': typeof ApiSessionRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/discover/listings': typeof ApiDiscoverListingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/api/logout'
     | '/api/session'
     | '/api/auth/$'
+    | '/api/discover/listings'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/api/logout'
     | '/api/session'
     | '/api/auth/$'
+    | '/api/discover/listings'
   id:
     | '__root__'
     | '/'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/api/logout'
     | '/api/session'
     | '/api/auth/$'
+    | '/api/discover/listings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -158,6 +170,7 @@ export interface RootRouteChildren {
   ApiLogoutRoute: typeof ApiLogoutRoute
   ApiSessionRoute: typeof ApiSessionRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiDiscoverListingsRoute: typeof ApiDiscoverListingsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -225,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/discover/listings': {
+      id: '/api/discover/listings'
+      path: '/api/discover/listings'
+      fullPath: '/api/discover/listings'
+      preLoaderRoute: typeof ApiDiscoverListingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -246,6 +266,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiLogoutRoute: ApiLogoutRoute,
   ApiSessionRoute: ApiSessionRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiDiscoverListingsRoute: ApiDiscoverListingsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
