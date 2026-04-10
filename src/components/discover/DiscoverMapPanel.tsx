@@ -1,6 +1,10 @@
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+<<<<<<< HEAD
 import { useCallback, useEffect, useRef, useState } from "react";
+=======
+import { useEffect, useRef, useState } from "react";
+>>>>>>> refs/remotes/origin/master
 
 import { googleMapsApiKey } from "@/components/discover/discover-data";
 
@@ -362,7 +366,11 @@ export function DiscoverMapPanel({
       map.panTo(nextCenter);
       previousPinnedListingIdRef.current = mapTarget.id;
     }
+<<<<<<< HEAD
   }, [animateZoom, clearFocusAnimation, mapTarget, mapReadyRevision]);
+=======
+  }, [mapTarget, mapReadyRevision]);
+>>>>>>> refs/remotes/origin/master
 
   return (
     <aside className="flex flex-col self-start rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] xl:sticky xl:top-28">
