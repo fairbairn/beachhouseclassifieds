@@ -1,5 +1,5 @@
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
-import { ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { googleMapsApiKey } from "@/components/discover/discover-data";
@@ -87,6 +87,8 @@ export function DiscoverMapPanel({
   listings,
   onClearPin,
   onSelectListing,
+  isExpanded,
+  onToggleExpanded,
 }: {
   mapTarget: {
     id?: string;
@@ -109,6 +111,8 @@ export function DiscoverMapPanel({
     label: string;
     zoom?: number;
   }) => void;
+  isExpanded: boolean;
+  onToggleExpanded: () => void;
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const googleMapRef = useRef<GoogleMapInstance | null>(null);
@@ -363,9 +367,26 @@ export function DiscoverMapPanel({
   return (
     <aside className="flex flex-col self-start rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] xl:sticky xl:top-28">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
-          Map View
-        </p>
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleExpanded}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-cyan-200 bg-cyan-50 text-cyan-800 transition-colors hover:bg-cyan-100"
+            aria-pressed={isExpanded}
+            aria-label={isExpanded ? "Collapse map view" : "Expand map view"}
+            title={isExpanded ? "Collapse map view" : "Expand map view"}
+          >
+            {isExpanded ? (
+              <ChevronRight className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronLeft className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <p className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
+            Map View
+          </p>
+        </div>
+
         <div className="inline-flex items-center gap-1.5">
           <button
             type="button"
@@ -392,6 +413,7 @@ export function DiscoverMapPanel({
           </a>
         </div>
       </div>
+
       <div className="relative mt-3 h-88 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-104 xl:h-[calc(100dvh-8.5rem)] xl:max-h-232 xl:min-h-136">
         {googleMapsApiKey ? (
           <div

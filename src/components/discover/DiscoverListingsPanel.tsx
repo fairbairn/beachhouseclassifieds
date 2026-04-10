@@ -20,11 +20,13 @@ import {
 export function DiscoverListingsPanel({
   listings,
   cardsPerRow,
+  singleColumnCardVariant = 3,
   activeListingId,
   onFocusMap,
 }: {
   listings: ReadonlyArray<DiscoverListing>;
-  cardsPerRow: 2 | 3 | 4;
+  cardsPerRow: 1 | 2 | 3 | 4;
+  singleColumnCardVariant?: 3 | 4;
   activeListingId?: string;
   onFocusMap: (next: {
     id: string;
@@ -69,11 +71,13 @@ export function DiscoverListingsPanel({
   }, [activeListingId, cardsPerRow]);
 
   const listingGridClass =
-    cardsPerRow === 2
-      ? "xl:grid-cols-2"
-      : cardsPerRow === 3
-        ? "xl:grid-cols-2 2xl:grid-cols-3"
-        : "xl:grid-cols-3 2xl:grid-cols-4";
+    cardsPerRow === 1
+      ? "xl:grid-cols-1"
+      : cardsPerRow === 2
+        ? "xl:grid-cols-2"
+        : cardsPerRow === 3
+          ? "xl:grid-cols-2 2xl:grid-cols-3"
+          : "xl:grid-cols-3 2xl:grid-cols-4";
 
   return (
     <div className="relative z-0 min-h-0 xl:h-full">
@@ -104,7 +108,10 @@ export function DiscoverListingsPanel({
                 const communityHighlight = location.isPlannedCommunity
                   ? location.locationChip
                   : null;
-                const isFourUpCardLayout = cardsPerRow === 4;
+                const isSingleColumnCardLayout = cardsPerRow === 1;
+                const isFourUpCardLayout =
+                  cardsPerRow === 4 ||
+                  (isSingleColumnCardLayout && singleColumnCardVariant === 4);
                 const isTwoUpCardLayout = cardsPerRow === 2;
                 const previewImages = isFourUpCardLayout
                   ? listing.previewImages.slice(0, 1)
@@ -127,7 +134,7 @@ export function DiscoverListingsPanel({
                   <article
                     key={listing.id}
                     data-listing-id={listing.id}
-                    className={`flex h-full flex-col rounded-2xl bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] ${listing.beachfront ? "border border-cyan-300 shadow-[0_0_0_1px_rgba(34,211,238,0.35),0_18px_36px_-24px_rgba(8,145,178,0.65)]" : "border border-slate-200"}`}
+                    className={`flex h-full flex-col rounded-2xl bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] ${listing.beachfront ? "border-2 border-amber-300 shadow-[0_0_0_2px_rgba(252,211,77,0.55),0_0_0_7px_rgba(251,191,36,0.2),0_24px_44px_-26px_rgba(180,83,9,0.7)]" : "border border-slate-200"}`}
                   >
                     {isTwoUpCardLayout ? (
                       <div className="mb-3 grid grid-cols-2 gap-2">

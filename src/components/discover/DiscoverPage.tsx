@@ -120,9 +120,26 @@ export function DiscoverPage() {
   const [activeListingId, setActiveListingId] = useState<string | undefined>(
     undefined,
   );
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [cardsPerRow, setCardsPerRow] = useState<2 | 3 | 4>(3);
+  const [expandedSingleCardVariant, setExpandedSingleCardVariant] = useState<
+    3 | 4
+  >(3);
   const [sortOption, setSortOption] = useState<SortOption>("recommended");
   const [fetchedListings, setFetchedListings] = useState<DiscoverListing[]>([]);
+
+  useEffect(() => {
+    const chooseVariant = () => {
+      setExpandedSingleCardVariant(window.innerWidth >= 1820 ? 4 : 3);
+    };
+
+    chooseVariant();
+    window.addEventListener("resize", chooseVariant);
+
+    return () => {
+      window.removeEventListener("resize", chooseVariant);
+    };
+  }, []);
 
   const clearPinnedListing = useCallback(() => {
     setActiveListingId(undefined);
@@ -696,7 +713,13 @@ export function DiscoverPage() {
           </div>
         </header>
 
-        <div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[240px_minmax(0,1.45fr)_400px] 2xl:grid-cols-[220px_minmax(0,1.85fr)_340px]">
+        <div
+          className={`grid gap-5 xl:min-h-0 xl:flex-1 ${
+            isMapExpanded
+              ? "xl:grid-cols-[240px_minmax(0,0.9fr)_minmax(0,2.1fr)] 2xl:grid-cols-[220px_minmax(0,0.85fr)_minmax(0,2.25fr)]"
+              : "xl:grid-cols-[240px_minmax(0,1.45fr)_400px] 2xl:grid-cols-[220px_minmax(0,1.85fr)_340px]"
+          }`}
+        >
           <DiscoverFacetSidebar
             listingCount={displayListings.length}
             areaCounts={areaCounts}
@@ -706,7 +729,8 @@ export function DiscoverPage() {
 
           <DiscoverListingsPanel
             listings={displayListings}
-            cardsPerRow={cardsPerRow}
+            cardsPerRow={isMapExpanded ? 1 : cardsPerRow}
+            singleColumnCardVariant={expandedSingleCardVariant}
             activeListingId={activeListingId}
             onFocusMap={handleFocusMap}
           />
@@ -716,6 +740,8 @@ export function DiscoverPage() {
             listings={mapListings}
             onClearPin={clearPinnedListing}
             onSelectListing={handleSelectListingFromMap}
+            isExpanded={isMapExpanded}
+            onToggleExpanded={() => setIsMapExpanded((current) => !current)}
           />
         </div>
       </section>

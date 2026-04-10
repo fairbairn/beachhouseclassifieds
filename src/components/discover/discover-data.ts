@@ -881,13 +881,13 @@ export const sampleListings: DiscoverListing[] = [
     kingBeds: 2,
     queenBeds: 3,
     privatePool: true,
-    beachfront: true,
+    beachfront: false,
     golfCart: false,
     petsAllowed: false,
     accessible: false,
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
-    typicalPrice: "$9.8k - $12.1k",
+    typicalPrice: "$8.4k - $10.7k",
   },
   {
     id: "watercolor-79-dandelion-1297",
@@ -2069,13 +2069,13 @@ export const sampleListings: DiscoverListing[] = [
     kingBeds: 1,
     queenBeds: 2,
     privatePool: true,
-    beachfront: true,
+    beachfront: false,
     golfCart: false,
     petsAllowed: false,
     accessible: false,
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
-    typicalPrice: "$9.1k - $11.4k",
+    typicalPrice: "$7.7k - $10.0k",
   },
   {
     id: "dune-our-thing",
@@ -2142,7 +2142,7 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$9.8k - $12.1k",
-  },
+  }
 ];
 
 export const known30AAreas = ["West 30A", "Central 30A", "East 30A"];
