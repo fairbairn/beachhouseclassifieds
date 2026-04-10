@@ -3,6 +3,11 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import {
+  canonicalizeExternalListingId,
+  externalListingIdFromDetailUrl,
+} from "@/lib/pricing/shared/external-listing-id";
+
 const chalk = new Chalk({ level: 1 });
 
 type CliOptions = {
@@ -59,25 +64,6 @@ function parseArgs(argv: string[]): CliOptions {
 
 function normalizeFileBase(name: string, extension: string): string {
   return name.endsWith(extension) ? name.slice(0, -extension.length) : name;
-}
-
-function externalIdFromDetailUrl(detailUrl: string): string {
-  const normalized = detailUrl.trim();
-  if (!normalized) {
-    return "";
-  }
-
-  try {
-    const parsed = new URL(normalized);
-    const path = parsed.pathname.replace(/\/$/, "");
-    const lastSegment = path.split("/").filter(Boolean).pop() ?? "";
-    return decodeURIComponent(lastSegment).trim();
-  } catch {
-    const withoutQuery = normalized.split("?")[0]?.split("#")[0] ?? normalized;
-    const path = withoutQuery.replace(/\/$/, "");
-    const lastSegment = path.split("/").filter(Boolean).pop() ?? "";
-    return decodeURIComponent(lastSegment).trim();
-  }
 }
 
 async function listFiles(
@@ -194,7 +180,7 @@ export async function runValidateScrapeFilenameAlignmentCli(
       continue;
     }
 
-    const expectedFromDetailUrl = externalIdFromDetailUrl(detailUrl);
+    const expectedFromDetailUrl = externalListingIdFromDetailUrl(detailUrl);
     if (!expectedFromDetailUrl) {
       issues.push({
         code: "detail_url_identifier_invalid",
@@ -203,31 +189,35 @@ export async function runValidateScrapeFilenameAlignmentCli(
       continue;
     }
 
-    if (externalListingId !== expectedFromDetailUrl) {
+    const canonicalExternalListingId =
+      canonicalizeExternalListingId(externalListingId);
+    const canonicalFileBase = canonicalizeExternalListingId(fileBase);
+
+    if (canonicalExternalListingId !== expectedFromDetailUrl) {
       issues.push({
         code: "external_id_not_from_detail_url",
-        message: `details/json/${fileName} external_listing_id='${externalListingId}' but detail_url identifier='${expectedFromDetailUrl}'`,
+        message: `details/json/${fileName} external_listing_id='${externalListingId}' canonical='${canonicalExternalListingId}' but detail_url canonical identifier='${expectedFromDetailUrl}'`,
       });
     }
 
-    if (fileBase !== externalListingId) {
+    if (canonicalFileBase !== canonicalExternalListingId) {
       issues.push({
         code: "json_filename_mismatch",
-        message: `details/json/${fileName} filename id='${fileBase}' but external_listing_id='${externalListingId}'`,
+        message: `details/json/${fileName} filename id='${fileBase}' canonical='${canonicalFileBase}' but external_listing_id='${externalListingId}' canonical='${canonicalExternalListingId}'`,
       });
     }
 
-    const existing = primaryIdToFile.get(externalListingId);
+    const existing = primaryIdToFile.get(canonicalExternalListingId);
     if (existing && existing !== fileName) {
       issues.push({
         code: "duplicate_primary_external_id",
-        message: `duplicate external_listing_id='${externalListingId}' in details/json/${existing} and details/json/${fileName}`,
+        message: `duplicate canonical external_listing_id='${canonicalExternalListingId}' in details/json/${existing} and details/json/${fileName}`,
       });
     } else {
-      primaryIdToFile.set(externalListingId, fileName);
+      primaryIdToFile.set(canonicalExternalListingId, fileName);
     }
 
-    primaryIds.add(externalListingId);
+    primaryIds.add(canonicalExternalListingId);
   }
 
   const artifactChecks: Array<{
@@ -264,7 +254,8 @@ export async function runValidateScrapeFilenameAlignmentCli(
 
     for (const fileName of files) {
       const fileBase = normalizeFileBase(fileName, artifact.ext);
-      if (!primaryIds.has(fileBase)) {
+      const canonicalFileBase = canonicalizeExternalListingId(fileBase);
+      if (!primaryIds.has(canonicalFileBase)) {
         issues.push({
           code: "orphan_artifact",
           message: `details/${artifact.label}/${fileName} has no matching primary extraction external_listing_id`,

@@ -1,5 +1,6 @@
 import { executeDunevr30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/dunevr30a";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
+import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -356,7 +357,7 @@ function normalizeSeoPath(value: string): string {
 }
 
 function normalizeSeoLookupKey(value: string): string {
-  return normalizeSeoPath(value).replace(/'/g, "");
+  return canonicalizeExternalListingId(normalizeSeoPath(value));
 }
 
 function detailUrlFromSeoPath(origin: string, seoPath: string): string {
@@ -377,13 +378,7 @@ function extractSeoPathFromDetailUrl(detailUrl: string): string {
 }
 
 function extractExternalListingSlug(value: string): string {
-  const normalized = normalizeSeoLookupKey(value);
-  if (!normalized) {
-    return "";
-  }
-
-  const parts = normalized.split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? "";
+  return canonicalizeExternalListingId(value);
 }
 
 function extractUnitIdFromHtml(html: string): string | null {

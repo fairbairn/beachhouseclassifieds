@@ -21,6 +21,7 @@ type CliOptions = {
   includeBookingFetch: boolean;
   continueOnError: boolean;
   summaryOnly: boolean;
+  jsonOutput: boolean;
 };
 
 type QuoteObservation = {
@@ -268,6 +269,7 @@ function parseArgs(argv: string[]): CliOptions {
   let includeBookingFetch = false;
   let continueOnError = true;
   let summaryOnly = false;
+  let jsonOutput = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -367,6 +369,11 @@ function parseArgs(argv: string[]): CliOptions {
       summaryOnly = true;
       continue;
     }
+
+    if (arg === "--json") {
+      jsonOutput = true;
+      continue;
+    }
   }
 
   return {
@@ -383,6 +390,7 @@ function parseArgs(argv: string[]): CliOptions {
     includeBookingFetch,
     continueOnError,
     summaryOnly,
+    jsonOutput,
   };
 }
 
@@ -1210,7 +1218,7 @@ async function runForAdapter(
     };
   }
 
-  if (!options.summaryOnly) {
+  if (!options.summaryOnly && !options.jsonOutput) {
     console.log(
       paint(
         `\nAdapter ${adapterKey}: selected ${samples.length} listings (min available observations: ${options.minAvailableObservations})`,
@@ -1254,23 +1262,27 @@ async function runForAdapter(
         failCount += 1;
       }
 
-      writeProgressLine(
-        `${renderProgressBar({
-          completed,
-          total: totalRequests,
-          ok: okCount,
-          fail: failCount,
-          adapterKey,
-          phase: "run",
-        })} ${paint(sample.listingId, COLOR.dim)} ${fmtMsCompact(result.elapsedMs)}${
-          result.reason && !result.success
-            ? ` ${paint(result.reason, COLOR.red)}`
-            : ""
-        }`,
-      );
+      if (!options.jsonOutput) {
+        writeProgressLine(
+          `${renderProgressBar({
+            completed,
+            total: totalRequests,
+            ok: okCount,
+            fail: failCount,
+            adapterKey,
+            phase: "run",
+          })} ${paint(sample.listingId, COLOR.dim)} ${fmtMsCompact(result.elapsedMs)}${
+            result.reason && !result.success
+              ? ` ${paint(result.reason, COLOR.red)}`
+              : ""
+          }`,
+        );
+      }
     }
   }
-  clearProgressLine();
+  if (!options.jsonOutput) {
+    clearProgressLine();
+  }
 
   const successful = results.filter((item) => item.success);
   const failed = results.length - successful.length;
@@ -1566,42 +1578,89 @@ async function main(): Promise<void> {
       });
     }
 
-    console.log(paint("Ad-hoc Single Quote Latency Analyzer", COLOR.bold));
-    console.log(
-      paint(
-        `mode=single adapter=${adapterKey} listing=${sample.listingId} start=${sample.startDate} end=${sample.endDate} random_single=${options.randomSingle}`,
-        COLOR.dim,
-      ),
-    );
-
     const result = await runSingleQuoteRequestOnceWithTimeout(sample, options);
-    printSingleQuoteReport({
-      adapterKey,
-      sample,
-      result,
-      adults: options.adults,
-      children: options.children,
-    });
+    if (options.jsonOutput) {
+      const baseTotal = result.observationSample.baseTotal;
+      const feesTotal = result.observationSample.feesTotalExclTaxes;
+      const subTotal =
+        typeof baseTotal === "number" && typeof feesTotal === "number"
+          ? roundCurrency(baseTotal + feesTotal)
+          : null;
+
+      console.log(
+        JSON.stringify(
+          {
+            mode: "single",
+            adapterKey,
+            randomSingle: options.randomSingle,
+            guests: {
+              adults: options.adults,
+              children: options.children,
+            },
+            sample: {
+              listingId: sample.listingId,
+              detailUrl: sample.detailUrl,
+              startDate: sample.startDate,
+              endDate: sample.endDate,
+            },
+            result,
+            pricing: {
+              currency: result.observationSample.currency,
+              baseTotal,
+              feesTotalExclTaxes: feesTotal,
+              subTotal,
+              taxesTotal: result.observationSample.taxesTotal,
+              grandTotal: result.observationSample.grandTotal,
+              quotedTotal: result.observationSample.quotedTotal,
+            },
+            urls: {
+              detailUrl: sample.detailUrl || null,
+              handoffUrl: result.observationSample.handoffUrl,
+            },
+          },
+          null,
+          2,
+        ),
+      );
+    } else {
+      console.log(paint("Ad-hoc Single Quote Latency Analyzer", COLOR.bold));
+      console.log(
+        paint(
+          `mode=single adapter=${adapterKey} listing=${sample.listingId} start=${sample.startDate} end=${sample.endDate} random_single=${options.randomSingle}`,
+          COLOR.dim,
+        ),
+      );
+      printSingleQuoteReport({
+        adapterKey,
+        sample,
+        result,
+        adults: options.adults,
+        children: options.children,
+      });
+    }
+
     if (!result.success) {
       process.exitCode = 1;
     }
     return;
   }
 
-  console.log(paint("Ad-hoc Single Quote Latency Analyzer", COLOR.bold));
-  console.log(
-    paint(
-      `adapters=${adapters.join(",")} sample_listings=${options.sampleListings} repeats=${options.repeats} min_available_observations=${options.minAvailableObservations} include_booking_fetch=${options.includeBookingFetch} summary_only=${options.summaryOnly}`,
-      COLOR.dim,
-    ),
-  );
+  if (!options.jsonOutput) {
+    console.log(paint("Ad-hoc Single Quote Latency Analyzer", COLOR.bold));
+    console.log(
+      paint(
+        `adapters=${adapters.join(",")} sample_listings=${options.sampleListings} repeats=${options.repeats} min_available_observations=${options.minAvailableObservations} include_booking_fetch=${options.includeBookingFetch} summary_only=${options.summaryOnly}`,
+        COLOR.dim,
+      ),
+    );
+  }
 
   const results: AdapterRunResult[] = [];
   for (const adapterKey of adapters) {
     const result = await runForAdapter(adapterKey, options);
     results.push(result);
 
-    if (result.failureReason) {
+    if (result.failureReason && !options.jsonOutput) {
       console.log(
         paint(
           `Adapter ${adapterKey} failed: ${result.failureReason}`,
@@ -1614,6 +1673,41 @@ async function main(): Promise<void> {
     }
   }
 
+  const successfulAdapters = results.filter(
+    (item) => item.failureReason === null,
+  );
+  const failedAdapters = results.length - successfulAdapters.length;
+
+  if (options.jsonOutput) {
+    console.log(
+      JSON.stringify(
+        {
+          mode: "batch",
+          options: {
+            adapters,
+            sampleListings: options.sampleListings,
+            repeats: options.repeats,
+            minAvailableObservations: options.minAvailableObservations,
+            adults: options.adults,
+            children: options.children,
+            includeBookingFetch: options.includeBookingFetch,
+            continueOnError: options.continueOnError,
+            summaryOnly: options.summaryOnly,
+          },
+          results,
+          overall: {
+            adaptersTotal: results.length,
+            adaptersSuccessful: successfulAdapters.length,
+            adaptersFailed: failedAdapters,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   printAdapterSummaryTable(results);
 
   if (!options.summaryOnly) {
@@ -1621,11 +1715,6 @@ async function main(): Promise<void> {
       printPerAdapterListingLatencyTable(result);
     }
   }
-
-  const successfulAdapters = results.filter(
-    (item) => item.failureReason === null,
-  );
-  const failedAdapters = results.length - successfulAdapters.length;
 
   console.log(`\n${paint("Overall", COLOR.bold)}`);
   console.log(`- adapters_total: ${results.length}`);
@@ -1639,6 +1728,22 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(paint(`ad-hoc quote latency failed: ${message}`, COLOR.red));
+  const options = parseArgs(process.argv.slice(2));
+  if (options.jsonOutput) {
+    console.error(
+      JSON.stringify(
+        {
+          success: false,
+          error: {
+            message,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+  } else {
+    console.error(paint(`ad-hoc quote latency failed: ${message}`, COLOR.red));
+  }
   process.exitCode = 1;
 });

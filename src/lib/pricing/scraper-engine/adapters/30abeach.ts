@@ -1,5 +1,6 @@
 import { execute30ABeachSingleQuote } from "@/lib/pricing/quote-runtime/adapters/30abeach";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
+import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -369,7 +370,7 @@ function normalizeSeoPath(value: string): string {
 }
 
 function normalizeSeoLookupKey(value: string): string {
-  return normalizeSeoPath(value).replace(/'/g, "");
+  return canonicalizeExternalListingId(normalizeSeoPath(value));
 }
 
 function detailUrlFromSeoPath(origin: string, seoPath: string): string {
@@ -393,14 +394,12 @@ function externalListingIdFromDetailUrl(
   detailUrl: string,
   fallbackUnitId: string,
 ): string {
-  const seoPath = extractSeoPathFromDetailUrl(detailUrl);
-  if (!seoPath) {
+  const externalListingId = canonicalizeExternalListingId(detailUrl);
+  if (!externalListingId) {
     return fallbackUnitId;
   }
 
-  const segments = seoPath.split("/").filter((segment) => segment.length > 0);
-  const leaf = segments[segments.length - 1] ?? "";
-  return leaf || fallbackUnitId;
+  return externalListingId;
 }
 
 function extractUnitIdFromHtml(html: string): string | null {

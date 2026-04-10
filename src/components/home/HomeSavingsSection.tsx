@@ -71,17 +71,16 @@ export function HomeSavingsSection() {
           <div className="overflow-x-auto">
             <table className="w-full table-fixed text-left">
               <colgroup>
-                <col className="w-[30%]" />
-                <col className="w-[20%]" />
-                <col className="w-[20%]" />
-                <col className="w-[18%]" />
-                <col className="w-[12%]" />
+                <col className="w-[34%]" />
+                <col className="w-[22%]" />
+                <col className="w-[22%]" />
+                <col className="w-[22%]" />
               </colgroup>
               <thead className="bg-slate-50">
                 <tr className="text-xs font-bold tracking-[0.16em] text-slate-400 uppercase md:text-sm">
                   <th className="px-6 py-4">Vacation Rental</th>
                   <th className="px-6 py-4 text-right">VRBO</th>
-                  <th className="px-6 py-4 text-right tracking-normal normal-case">
+                  <th className="py-4 pr-8 pl-6 text-right tracking-normal normal-case">
                     <span
                       className="text-2xl leading-none font-semibold text-slate-900 md:text-3xl"
                       style={{ fontFamily: "'Playfair Display', serif" }}
@@ -89,9 +88,36 @@ export function HomeSavingsSection() {
                       30<span className="text-[#2DD4BF]">A</span>
                     </span>
                   </th>
-                  <th className="px-6 py-4 text-center" colSpan={2}>
-                    <span className="inline-block translate-x-5 md:translate-x-6">
-                      You Could Save
+                  <th className="px-6 py-4 text-right tracking-normal normal-case">
+                    <span
+                      className="relative mr-1 inline-block text-2xl leading-tight font-normal tracking-tight text-slate-900 md:mr-1.5 md:text-3xl"
+                      style={{ fontFamily: "'Playfair Display', serif" }}
+                    >
+                      You{" "}
+                      <span className="relative inline-block">
+                        Save
+                        <svg
+                          className="pointer-events-none absolute top-[88%] left-[-14%] h-10 w-[130%] text-[#2DD4BF]"
+                          viewBox="0 0 300 40"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M8 24C70 8 218 6 292 20"
+                            stroke="currentColor"
+                            strokeWidth="9"
+                            strokeLinecap="round"
+                          />
+                          <path
+                            d="M16 34C94 18 220 18 286 34"
+                            stroke="currentColor"
+                            strokeWidth="4.5"
+                            strokeLinecap="round"
+                            opacity="0.85"
+                          />
+                        </svg>
+                      </span>
                     </span>
                   </th>
                 </tr>
@@ -99,7 +125,6 @@ export function HomeSavingsSection() {
               <tbody>
                 {SAMPLE_ROWS.map((row) => {
                   const savings = row.vrboTotal - row.ourTotal;
-                  const savedPct = Math.round((savings / row.vrboTotal) * 100);
 
                   return (
                     <tr
@@ -121,14 +146,9 @@ export function HomeSavingsSection() {
                         {money.format(row.ourTotal)}
                       </td>
                       <td
-                        className={`px-6 py-5 text-right tabular-nums ${SAVINGS_VALUE_SIZE} font-bold text-[#14B8A6]`}
+                        className={`py-5 pr-8 pl-6 text-right tabular-nums ${SAVINGS_VALUE_SIZE} font-bold text-[#14B8A6]`}
                       >
                         {money.format(savings)}
-                      </td>
-                      <td
-                        className={`px-4 py-5 text-center ${SAVINGS_VALUE_SIZE} font-medium text-[#14B8A6]/85`}
-                      >
-                        {savedPct}%
                       </td>
                     </tr>
                   );
