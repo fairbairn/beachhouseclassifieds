@@ -27,6 +27,7 @@ export function DiscoverListingsPanel({
   favoriteIds,
   onToggleFavorite,
   onFocusMap,
+  nights,
 }: {
   listings: ReadonlyArray<DiscoverListing>;
   cardsPerRow: 1 | 2 | 3 | 4;
@@ -43,6 +44,7 @@ export function DiscoverListingsPanel({
     label: string;
     zoom?: number;
   }) => void;
+  nights: number;
 }) {
   const [isReturnToTopPulsing, setIsReturnToTopPulsing] = useState(false);
   const cardsScrollRef = useRef<HTMLDivElement | null>(null);
@@ -101,8 +103,8 @@ export function DiscoverListingsPanel({
     }
 
     scrollContainer.scrollTo({
-      top: clampedTop,
       behavior: "smooth",
+      top: clampedTop,
     });
   }, [activeListingId, cardsPerRow, scrollToListingRequestToken]);
 
@@ -181,6 +183,11 @@ export function DiscoverListingsPanel({
           ? "xl:grid-cols-2 2xl:grid-cols-3"
           : "xl:grid-cols-3 2xl:grid-cols-4";
 
+  const formatApproximateTotal = (allInNightly: number) => {
+    const roundedTotal = Math.ceil(allInNightly * nights);
+    return `$${roundedTotal.toLocaleString("en-US")}`;
+  };
+
   return (
     <div className="relative z-0 min-h-0 xl:h-full">
       <div className="pointer-events-none absolute -top-4 -right-1 -bottom-1 -left-1 z-0 rounded-2xl border border-white/35 bg-white/18 backdrop-blur-md xl:-top-24 xl:-right-2 xl:-left-2" />
@@ -236,7 +243,7 @@ export function DiscoverListingsPanel({
                   <article
                     key={listing.id}
                     data-listing-id={listing.id}
-                    className={`flex h-full flex-col rounded-2xl bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] ${listing.beachfront ? "border-2 border-amber-300 shadow-[0_0_0_2px_rgba(252,211,77,0.55),0_0_0_7px_rgba(251,191,36,0.2),0_24px_44px_-26px_rgba(180,83,9,0.7)]" : "border border-slate-200"}`}
+                    className={`flex h-full flex-col rounded-2xl bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] ${listing.beachfront ? "border-[3px] border-amber-300 shadow-[0_0_24px_7px_rgba(251,191,36,0.5),0_32px_60px_-20px_rgba(180,83,9,0.82)] drop-shadow-[0_0_16px_rgba(251,191,36,0.6)]" : "border border-slate-200"}`}
                   >
                     {isTwoUpCardLayout ? (
                       <div className="mb-3 grid grid-cols-2 gap-2">
@@ -332,7 +339,7 @@ export function DiscoverListingsPanel({
                         {listing.sleeps}
                       </p>
                       {communityHighlight ? (
-                        <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-100 px-2.5 py-1 text-[11px] font-bold text-indigo-900">
+                        <span className="shrink-0 rounded-full border border-teal-300 bg-teal-100 px-2.5 py-1 text-[11px] font-semibold text-teal-900">
                           {communityHighlight}
                         </span>
                       ) : null}
@@ -358,10 +365,10 @@ export function DiscoverListingsPanel({
 
                     <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
                       <span className="text-[11px] text-slate-500">
-                        Typical pricing
+                        {`Typical pricing for ${nights} ${nights === 1 ? "night" : "nights"} in ${listing.typicalPricingMonth}`}
                       </span>
                       <strong className="text-xs text-slate-900">
-                        {listing.typicalPrice}
+                        {formatApproximateTotal(listing.typicalAllInNightly)}
                       </strong>
                     </div>
                   </article>

@@ -17,12 +17,16 @@ export type DiscoverListing = {
   queenBeds: number;
   privatePool: boolean;
   beachfront: boolean;
+  gulfView?: boolean;
   golfCart: boolean;
   petsAllowed: boolean;
   accessible: boolean;
   elevator: boolean;
   previewImages: string[];
   typicalPrice: string;
+  typicalPricingMonth: string;
+  typicalBaseNightly: number;
+  typicalAllInNightly: number;
 };
 
 export const googleMapsApiKey =
@@ -52,6 +56,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 659,
+    typicalAllInNightly: 738,
   },
   {
     id: "watersound-west-beach-adventure-west-25-full-moon-lane-262",
@@ -74,6 +81,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 518,
+    typicalAllInNightly: 580,
   },
   {
     id: "prominence-four-buoys-and-a-birdie-24-w-crabbing-hole-lane-178",
@@ -96,6 +106,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 802,
+    typicalAllInNightly: 898,
   },
   {
     id: "watercolor-72-buttercup-street-1291",
@@ -118,6 +131,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$7.7k - $10.0k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 989,
+    typicalAllInNightly: 1107,
   },
   {
     id: "watersound-seaglass-152-e-yacht-pond-lane-1333",
@@ -140,6 +156,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1116,
+    typicalAllInNightly: 1250,
   },
   {
     id: "watercolor-214-spartina-circle-2818",
@@ -162,6 +181,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 691,
+    typicalAllInNightly: 774,
   },
   {
     id: "watersound-45-tidal-bridge-way-1357",
@@ -184,6 +206,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$8.3k - $10.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 860,
+    typicalAllInNightly: 963,
   },
   {
     id: "watercolor-white-sands-and-suntans-34-pine-needle-way-1242",
@@ -206,6 +231,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$8.4k - $10.7k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1042,
+    typicalAllInNightly: 1167,
   },
   {
     id: "watersound-seabatical-230-salt-box-lane-1343",
@@ -228,6 +256,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 676,
+    typicalAllInNightly: 757,
   },
   {
     id: "grayton-beach-bella-waves-60-hotz-avenue-418",
@@ -250,6 +281,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$9.8k - $12.1k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 3539,
+    typicalAllInNightly: 3964,
   },
   {
     id: "seacrest-beach-the-chill-out-27-blue-dolphin-court-2945",
@@ -272,6 +306,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 783,
+    typicalAllInNightly: 877,
   },
   {
     id: "seagrove-beach-whake-up-172-chivas-lane-815",
@@ -294,6 +331,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$11.9k - $14.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2170,
+    typicalAllInNightly: 2431,
   },
   {
     id: "the-odessa",
@@ -316,6 +356,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$9.8k - $12.1k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 650,
+    typicalAllInNightly: 728,
   },
   {
     id: "watercolor-241-red-cedar-way-1218",
@@ -338,6 +381,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$9.7k - $12.0k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1371,
+    typicalAllInNightly: 1535,
   },
   {
     id: "blue-mountain-66-s-spooky-lane-83",
@@ -360,6 +406,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$10.5k - $12.8k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1741,
+    typicalAllInNightly: 1950,
   },
   {
     id: "dune-our-thing",
@@ -382,13 +431,16 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$8.4k - $10.7k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 650,
+    typicalAllInNightly: 728,
   },
   {
     id: "watercolor-sunny-side-up-568-east-royal-fern-way-1277",
     name: "Sunny Side Up",
     demoOrder: 626608498,
     area: "Seagrove Beach",
-    community: "WaterColor",
+    community: "Seagrove Beach",
     lat: 30.32754,
     lng: -86.1201,
     bedrooms: 5,
@@ -404,6 +456,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 943,
+    typicalAllInNightly: 1056,
   },
   {
     id: "seagrove-beach-fore-seasons-392-wood-beach-drive-221",
@@ -426,6 +481,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 748,
+    typicalAllInNightly: 838,
   },
   {
     id: "watercolor-beach-haven-604-western-lake-drive-1282",
@@ -448,6 +506,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 752,
+    typicalAllInNightly: 842,
   },
   {
     id: "watercolor-99-mystic-cobalt-street-1326",
@@ -470,6 +531,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$8.3k - $10.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1812,
+    typicalAllInNightly: 2029,
   },
   {
     id: "watercolor-happy-place-370-spartina-circle-1249",
@@ -492,6 +556,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 991,
+    typicalAllInNightly: 1110,
   },
   {
     id: "watercolor-62-royal-fern-way-248",
@@ -514,6 +581,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 605,
+    typicalAllInNightly: 678,
   },
   {
     id: "watercolor-outta-the-blue-32-bluestem-lane-1238",
@@ -536,13 +606,16 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1051,
+    typicalAllInNightly: 1177,
   },
   {
     id: "seagrove-beach-seabelle-on-30a-239-sand-oaks-circle-219",
     name: "SeaBelle on 30A",
     demoOrder: 885237625,
     area: "Seagrove Beach",
-    community: "WaterColor",
+    community: "Seagrove Beach",
     lat: 30.31025,
     lng: -86.10384,
     bedrooms: 3,
@@ -558,6 +631,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 485,
+    typicalAllInNightly: 544,
   },
   {
     id: "watercolor-79-dandelion-1297",
@@ -580,13 +656,16 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$9.0k - $11.3k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1457,
+    typicalAllInNightly: 1632,
   },
   {
     id: "the-pearl-on-grove",
     name: "The Pearl on Grove",
     demoOrder: 926624848,
     area: "Seagrove Beach",
-    community: "WaterColor",
+    community: "Seagrove Beach",
     lat: 30.31859,
     lng: -86.12951,
     bedrooms: 3,
@@ -602,12 +681,15 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.7k - $10.0k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 650,
+    typicalAllInNightly: 728,
   },
   {
     id: "seagrove-beach-feeling-tipsea-67-montigo-avenue-851",
     name: "Feeling Tipsea",
     demoOrder: 941042679,
-    area: "Seagrove Beach",
+    community: "Seagrove Beach",
     community: "Seagrove Beach",
     lat: 30.31528,
     lng: -86.11829,
@@ -624,12 +706,15 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$11.2k - $13.5k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2558,
+    typicalAllInNightly: 2865,
   },
   {
     id: "watercolor-70-red-cedar-way-1290",
     name: "70 Red Cedar Way",
     demoOrder: 972087222,
-    area: "Seagrove Beach",
+    community: "Seagrove Beach",
     community: "WaterColor",
     lat: 30.327,
     lng: -86.13324,
@@ -646,12 +731,15 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 696,
+    typicalAllInNightly: 780,
   },
   {
     id: "watercolor-searendipity-108-scrub-oak-circle-235",
     name: "Searendipity",
     demoOrder: 1050519288,
-    area: "Seagrove Beach",
+    community: "Seagrove Beach",
     community: "WaterColor",
     lat: 30.32663,
     lng: -86.13609,
@@ -668,6 +756,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1050,
+    typicalAllInNightly: 1176,
   },
   {
     id: "blue-mountain-beach-serenity-dunes-299-old-beach-road-69",
@@ -690,6 +781,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$8.3k - $10.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1638,
+    typicalAllInNightly: 1834,
   },
   {
     id: "seacrest-beach-three-little-birds-30-barefoot-lane-183",
@@ -712,6 +806,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1087,
+    typicalAllInNightly: 1217,
   },
   {
     id: "watercolor-mint-julep-378-western-lake-drive-1250",
@@ -734,6 +831,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 845,
+    typicalAllInNightly: 946,
   },
   {
     id: "seagrove-beach-8-degrees-of-separation-45-sea-walk-circle-844",
@@ -756,6 +856,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$12.6k - $14.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 5232,
+    typicalAllInNightly: 5860,
   },
   {
     id: "seacrest-beach-gotta-lovitt-150-walton-gulfview-drive-772",
@@ -778,6 +881,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1174,
+    typicalAllInNightly: 1315,
   },
   {
     id: "watercolor-yolo-800-western-lake-1302",
@@ -800,6 +906,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 737,
+    typicalAllInNightly: 826,
   },
   {
     id: "seagrove-seasons-in-the-sun-140-dalton-drive-808",
@@ -822,6 +931,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1386,
+    typicalAllInNightly: 1552,
   },
   {
     id: "watercolor-28-red-cedar-way-1227",
@@ -844,6 +956,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 949,
+    typicalAllInNightly: 1062,
   },
   {
     id: "grayton-beach-grayton-bliss-120-banfill-street-167",
@@ -866,6 +981,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1272,
+    typicalAllInNightly: 1425,
   },
   {
     id: "inlet-beach-somewhere-in-the-sun-15-pompano-street-172",
@@ -888,6 +1006,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 871,
+    typicalAllInNightly: 976,
   },
   {
     id: "watercolor-magnolia-house-592-western-lake-drive-247",
@@ -910,6 +1031,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 865,
+    typicalAllInNightly: 969,
   },
   {
     id: "seagrove-beach-34-seagrove-village-dr-220",
@@ -932,6 +1056,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 733,
+    typicalAllInNightly: 821,
   },
   {
     id: "watercolor-wispy-waters-73-western-lake-drive-1292",
@@ -954,6 +1081,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 4179,
+    typicalAllInNightly: 4680,
   },
   {
     id: "watersound-83-west-salt-box-lane-1368",
@@ -976,6 +1106,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1065,
+    typicalAllInNightly: 1193,
   },
   {
     id: "watercolor-421-western-lake-drive-1258",
@@ -998,6 +1131,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$8.3k - $10.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1157,
+    typicalAllInNightly: 1296,
   },
   {
     id: "seagrove-beach-3036-east-county-highway-30a-2996",
@@ -1020,6 +1156,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$11.9k - $14.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 4448,
+    typicalAllInNightly: 4982,
   },
   {
     id: "seagrove-beach-mia-s-place-22-south-gulf-drive-217",
@@ -1042,6 +1181,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$8.4k - $10.7k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 489,
+    typicalAllInNightly: 548,
   },
   {
     id: "seacrest-beach-amazing-grace-8915-e-co-hwy-30a-796",
@@ -1064,6 +1206,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$11.2k - $13.5k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2465,
+    typicalAllInNightly: 2761,
   },
   {
     id: "watercolor-summer-house-memory-26-mist-flower-lane-1221",
@@ -1086,6 +1231,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$8.3k - $10.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1060,
+    typicalAllInNightly: 1187,
   },
   {
     id: "21-hamilton-lane",
@@ -1108,6 +1256,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 650,
+    typicalAllInNightly: 728,
   },
   {
     id: "watercolor-healing-palms-295-west-lake-forest-drive-241",
@@ -1130,6 +1281,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 879,
+    typicalAllInNightly: 984,
   },
   {
     id: "seacrest-beach-the-sea-shak-41-green-street-780",
@@ -1152,13 +1306,16 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$11.2k - $13.5k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 3555,
+    typicalAllInNightly: 3981,
   },
   {
     id: "watercolor-blessings-by-the-sea-160-e-royal-fern-way-1203",
     name: "Blessings by the Sea",
     demoOrder: 2201272248,
     area: "Seagrove Beach",
-    community: "WaterColor",
+    community: "Seagrove Beach",
     lat: 30.323,
     lng: -86.12307,
     bedrooms: 4,
@@ -1174,6 +1331,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$8.4k - $10.7k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1394,
+    typicalAllInNightly: 1561,
   },
   {
     id: "seagrove-sunset-sands-3325-east-co-hwy-30a-833",
@@ -1196,6 +1356,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$10.5k - $12.8k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2175,
+    typicalAllInNightly: 2436,
   },
   {
     id: "seacrest-beach-heaven-on-30a-145-clareon-drive-771",
@@ -1218,6 +1381,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$8.4k - $10.7k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 858,
+    typicalAllInNightly: 961,
   },
   {
     id: "blue-mountain-spooky-blues-48-n-spooky-lane-154",
@@ -1240,6 +1406,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 929,
+    typicalAllInNightly: 1041,
   },
   {
     id: "watersound-time-of-your-life-86-compass-point-way-1370",
@@ -1262,6 +1431,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$9.8k - $12.1k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1969,
+    typicalAllInNightly: 2206,
   },
   {
     id: "grayton-beach-grayt-dreams-and-graytness-158-grayton-village-road-2982",
@@ -1284,6 +1456,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$21.0k - $23.3k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1841,
+    typicalAllInNightly: 2061,
   },
   {
     id: "watersound-30-a-ok-265-salt-box-lane-1349",
@@ -1306,6 +1481,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 724,
+    typicalAllInNightly: 811,
   },
   {
     id: "watercolor-7th-heaven-82-flatwood-st-1306",
@@ -1328,13 +1506,16 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$8.3k - $10.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 946,
+    typicalAllInNightly: 1059,
   },
   {
     id: "watercolor-sea-la-vie-301-east-royal-fern-1234",
     name: "Sea-La-Vie",
     demoOrder: 2409884260,
     area: "Seagrove Beach",
-    community: "WaterColor",
+    community: "Seagrove Beach",
     lat: 30.32424,
     lng: -86.12157,
     bedrooms: 4,
@@ -1350,6 +1531,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$8.4k - $10.7k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 591,
+    typicalAllInNightly: 662,
   },
   {
     id: "rosemary-beach-the-beach-house-106-rosemary-avenue-2955",
@@ -1372,6 +1556,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 705,
+    typicalAllInNightly: 789,
   },
   {
     id: "seagrove-beach-white-azaela-77-azalea-st-860",
@@ -1394,6 +1581,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$9.8k - $12.1k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2020,
+    typicalAllInNightly: 2262,
   },
   {
     id: "blue-mountain-beach-olive-at-the-beach-122-sand-dunes-137",
@@ -1416,6 +1606,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1045,
+    typicalAllInNightly: 1170,
   },
   {
     id: "watercolor-the-way-we-like-it-27-running-oak-circle-1224",
@@ -1438,6 +1631,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$9.8k - $12.1k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1831,
+    typicalAllInNightly: 2050,
   },
   {
     id: "watersound-moonstone-10-tidepool-lane-1329",
@@ -1460,6 +1656,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$8.3k - $10.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1450,
+    typicalAllInNightly: 1624,
   },
   {
     id: "watercolor-64-vermilion-way-1283",
@@ -1482,6 +1681,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1539,
+    typicalAllInNightly: 1723,
   },
   {
     id: "watercolor-143-buttercup-st-1193",
@@ -1504,6 +1706,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 708,
+    typicalAllInNightly: 793,
   },
   {
     id: "rosemary-beach-red-stick-190-e-water-st-726",
@@ -1526,6 +1731,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2055,
+    typicalAllInNightly: 2301,
   },
   {
     id: "watersound-summer-wind-40-watch-tower-lane-1354",
@@ -1548,6 +1756,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$9.8k - $12.1k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2303,
+    typicalAllInNightly: 2580,
   },
   {
     id: "seagrove-beach-the-salty-pelican-158-brown-street-810",
@@ -1570,6 +1781,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$9.8k - $12.1k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1121,
+    typicalAllInNightly: 1256,
   },
   {
     id: "rosemary-beach-living-the-dream-32-rosemary-avenue-main-house-2938",
@@ -1592,6 +1806,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 706,
+    typicalAllInNightly: 791,
   },
   {
     id: "seaside-suite-magnolia-i-ii-640-forest-street-233",
@@ -1614,6 +1831,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2055,
+    typicalAllInNightly: 2301,
   },
   {
     id: "always-on-my-mind",
@@ -1636,6 +1856,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$10.5k - $12.8k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 650,
+    typicalAllInNightly: 728,
   },
   {
     id: "grayton-beach-bahama-breeze-148-gulf-shore-drive-407",
@@ -1658,6 +1881,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$11.9k - $14.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1302,
+    typicalAllInNightly: 1458,
   },
   {
     id: "naturewalk-unwind-by-the-gulf-897-sandgrass-way-177",
@@ -1680,6 +1906,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 471,
+    typicalAllInNightly: 527,
   },
   {
     id: "watersound-19-salt-box-lane-1336",
@@ -1702,6 +1931,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$8.3k - $10.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 830,
+    typicalAllInNightly: 930,
   },
   {
     id: "seacrest-beach-sunny-shores-29-beachcomber-lane-182",
@@ -1724,6 +1956,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 524,
+    typicalAllInNightly: 587,
   },
   {
     id: "watercolor-cove-hollow-house-142-cove-hollow-street-1192",
@@ -1746,6 +1981,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1357,
+    typicalAllInNightly: 1519,
   },
   {
     id: "seagrove-beach-freebird-seagrove-135-dogwood-street-805",
@@ -1768,6 +2006,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$10.5k - $12.8k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1728,
+    typicalAllInNightly: 1935,
   },
   {
     id: "mariglo",
@@ -1790,6 +2031,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 650,
+    typicalAllInNightly: 728,
   },
   {
     id: "seagrove-how-sweet-it-is-15-lake-vista-lane-811",
@@ -1812,6 +2056,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$8.4k - $10.7k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1051,
+    typicalAllInNightly: 1177,
   },
   {
     id: "watercolor-102-vermillion-way-1155",
@@ -1834,6 +2081,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1232,
+    typicalAllInNightly: 1380,
   },
   {
     id: "grayton-beach-resting-beach-face-277-barton-s-way-170",
@@ -1856,6 +2106,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$8.3k - $10.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 664,
+    typicalAllInNightly: 744,
   },
   {
     id: "rosemary-beach-171-e-kingston-road-715",
@@ -1878,6 +2131,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 740,
+    typicalAllInNightly: 829,
   },
   {
     id: "grayton-beach-grayt-dreams-158-grayton-village-road-409",
@@ -1900,6 +2156,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$13.3k - $15.6k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1120,
+    typicalAllInNightly: 1254,
   },
   {
     id: "watersound-siena-by-the-sea-224-gulf-bridge-lane-1340",
@@ -1922,6 +2181,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1073,
+    typicalAllInNightly: 1202,
   },
   {
     id: "blue-mountain-beach-surf-shack-34-seaward-drive-72",
@@ -1944,6 +2206,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$8.4k - $10.7k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 882,
+    typicalAllInNightly: 988,
   },
   {
     id: "blue-mountain-beach-charmed-water-oasis-at-30a-190-walnut-street-142",
@@ -1966,6 +2231,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$8.4k - $10.7k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 547,
+    typicalAllInNightly: 613,
   },
   {
     id: "seacrest-beach-toro-azul-59-green-st-784",
@@ -1988,6 +2256,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$10.5k - $12.8k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1810,
+    typicalAllInNightly: 2028,
   },
   {
     id: "watersound-serenity-breeze-224-e-yacht-pond-lane-1341",
@@ -2010,6 +2281,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1389,
+    typicalAllInNightly: 1555,
   },
   {
     id: "seacrest-beach-shrimply-the-best-249-beach-bike-way-2823",
@@ -2032,13 +2306,16 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 487,
+    typicalAllInNightly: 546,
   },
   {
     id: "seagrove-beach-51-bramble-lane-223",
     name: "51 Bramble Lane",
     demoOrder: 3931848770,
     area: "Seagrove Beach",
-    community: "WaterColor",
+    community: "Seagrove Beach",
     lat: 30.32247,
     lng: -86.12675,
     bedrooms: 4,
@@ -2054,6 +2331,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: true,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2055,
+    typicalAllInNightly: 2301,
   },
   {
     id: "watercolor-3-sisters-on-the-beach-93-park-row-lane-1321",
@@ -2076,6 +2356,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$9.0k - $11.3k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1651,
+    typicalAllInNightly: 1849,
   },
   {
     id: "seacrest-beach-footprints-in-the-sand-36-kareny-lane-185",
@@ -2098,6 +2381,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachHomesTexture, beachPathTexture, beachEntryTexture],
     typicalPrice: "$6.9k - $9.2k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 629,
+    typicalAllInNightly: 704,
   },
   {
     id: "seagrove-beach-chel-sea-lane-hideaway-80-chelsey-lane-2929",
@@ -2120,6 +2406,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachPathTexture, beachHomesTexture, beachEntryTexture],
     typicalPrice: "$9.1k - $11.4k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 1248,
+    typicalAllInNightly: 1398,
   },
   {
     id: "blue-mountain-beach-drift-away-on-30a-35-kriss-court-2932",
@@ -2142,6 +2431,9 @@ export const sampleListings: DiscoverListing[] = [
     elevator: false,
     previewImages: [beachEntryTexture, beachHomesTexture, beachPathTexture],
     typicalPrice: "$7.6k - $9.9k",
+    typicalPricingMonth: "May",
+    typicalBaseNightly: 2055,
+    typicalAllInNightly: 2301,
   },
 ];
 

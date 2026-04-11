@@ -208,7 +208,7 @@ const PLANNED_COMMUNITIES: PlannedCommunityDefinition[] = [
       { lat: 30.322719133828485, lng: -86.14199397590329 },
       { lat: 30.322647231610063, lng: -86.13694310638571 },
       { lat: 30.322594939054014, lng: -86.13415641975496 },
-      { lat: 30.320713341766265, lng: -86.1271832391104 },
+      { lat: 30.32259458650762, lng: -86.12635324466613 },
       { lat: 30.323281921303945, lng: -86.12576928153277 },
       { lat: 30.324994270246748, lng: -86.12587480075459 },
       { lat: 30.32987612204444, lng: -86.12811180826571 },
@@ -324,6 +324,29 @@ const PLANNED_COMMUNITIES: PlannedCommunityDefinition[] = [
     ],
   },
 ];
+
+export function getPlannedCommunityPolygonsByName(
+  communityName: string,
+): GeoPoint[][] {
+  const normalizedName = normalizeText(communityName);
+  const definition = PLANNED_COMMUNITIES.find(
+    (candidate) => normalizeText(candidate.name) === normalizedName,
+  );
+
+  if (!definition) {
+    return [];
+  }
+
+  if (definition.polygons && definition.polygons.length > 0) {
+    return definition.polygons;
+  }
+
+  if (definition.polygon && definition.polygon.length > 0) {
+    return [definition.polygon];
+  }
+
+  return [];
+}
 
 function normalizeText(value: string): string {
   return value

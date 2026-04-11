@@ -30,7 +30,7 @@ import {
   getAreaFromListing,
   getBeachZoneFromListing,
   getListingGeoTarget,
-  getTypicalPriceBounds,
+  verifyGulfFrontClaim,
 } from "@/components/discover/discover-utils";
 import { DiscoverFacetSidebar } from "@/components/discover/DiscoverFacetSidebar";
 import { DiscoverListingsPanel } from "@/components/discover/DiscoverListingsPanel";
@@ -261,7 +261,9 @@ export function DiscoverPage() {
   }, []);
 
   const sourceListings =
-    fetchedListings.length > 0 ? fetchedListings : sampleListings;
+    fetchedListings.length > 0
+      ? fetchedListings.map(verifyGulfFrontClaim)
+      : sampleListings.map(verifyGulfFrontClaim);
 
   const guestCount = adults + children;
 
@@ -348,16 +350,16 @@ export function DiscoverPage() {
 
     if (sortOption === "price-low") {
       return listings.sort((a, b) => {
-        const aPrice = getTypicalPriceBounds(a.typicalPrice).low;
-        const bPrice = getTypicalPriceBounds(b.typicalPrice).low;
+        const aPrice = a.typicalAllInNightly * nights;
+        const bPrice = b.typicalAllInNightly * nights;
         return aPrice - bPrice;
       });
     }
 
     if (sortOption === "price-high") {
       return listings.sort((a, b) => {
-        const aPrice = getTypicalPriceBounds(a.typicalPrice).high;
-        const bPrice = getTypicalPriceBounds(b.typicalPrice).high;
+        const aPrice = a.typicalAllInNightly * nights;
+        const bPrice = b.typicalAllInNightly * nights;
         return bPrice - aPrice;
       });
     }
@@ -375,20 +377,22 @@ export function DiscoverPage() {
       }
       return b.sleeps - a.sleeps;
     });
-  }, [baseDisplayListings, sortOption]);
+  }, [baseDisplayListings, nights, sortOption]);
 
   const mapListings = useMemo(
     () =>
       displayListings.map((listing) => {
         const geoTarget = getListingGeoTarget(listing);
+        const typicalTotal = Math.ceil(listing.typicalAllInNightly * nights);
         return {
           id: listing.id,
           name: listing.name,
           lat: geoTarget.lat,
           lng: geoTarget.lng,
+          hoverPriceAmount: `$${typicalTotal.toLocaleString("en-US")}`,
         };
       }),
-    [displayListings],
+    [displayListings, nights],
   );
 
   const areaCounts = useMemo(() => {
@@ -822,6 +826,7 @@ export function DiscoverPage() {
 
           <DiscoverListingsPanel
             listings={displayListings}
+            nights={nights}
             cardsPerRow={isMapExpanded ? 1 : cardsPerRow}
             singleColumnCardVariant={expandedSingleCardVariant}
             activeListingId={activeListingId}

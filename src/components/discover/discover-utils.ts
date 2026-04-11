@@ -6,6 +6,7 @@ import {
   known30ACommunities,
   type DiscoverListing,
 } from "@/components/discover/discover-data";
+import { GULF_FRONT_VERIFICATION_POLYGON } from "@/components/discover/gulf-front-polygon";
 
 type BroadArea = "West 30A" | "Central 30A" | "East 30A";
 
@@ -450,4 +451,43 @@ export function getListingGeoTarget(listing: DiscoverListing) {
   }
 
   return geoByRegion[region] ?? { lat: 30.3158, lng: -86.1186 };
+}
+
+export function verifyGulfFrontClaim(
+  listing: DiscoverListing,
+): DiscoverListing {
+  if (!listing.beachfront) {
+    return listing;
+  }
+
+  if (
+    !Number.isFinite(listing.lat) ||
+    !Number.isFinite(listing.lng) ||
+    listing.lat === undefined ||
+    listing.lng === undefined
+  ) {
+    return {
+      ...listing,
+      beachfront: false,
+      gulfView: true,
+    };
+  }
+
+  const isInsideGulfFrontPolygon = pointInPolygon(
+    { lat: listing.lat, lng: listing.lng },
+    GULF_FRONT_VERIFICATION_POLYGON,
+  );
+
+  if (isInsideGulfFrontPolygon) {
+    return {
+      ...listing,
+      gulfView: listing.gulfView ?? false,
+    };
+  }
+
+  return {
+    ...listing,
+    beachfront: false,
+    gulfView: true,
+  };
 }

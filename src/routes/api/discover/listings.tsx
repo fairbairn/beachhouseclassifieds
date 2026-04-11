@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { sampleListings } from "@/components/discover/discover-data";
-import { getBeachZoneFromListing } from "@/components/discover/discover-utils";
+import {
+  getBeachZoneFromListing,
+  verifyGulfFrontClaim,
+} from "@/components/discover/discover-utils";
 import {
   NullRouteComponent,
   createNoStoreHeaders,
@@ -18,13 +21,13 @@ export const Route = createFileRoute("/api/discover/listings")({
         const locationAlignedListings = sampleListings.map((listing) => {
           const beachZone = getBeachZoneFromListing(listing);
           if (!beachZone) {
-            return listing;
+            return verifyGulfFrontClaim(listing);
           }
 
-          return {
+          return verifyGulfFrontClaim({
             ...listing,
             area: beachZone,
-          };
+          });
         });
 
         const normalizedListings = normalizeDiscoverListings(

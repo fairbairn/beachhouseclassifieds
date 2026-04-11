@@ -50,9 +50,9 @@ This is a living map of routes, page-level composition, and major UI components.
 - Current surface map:
   1. Search/filter command bar (query, date window, stay and guest steppers)
   2. Advanced filter tray (threshold controls + feature toggles)
-  3. Left facet sidebar (Areas, Planned Communities, Property Features)
+  3. Left facet sidebar (Areas, Beaches, Communities, Features)
   4. Center listings panel (card layouts, map focus actions, favorites, end-of-list guidance)
-  5. Right map panel (interactive map, focus animation, open-in-maps)
+  5. Right map panel (interactive map, sync/reset/clear controls, open-in-maps)
 
 ## Discover Component Responsibilities
 
@@ -63,9 +63,10 @@ This is a living map of routes, page-level composition, and major UI components.
 - DiscoverListingsPanel
   - Renders browse cards, card-level actions, and browse guidance panel.
 - DiscoverMapPanel
-  - Owns map lifecycle, marker updates, focus transitions, and map type switching.
+  - Owns map lifecycle, marker updates, map/list sync actions, and map type switching.
 - DiscoverSortLayoutControls
   - Owns sort dropdown, card density controls, and help popover.
+  - Shows expanded-map lock-state card-layout messaging when map is expanded.
 - discover-controls primitives
   - Date range picker behavior and reusable steppers/facet section controls.
   - Legal/navigation utility links and copyright line.

@@ -9,7 +9,9 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { discoverCustomPois } from "@/components/discover/discover-custom-pois";
 import { googleMapsApiKey } from "@/components/discover/discover-data";
+import { getPlannedCommunityPolygonsByName } from "@/lib/discover/community-resolution";
 
 type LatLng = { lat: number; lng: number };
 type GoogleMapInstance = {
@@ -28,6 +30,9 @@ type GoogleMapInstance = {
   ) => { remove: () => void };
 };
 type GoogleMapsEventListener = { remove: () => void };
+type GooglePolygonInstance = {
+  setMap: (map: GoogleMapInstance | null) => void;
+};
 type GoogleMarkerInstance = {
   setPosition: (center: LatLng) => void;
   setMap: (map: GoogleMapInstance | null) => void;
@@ -80,6 +85,17 @@ type GoogleMapsNamespace = {
     options: Record<string, unknown>,
   ) => GoogleMapInstance;
   Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
+  Polygon: new (options: {
+    paths: LatLng[];
+    strokeColor?: string;
+    strokeOpacity?: number;
+    strokeWeight?: number;
+    fillColor?: string;
+    fillOpacity?: number;
+    clickable?: boolean;
+    geodesic?: boolean;
+    zIndex?: number;
+  }) => GooglePolygonInstance;
 };
 
 const defaultMapTarget = {
@@ -92,6 +108,7 @@ const CONTEXT_ZOOM = 13;
 const ZOOM_STEP_DELAY_MS = 80;
 const PAN_TO_NEW_PIN_DELAY_MS = 220;
 const RESET_CENTER_TOLERANCE = 0.0004;
+const DEBUG_WATERCOLOR_BOUNDARY_QUERY_KEY = "debugWatercolorBoundary";
 let mapsLoaderConfigured = false;
 
 function getMapTypeForZoom(zoom: number | undefined) {
@@ -126,15 +143,63 @@ function getSecondaryMarkerPinOptions(zoom: number | undefined) {
 function createSecondaryMarkerContent(
   markerLibrary: GoogleMapsMarkerNamespace,
   zoom: number | undefined,
+  hoverPriceAmount?: string,
 ) {
   const highDetailZoom =
     typeof zoom === "number" && zoom >= SATELLITE_ZOOM_THRESHOLD;
+
+  const createTooltipShell = (inner: HTMLElement) => {
+    if (!hoverPriceAmount) {
+      return inner;
+    }
+
+    const tooltip = document.createElement("div");
+    tooltip.textContent = hoverPriceAmount;
+    tooltip.style.position = "absolute";
+    tooltip.style.left = "50%";
+    tooltip.style.bottom = "calc(100% + 8px)";
+    tooltip.style.transform = "translateX(-50%) translateY(4px)";
+    tooltip.style.background = "rgba(255,255,255,0.88)";
+    tooltip.style.border = "1px solid rgba(148,163,184,0.35)";
+    tooltip.style.borderRadius = "999px";
+    tooltip.style.padding = "4px 10px";
+    tooltip.style.fontSize = "12px";
+    tooltip.style.fontWeight = "700";
+    tooltip.style.lineHeight = "1";
+    tooltip.style.color = "#0f172a";
+    tooltip.style.whiteSpace = "nowrap";
+    tooltip.style.boxShadow = "0 10px 20px -14px rgba(15,23,42,0.75)";
+    tooltip.style.opacity = "0";
+    tooltip.style.pointerEvents = "none";
+    tooltip.style.transition = "opacity 140ms ease, transform 140ms ease";
+    tooltip.style.zIndex = "2";
+
+    const shell = document.createElement("div");
+    shell.style.position = "relative";
+    shell.style.display = "inline-flex";
+    shell.style.alignItems = "center";
+    shell.style.justifyContent = "center";
+
+    shell.addEventListener("mouseenter", () => {
+      tooltip.style.opacity = "1";
+      tooltip.style.transform = "translateX(-50%) translateY(0)";
+    });
+
+    shell.addEventListener("mouseleave", () => {
+      tooltip.style.opacity = "0";
+      tooltip.style.transform = "translateX(-50%) translateY(4px)";
+    });
+
+    shell.appendChild(tooltip);
+    shell.appendChild(inner);
+    return shell;
+  };
 
   if (highDetailZoom) {
     const pin = new markerLibrary.PinElement(
       getSecondaryMarkerPinOptions(zoom),
     );
-    return pin.element;
+    return createTooltipShell(pin.element);
   }
 
   const dot = document.createElement("div");
@@ -144,7 +209,64 @@ function createSecondaryMarkerContent(
   dot.style.background = "#a855f7";
   dot.style.border = "1.5px solid #ffffff";
   dot.style.boxShadow = "0 0 0 1px rgba(168,85,247,0.25)";
-  return dot;
+  return createTooltipShell(dot);
+}
+
+function createPrimaryMarkerContent(
+  markerLibrary: GoogleMapsMarkerNamespace,
+  hoverPriceAmount?: string,
+) {
+  const pin = new markerLibrary.PinElement({
+    background: "#ef4444",
+    borderColor: "#ffffff",
+    glyphColor: "#ffffff",
+    scale: 1,
+  });
+
+  if (!hoverPriceAmount) {
+    return pin.element;
+  }
+
+  const tooltip = document.createElement("div");
+  tooltip.textContent = hoverPriceAmount;
+  tooltip.style.position = "absolute";
+  tooltip.style.left = "50%";
+  tooltip.style.bottom = "calc(100% + 8px)";
+  tooltip.style.transform = "translateX(-50%) translateY(4px)";
+  tooltip.style.background = "rgba(255,255,255,0.88)";
+  tooltip.style.border = "1px solid rgba(148,163,184,0.35)";
+  tooltip.style.borderRadius = "999px";
+  tooltip.style.padding = "4px 10px";
+  tooltip.style.fontSize = "12px";
+  tooltip.style.fontWeight = "700";
+  tooltip.style.lineHeight = "1";
+  tooltip.style.color = "#0f172a";
+  tooltip.style.whiteSpace = "nowrap";
+  tooltip.style.boxShadow = "0 10px 20px -14px rgba(15,23,42,0.75)";
+  tooltip.style.opacity = "0";
+  tooltip.style.pointerEvents = "none";
+  tooltip.style.transition = "opacity 140ms ease, transform 140ms ease";
+  tooltip.style.zIndex = "2";
+
+  const shell = document.createElement("div");
+  shell.style.position = "relative";
+  shell.style.display = "inline-flex";
+  shell.style.alignItems = "center";
+  shell.style.justifyContent = "center";
+
+  shell.addEventListener("mouseenter", () => {
+    tooltip.style.opacity = "1";
+    tooltip.style.transform = "translateX(-50%) translateY(0)";
+  });
+
+  shell.addEventListener("mouseleave", () => {
+    tooltip.style.opacity = "0";
+    tooltip.style.transform = "translateX(-50%) translateY(4px)";
+  });
+
+  shell.appendChild(tooltip);
+  shell.appendChild(pin.element);
+  return shell;
 }
 
 export function DiscoverMapPanel({
@@ -170,6 +292,7 @@ export function DiscoverMapPanel({
     name: string;
     lat: number;
     lng: number;
+    hoverPriceAmount: string;
   }>;
   onClearPin: () => void;
   onResetMapView: () => void;
@@ -188,9 +311,16 @@ export function DiscoverMapPanel({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const googleMapRef = useRef<GoogleMapInstance | null>(null);
   const googleMapMarkerRef = useRef<GoogleAdvancedMarkerInstance | null>(null);
+  const listingHoverPriceMapRef = useRef<Map<string, string>>(new Map());
   const googleMapSecondaryMarkerRef = useRef<
     Map<string, GoogleAdvancedMarkerInstance>
   >(new Map());
+  const customPoiMarkerRef = useRef<Map<string, GoogleAdvancedMarkerInstance>>(
+    new Map(),
+  );
+  const watercolorBoundaryPolygonRef = useRef<GooglePolygonInstance | null>(
+    null,
+  );
   const markerListenerRef = useRef<Array<() => void>>([]);
   const googleMapsNamespaceRef = useRef<GoogleMapsNamespace | null>(null);
   const googleMapsMarkerNamespaceRef = useRef<GoogleMapsMarkerNamespace | null>(
@@ -227,6 +357,106 @@ export function DiscoverMapPanel({
       marker.map = null;
     }
     googleMapSecondaryMarkerRef.current.clear();
+  };
+
+  const clearCustomPoiMarkers = () => {
+    for (const marker of customPoiMarkerRef.current.values()) {
+      marker.map = null;
+    }
+    customPoiMarkerRef.current.clear();
+  };
+
+  const clearWatercolorBoundaryPolygon = () => {
+    if (!watercolorBoundaryPolygonRef.current) {
+      return;
+    }
+    watercolorBoundaryPolygonRef.current.setMap(null);
+    watercolorBoundaryPolygonRef.current = null;
+  };
+
+  const createCustomPoiContent = (poi: (typeof discoverCustomPois)[number]) => {
+    const isBeachAccessPoi = /(?:beach access|access)$/i.test(poi.name.trim());
+    const markerColor = isBeachAccessPoi
+      ? "#facc15"
+      : poi.kind === "sports-field" || poi.kind === "park"
+        ? "#22c55e"
+        : "#0284c7";
+    const labelColor = isBeachAccessPoi
+      ? "#fde047"
+      : poi.kind === "sports-field" || poi.kind === "park"
+        ? "#4ade80"
+        : "#38bdf8";
+
+    const container = document.createElement("div");
+    container.style.position = "relative";
+    container.style.display = "inline-flex";
+    container.style.alignItems = "center";
+    container.style.justifyContent = "center";
+
+    const dot = document.createElement("div");
+    dot.style.width = poi.kind === "sports-field" ? "10px" : "11px";
+    dot.style.height = poi.kind === "sports-field" ? "10px" : "11px";
+    dot.style.borderRadius = "999px";
+    dot.style.background = markerColor;
+    dot.style.border = "1.5px solid #ffffff";
+    dot.style.boxShadow = "0 0 0 1px rgba(15,23,42,0.18)";
+
+    const label = document.createElement("div");
+    label.textContent = poi.name;
+    label.style.position = "absolute";
+    label.style.left = "50%";
+    label.style.bottom = "calc(100% + 8px)";
+    label.style.transform = "translateX(-50%)";
+    label.style.transition =
+      "background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease, text-shadow 140ms ease, padding 140ms ease, border-radius 140ms ease";
+    label.style.fontSize = "12px";
+    label.style.fontWeight = "700";
+    label.style.lineHeight = "1";
+    label.style.whiteSpace = "nowrap";
+    label.style.pointerEvents = "none";
+
+    const applyDefaultLabelStyle = () => {
+      label.style.background = "transparent";
+      label.style.border = "1px solid transparent";
+      label.style.borderRadius = "999px";
+      label.style.padding = "4px 10px";
+      label.style.color = labelColor;
+      label.style.boxShadow = "none";
+      label.style.textShadow = "0 1px 3px rgba(15,23,42,0.72)";
+    };
+
+    const applyHoverLabelStyle = () => {
+      label.style.background = markerColor;
+      label.style.border = "1px solid rgba(255,255,255,0.78)";
+      label.style.borderRadius = "999px";
+      label.style.padding = "4px 10px";
+      label.style.color = isBeachAccessPoi ? "#1f2937" : "#ffffff";
+      label.style.boxShadow = "0 10px 20px -14px rgba(15,23,42,0.75)";
+      label.style.textShadow = "none";
+    };
+
+    applyDefaultLabelStyle();
+    container.addEventListener("mouseenter", applyHoverLabelStyle);
+    container.addEventListener("mouseleave", applyDefaultLabelStyle);
+    label.style.pointerEvents = "auto";
+
+    container.appendChild(label);
+    container.appendChild(dot);
+    return container;
+  };
+
+  const updateCustomPoiMarkerVisibility = (zoom: number | undefined) => {
+    const map = googleMapRef.current;
+    if (!map) {
+      return;
+    }
+
+    const shouldShow =
+      typeof zoom === "number" && zoom >= SATELLITE_ZOOM_THRESHOLD;
+
+    for (const marker of customPoiMarkerRef.current.values()) {
+      marker.map = shouldShow ? map : null;
+    }
   };
 
   const registerAdvancedMarkerClick = (
@@ -295,8 +525,12 @@ export function DiscoverMapPanel({
       return;
     }
 
-    for (const marker of googleMapSecondaryMarkerRef.current.values()) {
-      marker.content = createSecondaryMarkerContent(markerLibrary, zoom);
+    for (const [listingId, marker] of googleMapSecondaryMarkerRef.current) {
+      marker.content = createSecondaryMarkerContent(
+        markerLibrary,
+        zoom,
+        listingHoverPriceMapRef.current.get(listingId),
+      );
     }
   };
 
@@ -383,17 +617,10 @@ export function DiscoverMapPanel({
         scrollwheel: true,
       });
 
-      const primaryPin = new markerLibrary.PinElement({
-        background: "#ef4444",
-        borderColor: "#ffffff",
-        glyphColor: "#ffffff",
-        scale: 1,
-      });
-
       const marker = new markerLibrary.AdvancedMarkerElement({
         map: null,
         position: center,
-        content: primaryPin.element,
+        content: createPrimaryMarkerContent(markerLibrary, undefined),
         gmpClickable: true,
       });
 
@@ -412,6 +639,7 @@ export function DiscoverMapPanel({
         const zoom = map.getZoom();
         map.setMapTypeId(getMapTypeForZoom(zoom));
         applySecondaryMarkerIcons(zoom);
+        updateCustomPoiMarkerVisibility(zoom);
         updateResetState(map);
       });
       const idleListener = map.addListener("idle", () => {
@@ -447,10 +675,85 @@ export function DiscoverMapPanel({
       disposed = true;
       clearFocusAnimation();
       clearSecondaryMarkers();
+      clearCustomPoiMarkers();
+      clearWatercolorBoundaryPolygon();
       mapEventCleanupRef.current.forEach((cleanup) => cleanup());
       mapEventCleanupRef.current = [];
     };
   }, [clearFocusAnimation, updateResetState]);
+
+  useEffect(() => {
+    const map = googleMapRef.current;
+    const googleMaps = googleMapsNamespaceRef.current;
+    if (!map || !googleMaps) {
+      return;
+    }
+
+    clearWatercolorBoundaryPolygon();
+
+    if (!import.meta.env.DEV) {
+      return;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const isEnabled =
+      searchParams.get(DEBUG_WATERCOLOR_BOUNDARY_QUERY_KEY) === "1";
+    if (!isEnabled) {
+      return;
+    }
+
+    const watercolorPolygons = getPlannedCommunityPolygonsByName("WaterColor");
+    const watercolorBoundary = watercolorPolygons[0];
+    if (!watercolorBoundary || watercolorBoundary.length < 3) {
+      return;
+    }
+
+    const overlay = new googleMaps.Polygon({
+      paths: watercolorBoundary,
+      strokeColor: "#0ea5a4",
+      strokeOpacity: 0.95,
+      strokeWeight: 2,
+      fillColor: "#14b8a6",
+      fillOpacity: 0.2,
+      clickable: false,
+      geodesic: true,
+      zIndex: 10,
+    });
+
+    overlay.setMap(map);
+    watercolorBoundaryPolygonRef.current = overlay;
+
+    return () => {
+      clearWatercolorBoundaryPolygon();
+    };
+  }, [mapReadyRevision]);
+
+  useEffect(() => {
+    const map = googleMapRef.current;
+    const markerLibrary = googleMapsMarkerNamespaceRef.current;
+    if (!map || !markerLibrary) {
+      return;
+    }
+
+    clearCustomPoiMarkers();
+
+    for (const poi of discoverCustomPois) {
+      const marker = new markerLibrary.AdvancedMarkerElement({
+        map: null,
+        position: { lat: poi.lat, lng: poi.lng },
+        content: createCustomPoiContent(poi),
+        gmpClickable: false,
+      });
+
+      customPoiMarkerRef.current.set(poi.id, marker);
+    }
+
+    updateCustomPoiMarkerVisibility(map.getZoom());
+
+    return () => {
+      clearCustomPoiMarkers();
+    };
+  }, [mapReadyRevision]);
 
   useEffect(() => {
     const map = googleMapRef.current;
@@ -460,6 +763,9 @@ export function DiscoverMapPanel({
     }
 
     clearSecondaryMarkers();
+    listingHoverPriceMapRef.current = new Map(
+      listings.map((listing) => [listing.id, listing.hoverPriceAmount]),
+    );
 
     for (const listing of listings) {
       if (mapTarget.id && listing.id === mapTarget.id) {
@@ -469,8 +775,11 @@ export function DiscoverMapPanel({
       const marker = new markerLibrary.AdvancedMarkerElement({
         map,
         position: { lat: listing.lat, lng: listing.lng },
-        title: listing.name,
-        content: createSecondaryMarkerContent(markerLibrary, map.getZoom()),
+        content: createSecondaryMarkerContent(
+          markerLibrary,
+          map.getZoom(),
+          listing.hoverPriceAmount,
+        ),
         gmpClickable: true,
       });
 
@@ -508,6 +817,17 @@ export function DiscoverMapPanel({
 
     marker.map = map;
 
+    const markerLibrary = googleMapsMarkerNamespaceRef.current;
+    const activeListing = listings.find(
+      (listing) => listing.id === mapTarget.id,
+    );
+    if (markerLibrary) {
+      marker.content = createPrimaryMarkerContent(
+        markerLibrary,
+        activeListing?.hoverPriceAmount,
+      );
+    }
+
     const nextCenter = { lat: mapTarget.lat, lng: mapTarget.lng };
     marker.position = nextCenter;
 
@@ -536,7 +856,7 @@ export function DiscoverMapPanel({
       map.panTo(nextCenter);
       previousPinnedListingIdRef.current = mapTarget.id;
     }
-  }, [animateZoom, clearFocusAnimation, mapTarget, mapReadyRevision]);
+  }, [animateZoom, clearFocusAnimation, listings, mapTarget, mapReadyRevision]);
 
   return (
     <aside className="flex flex-col self-start rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] xl:sticky xl:top-28">

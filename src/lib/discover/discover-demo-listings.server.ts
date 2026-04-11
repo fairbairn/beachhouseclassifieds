@@ -221,6 +221,56 @@ function inferTypicalPriceLabel(raw: RawListing): string {
   return "$5.0k - $8.0k";
 }
 
+function inferTypicalNightly(raw: RawListing): {
+  typicalPricingMonth: string;
+  typicalBaseNightly: number;
+  typicalAllInNightly: number;
+} {
+  const rates = raw.calendarRates;
+  const values: number[] = [];
+
+  if (rates && typeof rates === "object") {
+    for (const value of Object.values(rates)) {
+      if (typeof value !== "string") {
+        continue;
+      }
+
+      const normalized = Number(value.replace(/[^\d.]/g, ""));
+      if (Number.isFinite(normalized) && normalized > 0) {
+        values.push(normalized);
+      }
+    }
+  }
+
+  const month45 = new Date();
+  month45.setDate(month45.getDate() + 45);
+  const typicalPricingMonth = month45.toLocaleString("en-US", {
+    month: "long",
+  });
+
+  if (values.length === 0) {
+    return {
+      typicalPricingMonth,
+      typicalBaseNightly: 875,
+      typicalAllInNightly: 1000,
+    };
+  }
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const medianNightly =
+    sorted.length % 2 === 1
+      ? sorted[middle]
+      : (sorted[middle - 1] + sorted[middle]) / 2;
+  const typicalAllInNightly = Math.ceil(medianNightly);
+
+  return {
+    typicalPricingMonth,
+    typicalBaseNightly: Math.ceil(typicalAllInNightly * 0.88),
+    typicalAllInNightly,
+  };
+}
+
 function mapListing(raw: RawListing): DiscoverListing | null {
   const id = asString(raw.id) ?? null;
   const lat = toFiniteNumber(raw.coordinate?.latitude);
@@ -264,6 +314,7 @@ function mapListing(raw: RawListing): DiscoverListing | null {
   const hasNoPets = /no\s+pets?\s+allowed|pets?\s+not\s+allowed/i.test(
     policyText,
   );
+  const nightlyPricing = inferTypicalNightly(raw);
 
   return {
     id,
@@ -286,6 +337,9 @@ function mapListing(raw: RawListing): DiscoverListing | null {
     elevator: /\belevator\b|\blift\b/i.test(allText),
     previewImages: imageUrls,
     typicalPrice: inferTypicalPriceLabel(raw),
+    typicalPricingMonth: nightlyPricing.typicalPricingMonth,
+    typicalBaseNightly: nightlyPricing.typicalBaseNightly,
+    typicalAllInNightly: nightlyPricing.typicalAllInNightly,
     lat,
     lng,
   };

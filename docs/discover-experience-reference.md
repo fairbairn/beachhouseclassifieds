@@ -2,7 +2,7 @@
 
 This document is the implementation-level reference for the `/discover` experience.
 
-Last updated: 2026-04-10
+Last updated: 2026-04-11
 
 ## Purpose
 
@@ -17,7 +17,7 @@ Last updated: 2026-04-10
 - Server demo feed: `src/routes/api/discover/listings.tsx`
 - Left facet rail: `src/components/discover/DiscoverFacetSidebar.tsx`
 - Listing cards and card actions: `src/components/discover/DiscoverListingsPanel.tsx`
-- Map panel and focus animation: `src/components/discover/DiscoverMapPanel.tsx`
+- Map panel and sync/reset controls: `src/components/discover/DiscoverMapPanel.tsx`
 - Sort/layout/help controls: `src/components/discover/DiscoverSortLayoutControls.tsx`
 - Date/stepper/facet primitives: `src/components/discover/discover-controls.tsx`
 - Discover sample data model + rows: `src/components/discover/discover-data.ts`
@@ -103,19 +103,37 @@ If copy changes in one place, update all user-visible surfaces to match:
 - Centered on 30A baseline coordinates.
 - Map type defaults to roadmap.
 
+### Header Controls
+
+Current map header controls (left to right):
+
+1. Expand/collapse toggle
+2. Sync
+3. Clear Pin
+4. Reset
+5. Open-in-maps icon-only outbound action
+
+Behavior notes:
+
+- Sync is enabled only when a pin is selected and its listing card is out of the current cards viewport.
+- Sync shows pulse-ring attention when enabled.
+- Clear Pin clears selected pin state only and preserves current map camera state.
+- Reset returns map to baseline center/context zoom and clears selected pin.
+- Reset is disabled when the map is already at reset state.
+
 ### Focus Sequence on Card Pin Click
 
-The map performs an intentional cinematic sequence:
+Selection now uses direct state-aware focus:
 
 1. Update marker to selected listing coordinates.
-2. If currently zoomed in past context zoom, animate zoom-out to context zoom.
-3. Pan to the new listing position.
-4. Animate zoom-in to target zoom.
+2. Pan to target from current camera position.
+3. Adjust zoom from current zoom toward target zoom (no forced intermediate reset hop).
 
 ### Map Type Switching
 
 - At closer zoom threshold, map switches to satellite.
 - When zoomed back out below threshold, map returns to roadmap.
+- Clearing pin does not force immediate map-type reset.
 
 ### Fallback Behavior
 
@@ -131,6 +149,11 @@ Sort options:
 - Sleeps: High to Low
 - Beachfront + Pool First
 
+Price sorting behavior:
+
+- Price low/high sort now uses seeded `typicalAllInNightly * selectedNights` values.
+- This keeps sort order consistent with the on-card approximate total shown for the current nights selection.
+
 Recommended mode behavior:
 
 - Preserve server/source ordering (do not alpha-sort first).
@@ -141,6 +164,9 @@ Recommended mode behavior:
 ### Runtime Feed
 
 - `GET /api/discover/listings` returns sample listings sorted by `demoOrder`.
+- Before response, demo rows are normalized for location alignment:
+  - `area` is aligned from coordinate/polygon beach-zone resolution.
+  - `community` is aligned using planned-community polygon normalization.
 - Client fetches the endpoint and falls back to local sample data if fetch fails.
 
 ### Demo Listing Shape
@@ -150,7 +176,14 @@ Discover listing rows include:
 - identity/location fields: `id`, `name`, `area`, `community`, `lat`, `lng`
 - stay capacity fields: bedrooms/bathrooms/sleeps and bed mix
 - feature flags: `privatePool`, `beachfront`, `golfCart`, `petsAllowed`, `accessible`, `elevator`
+- pricing helpers: `typicalPricingMonth`, `typicalBaseNightly`, `typicalAllInNightly`
 - rendering helpers: `previewImages`, `typicalPrice`, `demoOrder`
+
+### Card Pricing Presentation (Current)
+
+- Card footer copy uses: `Typical pricing for N nights in <typicalPricingMonth>`.
+- Card footer value uses approximate total: `~ $<rounded(typicalAllInNightly * N)>`.
+- `~` indicates estimate semantics for this demo phase.
 
 ## Demo Data Curation Rules
 
@@ -191,6 +224,12 @@ Generator rules currently emphasize realistic house-like inventory:
 
 - Generate deterministic `demoOrder` to avoid alphabetical clustering while staying stable across loads.
 
+8. Location-source-of-truth normalization
+
+- Polygon/coordinate resolution is authoritative for beach-zone and community alignment.
+- Seed/demo rows may be batch-rewritten using:
+  - `.tmp/scripts/normalize-discover-data-seed.mjs`
+
 ## Interaction and Accessibility Notes
 
 - Sort and help controls support outside-click close behavior.
@@ -198,9 +237,9 @@ Generator rules currently emphasize realistic house-like inventory:
 - Active control states are visually distinct and consistent with current color intent.
 - Route-level scroll behavior is intentionally managed to keep primary Discover surfaces stable.
 
-## Facet Selection UX Direction (Planned)
+## Facet Selection UX (Current)
 
-This section captures the agreed UI direction for interactive facet selection. This is a UX/state contract for near-term implementation and does not yet require server-backed filtering.
+This section captures the implemented interactive facet behavior in the current Discover UI.
 
 ### Selection Model
 
@@ -213,13 +252,14 @@ This section captures the agreed UI direction for interactive facet selection. T
 
 - When selected, a facet row moves to a selected pill-like visual treatment.
 - Selected treatment wraps both facet label and count.
-- Each selected row includes a small inline X action for one-click unselect.
+- Row-level unselect icon is intentionally not shown; row toggle handles select/unselect.
 
 ### Section Header Actions
 
 - If at least one facet is selected in a section, show an indicator/action near that section title.
 - Header action clears only that section's selected facets.
 - No global clear-all facet action is required yet because section headers stay visible.
+- Section indicator can show `0` when selected facets exist but summed counts resolve to zero.
 
 ### Count and Math Behavior (Current Phase)
 
@@ -244,7 +284,8 @@ Use these terms consistently in Discover UI:
 - Gulf Front
 - Private Pool
 - Golf Cart
-- Planned Communities
+- Beaches
+- Communities
 - Typical pricing
 
 Avoid reintroducing old labels (`Beachfront`, `Pool`, `LSV`) in filter controls unless there is an explicit product decision.
@@ -287,8 +328,8 @@ Use this section to track meaningful Discover UX/data contract decisions over ti
 
 - Date: 2026-04-09
 - Scope: map behavior
-- Decision: Map focus interaction uses zoom-out -> pan -> zoom-in sequencing and auto-switches roadmap/satellite by zoom threshold.
-- Why: Improve user orientation and make focus transitions feel deliberate.
+- Decision: Map focus interaction uses state-aware pan + zoom adjustment from the current camera state, and auto-switches roadmap/satellite by zoom threshold.
+- Why: Preserve orientation while avoiding reset-like transition hops.
 - Implementation: `src/components/discover/DiscoverMapPanel.tsx`, `src/components/discover/DiscoverListingsPanel.tsx`
 - Follow-up: Tune timing/zoom constants if UX feedback requests stronger or calmer motion.
 
@@ -300,11 +341,24 @@ Use this section to track meaningful Discover UX/data contract decisions over ti
 
 - Date: 2026-04-10
 - Scope: behavior | layout | UX contract
-- Decision: Established planned interactive facet model: selectable rows with selected-pill state + per-row X unselect, per-section clear action, multi-select support, AND behavior across selected facets, fake UI math in current phase, and server-driven hard filter/count behavior in future Mellisearch integration.
-- Why: Lock UX direction early so UI/state scaffolding can be built consistently before backend filter execution is finalized.
-- Implementation: `docs/discover-experience-reference.md`
-- Follow-up: Implement section-level selection state in sidebar UI first, then wire constrained result/count semantics to backend facet query responses.
-- Follow-up: Keep synonyms in parser logic, but keep UI copy canonical.
+- Decision: Implemented interactive facet model with selectable rows, selected-pill treatment, per-section clear action, multi-select support, AND behavior across selected facets, and no per-row unselect icon.
+- Why: Improve scan density and preserve row width while keeping unselect behavior simple via row toggle.
+- Implementation: `src/components/discover/DiscoverFacetSidebar.tsx`, `src/components/discover/discover-controls.tsx`, `docs/discover-experience-reference.md`
+- Follow-up: Wire constrained result/count semantics to backend facet query responses.
+
+- Date: 2026-04-11
+- Scope: map behavior | layout
+- Decision: Map header now exposes Sync/Clear Pin/Reset actions with state-aware enablement; expanded map locks card density to one-card mode and shows lock messaging in controls.
+- Why: Improve map/list coordination and avoid ambiguous state changes while map is expanded.
+- Implementation: `src/components/discover/DiscoverMapPanel.tsx`, `src/components/discover/DiscoverSortLayoutControls.tsx`, `src/components/discover/DiscoverPage.tsx`
+- Follow-up: Re-evaluate control ordering if operator testing suggests faster action grouping.
+
+- Date: 2026-04-11
+- Scope: data curation | API behavior
+- Decision: Discover runtime now normalizes area/community from polygon+coordinate resolution at API boundary; static demo seed rows were batch-normalized to match.
+- Why: Remove location/community mismatches and make map/list geography consistent.
+- Implementation: `src/routes/api/discover/listings.tsx`, `src/components/discover/discover-utils.ts`, `src/components/discover/discover-data.ts`, `.tmp/scripts/normalize-discover-data-seed.mjs`
+- Follow-up: Keep normalization script available for future seed refreshes.
 
 ## Change Checklist
 
@@ -318,6 +372,6 @@ When modifying Discover behavior, update this doc and validate:
 - facet sidebar feature labels
 - listing badges
 
-3. Verify map focus flow still performs zoom-out -> pan -> zoom-in and map type switching.
+3. Verify map focus flow performs state-aware pan/zoom adjustment (without forced reset hop) and map type switching.
 4. If sample generation changes, regenerate rows and apply to `discover-data.ts`.
 5. Confirm `/api/discover/listings` ordering still matches intended recommended browse behavior.
