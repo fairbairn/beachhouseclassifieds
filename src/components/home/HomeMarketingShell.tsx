@@ -22,10 +22,10 @@ export function HomeMarketingShell({
   disableNavScrollEffect = false,
 }: HomeMarketingShellProps) {
   const [isScrolled, setIsScrolled] = useState(false);
+  const navIsScrolled = disableNavScrollEffect ? false : isScrolled;
 
   useEffect(() => {
     if (disableNavScrollEffect) {
-      setIsScrolled(false);
       return;
     }
 
@@ -45,7 +45,7 @@ export function HomeMarketingShell({
     >
       {showTopNav ? (
         <HomeLandingNav
-          isScrolled={isScrolled}
+          isScrolled={navIsScrolled}
           preferDarkTopText={preferDarkTopNavText}
         />
       ) : null}

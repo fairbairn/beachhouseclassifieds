@@ -44,7 +44,9 @@ async function worker(context, jobs, checkIn, checkOut, workerId) {
         const found = deepFindTotalPrice(json);
 
         if (found && !result) result = found;
-      } catch {}
+      } catch {
+        // Ignore malformed/intermediate responses while sniffing GraphQL payloads.
+      }
     };
 
     page.on("response", handler);

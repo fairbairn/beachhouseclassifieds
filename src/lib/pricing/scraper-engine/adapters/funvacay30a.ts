@@ -1956,7 +1956,10 @@ async function fetchDetail(
       };
     });
 
-    let descriptionText = (await extractDescriptionText(page)).slice(0, 15000);
+    const descriptionText = (await extractDescriptionText(page)).slice(
+      0,
+      15000,
+    );
 
     const dayCodeByDate = new Map<string, LuxuryDayCode>();
     const minNightsByDate = new Map<string, number>();

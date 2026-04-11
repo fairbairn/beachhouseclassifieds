@@ -522,13 +522,6 @@ export async function buildListingPricingCacheForAdapter(
 
     assertListingPricingCacheRecord(listingCache);
 
-    const avgBaseNightly = roundCurrency(
-      days.reduce((sum, day) => sum + day.base_nightly, 0) / days.length,
-    );
-    const avgAllInNightly = roundCurrency(
-      days.reduce((sum, day) => sum + day.all_in_nightly, 0) / days.length,
-    );
-
     const cachePath = resolve(pricingDir, `${detail.external_listing_id}.json`);
 
     if (!input.options.dryRun) {
