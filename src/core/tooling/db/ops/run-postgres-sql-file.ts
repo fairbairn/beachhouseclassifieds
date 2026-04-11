@@ -5,11 +5,11 @@ import { Client } from "pg";
 
 import { normalizePostgresConnectionString } from "@/core/server/postgres-connection-string";
 
-type OutputFormat = "tsv" | "json";
+type OutputFormat = "tsv" | "json" | "table";
 
 function printUsage(): void {
   console.error(
-    "Usage: tsx src/core/tooling/db/ops/run-postgres-sql-file.ts --file <path> [--format tsv|json] [--header true|false]",
+    "Usage: tsx src/core/tooling/db/ops/run-postgres-sql-file.ts --file <path> [--format tsv|json|table] [--header true|false]",
   );
 }
 
@@ -43,8 +43,8 @@ function parseArgs(argv: string[]): {
     if (arg === "--format") {
       const value = argv[i + 1];
       if (!value) throw new Error("Missing value for --format");
-      if (value !== "tsv" && value !== "json") {
-        throw new Error("Invalid --format. Use tsv or json.");
+      if (value !== "tsv" && value !== "json" && value !== "table") {
+        throw new Error("Invalid --format. Use tsv, json, or table.");
       }
       format = value;
       i += 1;
@@ -77,6 +77,47 @@ function parseArgs(argv: string[]): {
 function formatTsvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   return String(value).replaceAll("\t", " ").replaceAll("\n", " ");
+}
+
+function formatTableCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value).replaceAll("\n", " ").trim();
+}
+
+function printTable(
+  columns: string[],
+  rows: Array<Record<string, unknown>>,
+  includeHeader: boolean,
+): void {
+  const widths = columns.map((column) => column.length);
+
+  for (const row of rows) {
+    columns.forEach((column, index) => {
+      const cell = formatTableCell(row[column]);
+      if (cell.length > widths[index]) {
+        widths[index] = cell.length;
+      }
+    });
+  }
+
+  const separator = widths.map((width) => "-".repeat(width)).join("-+-");
+
+  if (includeHeader) {
+    const header = columns
+      .map((column, index) => column.padEnd(widths[index], " "))
+      .join(" | ");
+    console.log(header);
+    console.log(separator);
+  }
+
+  for (const row of rows) {
+    const line = columns
+      .map((column, index) =>
+        formatTableCell(row[column]).padEnd(widths[index], " "),
+      )
+      .join(" | ");
+    console.log(line);
+  }
 }
 
 async function run(): Promise<void> {
@@ -121,6 +162,11 @@ async function run(): Promise<void> {
     }
 
     const columns = result.fields.map((field) => field.name);
+
+    if (format === "table") {
+      printTable(columns, result.rows, includeHeader);
+      return;
+    }
 
     if (includeHeader) {
       console.log(columns.join("\t"));

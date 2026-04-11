@@ -71,7 +71,9 @@ async function getPriceAndMeta(page, timeout = 5000) {
             raw: json,
           });
         }
-      } catch {}
+      } catch {
+        // Ignore malformed/intermediate responses while sniffing GraphQL payloads.
+      }
     };
 
     page.on("response", handler);

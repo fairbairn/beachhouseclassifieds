@@ -24,20 +24,6 @@ function toPositiveIntString(input: unknown): string | null {
   return String(Math.floor(value));
 }
 
-function toNonNegativeInt(input: number, fallback: number): number {
-  if (!Number.isFinite(input)) {
-    return fallback;
-  }
-  return Math.max(0, Math.floor(input));
-}
-
-function toPositiveInt(input: number, fallback: number): number {
-  if (!Number.isFinite(input)) {
-    return fallback;
-  }
-  return Math.max(1, Math.floor(input));
-}
-
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;

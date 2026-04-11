@@ -24,6 +24,7 @@ export const envOverrideKeys = [
   "APIFY_API_TOKEN",
   "APIFY_PROXY_GROUPS",
   "APIFY_PROXY_COUNTRY",
+  "GOOGLE_MAPS_API_KEY",
 ] as const;
 
 export function resolveProfile(value: string | undefined): EnvProfile {

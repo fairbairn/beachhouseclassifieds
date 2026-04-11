@@ -66,7 +66,9 @@ async function run(url, checkIn, checkOut, adults = 2, children = 0) {
         console.log("🔥 FOUND PRICE:", found.total);
         result = found;
       }
-    } catch {}
+    } catch {
+      // Ignore transient parse/network issues while waiting for pricing payloads.
+    }
   });
 
   const target = new URL(url);

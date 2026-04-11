@@ -19,7 +19,14 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { DayPicker, type DateRange } from "react-day-picker";
 
 const countFormatter = new Intl.NumberFormat("en-US");
@@ -112,16 +119,19 @@ export function DateRangeField({
     [calendarEndMonth, numberOfMonths],
   );
 
-  const clampVisibleMonth = (candidate: Date) => {
-    const monthStart = startOfMonth(candidate);
-    if (monthStart.getTime() < calendarStartMonth.getTime()) {
-      return calendarStartMonth;
-    }
-    if (monthStart.getTime() > maxVisibleMonth.getTime()) {
-      return maxVisibleMonth;
-    }
-    return monthStart;
-  };
+  const clampVisibleMonth = useCallback(
+    (candidate: Date) => {
+      const monthStart = startOfMonth(candidate);
+      if (monthStart.getTime() < calendarStartMonth.getTime()) {
+        return calendarStartMonth;
+      }
+      if (monthStart.getTime() > maxVisibleMonth.getTime()) {
+        return maxVisibleMonth;
+      }
+      return monthStart;
+    },
+    [calendarStartMonth, maxVisibleMonth],
+  );
 
   const [isOpen, setIsOpen] = useState(false);
   const [pickerResetToken, setPickerResetToken] = useState(0);
@@ -211,10 +221,18 @@ export function DateRangeField({
       return;
     }
 
-    setIsOpen(true);
     const selectedStart = parseIsoDate(startDate);
-    setVisibleMonth(clampVisibleMonth(selectedStart ?? new Date()));
-  }, [openRequestToken]);
+    const requestedMonth = clampVisibleMonth(selectedStart ?? new Date());
+
+    const frameId = requestAnimationFrame(() => {
+      setIsOpen(true);
+      setVisibleMonth(requestedMonth);
+    });
+
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
+  }, [openRequestToken, startDate, clampVisibleMonth]);
 
   const handleDayClick = (day: Date) => {
     const clicked = startOfDay(day);

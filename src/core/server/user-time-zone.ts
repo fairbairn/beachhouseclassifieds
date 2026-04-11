@@ -32,7 +32,7 @@ async function ensurePostgresUserTimeZoneColumn() {
   }
 
   await pgDb.execute(
-    sql`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "timeZone" text`,
+    sql`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "time_zone" text`,
   );
 }
 
@@ -65,7 +65,7 @@ export async function getStoredUserTimeZoneByUserId(userId: string) {
     }
 
     const rows = await pgDb
-      .select({ timeZone: pgUsers.timeZone })
+      .select({ timeZone: pgUsers.time_zone })
       .from(pgUsers)
       .where(eq(pgUsers.id, userId))
       .limit(1);
@@ -103,8 +103,8 @@ export async function setStoredUserTimeZoneByUserId(
     await pgDb
       .update(pgUsers)
       .set({
-        timeZone: normalizedTimeZone,
-        updatedAt: new Date().toISOString(),
+        time_zone: normalizedTimeZone,
+        updated_at: new Date().toISOString(),
       })
       .where(eq(pgUsers.id, userId));
 

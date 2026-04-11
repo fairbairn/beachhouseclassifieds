@@ -207,7 +207,7 @@ async function runReplay(file) {
   let json;
   try {
     json = JSON.parse(text);
-  } catch (err) {
+  } catch {
     console.log("\n❌ Failed to parse JSON");
     return;
   }
@@ -229,7 +229,7 @@ async function runReplay(file) {
 const mode = process.argv[2];
 
 if (mode === "capture") {
-  const [_, __, ___, checkIn, checkOut] = process.argv;
+  const [, , , checkIn, checkOut] = process.argv;
 
   if (!checkIn || !checkOut) {
     console.error(

@@ -112,7 +112,10 @@ export function DiscoverFacetSidebar({
 
     if (start === end) {
       propertiesCountRef.current = end;
-      setAnimatedPropertiesCount(end);
+      animationFrameRef.current = requestAnimationFrame(() => {
+        setAnimatedPropertiesCount(end);
+        animationFrameRef.current = null;
+      });
       return;
     }
 

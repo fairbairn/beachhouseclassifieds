@@ -75,7 +75,9 @@ async function worker(context, jobs, checkIn, checkOut, workerId) {
             loggedVariables = true;
           }
         }
-      } catch {}
+      } catch {
+        // Ignore malformed/intermediate responses while sniffing GraphQL payloads.
+      }
     };
 
     page.on("response", handler);

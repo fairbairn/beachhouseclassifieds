@@ -1,6 +1,6 @@
 {
-  "id": "822c70a6-8467-4c49-a854-4a46873d728b",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "05e49f29-6e3b-48b4-8b29-751cadba148a",
+  "prevId": "1f568cdc-71d6-4e0b-88d8-2ca8c2de2747",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -91,6 +91,50 @@
         "description_markdown": {
           "name": "description_markdown",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description_short_plain": {
+          "name": "description_short_plain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seo_meta_description": {
+          "name": "seo_meta_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seo_meta_title": {
+          "name": "seo_meta_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seo_hidden_summary_plain": {
+          "name": "seo_hidden_summary_plain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleeping_arrangements": {
+          "name": "sleeping_arrangements",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "content_version": {
+          "name": "content_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "content_generated_at": {
+          "name": "content_generated_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -355,6 +399,19 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "details_url": {
+          "name": "details_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quote_context": {
+          "name": "quote_context",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
         },
         "is_primary_source": {
           "name": "is_primary_source",

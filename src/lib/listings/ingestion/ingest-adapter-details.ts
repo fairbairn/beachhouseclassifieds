@@ -1,0 +1,1283 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import { and, eq } from "drizzle-orm";
+
+import { pgDb } from "@/core/server/db";
+import {
+  listing,
+  listing_source_link,
+  site,
+  type listing as listing_table,
+} from "@/lib/db/schema-postgres";
+import { resolvePlannedCommunity } from "@/lib/discover/community-resolution";
+import { resolveListingGeocode } from "@/lib/listings/geocoding/listing-geocode-cache";
+import {
+  toAreaCodeFromLabel,
+  toBeachAreaCodeFromLabel,
+  toCommunityCodeFromLabel,
+} from "@/lib/listings/taxonomy/location-taxonomy";
+import { selectCanonicalListings } from "@/lib/pricing/shared/canonical-index-listings";
+
+const BASELINE_SITE_SLUG = "30acollections";
+
+type IngestOptions = {
+  adapterKey: string;
+  listingId?: string | null;
+  maxListings?: number | null;
+  dryRun?: boolean;
+  rootDir?: string;
+};
+
+export type IngestStats = {
+  adapterKey: string;
+  scanned: number;
+  insertedListings: number;
+  updatedListings: number;
+  insertedSourceLinks: number;
+  updatedSourceLinks: number;
+  skippedMissingDetailJson: number;
+  skippedMissingName: number;
+};
+
+type CanonicalDetailRecord = {
+  external_listing_id?: unknown;
+  detail_url?: unknown;
+  title?: unknown;
+  h1?: unknown;
+  description_expanded?: unknown;
+  meta_description?: unknown;
+  amenities?: unknown;
+  property_profile?: unknown;
+  location?: unknown;
+  quote_context?: unknown;
+};
+
+type BroadArea = "West 30A" | "Central 30A" | "East 30A";
+
+type SpecificBeachZone =
+  | "Dune Allen Beach"
+  | "Blue Mountain Beach"
+  | "Grayton Beach"
+  | "Seagrove Beach"
+  | "WaterSound Beach"
+  | "Seacrest Beach"
+  | "Rosemary Beach"
+  | "Santa Rosa Beach"
+  | "Inlet Beach";
+
+const BEACH_ZONE_POLYGONS: Partial<
+  Record<SpecificBeachZone, Array<{ lat: number; lng: number }>>
+> = {
+  "Santa Rosa Beach": [
+    { lat: 30.34772233336146, lng: -86.23731252489573 },
+    { lat: 30.338415151215898, lng: -86.20476947639881 },
+    { lat: 30.340677880717806, lng: -86.20468208335183 },
+    { lat: 30.339584234655803, lng: -86.18528082692542 },
+    { lat: 30.354102333232063, lng: -86.18785892181097 },
+    { lat: 30.35677946163925, lng: -86.23697381420534 },
+    { lat: 30.34772233336146, lng: -86.23731252489573 },
+  ],
+  "Dune Allen Beach": [
+    { lat: 30.347729690218713, lng: -86.23736632502414 },
+    { lat: 30.356817179228813, lng: -86.2370166884941 },
+    { lat: 30.360832732927406, lng: -86.26303796822747 },
+    { lat: 30.355139269936075, lng: -86.26391189869746 },
+    { lat: 30.347729690218713, lng: -86.23736632502414 },
+  ],
+  "Blue Mountain Beach": [
+    { lat: 30.340681621369924, lng: -86.20462299123126 },
+    { lat: 30.338397968836418, lng: -86.2047147612119 },
+    { lat: 30.337328725930377, lng: -86.20089101202714 },
+    { lat: 30.340576020115364, lng: -86.20078394705003 },
+    { lat: 30.340681621369924, lng: -86.20462299123126 },
+  ],
+  "Grayton Beach": [
+    { lat: 30.34059995024859, lng: -86.20092558678674 },
+    { lat: 30.3373311423627, lng: -86.20090006766108 },
+    { lat: 30.31884964572356, lng: -86.14651237155411 },
+    { lat: 30.336870102146293, lng: -86.14516619493546 },
+    { lat: 30.34059995024859, lng: -86.20092558678674 },
+  ],
+  "Seagrove Beach": [
+    { lat: 30.318854763519624, lng: -86.14648578450826 },
+    { lat: 30.29800443110517, lng: -86.07718801837291 },
+    { lat: 30.305705354496183, lng: -86.07330002489343 },
+    { lat: 30.336937254371747, lng: -86.14529651591467 },
+    { lat: 30.318854763519624, lng: -86.14648578450826 },
+  ],
+  "WaterSound Beach": [
+    { lat: 30.305713898281326, lng: -86.07328235375053 },
+    { lat: 30.298010029971863, lng: -86.07716188857569 },
+    { lat: 30.293767061012076, lng: -86.06483790408446 },
+    { lat: 30.29581040845393, lng: -86.05556581921546 },
+    { lat: 30.304954703294655, lng: -86.05222941906923 },
+    { lat: 30.305713898281326, lng: -86.07328235375053 },
+  ],
+  "Seacrest Beach": [
+    { lat: 30.293748829005125, lng: -86.06489519930663 },
+    { lat: 30.277639373721286, lng: -86.01931415024751 },
+    { lat: 30.285279238992814, lng: -86.0156599733186 },
+    { lat: 30.304985129947994, lng: -86.05226585097377 },
+    { lat: 30.295769244068623, lng: -86.05556743188328 },
+    { lat: 30.293748829005125, lng: -86.06489519930663 },
+  ],
+  "Rosemary Beach": [
+    { lat: 30.285248921299328, lng: -86.01567075132394 },
+    { lat: 30.27760905366793, lng: -86.0193249282528 },
+    { lat: 30.274951568976988, lng: -86.01233711623102 },
+    { lat: 30.28163666671793, lng: -86.01193643893637 },
+    { lat: 30.285248921299328, lng: -86.01567075132394 },
+  ],
+};
+
+const SPECIFIC_AREA_TO_BROAD_AREA: Record<SpecificBeachZone, BroadArea> = {
+  "Dune Allen Beach": "West 30A",
+  "Blue Mountain Beach": "West 30A",
+  "Grayton Beach": "West 30A",
+  "Seagrove Beach": "Central 30A",
+  "WaterSound Beach": "East 30A",
+  "Seacrest Beach": "East 30A",
+  "Rosemary Beach": "East 30A",
+  "Inlet Beach": "East 30A",
+  "Santa Rosa Beach": "West 30A",
+};
+
+const AREA_ALIAS_TO_SPECIFIC_ZONE: Record<string, SpecificBeachZone> = {
+  seaside: "Seagrove Beach",
+  watercolor: "Seagrove Beach",
+  "old seagrove": "Seagrove Beach",
+  "eastern lake": "Seagrove Beach",
+  watersound: "WaterSound Beach",
+  "watersound west beach": "WaterSound Beach",
+  "watersound west": "WaterSound Beach",
+  "watersound bridges": "WaterSound Beach",
+  "watersound bridge": "WaterSound Beach",
+  seacrest: "Seacrest Beach",
+  "gulf place": "Santa Rosa Beach",
+  "watersound origins": "Inlet Beach",
+  "kaiya beach resort": "Inlet Beach",
+  "alys beach": "Inlet Beach",
+  alys: "Inlet Beach",
+  "rosemary inlet beach": "Rosemary Beach",
+};
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, "").trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function hashHex(value: string, length: number): string {
+  return createHash("sha1").update(value).digest("hex").slice(0, length);
+}
+
+function buildSourceContentHash(input: {
+  canonicalName: string;
+  descriptionExpanded: string;
+  metaDescription: string;
+  amenities: string[];
+  area: string | null;
+  bedrooms: number | null;
+  bathrooms: string | null;
+  sleeps: number | null;
+  lat: number | null;
+  lng: number | null;
+}): string {
+  const payload = JSON.stringify({
+    canonical_name: input.canonicalName,
+    description_expanded: input.descriptionExpanded,
+    meta_description: input.metaDescription,
+    amenities: [...input.amenities].sort(),
+    area: input.area,
+    bedrooms: input.bedrooms,
+    bathrooms: input.bathrooms,
+    sleeps: input.sleeps,
+    lat: input.lat,
+    lng: input.lng,
+  });
+
+  return hashHex(payload, 20);
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
+function toTitleCase(value: string): string {
+  const lowered = value.toLowerCase();
+  const result = lowered.replace(/\b([a-z])/g, (_match, chr: string) =>
+    chr.toUpperCase(),
+  );
+
+  return result
+    .replace(/\b30a\b/g, "30A")
+    .replace(/\bLsv\b/g, "LSV")
+    .replace(/\bUsa\b/g, "USA")
+    .replace(/\bFl\b/g, "FL");
+}
+
+function normalizeListingName(input: string, fallbackId: string): string {
+  const raw = input.trim();
+  const base = raw || fallbackId;
+  const stripped = base.replace(/\s*\|\s*[^|]+$/, "").trim();
+  const lettersOnly = stripped.replace(/[^A-Za-z]/g, "");
+  const mostlyUppercase =
+    stripped.length > 0 &&
+    lettersOnly.length > 0 &&
+    lettersOnly === lettersOnly.toUpperCase();
+
+  return mostlyUppercase ? toTitleCase(stripped) : stripped;
+}
+
+function extractQuotedPropertyName(input: string): string {
+  const quoteMatch = input.match(/["“]([^"”]{2,120})["”]/);
+  return quoteMatch?.[1]?.trim() ?? "";
+}
+
+function buildSlugParts(input: {
+  canonicalName: string;
+  communityName?: string | null;
+  beachAreaName?: string | null;
+  areaName?: string | null;
+  stableKey: string;
+}) {
+  const slug_base = slugify(input.canonicalName) || "listing";
+  const qualifierSource =
+    asString(input.communityName ?? "") ||
+    asString(input.beachAreaName ?? "") ||
+    asString(input.areaName ?? "");
+  const slug_qualifier = qualifierSource ? slugify(qualifierSource) : null;
+  const slug_hash8 = hashHex(input.stableKey, 8);
+  const slug = slug_qualifier
+    ? `${slug_base}-in-${slug_qualifier}-${slug_hash8}-at-30a-collections`
+    : `${slug_base}-${slug_hash8}-at-30a-collections`;
+
+  return {
+    slug,
+    slug_base,
+    slug_qualifier,
+    slug_hash8,
+  };
+}
+
+function buildDeterministicListingNumber(stableKey: string): number {
+  const digest = createHash("sha1").update(stableKey).digest();
+  const raw = digest.readUInt32BE(0);
+  return 100000000 + (raw % 900000000);
+}
+
+function buildCanonicalName(
+  detail: CanonicalDetailRecord,
+  fallbackId: string,
+): string {
+  const h1 = asString(detail.h1);
+  const quotedFromH1 = extractQuotedPropertyName(h1);
+  if (quotedFromH1) {
+    return normalizeListingName(quotedFromH1, fallbackId);
+  }
+
+  if (h1) {
+    return normalizeListingName(h1, fallbackId);
+  }
+
+  const title = asString(detail.title);
+  if (title) {
+    return normalizeListingName(title, fallbackId);
+  }
+
+  return normalizeListingName(fallbackId, fallbackId);
+}
+
+function normalizePositiveInteger(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  const rounded = Math.round(value);
+  return rounded > 0 ? rounded : null;
+}
+
+function normalizePositiveDecimalString(value: number | null): string | null {
+  if (value === null || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return value.toString();
+}
+
+function parseCount(text: string, regex: RegExp): number | null {
+  const match = text.match(regex);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+}
+
+function inferBedroomCount(
+  profileBeds: number | null,
+  detail: CanonicalDetailRecord,
+): number | null {
+  const direct = normalizePositiveInteger(profileBeds);
+  if (direct !== null) {
+    return direct;
+  }
+
+  const textBlob = [
+    asString(detail.h1),
+    asString(detail.title),
+    asString(detail.description_expanded),
+    asString(detail.meta_description),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const fromBedrooms = parseCount(textBlob, /(\d+)\s*bed(?:room)?s?/i);
+  if (fromBedrooms !== null) {
+    return fromBedrooms;
+  }
+
+  const fromSleeps = parseCount(textBlob, /sleeps\s*(\d+)/i);
+  if (fromSleeps !== null) {
+    const estimated = Math.floor(fromSleeps / 2);
+    return estimated > 0 ? estimated : null;
+  }
+
+  return null;
+}
+
+function inferSleepsCount(
+  profileSleeps: number | null,
+  detail: CanonicalDetailRecord,
+): number | null {
+  const direct = normalizePositiveInteger(profileSleeps);
+  if (direct !== null) {
+    return direct;
+  }
+
+  const textBlob = [
+    asString(detail.h1),
+    asString(detail.title),
+    asString(detail.description_expanded),
+    asString(detail.meta_description),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return parseCount(textBlob, /sleeps\s*(\d+)/i);
+}
+
+function inferCanonicalPropertyType(input: {
+  detail: CanonicalDetailRecord;
+  canonicalName: string;
+  externalListingId: string;
+  bedrooms: number | null;
+}): "condo" | "cottage" | "carriage" | "townhome" | "house" {
+  const profile = asObject(input.detail.property_profile);
+  const sourcePropertyType = asString(profile?.property_type).toLowerCase();
+
+  const bedrooms = input.bedrooms ?? 0;
+
+  const amenities = extractAmenities(input.detail).join("\n");
+  const textBlob = [
+    input.canonicalName,
+    input.externalListingId,
+    asString(input.detail.title),
+    asString(input.detail.h1),
+    asString(input.detail.description_expanded),
+    asString(input.detail.meta_description),
+    amenities,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const nameAndDescriptionBlob = [
+    input.canonicalName,
+    asString(input.detail.title),
+    asString(input.detail.h1),
+    asString(input.detail.description_expanded),
+    asString(input.detail.meta_description),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const hasCarriageSignal =
+    /\bcarriage\s+house\b|\bcarriage\b/i.test(sourcePropertyType) ||
+    /\bcarriage\s+house\b|\bcarriage\b/i.test(nameAndDescriptionBlob);
+  const hasCottageSignal =
+    /\bcottage\b/i.test(sourcePropertyType) ||
+    /\bcottage\b/i.test(nameAndDescriptionBlob);
+
+  if (hasCarriageSignal) {
+    return "carriage";
+  }
+  if (hasCottageSignal) {
+    return "cottage";
+  }
+
+  if (/\btown(?:home|house)s?\b/i.test(sourcePropertyType)) {
+    return "townhome";
+  }
+  if (/\btown(?:home|house)s?\b/i.test(textBlob)) {
+    return "townhome";
+  }
+
+  // For larger inventory, default to house unless very explicit condo evidence is present.
+  if (bedrooms >= 3) {
+    return "house";
+  }
+
+  const hasUnitNumericSignal =
+    /\B#\s*\d+\b/i.test(textBlob) ||
+    /\bunit\s*#\s*\d+\b/i.test(textBlob) ||
+    /\bunit\s+\d+\b/i.test(textBlob) ||
+    /\b\d{1,4}\s*-\s*\d{1,4}\b/i.test(textBlob);
+
+  const hasCondoWordInDescription = /\bcondo(?:minium)?s?\b/i.test(
+    [
+      asString(input.detail.description_expanded),
+      asString(input.detail.meta_description),
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
+
+  const hasNameOrDescriptionCottageCarriage = /\bcottage\b|\bcarriage\b/i.test(
+    nameAndDescriptionBlob,
+  );
+
+  if (hasUnitNumericSignal) {
+    return "condo";
+  }
+
+  if (hasCondoWordInDescription && !hasNameOrDescriptionCottageCarriage) {
+    return "condo";
+  }
+
+  if (/\b(vacation\s+home|house|home|villa)\b/i.test(sourcePropertyType)) {
+    return "house";
+  }
+
+  return "house";
+}
+
+function inferIsGulfFront(detail: CanonicalDetailRecord): boolean {
+  const haystack = [
+    asString(detail.title),
+    asString(detail.h1),
+    asString(detail.description_expanded),
+    asString(detail.meta_description),
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
+
+  if (!haystack) {
+    return false;
+  }
+
+  const negativePatterns = [
+    /(not|no|non[-\s])\s+(gulf|beach|ocean|water)\s*front/,
+    /not\s+beachfront/,
+    /not\s+on\s+the\s+(beach|gulf|ocean)/,
+  ];
+  if (negativePatterns.some((pattern) => pattern.test(haystack))) {
+    return false;
+  }
+
+  const strongPatterns = [
+    /gulf\s*front/,
+    /beach\s*front/,
+    /ocean\s*front/,
+    /direct\s+(beach|gulf|ocean|water)\s*front/,
+    /waterfront\s+(home|house|property|residence|villa)/,
+    /(home|house|property|residence|villa)\s+on\s+the\s+waterfront/,
+  ];
+  const weakPatterns = [/\bbeachfront\b/, /\bwaterfront\b/];
+  const nearButNotFrontPatterns = [
+    /near\s+the\s+(beach|gulf|ocean|water)/,
+    /close\s+to\s+the\s+(beach|gulf|ocean|water)/,
+    /\d+\s*[- ]?minute\s+(walk|stroll|ride|drive)\s+to\s+(the\s+)?beach/,
+    /public\s+beach\s+access/,
+  ];
+
+  const hasStrong = strongPatterns.some((pattern) => pattern.test(haystack));
+  const hasWeak = weakPatterns.some((pattern) => pattern.test(haystack));
+  const hasNearSignal = nearButNotFrontPatterns.some((pattern) =>
+    pattern.test(haystack),
+  );
+
+  if (hasNearSignal && !hasStrong) {
+    return false;
+  }
+
+  return hasStrong || hasWeak;
+}
+
+function extractAmenities(detail: CanonicalDetailRecord): string[] {
+  const amenities = asObject(detail.amenities);
+  if (!amenities) {
+    return [];
+  }
+
+  const all = Array.isArray(amenities.all) ? amenities.all : [];
+  const categories = asObject(amenities.categories);
+  const categoryValues = categories
+    ? Object.values(categories)
+        .flatMap((value) => (Array.isArray(value) ? value : []))
+        .map((entry) => asString(entry))
+    : [];
+
+  return Array.from(
+    new Set(
+      [...all, ...categoryValues]
+        .map((entry) => asString(entry))
+        .filter(Boolean),
+    ),
+  );
+}
+
+function toTraitObjects(detail: CanonicalDetailRecord, amenities: string[]) {
+  const amenityHaystack = amenities.join("\n").toLowerCase();
+  const textHaystack = [
+    asString(detail.title),
+    asString(detail.h1),
+    asString(detail.description_expanded),
+    asString(detail.meta_description),
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
+  const combinedHaystack = `${amenityHaystack}\n${textHaystack}`;
+
+  const hasAny = (patterns: RegExp[]) =>
+    patterns.some((pattern) => pattern.test(combinedHaystack));
+  const hasAnyAmenity = (patterns: RegExp[]) =>
+    patterns.some((pattern) => pattern.test(amenityHaystack));
+
+  const boolTrait = (key: string, value: boolean) => ({
+    key,
+    value_type: "boolean",
+    value_boolean: value,
+    extraction_method: "rule",
+    confidence_score: value ? 0.9 : 0.75,
+    sources: [
+      {
+        source: "amenities",
+      },
+    ],
+  });
+
+  return [
+    boolTrait(
+      "feature.private_pool",
+      !hasAny([
+        /\bno\s+private\s+pool\b/,
+        /\bnot\s+a?\s*private\s+pool\b/,
+        /\bwithout\s+a?\s*private\s+pool\b/,
+      ]) &&
+        (hasAnyAmenity([/\bprivate\s+pool\b/, /\bpool\s*\(private\)\b/]) ||
+          hasAny([/\bprivate\s+pool\b/])),
+    ),
+    boolTrait(
+      "feature.pets_allowed",
+      !hasAny([/\bno\s+pets?\s+allowed\b/, /\bpets?\s+not\s+allowed\b/]) &&
+        hasAny([/\bpets?\s+allowed\b/, /\bpet[-\s]?friendly\b/]),
+    ),
+    boolTrait(
+      "feature.golf_cart",
+      !hasAny([
+        /\bno\s+golf\s*cart\b/,
+        /\bwithout\s+golf\s*cart\b/,
+        /\bgolf\s*cart\s+not\s+included\b/,
+      ]) && hasAny([/\bgolf\s*cart\b/, /\blsv\b/]),
+    ),
+    boolTrait(
+      "feature.accessible",
+      hasAny([/\baccessible\b/, /\bwheelchair\b/, /\bmobility\b/]),
+    ),
+    boolTrait("feature.elevator", hasAny([/\belevator\b/])),
+  ];
+}
+
+function parseCityState(detail: CanonicalDetailRecord): {
+  city: string | null;
+  state: string | null;
+} {
+  const profile = asObject(detail.property_profile);
+  const location = asObject(detail.location);
+  const profileCity = asString(profile?.city);
+  const profileState = asString(profile?.state);
+
+  if (profileCity || profileState) {
+    return {
+      city: profileCity || null,
+      state: profileState || null,
+    };
+  }
+
+  const candidates: Array<{ city: string | null; state: string | null }> = [];
+
+  const walk = (value: unknown) => {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        walk(item);
+      }
+      return;
+    }
+
+    const objectValue = value as Record<string, unknown>;
+    const city =
+      asString(objectValue.city) ||
+      asString(objectValue.locality) ||
+      asString(objectValue.town) ||
+      null;
+    const state =
+      asString(objectValue.state) ||
+      asString(objectValue.province) ||
+      asString(objectValue.region) ||
+      null;
+    if (city || state) {
+      candidates.push({ city, state });
+    }
+
+    for (const nested of Object.values(objectValue)) {
+      walk(nested);
+    }
+  };
+
+  walk(detail.property_profile);
+  walk(detail.location);
+  walk(detail.quote_context);
+
+  const bestNested = candidates.find((entry) => entry.city || entry.state);
+  if (bestNested) {
+    return {
+      city: bestNested.city,
+      state: bestNested.state,
+    };
+  }
+
+  const label = asString(location?.location_label);
+  const parts = label
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    const stateToken = parts[1]?.split(/\s+/)[0]?.trim() || null;
+    return {
+      city: parts[0] || null,
+      state: stateToken,
+    };
+  }
+
+  return { city: null, state: null };
+}
+
+function normalizePostalCode(value: string): string | null {
+  const text = value.trim();
+  if (!text) {
+    return null;
+  }
+
+  const us = text.match(/\b\d{5}(?:-\d{4})?\b/);
+  if (us) {
+    return us[0];
+  }
+
+  return text;
+}
+
+function inferPostalCode(detail: CanonicalDetailRecord): string | null {
+  const candidates: string[] = [];
+  const visited = new Set<unknown>();
+
+  const walk = (value: unknown) => {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+
+    if (visited.has(value)) {
+      return;
+    }
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        walk(item);
+      }
+      return;
+    }
+
+    for (const [key, nested] of Object.entries(value)) {
+      if (/(postal|postcode|zip)/i.test(key)) {
+        const maybe = asString(nested);
+        if (maybe) {
+          candidates.push(maybe);
+        }
+      }
+
+      if (/(address|location|label)/i.test(key)) {
+        const maybe = asString(nested);
+        if (maybe) {
+          candidates.push(maybe);
+        }
+      }
+
+      walk(nested);
+    }
+  };
+
+  walk(detail.property_profile);
+  walk(detail.location);
+  walk(detail.quote_context);
+
+  const label = asString(asObject(detail.location)?.location_label);
+  if (label) {
+    candidates.push(label);
+  }
+
+  const textBlob = [
+    asString(detail.h1),
+    asString(detail.title),
+    asString(detail.description_expanded),
+    asString(detail.meta_description),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  if (textBlob) {
+    candidates.push(textBlob);
+  }
+
+  for (const candidate of candidates) {
+    const normalized = normalizePostalCode(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/[-_]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function pointInPolygon(
+  point: { lat: number; lng: number },
+  polygon: Array<{ lat: number; lng: number }>,
+): boolean {
+  if (polygon.length < 3) {
+    return false;
+  }
+
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng;
+    const yi = polygon[i].lat;
+    const xj = polygon[j].lng;
+    const yj = polygon[j].lat;
+
+    const intersects =
+      yi > point.lat !== yj > point.lat &&
+      point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function inferSpecificAreaFromCoordinates(
+  lat: number,
+  lng: number,
+): SpecificBeachZone | null {
+  for (const [zone, polygon] of Object.entries(BEACH_ZONE_POLYGONS)) {
+    if (polygon && pointInPolygon({ lat, lng }, polygon)) {
+      return zone as SpecificBeachZone;
+    }
+  }
+
+  if (lng > -86.055 && lng <= -86.012) {
+    return "Inlet Beach";
+  }
+
+  return "Santa Rosa Beach";
+}
+
+function inferSpecificAreaFromSourceArea(
+  sourceAreaName: string | null,
+): SpecificBeachZone | null {
+  if (!sourceAreaName) {
+    return null;
+  }
+
+  const normalized = normalizeText(sourceAreaName);
+  return AREA_ALIAS_TO_SPECIFIC_ZONE[normalized] ?? null;
+}
+
+function resolveBeachAreaName(input: {
+  lat: number | null;
+  lng: number | null;
+  sourceAreaName: string | null;
+}): SpecificBeachZone | null {
+  if (input.lat !== null && input.lng !== null) {
+    return inferSpecificAreaFromCoordinates(input.lat, input.lng);
+  }
+
+  return inferSpecificAreaFromSourceArea(input.sourceAreaName);
+}
+
+function resolveBroadAreaName(input: {
+  lat: number | null;
+  lng: number | null;
+  sourceAreaName: string | null;
+}): BroadArea | null {
+  if (input.lat !== null && input.lng !== null) {
+    const specificByPolygon = inferSpecificAreaFromCoordinates(
+      input.lat,
+      input.lng,
+    );
+    if (specificByPolygon) {
+      return SPECIFIC_AREA_TO_BROAD_AREA[specificByPolygon];
+    }
+  }
+
+  const specificBySourceArea = inferSpecificAreaFromSourceArea(
+    input.sourceAreaName,
+  );
+  if (specificBySourceArea) {
+    return SPECIFIC_AREA_TO_BROAD_AREA[specificBySourceArea];
+  }
+
+  return null;
+}
+
+function resolveCommunityName(input: {
+  externalListingId: string;
+  canonicalName: string;
+  sourceAreaName: string | null;
+  beachAreaName: string | null;
+  city: string | null;
+  state: string | null;
+  lat: number | null;
+  lng: number | null;
+}): string | null {
+  const result = resolvePlannedCommunity({
+    id: input.externalListingId,
+    name: input.canonicalName,
+    area: input.beachAreaName ?? input.sourceAreaName ?? "",
+    community: input.sourceAreaName ?? "",
+    addressText: [input.city, input.state].filter(Boolean).join(", "),
+    lat: input.lat ?? undefined,
+    lng: input.lng ?? undefined,
+  });
+
+  const top = result.topCandidate;
+  if (!top) {
+    return null;
+  }
+
+  if (top.reasons.includes("polygon:inside")) {
+    return top.community;
+  }
+
+  if (result.confidence === "high") {
+    return result.recommendedCommunity;
+  }
+
+  return null;
+}
+
+async function resolveBaselineSiteId(): Promise<string> {
+  if (!pgDb) {
+    throw new Error("Postgres database is not configured.");
+  }
+
+  const found = await pgDb
+    .select({ id: site.id })
+    .from(site)
+    .where(eq(site.slug, BASELINE_SITE_SLUG))
+    .limit(1);
+
+  if (found.length === 0) {
+    throw new Error(
+      `Baseline site '${BASELINE_SITE_SLUG}' is missing. Run db:setup:postgres:raw first.`,
+    );
+  }
+
+  return found[0].id;
+}
+
+async function readDetailJson(
+  rootDir: string,
+  adapterKey: string,
+  fileBaseNames: string[],
+): Promise<{
+  detail: CanonicalDetailRecord;
+  resolvedFileBaseName: string;
+} | null> {
+  for (const fileBaseName of fileBaseNames) {
+    if (!fileBaseName.trim()) {
+      continue;
+    }
+
+    const filePath = resolve(
+      rootDir,
+      "src",
+      "lib",
+      "data",
+      "external-sources",
+      adapterKey,
+      "details",
+      "json",
+      `${fileBaseName}.json`,
+    );
+
+    try {
+      const raw = await readFile(filePath, "utf8");
+      return {
+        detail: JSON.parse(raw) as CanonicalDetailRecord,
+        resolvedFileBaseName: fileBaseName,
+      };
+    } catch {
+      // Try next candidate filename.
+    }
+  }
+
+  return null;
+}
+
+export async function ingestAdapterDetailsToCanonical(
+  options: IngestOptions,
+): Promise<IngestStats> {
+  if (!pgDb) {
+    throw new Error("Postgres database is not configured.");
+  }
+
+  const rootDir = options.rootDir ?? process.cwd();
+  const siteId = await resolveBaselineSiteId();
+  const canonicalListings = await selectCanonicalListings({
+    adapterKey: options.adapterKey,
+    listingId: options.listingId,
+    maxListings: options.maxListings,
+    rootDir,
+  });
+
+  const stats: IngestStats = {
+    adapterKey: options.adapterKey,
+    scanned: 0,
+    insertedListings: 0,
+    updatedListings: 0,
+    insertedSourceLinks: 0,
+    updatedSourceLinks: 0,
+    skippedMissingDetailJson: 0,
+    skippedMissingName: 0,
+  };
+
+  for (const candidate of canonicalListings) {
+    stats.scanned += 1;
+
+    const detailResolution = await readDetailJson(rootDir, options.adapterKey, [
+      candidate.detailFileBaseName,
+      candidate.externalListingId,
+    ]);
+
+    if (!detailResolution) {
+      stats.skippedMissingDetailJson += 1;
+      continue;
+    }
+    const detail = detailResolution.detail;
+
+    const stableKey = `${options.adapterKey}:${candidate.externalListingId}`;
+    const canonicalName = buildCanonicalName(
+      detail,
+      candidate.externalListingId,
+    );
+    if (!canonicalName) {
+      stats.skippedMissingName += 1;
+      continue;
+    }
+
+    const parsedCityState = parseCityState(detail);
+    const profile = asObject(detail.property_profile);
+    const location = asObject(detail.location);
+    const lat = asNumber(location?.latitude);
+    const lng = asNumber(location?.longitude);
+    const sourceAreaName = asString(profile?.area) || null;
+    const beachAreaName = resolveBeachAreaName({
+      lat,
+      lng,
+      sourceAreaName,
+    });
+    const areaName = resolveBroadAreaName({
+      lat,
+      lng,
+      sourceAreaName,
+    });
+    const communityName = resolveCommunityName({
+      externalListingId: candidate.externalListingId,
+      canonicalName,
+      sourceAreaName,
+      beachAreaName,
+      city: parsedCityState.city,
+      state: parsedCityState.state,
+      lat,
+      lng,
+    });
+    const areaCode = toAreaCodeFromLabel(areaName);
+    const beachAreaCode = toBeachAreaCodeFromLabel(beachAreaName);
+    const communityCode = toCommunityCodeFromLabel(communityName);
+    const amenities = extractAmenities(detail);
+    const traits = toTraitObjects(detail, amenities);
+    const bedrooms = inferBedroomCount(asNumber(profile?.beds), detail);
+    const sleeps = inferSleepsCount(asNumber(profile?.sleeps), detail);
+    const bathrooms = normalizePositiveDecimalString(asNumber(profile?.baths));
+    const descriptionExpanded = asString(detail.description_expanded);
+    const metaDescription = asString(detail.meta_description);
+    const sourceContentHash = buildSourceContentHash({
+      canonicalName,
+      descriptionExpanded,
+      metaDescription,
+      amenities,
+      area: sourceAreaName,
+      bedrooms,
+      bathrooms,
+      sleeps,
+      lat,
+      lng,
+    });
+    const slugParts = buildSlugParts({
+      canonicalName,
+      communityName,
+      beachAreaName,
+      areaName,
+      stableKey,
+    });
+    const listingId = `lst_${hashHex(stableKey, 20)}`;
+    const listingNumber = buildDeterministicListingNumber(stableKey);
+    const externalQuoteContext = asObject(candidate.quoteContext);
+    const detailQuoteContext = asObject(detail.quote_context);
+    const quoteContext = externalQuoteContext ?? detailQuoteContext ?? {};
+    const detailUrl =
+      candidate.detailUrl || asString(detail.detail_url) || null;
+    const inferredPostalCode = inferPostalCode(detail);
+    const geocode = await resolveListingGeocode({
+      listingId,
+      canonicalName,
+      lat,
+      lng,
+      city: parsedCityState.city,
+      state: parsedCityState.state,
+      postalCode: inferredPostalCode,
+      area: sourceAreaName,
+    });
+    const city = geocode.city;
+    const state = geocode.state;
+    const postalCode = geocode.postalCode;
+    const now = new Date().toISOString();
+
+    const listingValues: typeof listing_table.$inferInsert = {
+      id: listingId,
+      listing_number: listingNumber,
+      site_id: siteId,
+      status: "active",
+      slug: slugParts.slug,
+      slug_base: slugParts.slug_base,
+      slug_qualifier: slugParts.slug_qualifier,
+      slug_hash8: slugParts.slug_hash8,
+      canonical_name: canonicalName,
+      // Canonical ingest should never persist zero bedrooms/sleeps values.
+      property_type: inferCanonicalPropertyType({
+        detail,
+        canonicalName,
+        externalListingId: candidate.externalListingId,
+        bedrooms,
+      }),
+      bedrooms,
+      bathrooms,
+      sleeps,
+      // AI-owned content field: keep null during canonical source ingest.
+      description_markdown: null,
+      lat,
+      lng,
+      city,
+      state,
+      postal_code: postalCode,
+      country_code: "US",
+      area: sourceAreaName,
+      area_name: areaCode,
+      beach_area_name: beachAreaCode,
+      community_name: communityCode,
+      is_gulf_front: inferIsGulfFront(detail),
+      traits,
+      amenities_normalized: amenities,
+      updated_at: now,
+    };
+
+    const sourceLinkId = `lsl_${hashHex(stableKey, 20)}`;
+
+    const existingSourceLink = await pgDb
+      .select({ id: listing_source_link.id })
+      .from(listing_source_link)
+      .where(
+        and(
+          eq(listing_source_link.adapter_key, options.adapterKey),
+          eq(
+            listing_source_link.external_listing_id,
+            candidate.externalListingId,
+          ),
+        ),
+      )
+      .limit(1);
+
+    if (!options.dryRun) {
+      await pgDb
+        .insert(listing)
+        .values(listingValues)
+        .onConflictDoUpdate({
+          target: listing.id,
+          set: {
+            site_id: listingValues.site_id,
+            status: listingValues.status,
+            slug: listingValues.slug,
+            slug_base: listingValues.slug_base,
+            slug_qualifier: listingValues.slug_qualifier,
+            slug_hash8: listingValues.slug_hash8,
+            canonical_name: listingValues.canonical_name,
+            property_type: listingValues.property_type,
+            bedrooms: listingValues.bedrooms,
+            bathrooms: listingValues.bathrooms,
+            sleeps: listingValues.sleeps,
+            lat: listingValues.lat,
+            lng: listingValues.lng,
+            city: listingValues.city,
+            state: listingValues.state,
+            area: listingValues.area,
+            area_name: listingValues.area_name,
+            beach_area_name: listingValues.beach_area_name,
+            community_name: listingValues.community_name,
+            is_gulf_front: listingValues.is_gulf_front,
+            traits: listingValues.traits,
+            amenities_normalized: listingValues.amenities_normalized,
+            updated_at: now,
+          },
+        });
+
+      await pgDb
+        .insert(listing_source_link)
+        .values({
+          id: sourceLinkId,
+          listing_id: listingId,
+          adapter_key: options.adapterKey,
+          external_listing_id: candidate.externalListingId,
+          details_url: detailUrl,
+          quote_context: quoteContext,
+          is_primary_source: true,
+          source_status: "active",
+          confidence_score: "1.0000",
+          first_seen_at: now,
+          last_seen_at: now,
+          active_from: now,
+          active_to: null,
+          match_method: "adapter_external_listing_id",
+          match_evidence: {
+            source: "adapter_details_json",
+            detail_file_base_name: detailResolution.resolvedFileBaseName,
+            source_content_hash: sourceContentHash,
+            source_snapshot: {
+              canonical_name: canonicalName,
+              description_expanded: descriptionExpanded || null,
+              meta_description: metaDescription || null,
+              amenities,
+              area: sourceAreaName,
+              bedrooms,
+              bathrooms,
+              sleeps,
+              lat,
+              lng,
+            },
+          },
+          updated_at: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            listing_source_link.adapter_key,
+            listing_source_link.external_listing_id,
+          ],
+          set: {
+            listing_id: listingId,
+            details_url: detailUrl,
+            quote_context: quoteContext,
+            source_status: "active",
+            is_primary_source: true,
+            last_seen_at: now,
+            active_to: null,
+            match_method: "adapter_external_listing_id",
+            match_evidence: {
+              source: "adapter_details_json",
+              detail_file_base_name: detailResolution.resolvedFileBaseName,
+              source_content_hash: sourceContentHash,
+              source_snapshot: {
+                canonical_name: canonicalName,
+                description_expanded: descriptionExpanded || null,
+                meta_description: metaDescription || null,
+                amenities,
+                area: sourceAreaName,
+                bedrooms,
+                bathrooms,
+                sleeps,
+                lat,
+                lng,
+              },
+            },
+            updated_at: now,
+          },
+        });
+    }
+
+    if (existingSourceLink.length > 0) {
+      stats.updatedSourceLinks += 1;
+      stats.updatedListings += 1;
+    } else {
+      stats.insertedSourceLinks += 1;
+      stats.insertedListings += 1;
+    }
+  }
+
+  return stats;
+}

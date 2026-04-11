@@ -43,7 +43,9 @@ async function getPrice(page, timeout = 4000) {
           page.off("response", handler);
           resolve(found);
         }
-      } catch {}
+      } catch {
+        // Ignore malformed/intermediate responses while sniffing GraphQL payloads.
+      }
     };
 
     page.on("response", handler);

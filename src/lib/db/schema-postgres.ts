@@ -13,75 +13,25 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-export const listingSourceTypeEnum = pgEnum("listing_source_type", ["vrbo"]);
-export const listingPriceChannelEnum = pgEnum("listing_price_channel", [
-  "vrbo",
-  "airbnb",
-  "pm_direct",
+export const listing_status_enum = pgEnum("listing_status", [
+  "draft",
+  "active",
+  "inactive",
+  "archived",
 ]);
-export const listingManagerRelationshipTypeEnum = pgEnum(
-  "listing_manager_relationship_type",
-  ["manager", "owner", "co_manager"],
+
+export const listing_source_link_status_enum = pgEnum(
+  "listing_source_link_status",
+  ["active", "inactive"],
 );
 
-export const sources = pgTable(
-  "sources",
+export const site = pgTable(
+  "site",
   {
     id: text("id").primaryKey(),
-    listingId: text("listing_id")
-      .notNull()
-      .references(() => listings.id, { onDelete: "cascade" }),
-    sourceType: listingSourceTypeEnum("source_type").notNull(),
-    sourceId: text("source_id").notNull(),
-    source_listing_id: text("source_listing_id"),
-    sourceUrl: text("source_url"),
-    payloadHash: text("payload_hash").notNull(),
-    payload: jsonb("payload").notNull(),
-    capturedAt: timestamp("captured_at", { mode: "string", withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => ({
-    listingIdIdx: index("sources_listing_id_idx").on(table.listingId),
-    sourceLookupIdx: index("sources_source_lookup_idx").on(
-      table.sourceType,
-      table.sourceId,
-    ),
-    sourceListingLookupIdx: index("sources_source_listing_lookup_idx").on(
-      table.sourceType,
-      table.source_listing_id,
-    ),
-    payloadHashIdx: index("sources_payload_hash_idx").on(table.payloadHash),
-    capturedAtIdx: index("sources_captured_at_idx").on(table.capturedAt),
-    listingPayloadUniqueIdx: uniqueIndex(
-      "sources_listing_payload_unique_idx",
-    ).on(table.listingId, table.payloadHash),
-  }),
-);
-
-export const managers = pgTable(
-  "managers",
-  {
-    id: text("id").primaryKey(),
-    company_name: text("company_name").notNull(),
-    contact_first_name: text("contact_first_name"),
-    contact_last_name: text("contact_last_name"),
-    contact_email: text("contact_email"),
-    contact_phone: text("contact_phone"),
-    website_url: text("website_url"),
-    street_address: text("street_address"),
-    street_address_line2: text("street_address_line2"),
-    city: text("city"),
-    state: text("state"),
-    postal_code: text("postal_code"),
-    country_code: text("country_code"),
-    notes: text("notes"),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    status: text("status").notNull().default("active"),
     created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -90,42 +40,125 @@ export const managers = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    companyNameIdx: index("managers_company_name_idx").on(table.company_name),
-    contactEmailIdx: index("managers_contact_email_idx").on(
-      table.contact_email,
+    slug_unique_idx: uniqueIndex("site_slug_unique_idx").on(table.slug),
+    status_idx: index("site_status_idx").on(table.status),
+  }),
+);
+
+export const listing = pgTable(
+  "listing",
+  {
+    id: text("id").primaryKey(),
+    listing_number: integer("listing_number").notNull(),
+    site_id: text("site_id").references(() => site.id, {
+      onDelete: "set null",
+    }),
+    status: listing_status_enum("status").notNull().default("active"),
+    slug: text("slug").notNull(),
+    slug_base: text("slug_base").notNull(),
+    slug_qualifier: text("slug_qualifier"),
+    slug_hash8: text("slug_hash8").notNull(),
+    canonical_name: text("canonical_name").notNull(),
+    property_type: text("property_type"),
+    bedrooms: integer("bedrooms"),
+    bathrooms: numeric("bathrooms", { precision: 4, scale: 1 }),
+    sleeps: integer("sleeps"),
+    description_markdown: text("description_markdown"),
+    description_short_plain: text("description_short_plain"),
+    seo_meta_description: text("seo_meta_description"),
+    seo_meta_title: text("seo_meta_title"),
+    seo_hidden_summary_plain: text("seo_hidden_summary_plain"),
+    sleeping_arrangements: jsonb("sleeping_arrangements")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    content_version: integer("content_version").notNull().default(1),
+    content_generated_at: timestamp("content_generated_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    city: text("city"),
+    state: text("state"),
+    postal_code: text("postal_code"),
+    country_code: text("country_code").notNull().default("US"),
+    area: text("area"),
+    area_name: text("area_name"),
+    beach_area_name: text("beach_area_name"),
+    community_name: text("community_name"),
+    is_gulf_front: boolean("is_gulf_front").notNull().default(false),
+    traits: jsonb("traits")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    amenities_normalized: jsonb("amenities_normalized")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    listing_number_unique_idx: uniqueIndex(
+      "listing_listing_number_unique_idx",
+    ).on(table.listing_number),
+    slug_unique_idx: uniqueIndex("listing_slug_unique_idx").on(table.slug),
+    site_id_idx: index("listing_site_id_idx").on(table.site_id),
+    status_idx: index("listing_status_idx").on(table.status),
+    city_idx: index("listing_city_idx").on(table.city),
+    state_idx: index("listing_state_idx").on(table.state),
+    community_name_idx: index("listing_community_name_idx").on(
+      table.community_name,
     ),
-    contactPhoneIdx: index("managers_contact_phone_idx").on(
-      table.contact_phone,
+    is_gulf_front_idx: index("listing_is_gulf_front_idx").on(
+      table.is_gulf_front,
     ),
   }),
 );
 
-export const listing_manager_relationships = pgTable(
-  "listing_manager_relationships",
+export const listing_source_link = pgTable(
+  "listing_source_link",
   {
     id: text("id").primaryKey(),
     listing_id: text("listing_id")
       .notNull()
-      .references(() => listings.id, { onDelete: "cascade" }),
-    manager_id: text("manager_id")
+      .references(() => listing.id, { onDelete: "cascade" }),
+    adapter_key: text("adapter_key").notNull(),
+    external_listing_id: text("external_listing_id").notNull(),
+    details_url: text("details_url"),
+    quote_context: jsonb("quote_context")
       .notNull()
-      .references(() => managers.id, { onDelete: "cascade" }),
-    relationship_type: listingManagerRelationshipTypeEnum("relationship_type")
+      .default(sql`'{}'::jsonb`),
+    is_primary_source: boolean("is_primary_source").notNull().default(false),
+    source_status: listing_source_link_status_enum("source_status")
       .notNull()
-      .default("manager"),
-    is_active: boolean("is_active").notNull().default(true),
-    start_date: timestamp("start_date", { mode: "string", withTimezone: true })
+      .default("active"),
+    confidence_score: numeric("confidence_score", { precision: 5, scale: 4 }),
+    first_seen_at: timestamp("first_seen_at", {
+      mode: "string",
+      withTimezone: true,
+    })
       .notNull()
       .defaultNow(),
-    end_date: timestamp("end_date", { mode: "string", withTimezone: true }),
-    confidence_score: numeric("confidence_score", { precision: 5, scale: 4 }),
-    evidence_source_id: text("evidence_source_id").references(
-      () => sources.id,
-      {
-        onDelete: "set null",
-      },
-    ),
-    notes: text("notes"),
+    last_seen_at: timestamp("last_seen_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    active_from: timestamp("active_from", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    active_to: timestamp("active_to", { mode: "string", withTimezone: true }),
+    match_method: text("match_method"),
+    match_evidence: jsonb("match_evidence")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -134,172 +167,75 @@ export const listing_manager_relationships = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    listingIdIdx: index("listing_manager_relationships_listing_id_idx").on(
+    listing_id_idx: index("listing_source_link_listing_id_idx").on(
       table.listing_id,
     ),
-    managerIdIdx: index("listing_manager_relationships_manager_id_idx").on(
-      table.manager_id,
-    ),
-    relationshipTypeIdx: index(
-      "listing_manager_relationships_relationship_type_idx",
-    ).on(table.relationship_type),
-    evidenceSourceIdIdx: index(
-      "listing_manager_relationships_evidence_source_id_idx",
-    ).on(table.evidence_source_id),
-    singleActiveListingRelationshipIdx: uniqueIndex(
-      "listing_manager_relationships_single_active_idx",
+    adapter_external_unique_idx: uniqueIndex(
+      "listing_source_link_adapter_external_unique_idx",
+    ).on(table.adapter_key, table.external_listing_id),
+    listing_primary_unique_idx: uniqueIndex(
+      "listing_source_link_listing_primary_unique_idx",
     )
       .on(table.listing_id)
-      .where(sql`${table.is_active} = true and ${table.end_date} is null`),
+      .where(
+        sql`${table.is_primary_source} = true and ${table.source_status} = 'active' and ${table.active_to} is null`,
+      ),
+    source_status_idx: index("listing_source_link_source_status_idx").on(
+      table.source_status,
+    ),
   }),
 );
 
-export const listings = pgTable(
-  "listing",
+export const listing_geocode_cache = pgTable(
+  "listing_geocode_cache",
   {
     id: text("id").primaryKey(),
-    slug: text("slug").notNull(),
-    title: text("title").notNull(),
-    city: text("city"),
-    state: text("state"),
-    countryCode: text("country_code"),
-    propertyType: text("property_type"),
-    description: text("description"),
-    descriptionSummary: text("description_summary"),
-    descriptionMarketingMd: text("description_marketing_md"),
-    traits: jsonb("traits")
+    listing_id: text("listing_id")
       .notNull()
-      .default(sql`'[]'::jsonb`),
-    amenitiesSection: jsonb("amenities_section")
+      .references(() => listing.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("google"),
+    source_fingerprint: text("source_fingerprint").notNull(),
+    source_input: jsonb("source_input")
       .notNull()
       .default(sql`'{}'::jsonb`),
-    spacesSection: jsonb("spaces_section")
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    policiesSection: jsonb("policies_section")
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    faqsSection: jsonb("faqs_section")
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    reviewsSection: jsonb("reviews_section")
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    locationSection: jsonb("location_section")
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    isOceanfront: boolean("is_oceanfront").notNull().default(false),
-    isBeachfront: boolean("is_beachfront").notNull().default(false),
-    isWaterfront: boolean("is_waterfront").notNull().default(false),
-    hasPrivatePool: boolean("has_private_pool").notNull().default(false),
-    hasNeighborhoodPool: boolean("has_neighborhood_pool")
-      .notNull()
-      .default(false),
-    hasPool: boolean("has_pool").notNull().default(false),
-    allowsPets: boolean("allows_pets").notNull().default(false),
-    hasNeighborhoodAmenities: boolean("has_neighborhood_amenities")
-      .notNull()
-      .default(false),
-    bedrooms: integer("bedrooms"),
-    bathrooms: numeric("bathrooms", { precision: 4, scale: 1 }),
-    maxGuests: integer("max_guests"),
-    currencyCode: text("currency_code"),
-    nightlyRate: numeric("nightly_rate", { precision: 12, scale: 2 }),
-    streetAddress: text("street_address"),
-    zipCode: text("zip_code"),
+    geocode_mode: text("geocode_mode").notNull().default("reverse"),
+    query_text: text("query_text"),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
-    geo: jsonb("geo"),
-    mergeStrategyVersion: text("merge_strategy_version")
-      .notNull()
-      .default("v1"),
-    fieldLineage: jsonb("field_lineage")
+    formatted_address: text("formatted_address"),
+    street_address: text("street_address"),
+    city: text("city"),
+    state: text("state"),
+    postal_code: text("postal_code"),
+    country_code: text("country_code"),
+    place_id: text("place_id"),
+    location_type: text("location_type"),
+    confidence_score: numeric("confidence_score", { precision: 5, scale: 4 }),
+    geocode_status: text("geocode_status").notNull().default("resolved"),
+    raw_response: jsonb("raw_response")
       .notNull()
       .default(sql`'{}'::jsonb`),
-    sourceRefs: jsonb("source_refs")
-      .notNull()
-      .default(sql`'[]'::jsonb`),
-    images: jsonb("images")
-      .notNull()
-      .default(sql`'[]'::jsonb`),
-    primaryImageId: text("primary_image_id"),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
+    resolved_at: timestamp("resolved_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true })
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => ({
-    slugUniqueIdx: uniqueIndex("listing_slug_unique_idx").on(table.slug),
-    cityIdx: index("listing_city_idx").on(table.city),
-    stateIdx: index("listing_state_idx").on(table.state),
-    propertyTypeIdx: index("listing_property_type_idx").on(table.propertyType),
-    isOceanfrontIdx: index("listing_is_oceanfront_idx").on(table.isOceanfront),
-    isBeachfrontIdx: index("listing_is_beachfront_idx").on(table.isBeachfront),
-    isWaterfrontIdx: index("listing_is_waterfront_idx").on(table.isWaterfront),
-    hasPrivatePoolIdx: index("listing_has_private_pool_idx").on(
-      table.hasPrivatePool,
+    listing_id_idx: index("listing_geocode_cache_listing_id_idx").on(
+      table.listing_id,
     ),
-    hasNeighborhoodPoolIdx: index("listing_has_neighborhood_pool_idx").on(
-      table.hasNeighborhoodPool,
+    status_idx: index("listing_geocode_cache_status_idx").on(
+      table.geocode_status,
     ),
-    hasPoolIdx: index("listing_has_pool_idx").on(table.hasPool),
-    allowsPetsIdx: index("listing_allows_pets_idx").on(table.allowsPets),
-    hasNeighborhoodAmenitiesIdx: index(
-      "listing_has_neighborhood_amenities_idx",
-    ).on(table.hasNeighborhoodAmenities),
-    bedroomsIdx: index("listing_bedrooms_idx").on(table.bedrooms),
-    nightlyRateIdx: index("listing_nightly_rate_idx").on(table.nightlyRate),
-    latIdx: index("listing_lat_idx").on(table.lat),
-    lngIdx: index("listing_lng_idx").on(table.lng),
-    primaryImageIdIdx: index("listing_primary_image_id_idx").on(
-      table.primaryImageId,
-    ),
-  }),
-);
-
-export const listingPriceSnapshots = pgTable(
-  "listing_price_snapshot",
-  {
-    id: text("id").primaryKey(),
-    listingId: text("listing_id")
-      .notNull()
-      .references(() => listings.id, { onDelete: "cascade" }),
-    channel: listingPriceChannelEnum("channel").notNull(),
-    sourceUrl: text("source_url"),
-    checkInDate: text("check_in_date").notNull(),
-    checkOutDate: text("check_out_date").notNull(),
-    nights: integer("nights"),
-    currencyCode: text("currency_code").notNull().default("USD"),
-    nightlyRate: numeric("nightly_rate", { precision: 12, scale: 2 }),
-    subtotal: numeric("subtotal", { precision: 12, scale: 2 }),
-    taxesAndFees: numeric("taxes_and_fees", { precision: 12, scale: 2 }),
-    totalPrice: numeric("total_price", { precision: 12, scale: 2 }),
-    isBookable: boolean("is_bookable").notNull().default(true),
-    payload: jsonb("payload"),
-    capturedAt: timestamp("captured_at", { mode: "string", withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => ({
-    listingIdIdx: index("listing_price_snapshot_listing_id_idx").on(
-      table.listingId,
-    ),
-    channelIdx: index("listing_price_snapshot_channel_idx").on(table.channel),
-    dateRangeIdx: index("listing_price_snapshot_date_range_idx").on(
-      table.checkInDate,
-      table.checkOutDate,
-    ),
-    capturedAtIdx: index("listing_price_snapshot_captured_at_idx").on(
-      table.capturedAt,
-    ),
+    listing_unique_idx: uniqueIndex(
+      "listing_geocode_cache_listing_unique_idx",
+    ).on(table.listing_id),
   }),
 );
 
@@ -309,105 +245,105 @@ export const users = pgTable(
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     email: text("email").notNull(),
-    timeZone: text("time_zone"),
-    emailVerified: boolean("email_verified").notNull(),
+    time_zone: text("time_zone"),
+    email_verified: boolean("email_verified").notNull(),
     image: text("image"),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true })
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => ({
-    emailUniqueIdx: uniqueIndex("user_email_unique_idx").on(table.email),
+    email_unique_idx: uniqueIndex("user_email_unique_idx").on(table.email),
   }),
 );
 
-export const authAccounts = pgTable(
+export const auth_accounts = pgTable(
   "account",
   {
     id: text("id").primaryKey(),
-    accountId: text("account_id").notNull(),
-    providerId: text("provider_id").notNull(),
-    userId: text("user_id")
+    account_id: text("account_id").notNull(),
+    provider_id: text("provider_id").notNull(),
+    user_id: text("user_id")
       .notNull()
       .references(() => users.id),
-    accessToken: text("access_token"),
-    refreshToken: text("refresh_token"),
-    idToken: text("id_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+    access_token: text("access_token"),
+    refresh_token: text("refresh_token"),
+    id_token: text("id_token"),
+    access_token_expires_at: timestamp("access_token_expires_at", {
       mode: "string",
       withTimezone: true,
     }),
-    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+    refresh_token_expires_at: timestamp("refresh_token_expires_at", {
       mode: "string",
       withTimezone: true,
     }),
     scope: text("scope"),
     password: text("password"),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true })
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => ({
-    userIdIdx: index("account_user_id_idx").on(table.userId),
-    accountProviderUniqueIdx: uniqueIndex("account_provider_unique_idx").on(
-      table.providerId,
-      table.accountId,
+    user_id_idx: index("account_user_id_idx").on(table.user_id),
+    account_provider_unique_idx: uniqueIndex("account_provider_unique_idx").on(
+      table.provider_id,
+      table.account_id,
     ),
   }),
 );
 
-export const authSessions = pgTable(
+export const auth_sessions = pgTable(
   "session",
   {
     id: text("id").primaryKey(),
-    expiresAt: timestamp("expires_at", {
+    expires_at: timestamp("expires_at", {
       mode: "string",
       withTimezone: true,
     }).notNull(),
     token: text("token").notNull(),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true })
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
-    ipAddress: text("ip_address"),
-    userAgent: text("user_agent"),
-    userId: text("user_id")
+    ip_address: text("ip_address"),
+    user_agent: text("user_agent"),
+    user_id: text("user_id")
       .notNull()
       .references(() => users.id),
   },
   (table) => ({
-    tokenUniqueIdx: uniqueIndex("session_token_unique_idx").on(table.token),
-    userIdIdx: index("session_user_id_idx").on(table.userId),
+    token_unique_idx: uniqueIndex("session_token_unique_idx").on(table.token),
+    user_id_idx: index("session_user_id_idx").on(table.user_id),
   }),
 );
 
-export const authVerifications = pgTable(
+export const auth_verifications = pgTable(
   "verification",
   {
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
     value: text("value").notNull(),
-    expiresAt: timestamp("expires_at", {
+    expires_at: timestamp("expires_at", {
       mode: "string",
       withTimezone: true,
     }).notNull(),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true })
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => ({
-    identifierValueUniqueIdx: uniqueIndex(
+    identifier_value_unique_idx: uniqueIndex(
       "verification_identifier_value_unique_idx",
     ).on(table.identifier, table.value),
   }),

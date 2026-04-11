@@ -33,7 +33,6 @@ const LOCALVR_RENDER_WAIT_MS = 2_000;
 const STAYAT_NAVIGATION_TIMEOUT_MS = 20_000;
 const STAYAT_RENDER_WAIT_MS = 1_500;
 const STAYAT_FRAGMENT_WAIT_TIMEOUT_MS = 45_000;
-const STAYAT_FRAGMENT_POLL_INTERVAL_MS = 500;
 
 let validationHttpActive = 0;
 let validationHttpLastStartMs = 0;

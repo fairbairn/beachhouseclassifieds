@@ -22,9 +22,9 @@ import {
   resolveUserTimeZone,
 } from "@/core/shared/time-zone";
 import {
-  authAccounts as pgAuthAccounts,
-  authSessions as pgAuthSessions,
-  authVerifications as pgAuthVerifications,
+  auth_accounts as pgAuthAccounts,
+  auth_sessions as pgAuthSessions,
+  auth_verifications as pgAuthVerifications,
   users as pgUsers,
 } from "@/lib/db/schema-postgres";
 import {
@@ -439,7 +439,7 @@ async function getUserByEmail(email: string): Promise<UserRecord | null> {
           id: pgUsers.id,
           name: pgUsers.name,
           email: pgUsers.email,
-          timeZone: pgUsers.timeZone,
+          timeZone: pgUsers.time_zone,
         })
         .from(pgUsers)
         .where(sql`lower(${pgUsers.email}) = lower(${email})`)
@@ -482,7 +482,7 @@ async function listUsers() {
               .select({
                 name: pgUsers.name,
                 email: pgUsers.email,
-                timeZone: pgUsers.timeZone,
+                timeZone: pgUsers.time_zone,
               })
               .from(pgUsers)
               .orderBy(asc(pgUsers.email)),
@@ -617,8 +617,12 @@ async function deleteUserFlow(rl: ReturnType<typeof createInterface>) {
       throw new Error("Postgres database is not configured.");
     }
 
-    await pgDb.delete(pgAuthSessions).where(eq(pgAuthSessions.userId, user.id));
-    await pgDb.delete(pgAuthAccounts).where(eq(pgAuthAccounts.userId, user.id));
+    await pgDb
+      .delete(pgAuthSessions)
+      .where(eq(pgAuthSessions.user_id, user.id));
+    await pgDb
+      .delete(pgAuthAccounts)
+      .where(eq(pgAuthAccounts.user_id, user.id));
     await pgDb
       .delete(pgAuthVerifications)
       .where(
@@ -686,8 +690,8 @@ async function changePasswordFlow(rl: ReturnType<typeof createInterface>) {
             .from(pgAuthAccounts)
             .where(
               and(
-                eq(pgAuthAccounts.userId, user.id),
-                eq(pgAuthAccounts.providerId, "credential"),
+                eq(pgAuthAccounts.user_id, user.id),
+                eq(pgAuthAccounts.provider_id, "credential"),
               ),
             )
             .limit(1)
@@ -718,7 +722,7 @@ async function changePasswordFlow(rl: ReturnType<typeof createInterface>) {
         .update(pgAuthAccounts)
         .set({
           password: passwordHash,
-          updatedAt: now,
+          updated_at: now,
         })
         .where(eq(pgAuthAccounts.id, credentialAccount.id));
     } else {
@@ -744,12 +748,12 @@ async function changePasswordFlow(rl: ReturnType<typeof createInterface>) {
 
     await pgDb.insert(pgAuthAccounts).values({
       id: accountId,
-      userId: user.id,
-      accountId: user.id,
-      providerId: "credential",
+      user_id: user.id,
+      account_id: user.id,
+      provider_id: "credential",
       password: passwordHash,
-      createdAt: now,
-      updatedAt: now,
+      created_at: now,
+      updated_at: now,
     });
   } else {
     db.insert(sqliteAuthAccounts)
@@ -809,7 +813,7 @@ async function changeNameFlow(rl: ReturnType<typeof createInterface>) {
       .update(pgUsers)
       .set({
         name: validation.data.newName,
-        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .where(eq(pgUsers.id, user.id));
   } else {
@@ -872,8 +876,8 @@ async function changeTimeZoneFlow(rl: ReturnType<typeof createInterface>) {
     await pgDb
       .update(pgUsers)
       .set({
-        timeZone: selectedTimeZone,
-        updatedAt: now,
+        time_zone: selectedTimeZone,
+        updated_at: now,
       })
       .where(eq(pgUsers.id, user.id));
   } else {
