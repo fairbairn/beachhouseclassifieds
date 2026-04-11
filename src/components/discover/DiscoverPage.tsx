@@ -48,6 +48,9 @@ const defaultMapTarget = {
   zoom: undefined as number | undefined,
 };
 
+// TODO: Temporary UX toggle. Keep false so Clear Pin does not recenter map.
+const RESET_MAP_ON_CLEAR_PIN = false;
+
 export function DiscoverPage() {
   const defaultMinSleeps = 0;
   const defaultMinBedrooms = 0;
@@ -130,6 +133,9 @@ export function DiscoverPage() {
   const [sortOption, setSortOption] = useState<SortOption>("recommended");
   const [fetchedListings, setFetchedListings] = useState<DiscoverListing[]>([]);
   const [favoriteListingIds, setFavoriteListingIds] = useState<string[]>([]);
+  const [selectedCardSyncRequestToken, setSelectedCardSyncRequestToken] =
+    useState(0);
+  const [isPinnedCardVisible, setIsPinnedCardVisible] = useState(true);
 
   useEffect(() => {
     const chooseVariant = () => {
@@ -146,12 +152,41 @@ export function DiscoverPage() {
 
   const clearPinnedListing = useCallback(() => {
     setActiveListingId(undefined);
+    setMapTarget((current) => {
+      if (RESET_MAP_ON_CLEAR_PIN) {
+        return {
+          ...defaultMapTarget,
+          id: undefined,
+          zoom: 13,
+        };
+      }
+
+      return {
+        ...current,
+        id: undefined,
+      };
+    });
+  }, []);
+
+  const resetMapView = useCallback(() => {
+    setActiveListingId(undefined);
     setMapTarget(() => ({
       ...defaultMapTarget,
       id: undefined,
       zoom: 13,
     }));
   }, []);
+
+  const requestSelectedCardSync = useCallback(() => {
+    if (!activeListingId) {
+      return;
+    }
+
+    setSelectedCardSyncRequestToken((current) => current + 1);
+  }, [activeListingId]);
+
+  const canSyncSelectedListingCard =
+    Boolean(activeListingId) && !isPinnedCardVisible;
 
   const handleFocusMap = useCallback(
     (next: {
@@ -635,6 +670,7 @@ export function DiscoverPage() {
                 onSortChange={setSortOption}
                 cardsPerRow={cardsPerRow}
                 onCardsPerRowChange={setCardsPerRow}
+                isCardLayoutLocked={isMapExpanded}
               />
             </div>
 
@@ -789,6 +825,8 @@ export function DiscoverPage() {
             cardsPerRow={isMapExpanded ? 1 : cardsPerRow}
             singleColumnCardVariant={expandedSingleCardVariant}
             activeListingId={activeListingId}
+            scrollToListingRequestToken={selectedCardSyncRequestToken}
+            onActiveListingVisibilityChange={setIsPinnedCardVisible}
             favoriteIds={favoriteListingIds}
             onToggleFavorite={toggleFavoriteListing}
             onFocusMap={handleFocusMap}
@@ -798,7 +836,10 @@ export function DiscoverPage() {
             mapTarget={mapTarget}
             listings={mapListings}
             onClearPin={clearPinnedListing}
+            onResetMapView={resetMapView}
             onSelectListing={handleSelectListingFromMap}
+            onSyncSelectedListingCard={requestSelectedCardSync}
+            isSyncSelectedListingCardAvailable={canSyncSelectedListingCard}
             isExpanded={isMapExpanded}
             onToggleExpanded={() => setIsMapExpanded((current) => !current)}
           />

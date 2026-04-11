@@ -31,11 +31,13 @@ export function DiscoverSortLayoutControls({
   onSortChange,
   cardsPerRow,
   onCardsPerRowChange,
+  isCardLayoutLocked,
 }: {
   sortOption: SortOption;
   onSortChange: (value: SortOption) => void;
   cardsPerRow: 2 | 3 | 4;
   onCardsPerRowChange: (value: 2 | 3 | 4) => void;
+  isCardLayoutLocked?: boolean;
 }) {
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isHelpMenuOpen, setIsHelpMenuOpen] = useState(false);
@@ -129,27 +131,51 @@ export function DiscoverSortLayoutControls({
           </div>
         ) : null}
       </div>
-      <div className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-1">
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-md text-indigo-600">
-          <LayoutGrid className="h-3.5 w-3.5" />
-        </span>
-        {[2, 3, 4].map((count) => {
-          const isSelected = cardsPerRow === count;
-          return (
-            <button
+      {isCardLayoutLocked ? (
+        <div
+          className="relative inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-1"
+          aria-disabled="true"
+          title="Map expanded: card layout is fixed"
+        >
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500">
+            <LayoutGrid className="h-3.5 w-3.5" />
+          </span>
+          {[2, 3, 4].map((count) => (
+            <span
               key={count}
-              type="button"
-              onClick={() => onCardsPerRowChange(count as 2 | 3 | 4)}
-              className={`inline-flex h-7 items-center justify-center rounded-md px-2.5 text-xs font-semibold whitespace-nowrap transition ${isSelected ? "border border-indigo-300 bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-100"}`}
-              aria-pressed={isSelected}
-              aria-label={`${count} cards per row`}
-              title={`${count} cards per row`}
+              aria-hidden="true"
+              className="inline-flex h-7 items-center justify-center rounded-md px-2.5 text-xs font-semibold whitespace-nowrap text-transparent"
             >
               {count} cards
-            </button>
-          );
-        })}
-      </div>
+            </span>
+          ))}
+          <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center text-xs font-semibold whitespace-nowrap text-slate-500">
+            1 card (map expanded)
+          </span>
+        </div>
+      ) : (
+        <div className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-1">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md text-indigo-600">
+            <LayoutGrid className="h-3.5 w-3.5" />
+          </span>
+          {[2, 3, 4].map((count) => {
+            const isSelected = cardsPerRow === count;
+            return (
+              <button
+                key={count}
+                type="button"
+                onClick={() => onCardsPerRowChange(count as 2 | 3 | 4)}
+                className={`inline-flex h-7 items-center justify-center rounded-md px-2.5 text-xs font-semibold whitespace-nowrap transition ${isSelected ? "border border-indigo-300 bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-100"}`}
+                aria-pressed={isSelected}
+                aria-label={`${count} cards per row`}
+                title={`${count} cards per row`}
+              >
+                {count} cards
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div ref={helpMenuRef} className="relative">
         {shouldPulseHelp ? (
           <span

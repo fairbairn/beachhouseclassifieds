@@ -292,6 +292,21 @@ function inferSpecificAreaFromCoordinates(
 }
 
 function resolveSpecificArea(listing: DiscoverListing): string | null {
+  if (
+    Number.isFinite(listing.lat) &&
+    Number.isFinite(listing.lng) &&
+    listing.lat !== undefined &&
+    listing.lng !== undefined
+  ) {
+    const inferredByCoordinates = inferSpecificAreaFromCoordinates(
+      listing.lat,
+      listing.lng,
+    );
+    if (inferredByCoordinates) {
+      return inferredByCoordinates;
+    }
+  }
+
   const mappedCommunityArea = communityBeachAreaMap[listing.community];
   if (mappedCommunityArea) {
     const canonicalMappedArea = canonicalizeSpecificZone(mappedCommunityArea);
@@ -309,21 +324,6 @@ function resolveSpecificArea(listing: DiscoverListing): string | null {
   const inferredByText = inferSpecificAreaFromText(listing);
   if (inferredByText) {
     return inferredByText;
-  }
-
-  if (
-    Number.isFinite(listing.lat) &&
-    Number.isFinite(listing.lng) &&
-    listing.lat !== undefined &&
-    listing.lng !== undefined
-  ) {
-    const inferredByCoordinates = inferSpecificAreaFromCoordinates(
-      listing.lat,
-      listing.lng,
-    );
-    if (inferredByCoordinates) {
-      return inferredByCoordinates;
-    }
   }
 
   return null;
@@ -392,7 +392,9 @@ export function getAreaFromListing(listing: DiscoverListing) {
   return getBroadAreaFromText(listing);
 }
 
-export function getBeachZoneFromListing(listing: DiscoverListing): string | null {
+export function getBeachZoneFromListing(
+  listing: DiscoverListing,
+): string | null {
   return resolveSpecificArea(listing);
 }
 

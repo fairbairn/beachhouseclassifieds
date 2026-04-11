@@ -22,6 +22,8 @@ export function DiscoverListingsPanel({
   cardsPerRow,
   singleColumnCardVariant = 3,
   activeListingId,
+  scrollToListingRequestToken,
+  onActiveListingVisibilityChange,
   favoriteIds,
   onToggleFavorite,
   onFocusMap,
@@ -30,6 +32,8 @@ export function DiscoverListingsPanel({
   cardsPerRow: 1 | 2 | 3 | 4;
   singleColumnCardVariant?: 3 | 4;
   activeListingId?: string;
+  scrollToListingRequestToken?: number;
+  onActiveListingVisibilityChange?: (isVisible: boolean) => void;
   favoriteIds: ReadonlyArray<string>;
   onToggleFavorite: (listingId: string) => void;
   onFocusMap: (next: {
@@ -100,7 +104,49 @@ export function DiscoverListingsPanel({
       top: clampedTop,
       behavior: "smooth",
     });
-  }, [activeListingId, cardsPerRow]);
+  }, [activeListingId, cardsPerRow, scrollToListingRequestToken]);
+
+  useEffect(() => {
+    const scrollContainer = cardsScrollRef.current;
+    if (!scrollContainer) {
+      return;
+    }
+
+    if (!activeListingId) {
+      onActiveListingVisibilityChange?.(false);
+      return;
+    }
+
+    const updateVisibility = () => {
+      const targetCard = scrollContainer.querySelector<HTMLElement>(
+        `[data-listing-id="${activeListingId}"]`,
+      );
+
+      if (!targetCard) {
+        onActiveListingVisibilityChange?.(false);
+        return;
+      }
+
+      const top = targetCard.offsetTop;
+      const bottom = top + targetCard.offsetHeight;
+      const viewportTop = scrollContainer.scrollTop;
+      const viewportBottom = viewportTop + scrollContainer.clientHeight;
+      const isVisible = bottom > viewportTop && top < viewportBottom;
+
+      onActiveListingVisibilityChange?.(isVisible);
+    };
+
+    updateVisibility();
+    scrollContainer.addEventListener("scroll", updateVisibility, {
+      passive: true,
+    });
+    window.addEventListener("resize", updateVisibility);
+
+    return () => {
+      scrollContainer.removeEventListener("scroll", updateVisibility);
+      window.removeEventListener("resize", updateVisibility);
+    };
+  }, [activeListingId, listings, cardsPerRow, onActiveListingVisibilityChange]);
 
   useEffect(() => {
     const panel = explorePanelRef.current;

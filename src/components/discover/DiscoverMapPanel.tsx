@@ -1,5 +1,12 @@
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
-import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  RefreshCw,
+  RotateCcw,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { googleMapsApiKey } from "@/components/discover/discover-data";
@@ -9,9 +16,14 @@ type GoogleMapInstance = {
   panTo: (center: LatLng) => void;
   setZoom: (zoom: number) => void;
   getZoom: () => number | undefined;
+  getCenter: () =>
+    | { lat: () => number; lng: () => number }
+    | { lat: number; lng: number }
+    | null
+    | undefined;
   setMapTypeId: (type: "roadmap" | "satellite") => void;
   addListener: (
-    eventName: "zoom_changed",
+    eventName: "zoom_changed" | "idle",
     handler: () => void,
   ) => { remove: () => void };
 };
@@ -79,6 +91,7 @@ const SATELLITE_ZOOM_THRESHOLD = 16;
 const CONTEXT_ZOOM = 13;
 const ZOOM_STEP_DELAY_MS = 80;
 const PAN_TO_NEW_PIN_DELAY_MS = 220;
+const RESET_CENTER_TOLERANCE = 0.0004;
 let mapsLoaderConfigured = false;
 
 function getMapTypeForZoom(zoom: number | undefined) {
@@ -138,7 +151,10 @@ export function DiscoverMapPanel({
   mapTarget,
   listings,
   onClearPin,
+  onResetMapView,
   onSelectListing,
+  onSyncSelectedListingCard,
+  isSyncSelectedListingCardAvailable,
   isExpanded,
   onToggleExpanded,
 }: {
@@ -156,6 +172,7 @@ export function DiscoverMapPanel({
     lng: number;
   }>;
   onClearPin: () => void;
+  onResetMapView: () => void;
   onSelectListing: (next: {
     id: string;
     lat: number;
@@ -163,6 +180,8 @@ export function DiscoverMapPanel({
     label: string;
     zoom?: number;
   }) => void;
+  onSyncSelectedListingCard: () => void;
+  isSyncSelectedListingCardAvailable: boolean;
   isExpanded: boolean;
   onToggleExpanded: () => void;
 }) {
@@ -179,7 +198,11 @@ export function DiscoverMapPanel({
   );
   const zoomAnimationIntervalRef = useRef<number | null>(null);
   const pendingPanTimeoutRef = useRef<number | null>(null);
+  const mapEventCleanupRef = useRef<Array<() => void>>([]);
   const previousPinnedListingIdRef = useRef<string | undefined>(undefined);
+  const activeMapTargetIdRef = useRef<string | undefined>(mapTarget.id);
+  const syncSelectedListingCardRef = useRef(onSyncSelectedListingCard);
+  const [isMapInResetState, setIsMapInResetState] = useState(true);
   const [mapReadyRevision, setMapReadyRevision] = useState(0);
 
   const mapEmbedSrc = `https://maps.google.com/maps?q=${encodeURIComponent(`${mapTarget.lat},${mapTarget.lng}`)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
@@ -225,6 +248,46 @@ export function DiscoverMapPanel({
       listener.remove();
     };
   };
+
+  const updateResetState = useCallback((map: GoogleMapInstance | null) => {
+    if (!map) {
+      setIsMapInResetState(true);
+      return;
+    }
+
+    if (activeMapTargetIdRef.current) {
+      setIsMapInResetState(false);
+      return;
+    }
+
+    const zoom = map.getZoom() ?? CONTEXT_ZOOM;
+    const center = map.getCenter();
+    const lat =
+      center && typeof center.lat === "function" ? center.lat() : center?.lat;
+    const lng =
+      center && typeof center.lng === "function" ? center.lng() : center?.lng;
+
+    if (typeof lat !== "number" || typeof lng !== "number") {
+      setIsMapInResetState(false);
+      return;
+    }
+
+    const isAtDefaultCenter =
+      Math.abs(lat - defaultMapTarget.lat) <= RESET_CENTER_TOLERANCE &&
+      Math.abs(lng - defaultMapTarget.lng) <= RESET_CENTER_TOLERANCE;
+    const isAtDefaultZoom = Math.abs(zoom - CONTEXT_ZOOM) < 0.01;
+
+    setIsMapInResetState(isAtDefaultCenter && isAtDefaultZoom);
+  }, []);
+
+  useEffect(() => {
+    activeMapTargetIdRef.current = mapTarget.id;
+    updateResetState(googleMapRef.current);
+  }, [mapTarget.id, updateResetState]);
+
+  useEffect(() => {
+    syncSelectedListingCardRef.current = onSyncSelectedListingCard;
+  }, [onSyncSelectedListingCard]);
 
   const applySecondaryMarkerIcons = (zoom: number | undefined) => {
     const markerLibrary = googleMapsMarkerNamespaceRef.current;
@@ -331,13 +394,33 @@ export function DiscoverMapPanel({
         map: null,
         position: center,
         content: primaryPin.element,
-        gmpClickable: false,
+        gmpClickable: true,
       });
+
+      const primaryMarkerClickCleanup = registerAdvancedMarkerClick(
+        marker,
+        () => {
+          if (!activeMapTargetIdRef.current) {
+            return;
+          }
+
+          syncSelectedListingCardRef.current();
+        },
+      );
 
       const zoomListener = map.addListener("zoom_changed", () => {
         const zoom = map.getZoom();
         map.setMapTypeId(getMapTypeForZoom(zoom));
         applySecondaryMarkerIcons(zoom);
+        updateResetState(map);
+      });
+      const idleListener = map.addListener("idle", () => {
+        updateResetState(map);
+      });
+
+      mapEventCleanupRef.current.push(() => {
+        zoomListener.remove();
+        idleListener.remove();
       });
 
       googleMapRef.current = map;
@@ -347,8 +430,15 @@ export function DiscoverMapPanel({
       setMapReadyRevision((current) => current + 1);
 
       if (disposed) {
+        primaryMarkerClickCleanup();
         zoomListener.remove();
+        idleListener.remove();
       }
+
+      return () => {
+        primaryMarkerClickCleanup();
+        zoomListener.remove();
+      };
     };
 
     void initializeMap();
@@ -357,8 +447,10 @@ export function DiscoverMapPanel({
       disposed = true;
       clearFocusAnimation();
       clearSecondaryMarkers();
+      mapEventCleanupRef.current.forEach((cleanup) => cleanup());
+      mapEventCleanupRef.current = [];
     };
-  }, [clearFocusAnimation]);
+  }, [clearFocusAnimation, updateResetState]);
 
   useEffect(() => {
     const map = googleMapRef.current;
@@ -407,12 +499,10 @@ export function DiscoverMapPanel({
     }
 
     if (!mapTarget.id) {
-      previousPinnedListingIdRef.current = undefined;
       marker.map = null;
       clearFocusAnimation();
       map.panTo({ lat: mapTarget.lat, lng: mapTarget.lng });
       map.setZoom(mapTarget.zoom ?? CONTEXT_ZOOM);
-      map.setMapTypeId("roadmap");
       return;
     }
 
@@ -424,14 +514,6 @@ export function DiscoverMapPanel({
     if (typeof mapTarget.zoom === "number") {
       const currentZoom = map.getZoom() ?? CONTEXT_ZOOM;
       const targetZoom = mapTarget.zoom;
-      const hadPinnedListing = Boolean(previousPinnedListingIdRef.current);
-
-      const panAndZoomInFromContext = () => {
-        map.panTo(nextCenter);
-        pendingPanTimeoutRef.current = window.setTimeout(() => {
-          animateZoom(map, CONTEXT_ZOOM, targetZoom);
-        }, PAN_TO_NEW_PIN_DELAY_MS);
-      };
 
       const panAndAdjustZoom = () => {
         clearFocusAnimation();
@@ -446,13 +528,7 @@ export function DiscoverMapPanel({
         }
       };
 
-      if (hadPinnedListing) {
-        panAndAdjustZoom();
-      } else if (currentZoom > CONTEXT_ZOOM) {
-        animateZoom(map, currentZoom, CONTEXT_ZOOM, panAndZoomInFromContext);
-      } else {
-        panAndZoomInFromContext();
-      }
+      panAndAdjustZoom();
 
       previousPinnedListingIdRef.current = mapTarget.id;
     } else {
@@ -480,17 +556,44 @@ export function DiscoverMapPanel({
               <ChevronLeft className="h-3.5 w-3.5" />
             )}
           </button>
-          <p className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
-            Map View
-          </p>
+          {isExpanded ? (
+            <p className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
+              Map Expanded
+            </p>
+          ) : null}
         </div>
 
         <div className="inline-flex items-center gap-1.5">
           <button
             type="button"
+            onClick={onSyncSelectedListingCard}
+            disabled={!isSyncSelectedListingCardAvailable}
+            className={`relative inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-colors ${
+              isSyncSelectedListingCardAvailable
+                ? "border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100"
+                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+            }`}
+            aria-label="Scroll selected listing card into view"
+            title={
+              isSyncSelectedListingCardAvailable
+                ? "Scroll selected listing card into view"
+                : "Pinned card already visible or no pin selected"
+            }
+          >
+            {isSyncSelectedListingCardAvailable ? (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -inset-0.5 animate-ping rounded-md border border-cyan-300/80"
+              />
+            ) : null}
+            <RefreshCw className="h-3 w-3" />
+            Sync
+          </button>
+          <button
+            type="button"
             onClick={onClearPin}
             disabled={!mapTarget.id}
-            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-colors ${
               mapTarget.id
                 ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
                 : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
@@ -498,15 +601,32 @@ export function DiscoverMapPanel({
             aria-label="Clear selected map pin"
             title={mapTarget.id ? "Clear selected map pin" : "No pin selected"}
           >
+            <X className="h-3 w-3" />
             Clear Pin
+          </button>
+          <button
+            type="button"
+            onClick={onResetMapView}
+            disabled={isMapInResetState}
+            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-colors ${
+              isMapInResetState
+                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                : "border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100"
+            }`}
+            aria-label="Reset map view"
+            title={isMapInResetState ? "Map already reset" : "Reset map view"}
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reset
           </button>
           <a
             href={openInMapsHref}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-800 transition-colors hover:bg-cyan-100"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-cyan-200 bg-cyan-50 text-cyan-800 transition-colors hover:bg-cyan-100"
+            aria-label="Open in Google Maps"
+            title="Open in Google Maps"
           >
-            Open in Maps
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
