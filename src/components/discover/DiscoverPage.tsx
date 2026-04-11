@@ -166,7 +166,10 @@ export function DiscoverPage() {
         return;
       }
 
-      setMapTarget(next);
+      setMapTarget({
+        ...next,
+        zoom: next.zoom,
+      });
       setActiveListingId(next.id);
     },
     [activeListingId, clearPinnedListing],
@@ -185,7 +188,10 @@ export function DiscoverPage() {
         return;
       }
 
-      setMapTarget(next);
+      setMapTarget({
+        ...next,
+        zoom: next.zoom,
+      });
       setActiveListingId(next.id);
     },
     [activeListingId, clearPinnedListing],

@@ -22,6 +22,12 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DayPicker, type DateRange } from "react-day-picker";
 
+const countFormatter = new Intl.NumberFormat("en-US");
+
+function formatCount(value: number): string {
+  return countFormatter.format(value);
+}
+
 export function GuestStepper({
   controlLabel,
   pillText,
@@ -487,26 +493,70 @@ export function FacetSection({
   title,
   isOpen,
   onToggle,
+  selectedCount,
+  hasSelected,
+  onClearSelected,
+  clearSelectedLabel,
   children,
 }: {
-  title: string;
+  title: ReactNode;
   isOpen: boolean;
   onToggle: () => void;
+  selectedCount?: number;
+  hasSelected?: boolean;
+  onClearSelected?: () => void;
+  clearSelectedLabel?: string;
   children: ReactNode;
 }) {
+  const hasSelectedFacets =
+    hasSelected ?? Boolean(selectedCount && selectedCount > 0);
+
   return (
-    <div className="mt-4 border-t border-slate-100 pt-4">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between text-left"
-        aria-expanded={isOpen}
-      >
-        <p className="text-xs font-bold text-slate-500 uppercase">{title}</p>
-        <ChevronDown
-          className={`h-4 w-4 text-slate-500 transition-transform ${isOpen ? "rotate-0" : "-rotate-90"}`}
-        />
-      </button>
+    <div className="mt-3 border-t border-slate-100 pt-3">
+      <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="min-w-0 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-100/70"
+            aria-expanded={isOpen}
+          >
+            <p
+              className={`truncate text-xs uppercase ${hasSelectedFacets ? "font-bold text-slate-700" : "font-semibold text-slate-500"}`}
+            >
+              {title}
+            </p>
+          </button>
+          <span
+            className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-teal-50 px-1.5 text-xs leading-none font-semibold text-teal-700 tabular-nums ${hasSelectedFacets ? "opacity-100" : "pointer-events-none opacity-0"}`}
+            aria-hidden={!hasSelectedFacets}
+          >
+            {formatCount(selectedCount ?? 0)}
+          </span>
+          <button
+            type="button"
+            onClick={onClearSelected}
+            disabled={!hasSelectedFacets || !onClearSelected}
+            className={`inline-flex h-3.5 w-3.5 items-center justify-center text-teal-700 ${hasSelectedFacets ? "opacity-100 hover:text-teal-800" : "pointer-events-none opacity-0"}`}
+            aria-label={clearSelectedLabel ?? "Clear selected facets"}
+            title={clearSelectedLabel ?? "Clear selected facets"}
+          >
+            <X className="h-3 w-3" />
+          </button>
+          <span className="min-w-0 flex-1" aria-hidden="true" />
+        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="inline-flex h-4 w-4 items-center justify-center text-slate-500 transition hover:text-slate-700"
+          aria-expanded={isOpen}
+          aria-label="Toggle section"
+        >
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-0" : "-rotate-90"}`}
+          />
+        </button>
+      </div>
       {isOpen ? children : null}
     </div>
   );

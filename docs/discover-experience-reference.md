@@ -2,7 +2,7 @@
 
 This document is the implementation-level reference for the `/discover` experience.
 
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
 ## Purpose
 
@@ -198,6 +198,45 @@ Generator rules currently emphasize realistic house-like inventory:
 - Active control states are visually distinct and consistent with current color intent.
 - Route-level scroll behavior is intentionally managed to keep primary Discover surfaces stable.
 
+## Facet Selection UX Direction (Planned)
+
+This section captures the agreed UI direction for interactive facet selection. This is a UX/state contract for near-term implementation and does not yet require server-backed filtering.
+
+### Selection Model
+
+- Facet rows are clickable selectable items.
+- Multiple selections are allowed in the same section.
+- Multiple selections are allowed across different sections.
+- Logical behavior is AND across selected facets.
+
+### Selected Row UI
+
+- When selected, a facet row moves to a selected pill-like visual treatment.
+- Selected treatment wraps both facet label and count.
+- Each selected row includes a small inline X action for one-click unselect.
+
+### Section Header Actions
+
+- If at least one facet is selected in a section, show an indicator/action near that section title.
+- Header action clears only that section's selected facets.
+- No global clear-all facet action is required yet because section headers stay visible.
+
+### Count and Math Behavior (Current Phase)
+
+- UI may use faked/derived count math for experimentation.
+- Final count math will be driven by server-side search/facet response data.
+- No hard backend filtering implementation is required in this phase.
+
+### Future Integration Intent (Mellisearch)
+
+- Selected facets become hard filters in the search query.
+- No selected facets: Properties count reflects total inventory and all facet breakouts.
+- Selected facets: constrained result count reflects filtered set returned by backend.
+
+### Future UX Note (Not Yet Implemented)
+
+- If users over-constrain filters/facets and reach zero results, provide a listings-panel guidance experience that explains constraint pressure and suggests concrete ways to recover results.
+
 ## Terminology and Copy Canon
 
 Use these terms consistently in Discover UI:
@@ -258,6 +297,13 @@ Use this section to track meaningful Discover UX/data contract decisions over ti
 - Decision: Feature vocabulary standardized to `Gulf Front`, `Private Pool`, and `Golf Cart`, and feature facet order fixed to Gulf Front -> Private Pool -> Golf Cart.
 - Why: Align terminology across filters, facets, and card badges.
 - Implementation: `src/components/discover/DiscoverPage.tsx`, `src/components/discover/DiscoverListingsPanel.tsx`
+
+- Date: 2026-04-10
+- Scope: behavior | layout | UX contract
+- Decision: Established planned interactive facet model: selectable rows with selected-pill state + per-row X unselect, per-section clear action, multi-select support, AND behavior across selected facets, fake UI math in current phase, and server-driven hard filter/count behavior in future Mellisearch integration.
+- Why: Lock UX direction early so UI/state scaffolding can be built consistently before backend filter execution is finalized.
+- Implementation: `docs/discover-experience-reference.md`
+- Follow-up: Implement section-level selection state in sidebar UI first, then wire constrained result/count semantics to backend facet query responses.
 - Follow-up: Keep synonyms in parser logic, but keep UI copy canonical.
 
 ## Change Checklist
