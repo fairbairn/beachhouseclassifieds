@@ -82,10 +82,13 @@ type ValidationFailure = {
     | "component_mismatch"
     | "invalid_observed_total"
     | "request_error"
-    | "direct_status_error";
+    | "direct_status_error"
+    | "handoff_prefill_mismatch";
   message: string;
   extractedTotal: number | null;
 };
+
+const DETAIL_PREFILL_HANDOFF_ADAPTERS = new Set(["sandpiper30a"]);
 
 type DirectTotalResult =
   | {
@@ -3170,6 +3173,86 @@ async function validateObservation(
       message: "grand_total is not a positive finite number",
       extractedTotal: null,
     };
+  }
+
+  if (DETAIL_PREFILL_HANDOFF_ADAPTERS.has(candidate.adapterKey)) {
+    let parsed: URL;
+    try {
+      parsed = new URL(candidate.handoffUrl);
+    } catch {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "handoff_prefill_mismatch",
+        message: "Handoff URL is not a valid URL",
+        extractedTotal: null,
+      };
+    }
+
+    const startDate = parsed.searchParams.get("start-date");
+    const endDate = parsed.searchParams.get("end-date");
+    const hubPropertyId = parsed.searchParams.get("hub_property_id");
+
+    if (startDate !== candidate.startDate || endDate !== candidate.endDate) {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "handoff_prefill_mismatch",
+        message:
+          `Detail prefill params mismatch expected start-date=${candidate.startDate} end-date=${candidate.endDate} ` +
+          `received start-date=${startDate ?? "(missing)"} end-date=${endDate ?? "(missing)"}`,
+        extractedTotal: null,
+      };
+    }
+
+    if (!hubPropertyId || hubPropertyId.trim().length === 0) {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "handoff_prefill_mismatch",
+        message: "Detail prefill handoff is missing required hub_property_id",
+        extractedTotal: null,
+      };
+    }
+
+    const responseResult = await fetchWithRetry({
+      url: candidate.handoffUrl,
+      init: {
+        headers: {
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "user-agent": USER_AGENT,
+          referer: candidate.detailUrl,
+        },
+      },
+      retryDelaysMs: getHandoffRetryDelaysMs(candidate.adapterKey),
+      reportProgress,
+      retryLabel: "handoff prefill page",
+    });
+
+    if (!responseResult.ok) {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "request_error",
+        message: responseResult.message,
+        extractedTotal: null,
+      };
+    }
+
+    return null;
   }
 
   const escapesDirect = await tryExtract30AEscapesDirectTotal(

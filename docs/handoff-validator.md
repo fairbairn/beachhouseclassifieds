@@ -20,6 +20,12 @@ In short, it answers: does what we recorded as quote data match what checkout/ha
 - Uses browser rendering for customer-visible total extraction.
 - Provides confidence for delayed or script-rendered handoff pages.
 
+3. Detail-prefill parity
+
+- Used for adapters where handoff URL intentionally lands on a detail page with prefilled dates, not a checkout page with visible totals.
+- Validates deterministic handoff URL alignment (for example `start-date`, `end-date`, required identity params) and page reachability.
+- Treats this as canonical parity when provider checkout flow requires additional in-page interaction before totals become visible.
+
 ## Runtime Behavior
 
 The validator uses bounded, configurable controls:
@@ -42,6 +48,7 @@ Typical outcomes include:
 - grand_total_mismatch
 - component_mismatch
 - direct_status_error
+- handoff_prefill_mismatch
 
 These are designed for targeted remediation, not blind full reruns.
 

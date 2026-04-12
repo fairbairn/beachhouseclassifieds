@@ -540,38 +540,6 @@ async function discoverListings(
 ): Promise<ScrapedLink[]> {
   await installEvaluateNameShim(page);
 
-  const payloadLinks = new Map<string, string>();
-
-  page.on("response", (response) => {
-    const responseUrl = response.url();
-    if (!/search|solr|riot|rental|vacation|api|ajax/i.test(responseUrl)) {
-      return;
-    }
-
-    void (async () => {
-      try {
-        const text = await response.text();
-        const matches =
-          text.match(
-            /https:\/\/www\.benchmark30a\.com\/emerald-coast-vacation-rentals\/[a-z0-9-]+/gi,
-          ) ?? [];
-
-        for (const match of matches) {
-          const valid = isValidDetailUrl(match);
-          if (!valid) {
-            continue;
-          }
-
-          if (!payloadLinks.has(valid)) {
-            payloadLinks.set(valid, "");
-          }
-        }
-      } catch {
-        // Ignore non-text or unreadable payloads.
-      }
-    })();
-  });
-
   await page.goto(anchorUrl, {
     waitUntil: "domcontentloaded",
     timeout: 120000,
@@ -611,7 +579,34 @@ async function discoverListings(
         }
       };
 
-      for (const anchor of Array.from(document.querySelectorAll("a[href]"))) {
+      const resultRootSelectors = [
+        "riot-solr-result-list",
+        ".riot-solr-result-list",
+        ".view-vacation-rental-listings .view-content",
+        "#content riot-solr-search",
+      ];
+
+      const candidateRoots = new Set<Element>();
+      for (const selector of resultRootSelectors) {
+        for (const node of Array.from(document.querySelectorAll(selector))) {
+          candidateRoots.add(node);
+        }
+      }
+
+      // Fall back to card-level discovery when root wrappers vary by template.
+      for (const card of Array.from(
+        document.querySelectorAll(
+          "subtag[data-is='rc-riot-result-list-item'], .rc-riot-result-list-item, .riot-solr-item",
+        ),
+      )) {
+        candidateRoots.add(card);
+      }
+
+      const anchors = Array.from(candidateRoots).flatMap((root) =>
+        Array.from(root.querySelectorAll("a[href]")),
+      );
+
+      for (const anchor of anchors) {
         const hrefRaw =
           (anchor as HTMLAnchorElement).getAttribute("href") ?? "";
         if (!hrefRaw) {
@@ -710,16 +705,13 @@ async function discoverListings(
     }
 
     discovery = await readDiscoverySnapshot();
-    const combinedCount = new Set([
-      ...discovery.rows.map((row) => row.href),
-      ...Array.from(payloadLinks.keys()),
-    ]).size;
+    const combinedCount = new Set(discovery.rows.map((row) => row.href)).size;
 
     if (combinedCount > previousCount) {
       reportProgress(
         `discovery grew to ${combinedCount}${
           discovery.expectedCount ? `/${discovery.expectedCount}` : ""
-        } at scroll step ${step + 1} (dom=${discovery.rows.length}, payload=${payloadLinks.size})`,
+        } at scroll step ${step + 1} (results_dom=${discovery.rows.length})`,
       );
       previousCount = combinedCount;
       stagnantSteps = 0;
@@ -739,19 +731,14 @@ async function discoverListings(
   for (const row of finalDom.rows) {
     merged.set(normalizeDetailUrl(row.href), row.text);
   }
-  for (const [url] of payloadLinks.entries()) {
-    if (!merged.has(url)) {
-      merged.set(url, "");
-    }
-  }
 
   if (finalDom.expectedCount !== null) {
     reportProgress(
-      `discovery final captured=${merged.size}/${finalDom.expectedCount} (dom=${finalDom.rows.length}, payload=${payloadLinks.size})`,
+      `discovery final captured=${merged.size}/${finalDom.expectedCount} (results_dom=${finalDom.rows.length})`,
     );
   } else {
     reportProgress(
-      `discovery final captured=${merged.size} (dom=${finalDom.rows.length}, payload=${payloadLinks.size})`,
+      `discovery final captured=${merged.size} (results_dom=${finalDom.rows.length})`,
     );
   }
 

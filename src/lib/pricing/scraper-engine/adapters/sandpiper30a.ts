@@ -14,6 +14,11 @@ type LuxuryDetailRecord = DetailRecordBase & {
   quote_context: {
     unit_code: string;
     detail_url: string;
+    hub_property_id?: string;
+    pms_id?: string;
+    item_code?: string;
+    item_id?: string;
+    property_id?: string;
   };
   title: string;
   h1: string;
@@ -111,9 +116,13 @@ type LuxuryDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://sandpipervacationrentals.com/vacation_rentals?post_type=vacation_rental&s=&action=&unit_code=&start_date=&end_date=&min_bedrooms=3&guests=&filter%5B%5D=&name=";
+  "https://sandpipervacationrentals.com/all-properties/";
 const EXPECTED_LISTING_COUNT = 106;
-const DETAIL_PATH_PREFIXES = ["/vacation_rentals/", "/vacation-rentals/"];
+const DETAIL_PATH_PREFIXES = [
+  "/vacation_rentals/",
+  "/vacation-rentals/",
+  "/all-properties/",
+];
 const OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
@@ -131,7 +140,9 @@ function normalizeLink(url: string): string {
 function normalizeDetailUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    return `${parsed.origin}${parsed.pathname}`.replace(/\/$/, "");
+    const pathOnly = `${parsed.origin}${parsed.pathname}`.replace(/\/$/, "");
+    const query = parsed.searchParams.toString();
+    return query ? `${pathOnly}?${query}` : pathOnly;
   } catch {
     return normalizeLink(url);
   }
@@ -196,15 +207,42 @@ function normalizeListingName(value: string): string {
   return cleaned.slice(0, 240);
 }
 
-function extractRequiredUnitCodeFromHtml(html: string): string {
+function extractRequiredUnitCodeFromHtml(html: string): string | null {
   const match = html.match(
     /<input[^>]*id=["']unitCode["'][^>]*value=["']([^"']+)["'][^>]*>/i,
   );
   const unitCode = match?.[1]?.trim() ?? "";
-  if (!unitCode) {
-    throw new Error("Missing required unitCode in detail HTML");
+  return unitCode || null;
+}
+
+function extractHubPropertyIdFromUrl(detailUrl: string): string | null {
+  try {
+    const parsed = new URL(detailUrl);
+    const value = parsed.searchParams.get("hub_property_id")?.trim() ?? "";
+    return value || null;
+  } catch {
+    return null;
   }
-  return unitCode;
+}
+
+function decodeHubPropertyId(value: string): {
+  itemCode: string | null;
+  propertyId: string | null;
+} {
+  try {
+    const decoded = Buffer.from(value, "base64").toString("utf8").trim();
+    if (!decoded) {
+      return { itemCode: null, propertyId: null };
+    }
+
+    const itemMatch = decoded.match(/^item\s*:\s*(\d+)$/i);
+    return {
+      itemCode: decoded,
+      propertyId: itemMatch?.[1] ?? null,
+    };
+  } catch {
+    return { itemCode: null, propertyId: null };
+  }
 }
 
 function dedupePreserveOrder(values: string[]): string[] {
@@ -263,6 +301,20 @@ function normalizeGalleryUrl(rawUrl: string): string {
 
   try {
     const decoded = cleaned.replace(/&amp;/gi, "&");
+
+    // Some Rezfusion URLs embed the canonical image URL directly in the path.
+    const embeddedUrlMatch = decoded.match(
+      /(https?:\/\/[^\s"']+\.(?:jpe?g|png|webp|gif))/i,
+    );
+    if (embeddedUrlMatch?.[1]) {
+      try {
+        const embedded = new URL(embeddedUrlMatch[1]);
+        return `${embedded.origin}${embedded.pathname}`;
+      } catch {
+        // Fall through to standard URL normalization.
+      }
+    }
+
     const parsed = new URL(decoded);
 
     // Rezfusion image endpoints encode the real image in `source`.
@@ -279,10 +331,92 @@ function normalizeGalleryUrl(rawUrl: string): string {
       }
     }
 
-    return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+    return `${parsed.origin}${parsed.pathname}`;
   } catch {
     return "";
   }
+}
+
+function buildGalleryImageSignature(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const decodedPath = decodeURIComponent(parsed.pathname);
+
+    const directEscapiaMatch = decodedPath.match(
+      /\/pictures\.escapia\.com\/[^?#]+\/(\d+)\.(?:jpe?g|png|webp|gif)$/i,
+    );
+    if (directEscapiaMatch?.[1]) {
+      const numericId = directEscapiaMatch[1];
+      return `escapia:${numericId.slice(-4)}`;
+    }
+
+    const embeddedEscapiaMatch = decodedPath.match(
+      /https?:\/\/pictures\.escapia\.com\/[^?#]+\/(\d+)\.(?:jpe?g|png|webp|gif)$/i,
+    );
+    if (embeddedEscapiaMatch?.[1]) {
+      const numericId = embeddedEscapiaMatch[1];
+      return `escapia:${numericId.slice(-4)}`;
+    }
+
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+function dedupeGalleryUrls(urls: string[]): string[] {
+  const bySignature = new Map<string, string>();
+
+  for (const url of urls) {
+    const signature = buildGalleryImageSignature(url);
+    if (!bySignature.has(signature)) {
+      bySignature.set(signature, url);
+    }
+  }
+
+  return Array.from(bySignature.values());
+}
+
+async function extractLightboxGalleryUrls(page: Page): Promise<string[]> {
+  await clickVisibleControlsByLabel(page, [
+    "photos",
+    "all photos",
+    "view photos",
+    "gallery",
+    "lightbox",
+  ]);
+
+  await page.waitForTimeout(900);
+
+  return page.evaluate(() => {
+    const urls: string[] = [];
+    const nodes = Array.from(
+      document.querySelectorAll(
+        ".image-gallery-slide img[src], .image-gallery-slide img[data-src], img.image-gallery-image, .image-gallery-thumbnail img[src], .image-gallery-thumbnail img[data-src], .image-gallery img[src], .image-gallery-content img[src]",
+      ),
+    );
+
+    for (const node of nodes) {
+      const attrs = [node.getAttribute("src"), node.getAttribute("data-src")];
+
+      for (const raw of attrs) {
+        if (!raw) {
+          continue;
+        }
+
+        try {
+          const absolute = new URL(raw, window.location.origin).toString();
+          if (/\.(jpe?g|png|webp|gif)(\?|$)/i.test(absolute)) {
+            urls.push(absolute);
+          }
+        } catch {
+          // Skip invalid URL fragments.
+        }
+      }
+    }
+
+    return Array.from(new Set(urls));
+  });
 }
 
 function extractFieldLocationFromHtml(html: string): {
@@ -290,6 +424,39 @@ function extractFieldLocationFromHtml(html: string): {
   latitude: number | null;
   longitude: number | null;
 } {
+  const extractCoordinatePairFallback = (): {
+    latitude: number | null;
+    longitude: number | null;
+  } => {
+    const pairPattern = /(-?\d{1,2}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})/g;
+
+    for (const match of html.matchAll(pairPattern)) {
+      const latitude = Number(match[1]);
+      const longitude = Number(match[2]);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        continue;
+      }
+
+      if (
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        continue;
+      }
+
+      // Guard against common non-geo numeric pairs like image dimensions.
+      if (Math.abs(latitude) < 0.01 || Math.abs(longitude) < 0.01) {
+        continue;
+      }
+
+      return { latitude, longitude };
+    }
+
+    return { latitude: null, longitude: null };
+  };
+
   const widgetMatch = html.match(
     /<div[^>]+class=["'][^"']*be-property-widget[^"']*["'][^>]*>/i,
   );
@@ -299,6 +466,28 @@ function extractFieldLocationFromHtml(html: string): {
     const match = widgetTag.match(new RegExp(`${name}=["']([^"']*)["']`, "i"));
     return (match?.[1] ?? "").trim();
   };
+
+  const geoMetaMatch = html.match(
+    /<meta[^>]+name=["']geo\.position["'][^>]+content=["']\s*(-?\d{1,2}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})\s*["'][^>]*>/i,
+  );
+  if (geoMetaMatch?.[1] && geoMetaMatch?.[2]) {
+    const latitude = Number(geoMetaMatch[1]);
+    const longitude = Number(geoMetaMatch[2]);
+    if (
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180
+    ) {
+      return {
+        street: "",
+        latitude,
+        longitude,
+      };
+    }
+  }
 
   const streetFromWidget = attrValue("data-straddress1");
   const latitudeFromWidget = Number(attrValue("data-latitude"));
@@ -387,14 +576,16 @@ function extractFieldLocationFromHtml(html: string): {
       : NaN;
 
   const hasMeaningfulCoords =
-    (Number.isFinite(latitude) && Math.abs(latitude) > 0.000001) ||
-    (Number.isFinite(longitude) && Math.abs(longitude) > 0.000001);
+    (Number.isFinite(latitudeResolved) &&
+      Math.abs(latitudeResolved) > 0.000001) ||
+    (Number.isFinite(longitudeResolved) &&
+      Math.abs(longitudeResolved) > 0.000001);
 
-  if (street || hasMeaningfulCoords) {
+  if (hasMeaningfulCoords) {
     return {
       street,
-      latitude: Number.isFinite(latitude) ? latitude : null,
-      longitude: Number.isFinite(longitude) ? longitude : null,
+      latitude: Number.isFinite(latitudeResolved) ? latitudeResolved : null,
+      longitude: Number.isFinite(longitudeResolved) ? longitudeResolved : null,
     };
   }
 
@@ -421,18 +612,30 @@ function extractFieldLocationFromHtml(html: string): {
       const latFromDaddr = daddrCoordMatch ? Number(daddrCoordMatch[1]) : NaN;
       const lngFromDaddr = daddrCoordMatch ? Number(daddrCoordMatch[2]) : NaN;
 
+      const resolvedLatitude = Number.isFinite(latFromPlace)
+        ? latFromPlace
+        : Number.isFinite(latFromDaddr)
+          ? latFromDaddr
+          : null;
+      const resolvedLongitude = Number.isFinite(lngFromPlace)
+        ? lngFromPlace
+        : Number.isFinite(lngFromDaddr)
+          ? lngFromDaddr
+          : null;
+
+      if (resolvedLatitude === null && resolvedLongitude === null) {
+        const coordinatePairFallback = extractCoordinatePairFallback();
+        return {
+          street: daddrCoordMatch ? "" : daddr,
+          latitude: coordinatePairFallback.latitude,
+          longitude: coordinatePairFallback.longitude,
+        };
+      }
+
       return {
         street: daddrCoordMatch ? "" : daddr,
-        latitude: Number.isFinite(latFromPlace)
-          ? latFromPlace
-          : Number.isFinite(latFromDaddr)
-            ? latFromDaddr
-            : null,
-        longitude: Number.isFinite(lngFromPlace)
-          ? lngFromPlace
-          : Number.isFinite(lngFromDaddr)
-            ? lngFromDaddr
-            : null,
+        latitude: resolvedLatitude,
+        longitude: resolvedLongitude,
       };
     } catch {
       // Fall through to empty location payload.
@@ -457,6 +660,18 @@ function extractFieldLocationFromHtml(html: string): {
       street,
       latitude: Number.isFinite(latitudeResolved) ? latitudeResolved : null,
       longitude: Number.isFinite(longitudeResolved) ? longitudeResolved : null,
+    };
+  }
+
+  const coordinatePairFallback = extractCoordinatePairFallback();
+  if (
+    Number.isFinite(coordinatePairFallback.latitude) ||
+    Number.isFinite(coordinatePairFallback.longitude)
+  ) {
+    return {
+      street,
+      latitude: coordinatePairFallback.latitude,
+      longitude: coordinatePairFallback.longitude,
     };
   }
 
@@ -592,8 +807,20 @@ async function discoverListings(
   await clickTab(page, "list view").catch(() => false);
   await page.waitForTimeout(Math.max(700, scrollPauseMs));
 
+  await page
+    .waitForSelector(
+      "#lmpm-property-search-list-scroll > div, riot-solr-result-list, .result-list",
+      {
+        state: "attached",
+        timeout: 9000,
+      },
+    )
+    .catch(() => undefined);
+
   await page.evaluate(() => {
-    const root = document.querySelector("riot-solr-result-list, .result-list");
+    const root = document.querySelector(
+      "#lmpm-property-search-list-scroll > div, riot-solr-result-list, .result-list",
+    );
     if (!root) {
       return;
     }
@@ -627,6 +854,7 @@ async function discoverListings(
           const matchesExpectedPrefix = [
             "/vacation_rentals/",
             "/vacation-rentals/",
+            "/all-properties/",
           ].some((prefix) => normalizedPath.startsWith(prefix));
           if (!matchesExpectedPrefix) {
             return "";
@@ -637,6 +865,7 @@ async function discoverListings(
             !slug ||
             slug === "vacation_rentals" ||
             slug === "vacation-rentals" ||
+            slug === "all-properties" ||
             slug === "search-results" ||
             slug === "results"
           ) {
@@ -647,14 +876,21 @@ async function discoverListings(
             return "";
           }
 
-          return `${absolute.origin}${absolute.pathname}`.replace(/\/$/, "");
+          const pathOnly = `${absolute.origin}${absolute.pathname}`.replace(
+            /\/$/,
+            "",
+          );
+          const query = absolute.searchParams.toString();
+          return query ? `${pathOnly}?${query}` : pathOnly;
         } catch {
           return "";
         }
       };
 
       const resultRoots = Array.from(
-        document.querySelectorAll("riot-solr-result-list, .result-list"),
+        document.querySelectorAll(
+          "#lmpm-property-search-list-scroll > div, riot-solr-result-list, .result-list",
+        ),
       );
 
       const resultAnchors =
@@ -818,7 +1054,7 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
     const items: Array<{ date: string; code: LuxuryDayCode }> = [];
     const monthHeaders = Array.from(
       document.querySelectorAll(
-        ".pdp-availability-calendar-container .mb-2 strong, .pdp-availability-calendar-container .mb-2",
+        ".pdp-availability-calendar-container .mb-2 strong, .pdp-availability-calendar-container .mb-2, .CalendarMonth_caption, .DayPicker-Caption, [class*='CalendarMonth'] [class*='caption'], [class*='month'] [class*='caption']",
       ),
     )
       .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
@@ -866,6 +1102,62 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
       items.push({ date: isoDate, code });
     }
 
+    const parseIsoDateFromLabel = (label: string): string | null => {
+      const cleaned = label.replace(/\s+/g, " ").trim();
+      if (!cleaned) {
+        return null;
+      }
+
+      const monthDateMatch = cleaned.match(
+        /(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}/i,
+      );
+      if (!monthDateMatch?.[0]) {
+        return null;
+      }
+
+      const parsed = new Date(monthDateMatch[0]);
+      if (!Number.isFinite(parsed.getTime())) {
+        return null;
+      }
+
+      return new Date(
+        Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()),
+      )
+        .toISOString()
+        .slice(0, 10);
+    };
+
+    const modernDayNodes = Array.from(
+      document.querySelectorAll(
+        ".CalendarDay, [class*='CalendarDay'], .DayPicker-Day, [role='gridcell'][aria-label], [aria-label*='available' i], [aria-label*='unavailable' i], [aria-label*='booked' i], [aria-label*='check-in' i], [aria-label*='check-out' i]",
+      ),
+    );
+
+    for (const node of modernDayNodes) {
+      const el = node as HTMLElement;
+      const classBlob = String(el.className || "").toLowerCase();
+      const ariaLabel = (el.getAttribute("aria-label") ?? "").trim();
+      const textBlob = `${ariaLabel} ${classBlob}`.toLowerCase();
+
+      const dateFromAria = parseIsoDateFromLabel(ariaLabel);
+      if (!dateFromAria) {
+        continue;
+      }
+
+      let code: LuxuryDayCode = "X";
+      if (/not available|unavailable|blocked|booked|disabled/.test(textBlob)) {
+        code = "U";
+      } else if (/check[- ]?in|arrive/.test(textBlob)) {
+        code = "I";
+      } else if (/check[- ]?out|depart/.test(textBlob)) {
+        code = "O";
+      } else if (/available/.test(textBlob)) {
+        code = "A";
+      }
+
+      items.push({ date: dateFromAria, code });
+    }
+
     const keyText = Array.from(
       document.querySelectorAll(
         ".be-calendar-legend-key-text, .rcav-key, .bre-ui-datepicker-extras, .label",
@@ -881,13 +1173,111 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
 
     return {
       hasCalendarWidget: !!document.querySelector(
-        ".pdp-availability-calendar, .pdp-availability-calendar-table, .ui-datepicker, .ui-datepicker-inline, .rcav-key",
+        ".pdp-availability-calendar, .pdp-availability-calendar-table, .ui-datepicker, .ui-datepicker-inline, .rcav-key, #startDate, #endDate, .DateRangePicker, [class*='CalendarDay'], .DayPicker",
       ),
       months: Array.from(new Set(monthHeaders)),
       items,
       bookingRestrictions: Array.from(new Set(keyText)).slice(0, 40),
     };
   });
+}
+
+async function extractAvailabilityFromLmpmApi(
+  page: Page,
+  propertyId: string,
+  todayIso: string,
+  horizonIso: string,
+): Promise<
+  Array<{ date: string; code: LuxuryDayCode; minNights: number | null }>
+> {
+  const rows: Array<{
+    date: string;
+    code: LuxuryDayCode;
+    minNights: number | null;
+  }> = [];
+
+  const cursor = new Date(`${todayIso}T00:00:00Z`);
+  const horizon = new Date(`${horizonIso}T00:00:00Z`);
+
+  while (cursor.getTime() <= horizon.getTime()) {
+    const startIso = cursor.toISOString().slice(0, 10);
+    const end = new Date(cursor);
+    end.setUTCDate(end.getUTCDate() + 30);
+    if (end.getTime() > horizon.getTime()) {
+      end.setTime(horizon.getTime());
+    }
+    const endIso = end.toISOString().slice(0, 10);
+
+    const endpoint =
+      `https://sandpipervacationrentals.com/wp-json/lmpm/v1/properties/${encodeURIComponent(propertyId)}/dates` +
+      `?start=${startIso}&end=${endIso}&pms_id=${encodeURIComponent(propertyId)}&_locale=user`;
+
+    const response = await page.request.get(endpoint, {
+      timeout: 30000,
+      failOnStatusCode: false,
+    });
+
+    if (!response.ok()) {
+      break;
+    }
+
+    const payload = (await response.json()) as Array<{
+      date?: unknown;
+      status?: unknown;
+      check_in?: unknown;
+      check_out?: unknown;
+      disable_check_in?: unknown;
+      disable_check_out?: unknown;
+      mlos?: unknown;
+    }>;
+
+    if (!Array.isArray(payload) || payload.length === 0) {
+      break;
+    }
+
+    for (const day of payload) {
+      const date = typeof day.date === "string" ? day.date.slice(0, 10) : "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        continue;
+      }
+
+      const status =
+        typeof day.status === "string" ? day.status.toLowerCase() : "";
+      const checkIn = day.check_in === true;
+      const checkOut = day.check_out === true;
+      const disableCheckIn = day.disable_check_in === true;
+      const disableCheckOut = day.disable_check_out === true;
+
+      let code: LuxuryDayCode = "X";
+      if (/booked|unavailable|blocked|closed/.test(status)) {
+        code = "U";
+      } else if (checkIn && !checkOut) {
+        code = "I";
+      } else if (checkOut && !checkIn) {
+        code = "O";
+      } else if (
+        /available|open/.test(status) ||
+        (!disableCheckIn && !disableCheckOut)
+      ) {
+        code = "A";
+      }
+
+      const mlosRaw =
+        typeof day.mlos === "number"
+          ? day.mlos
+          : typeof day.mlos === "string"
+            ? Number(day.mlos)
+            : NaN;
+      const minNights =
+        Number.isFinite(mlosRaw) && mlosRaw > 0 ? Math.floor(mlosRaw) : null;
+
+      rows.push({ date, code, minNights });
+    }
+
+    cursor.setUTCDate(cursor.getUTCDate() + 31);
+  }
+
+  return rows;
 }
 
 async function extractDescriptionText(page: Page): Promise<string> {
@@ -942,6 +1332,8 @@ async function fetchDetail(
   try {
     await installEvaluateNameShim(page);
 
+    const hubPropertyId = extractHubPropertyIdFromUrl(detailUrl);
+
     const beforeLoad = Date.now();
     await page.goto(detailUrl, {
       waitUntil: "domcontentloaded",
@@ -950,6 +1342,7 @@ async function fetchDetail(
     await page.waitForTimeout(1800);
 
     await clickVisibleControlsByLabel(page, [
+      "photos",
       "read more",
       "show all amenities",
       "show all",
@@ -976,28 +1369,94 @@ async function fetchDetail(
       return {
         title: document.title ?? "",
         h1: (() => {
-          const heading = document.querySelector("h1");
-          if (!heading) {
-            return "";
+          const propertyHeading = document.querySelector(
+            "h1[class*='property-listing-title']",
+          );
+          const propertyText = (propertyHeading?.textContent ?? "")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (propertyText) {
+            return propertyText;
           }
 
-          const clone = heading.cloneNode(true) as HTMLElement;
-          for (const nested of Array.from(
-            clone.querySelectorAll(
-              ".collapsible, .group-beds-baths-wrapper, .rc-lodging-detail",
-            ),
-          )) {
-            nested.remove();
+          const fallbackHeadings = Array.from(document.querySelectorAll("h1"));
+          for (const heading of fallbackHeadings) {
+            const text = (heading.textContent ?? "")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (text) {
+              return text;
+            }
           }
 
-          return (clone.textContent ?? "").replace(/\s+/g, " ").trim();
+          return "";
         })(),
         canonical:
           document
             .querySelector("link[rel='canonical']")
             ?.getAttribute("href") ?? "",
+        mapLatitude: (() => {
+          const byWindow = (window as Record<string, unknown>)[
+            "_lmpmHubSearchApiMapCenterLat"
+          ];
+          if (typeof byWindow === "number" && Number.isFinite(byWindow)) {
+            return byWindow;
+          }
+          if (typeof byWindow === "string") {
+            const parsed = Number(byWindow);
+            if (Number.isFinite(parsed)) {
+              return parsed;
+            }
+          }
+
+          const html = document.documentElement.outerHTML;
+          const pairMatch = html.match(
+            /(-?\d{1,2}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})/,
+          );
+          if (!pairMatch?.[1]) {
+            return null;
+          }
+
+          const latitude = Number(pairMatch[1]);
+          return Number.isFinite(latitude) ? latitude : null;
+        })(),
+        mapLongitude: (() => {
+          const byWindow = (window as Record<string, unknown>)[
+            "_lmpmHubSearchApiMapCenterLong"
+          ];
+          if (typeof byWindow === "number" && Number.isFinite(byWindow)) {
+            return byWindow;
+          }
+          if (typeof byWindow === "string") {
+            const parsed = Number(byWindow);
+            if (Number.isFinite(parsed)) {
+              return parsed;
+            }
+          }
+
+          const html = document.documentElement.outerHTML;
+          const pairMatch = html.match(
+            /(-?\d{1,2}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})/,
+          );
+          if (!pairMatch?.[2]) {
+            return null;
+          }
+
+          const longitude = Number(pairMatch[2]);
+          return Number.isFinite(longitude) ? longitude : null;
+        })(),
         metaDescription: getMeta("description") || getMeta("og:description"),
         sleepsText: (() => {
+          const propertyStats = document.querySelector(
+            ".lmpm-ps-occupancy, .lmpm-property-stats .lmpm-ps-occupancy",
+          );
+          const propertyStatsText = (propertyStats?.textContent ?? "")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (propertyStatsText) {
+            return propertyStatsText;
+          }
+
           const summaryCards = Array.from(
             document.querySelectorAll(".size-summary [class*='summary']"),
           );
@@ -1031,6 +1490,16 @@ async function fetchDetail(
           return "";
         })(),
         bedroomsText: (() => {
+          const propertyStats = document.querySelector(
+            ".lmpm-ps-bedrooms, .lmpm-property-stats .lmpm-ps-bedrooms",
+          );
+          const propertyStatsText = (propertyStats?.textContent ?? "")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (propertyStatsText) {
+            return propertyStatsText;
+          }
+
           const summaryCards = Array.from(
             document.querySelectorAll(".size-summary [class*='summary']"),
           );
@@ -1064,6 +1533,16 @@ async function fetchDetail(
           return "";
         })(),
         bathroomsText: (() => {
+          const propertyStats = document.querySelector(
+            ".lmpm-ps-bathrooms, .lmpm-property-stats .lmpm-ps-bathrooms",
+          );
+          const propertyStatsText = (propertyStats?.textContent ?? "")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (propertyStatsText) {
+            return propertyStatsText;
+          }
+
           const summaryCards = Array.from(
             document.querySelectorAll(".size-summary [class*='summary']"),
           );
@@ -1335,8 +1814,25 @@ async function fetchDetail(
       15000,
     );
     const descriptionExpanded = stripHtml(descriptionText).slice(0, 30000);
+    const lightboxGalleryUrls = await extractLightboxGalleryUrls(page);
 
     await clickTab(page, "Availability");
+    await page.evaluate(() => {
+      const openers = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "#startDate, input[name='startDate'], input[name='checkInDate'], .DateRangePickerInput input, [aria-label*='check in' i], [placeholder*='start date' i], [placeholder*='check in' i]",
+        ),
+      );
+
+      for (const opener of openers) {
+        if (opener.offsetParent === null) {
+          continue;
+        }
+        opener.click();
+        break;
+      }
+    });
+    await page.waitForTimeout(700);
 
     const dayCodeByDate = new Map<string, LuxuryDayCode>();
     const codePriority: Record<LuxuryDayCode, number> = {
@@ -1349,6 +1845,7 @@ async function fetchDetail(
 
     const bookingRestrictions = new Set<string>();
     const seenMonthSignatures = new Set<string>();
+    const minNightsByDate = new Map<string, number>();
 
     let calendarClicks = 0;
     let calendarIterations = 0;
@@ -1360,81 +1857,102 @@ async function fetchDetail(
     horizon.setUTCDate(horizon.getUTCDate() + availabilityHorizonDays);
     const horizonIso = horizon.toISOString().slice(0, 10);
 
-    for (
-      let iteration = 0;
-      iteration < Math.max(1, maxCalendarAdvanceMonths);
-      iteration += 1
-    ) {
-      calendarIterations += 1;
+    if (hubPropertyId) {
+      const apiRows = await extractAvailabilityFromLmpmApi(
+        page,
+        hubPropertyId,
+        todayIso,
+        horizonIso,
+      );
 
-      const snapshot = await extractAvailabilitySnapshot(page);
-      const monthSignature = snapshot.months.join("|");
-      if (monthSignature && seenMonthSignatures.has(monthSignature)) {
-        stagnantIterations += 1;
-      } else if (monthSignature) {
-        seenMonthSignatures.add(monthSignature);
-        stagnantIterations = 0;
-      }
-
-      for (const restriction of snapshot.bookingRestrictions) {
-        bookingRestrictions.add(restriction);
-      }
-
-      for (const item of snapshot.items) {
-        if (item.date < todayIso || item.date > horizonIso) {
-          continue;
+      for (const row of apiRows) {
+        const previous = dayCodeByDate.get(row.date);
+        if (!previous || codePriority[row.code] > codePriority[previous]) {
+          dayCodeByDate.set(row.date, row.code);
         }
-
-        const previous = dayCodeByDate.get(item.date);
-        if (!previous) {
-          dayCodeByDate.set(item.date, item.code);
-          continue;
-        }
-
-        if (codePriority[item.code] > codePriority[previous]) {
-          dayCodeByDate.set(item.date, item.code);
+        if (row.minNights !== null) {
+          minNightsByDate.set(row.date, row.minNights);
         }
       }
+    }
 
-      const latestDate = Array.from(dayCodeByDate.keys()).sort().at(-1) ?? "";
-      if (latestDate && latestDate >= horizonIso) {
-        break;
-      }
-      if (stagnantIterations >= 3) {
-        break;
-      }
+    if (dayCodeByDate.size === 0) {
+      for (
+        let iteration = 0;
+        iteration < Math.max(1, maxCalendarAdvanceMonths);
+        iteration += 1
+      ) {
+        calendarIterations += 1;
 
-      const clickedNext = await page.evaluate(() => {
-        const nodes = Array.from(
-          document.querySelectorAll(
-            "a.ui-datepicker-next, button.next, a.next, .rc-calendar-next, [class*='calendar'] .next, [class*='datepicker'] [title*='Next' i], [class*='datepicker'] [aria-label*='Next' i], button[title*='Next' i], a[title*='Next' i], button[aria-label*='Next' i], a[aria-label*='Next' i]",
-          ),
-        );
+        const snapshot = await extractAvailabilitySnapshot(page);
+        const monthSignature = snapshot.months.join("|");
+        if (monthSignature && seenMonthSignatures.has(monthSignature)) {
+          stagnantIterations += 1;
+        } else if (monthSignature) {
+          seenMonthSignatures.add(monthSignature);
+          stagnantIterations = 0;
+        }
 
-        for (const node of nodes) {
-          const element = node as HTMLElement;
-          if (element.offsetParent === null) {
+        for (const restriction of snapshot.bookingRestrictions) {
+          bookingRestrictions.add(restriction);
+        }
+
+        for (const item of snapshot.items) {
+          if (item.date < todayIso || item.date > horizonIso) {
             continue;
           }
-          if (
-            element.getAttribute("aria-disabled") === "true" ||
-            element.className.toLowerCase().includes("disabled")
-          ) {
+
+          const previous = dayCodeByDate.get(item.date);
+          if (!previous) {
+            dayCodeByDate.set(item.date, item.code);
             continue;
           }
-          element.click();
-          return true;
+
+          if (codePriority[item.code] > codePriority[previous]) {
+            dayCodeByDate.set(item.date, item.code);
+          }
         }
 
-        return false;
-      });
+        const latestDate = Array.from(dayCodeByDate.keys()).sort().at(-1) ?? "";
+        if (latestDate && latestDate >= horizonIso) {
+          break;
+        }
+        if (stagnantIterations >= 3) {
+          break;
+        }
 
-      if (!clickedNext) {
-        break;
+        const clickedNext = await page.evaluate(() => {
+          const nodes = Array.from(
+            document.querySelectorAll(
+              "a.ui-datepicker-next, button.next, a.next, .rc-calendar-next, [class*='calendar'] .next, [class*='datepicker'] [title*='Next' i], [class*='datepicker'] [aria-label*='Next' i], button[title*='Next' i], a[title*='Next' i], button[aria-label*='Next' i], a[aria-label*='Next' i], button[aria-label*='Move forward' i], button[aria-label*='next month' i], .DayPickerNavigation_button__horizontalDefault",
+            ),
+          );
+
+          for (const node of nodes) {
+            const element = node as HTMLElement;
+            if (element.offsetParent === null) {
+              continue;
+            }
+            if (
+              element.getAttribute("aria-disabled") === "true" ||
+              element.className.toLowerCase().includes("disabled")
+            ) {
+              continue;
+            }
+            element.click();
+            return true;
+          }
+
+          return false;
+        });
+
+        if (!clickedNext) {
+          break;
+        }
+
+        calendarClicks += 1;
+        await page.waitForTimeout(750);
       }
-
-      calendarClicks += 1;
-      await page.waitForTimeout(750);
     }
 
     const normalizedDays = Array.from(dayCodeByDate.entries())
@@ -1454,7 +1972,7 @@ async function fetchDetail(
           is_available_for_checkin: code === "A" || code === "I",
           is_available_for_checkout: code === "A" || code === "O",
           booking_day_state: bookingDayState,
-          min_nights_required: null,
+          min_nights_required: minNightsByDate.get(date) ?? null,
         };
       });
 
@@ -1492,13 +2010,61 @@ async function fetchDetail(
       windowCursor.setUTCDate(windowCursor.getUTCDate() + 1);
     }
 
+    const liveMapCoords = await page.evaluate(() => {
+      const parseCandidate = (value: unknown): number | null => {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          return value;
+        }
+        if (typeof value === "string") {
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) {
+            return parsed;
+          }
+        }
+        return null;
+      };
+
+      const latFromWindow = parseCandidate(
+        (window as Record<string, unknown>)._lmpmHubSearchApiMapCenterLat,
+      );
+      const lngFromWindow = parseCandidate(
+        (window as Record<string, unknown>)._lmpmHubSearchApiMapCenterLong,
+      );
+      if (latFromWindow !== null && lngFromWindow !== null) {
+        return { latitude: latFromWindow, longitude: lngFromWindow };
+      }
+
+      const html = document.documentElement.outerHTML;
+      const pairMatch = html.match(
+        /(-?\d{1,2}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})/,
+      );
+      if (pairMatch?.[1] && pairMatch?.[2]) {
+        const latitude = Number(pairMatch[1]);
+        const longitude = Number(pairMatch[2]);
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          return { latitude, longitude };
+        }
+      }
+
+      return { latitude: null, longitude: null };
+    });
+
     const externalListingId = extractExternalListingId(detailUrl);
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
     );
     const html = await page.content();
-    const unitCode = extractRequiredUnitCodeFromHtml(html);
+    const unitCodeFromHtml = extractRequiredUnitCodeFromHtml(html);
+    const hubPropertyDecoded = hubPropertyId
+      ? decodeHubPropertyId(hubPropertyId)
+      : { itemCode: null, propertyId: null };
+    const unitCode = unitCodeFromHtml ?? hubPropertyId;
+    if (!unitCode) {
+      throw new Error(
+        "Missing required unit code and hub_property_id in detail context",
+      );
+    }
     await writeFile(htmlPath, html, "utf8");
 
     const locationPayload = extractFieldLocationFromHtml(html);
@@ -1553,20 +2119,32 @@ async function fetchDetail(
       all: amenitiesAll,
     };
 
-    const mediaUrls = dedupePreserveOrder(
-      extracted.galleryUrls
-        .map((url) => normalizeGalleryUrl(url))
-        .filter(Boolean),
+    const mediaUrls = dedupeGalleryUrls(
+      dedupePreserveOrder(
+        lightboxGalleryUrls
+          .map((url) => normalizeGalleryUrl(url))
+          .filter(Boolean),
+      ),
     );
     const mediaGallery: LuxuryDetailRecord["media_gallery"] = {
       image_count: mediaUrls.length,
       image_urls: mediaUrls,
     };
 
-    const latitude =
-      locationPayload.latitude === 0 ? null : locationPayload.latitude;
-    const longitude =
-      locationPayload.longitude === 0 ? null : locationPayload.longitude;
+    const latitudeRaw =
+      locationPayload.latitude ??
+      liveMapCoords.latitude ??
+      (typeof extracted.mapLatitude === "number"
+        ? extracted.mapLatitude
+        : null);
+    const longitudeRaw =
+      locationPayload.longitude ??
+      liveMapCoords.longitude ??
+      (typeof extracted.mapLongitude === "number"
+        ? extracted.mapLongitude
+        : null);
+    const latitude = latitudeRaw === 0 ? null : latitudeRaw;
+    const longitude = longitudeRaw === 0 ? null : longitudeRaw;
     const streetAddress = stripHtml(locationPayload.street).slice(0, 240);
     const directionsQuery =
       streetAddress ||
@@ -1628,6 +2206,19 @@ async function fetchDetail(
       quote_context: {
         unit_code: unitCode,
         detail_url: detailUrl,
+        ...(hubPropertyId
+          ? {
+              hub_property_id: hubPropertyId,
+              pms_id: hubPropertyId,
+              property_id: hubPropertyId,
+            }
+          : {}),
+        ...(hubPropertyDecoded.itemCode
+          ? { item_code: hubPropertyDecoded.itemCode }
+          : {}),
+        ...(hubPropertyDecoded.propertyId
+          ? { item_id: hubPropertyDecoded.propertyId }
+          : {}),
       },
       fetched_at: new Date().toISOString(),
       title: normalizeListingName(extracted.title || extracted.h1 || ""),
