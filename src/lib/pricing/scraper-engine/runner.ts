@@ -1649,29 +1649,11 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         )}\n`,
       );
 
-      const canonicalArtifacts = await loadExistingDetailArtifacts(
-        root,
-        outputDetailsJsonDir,
-        adapter.isValidDetailUrl,
-      );
+      // In refresh-known mode, details/index.json is the authoritative source list.
+      // Do not rebuild it from filesystem artifacts here.
       const canonicalIndexPath = resolve(outputRoot, "details", "index.json");
-      const canonicalIndex = Array.from(canonicalArtifacts.values())
-        .map((artifact) => ({
-          detail_url: artifact.detailUrl,
-          external_listing_id: artifact.externalListingId,
-          ...(artifact.quoteContext
-            ? { quote_context: artifact.quoteContext }
-            : {}),
-        }))
-        .sort((left, right) => left.detail_url.localeCompare(right.detail_url));
-      await writeCanonicalIndexWithPruneGuard({
-        canonicalIndexPath,
-        canonicalIndex,
-        allowCanonicalPrune: options.allowCanonicalPrune,
-        allowEmptyCanonicalIndexPrune: options.allowEmptyCanonicalIndexPrune,
-      });
       progress.info(
-        `canonical index updated: ${toProjectRelativePath(canonicalIndexPath, root)} entries=${canonicalIndex.length}`,
+        `canonical index preserved: ${toProjectRelativePath(canonicalIndexPath, root)} (refresh-known source of truth)`,
       );
 
       progress.success(

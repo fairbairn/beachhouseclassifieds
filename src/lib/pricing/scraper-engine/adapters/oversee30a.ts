@@ -390,6 +390,24 @@ function extractAmenities(html: string): {
 function collectMediaUrls(html: string, baseUrl: string): string[] {
   const urls = new Set<string>();
 
+  const unwrapOverseeImageUrl = (url: string): string | null => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname === "img.trackhs.com") {
+        const wrappedPath = decodeURIComponent(
+          parsed.pathname.replace(/^\/x\d+\//i, ""),
+        ).trim();
+        if (/^https?:\/\//i.test(wrappedPath)) {
+          return wrappedPath;
+        }
+      }
+
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  };
+
   const addUrl = (value: string | null | undefined) => {
     if (!value) {
       return;
@@ -400,11 +418,13 @@ function collectMediaUrls(html: string, baseUrl: string): string[] {
       return;
     }
 
-    if (
-      normalized.includes("track-pm.s3.amazonaws.com/oversee/image") ||
-      normalized.includes("img.trackhs.com")
-    ) {
-      urls.add(normalized);
+    const canonicalImageUrl = unwrapOverseeImageUrl(normalized);
+    if (!canonicalImageUrl) {
+      return;
+    }
+
+    if (canonicalImageUrl.includes("track-pm.s3.amazonaws.com/oversee/image")) {
+      urls.add(canonicalImageUrl);
     }
   };
 
