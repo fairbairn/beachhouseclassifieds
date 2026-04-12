@@ -12,6 +12,7 @@ const chalk = new Chalk({ level: 1 });
 
 type CliOptions = {
   adapterKey: string;
+  listingId: string | null;
   maxListings: number | null;
 };
 
@@ -81,7 +82,8 @@ type ValidationWarning = {
 };
 
 function parseArgs(argv: string[]): CliOptions {
-  let adapterKey = "360blue";
+  let adapterKey: string | null = null;
+  let listingId: string | null = null;
   let maxListings: number | null = null;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -102,9 +104,22 @@ function parseArgs(argv: string[]): CliOptions {
       index += 1;
       continue;
     }
+
+    if ((arg === "--listing-id" || arg === "--external-listing-id") && value) {
+      const normalized = value.trim();
+      if (normalized.length > 0) {
+        listingId = canonicalizeExternalListingId(normalized);
+      }
+      index += 1;
+      continue;
+    }
   }
 
-  return { adapterKey, maxListings };
+  if (!adapterKey) {
+    throw new Error("Missing required --adapter-key <adapterKey>");
+  }
+
+  return { adapterKey, listingId, maxListings };
 }
 
 function normalizeFileBase(name: string, extension: string): string {
@@ -465,10 +480,40 @@ export async function runValidateScrapeFilenameAlignmentCli(
     return 1;
   }
 
+  const listingFilteredRecords =
+    options.listingId === null
+      ? indexRecords
+      : indexRecords.filter((indexRecord) => {
+          const indexExternalId =
+            typeof indexRecord.external_listing_id === "string"
+              ? indexRecord.external_listing_id.trim()
+              : "";
+          const indexDetailUrl =
+            typeof indexRecord.detail_url === "string"
+              ? indexRecord.detail_url.trim()
+              : "";
+          const canonicalIndexExternalId = indexExternalId
+            ? canonicalizeExternalListingId(indexExternalId)
+            : "";
+          const canonicalFromDetailUrl = indexDetailUrl
+            ? externalListingIdFromDetailUrl(indexDetailUrl)
+            : "";
+          const canonicalIndexId =
+            canonicalIndexExternalId || canonicalFromDetailUrl;
+          return canonicalIndexId === options.listingId;
+        });
+
+  if (options.listingId !== null && listingFilteredRecords.length === 0) {
+    console.error(
+      `No canonical index entry matched listing_id=${options.listingId} for adapter=${options.adapterKey}.`,
+    );
+    return 1;
+  }
+
   const selectedIndexRecords =
     options.maxListings === null
-      ? indexRecords
-      : indexRecords.slice(0, options.maxListings);
+      ? listingFilteredRecords
+      : listingFilteredRecords.slice(0, options.maxListings);
 
   const primaryIds = new Set<string>();
   const primaryIdToFile = new Map<string, string>();

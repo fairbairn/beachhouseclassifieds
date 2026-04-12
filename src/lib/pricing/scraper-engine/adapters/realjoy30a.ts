@@ -164,7 +164,18 @@ function normalizeDetailUrl(value: string): string | null {
     }
 
     // Keep only concrete listing detail pages.
+    const looksLikeCollectionSlug =
+      /(?:^|-)rentals?$/.test(slug) ||
+      /(?:^|-)condos?$/.test(slug) ||
+      /(?:^|-)townhomes?$/.test(slug) ||
+      /(?:^|-)studio-rentals$/.test(slug) ||
+      /(?:^|-)vacation-condo-rentals$/.test(slug) ||
+      /(?:^|-)luxury(?:-rentals?)?$/.test(slug) ||
+      /-with-(?:pool|hot-tub)$/.test(slug) ||
+      /-pet-friendly-rentals$/.test(slug);
+
     if (
+      looksLikeCollectionSlug ||
       slug.endsWith("vacation-rentals") ||
       slug === "beach-rentals" ||
       slug === "vacation-condo-rentals" ||
@@ -188,6 +199,15 @@ function extractExternalListingId(detailUrl: string): string {
 
   const parts = new URL(normalized).pathname.split("/").filter(Boolean);
   return parts[1] || "unknown";
+}
+
+function extractListingSlugFromUrl(value: string): string {
+  const normalized = normalizeDetailUrl(value);
+  if (!normalized) {
+    return "";
+  }
+  const parts = new URL(normalized).pathname.split("/").filter(Boolean);
+  return parts[1] || "";
 }
 
 function parseNumberLike(
@@ -223,8 +243,46 @@ function collectRealJoyMediaUrls(
   candidates: string[],
   baseUrl: string,
 ): string[] {
-  const urls = new Set<string>();
+  const bySource = new Map<
+    string,
+    {
+      source: string;
+      width: number;
+      height: number;
+      score: number;
+      firstSeen: number;
+    }
+  >();
 
+  const parseSource = (
+    absolute: string,
+  ): { source: string; width: number; height: number } | null => {
+    const wrappedMatch = absolute.match(
+      /img\.trackhs\.com\/(\d+)x(\d+)\/(https?:\/\/track-pm\.s3\.amazonaws\.com\/realjoy\/image\/[^?&#]+)/i,
+    );
+    if (wrappedMatch?.[1] && wrappedMatch[2] && wrappedMatch[3]) {
+      return {
+        source: wrappedMatch[3],
+        width: Number(wrappedMatch[1]) || 0,
+        height: Number(wrappedMatch[2]) || 0,
+      };
+    }
+
+    const rawMatch = absolute.match(
+      /(https?:\/\/track-pm\.s3\.amazonaws\.com\/realjoy\/image\/[^?&#]+)/i,
+    );
+    if (rawMatch?.[1]) {
+      return {
+        source: rawMatch[1],
+        width: 0,
+        height: 0,
+      };
+    }
+
+    return null;
+  };
+
+  let seenIndex = 0;
   for (const candidate of candidates) {
     if (!candidate) {
       continue;
@@ -240,16 +298,37 @@ function collectRealJoyMediaUrls(
         continue;
       }
 
-      if (
-        absolute.includes("track-pm.s3.amazonaws.com/realjoy/image") ||
-        absolute.includes("img.trackhs.com")
-      ) {
-        urls.add(absolute);
+      const parsed = parseSource(absolute);
+      if (!parsed) {
+        continue;
       }
+
+      const score = parsed.width * parsed.height;
+      const existing = bySource.get(parsed.source);
+      if (!existing) {
+        bySource.set(parsed.source, {
+          source: parsed.source,
+          width: parsed.width,
+          height: parsed.height,
+          score,
+          firstSeen: seenIndex,
+        });
+      } else if (score > existing.score) {
+        bySource.set(parsed.source, {
+          ...existing,
+          width: parsed.width,
+          height: parsed.height,
+          score,
+        });
+      }
+
+      seenIndex += 1;
     }
   }
 
-  return Array.from(urls);
+  return Array.from(bySource.values())
+    .sort((left, right) => left.firstSeen - right.firstSeen)
+    .map((entry) => entry.source);
 }
 
 function parseMonthHeader(
@@ -347,6 +426,7 @@ async function discoverListings(
   const sourceByLink = new Map<string, string>();
   const discovered = new Set<string>();
   const expectedPropertyIds = new Set<string>();
+  const expectedListingSlugs = new Set<string>();
 
   page.on("response", (response) => {
     void (async () => {
@@ -389,6 +469,12 @@ async function discoverListings(
           if (!normalized) {
             continue;
           }
+
+          const slug = extractListingSlugFromUrl(normalized);
+          if (slug) {
+            expectedListingSlugs.add(slug);
+          }
+
           discovered.add(normalized);
           sourceByLink.set(normalized, anchorUrl);
         }
@@ -418,6 +504,14 @@ async function discoverListings(
       if (!normalized || discovered.has(normalized)) {
         continue;
       }
+
+      if (expectedListingSlugs.size > 0) {
+        const slug = extractListingSlugFromUrl(normalized);
+        if (!slug || !expectedListingSlugs.has(slug)) {
+          continue;
+        }
+      }
+
       discovered.add(normalized);
       sourceByLink.set(normalized, anchorUrl);
       added += 1;

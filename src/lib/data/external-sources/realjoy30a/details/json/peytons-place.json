@@ -1,7 +1,7 @@
 {
   "external_listing_id": "peytons-place",
   "detail_url": "https://www.realjoy.com/beach-rentals/peytons-place",
-  "fetched_at": "2026-04-12T03:33:46.284Z",
+  "fetched_at": "2026-04-12T18:01:20.413Z",
   "quote_context": {
     "source": "detail_html",
     "property_id": "1814",
@@ -216,7 +216,7 @@
   "normalized_availability": {
     "source": "pm_realjoy30a",
     "external_listing_id": "peytons-place",
-    "captured_at": "2026-04-12T03:33:46.284Z",
+    "captured_at": "2026-04-12T18:01:20.413Z",
     "window_start": "2026-04-12",
     "window_end": "2027-05-31",
     "code_legend": {
@@ -226,7 +226,7 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUAAAAAAAAAAAAAA",
+    "day_codes": "AAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
@@ -310,43 +310,43 @@
       },
       {
         "date": "2026-04-22",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "booking_day_state": "unknown"
       },
       {
         "date": "2026-04-23",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-04-24",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-04-25",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-04-26",
-        "status_code": "A",
-        "is_available": true,
+        "status_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown"
       },
       {
         "date": "2026-04-27",
@@ -3550,14 +3550,14 @@
       }
     ],
     "counts": {
-      "available": 90,
-      "unavailable": 324,
-      "checkin_only": 0,
-      "checkout_only": 1,
+      "available": 85,
+      "unavailable": 327,
+      "checkin_only": 1,
+      "checkout_only": 2,
       "other": 0,
-      "booking_available": 90,
-      "booking_unavailable": 324,
-      "booking_unknown": 1
+      "booking_available": 85,
+      "booking_unavailable": 327,
+      "booking_unknown": 3
     }
   },
   "availability_raw": {
@@ -3567,8 +3567,10 @@
       "available",
       "ui-datepicker-other-month ui-datepicker-unselectable ui-state-disabled",
       "ui-datepicker-unselectable ui-state-disabled available",
+      "ui-datepicker-unselectable ui-state-disabled check-out",
       "ui-datepicker-unselectable ui-state-disabled unavailable",
       "ui-datepicker-week-end available",
+      "ui-datepicker-week-end check-in",
       "ui-datepicker-week-end ui-datepicker-days-cell-over available ui-datepicker-current-day ui-datepicker-today",
       "ui-datepicker-week-end ui-datepicker-other-month ui-datepicker-unselectable ui-state-disabled",
       "ui-datepicker-week-end ui-datepicker-unselectable ui-state-disabled available",

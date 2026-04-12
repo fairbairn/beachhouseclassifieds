@@ -561,10 +561,16 @@ async function fetchDetail(
 
     await expandDetailSections(page);
 
-    for (let monthStep = 0; monthStep < maxCalendarAdvanceMonths; monthStep += 1) {
+    for (
+      let monthStep = 0;
+      monthStep < maxCalendarAdvanceMonths;
+      monthStep += 1
+    ) {
       const advanced = await page.evaluate(() => {
         const controls = Array.from(
-          document.querySelectorAll("button[aria-label], [role='button'][aria-label]"),
+          document.querySelectorAll(
+            "button[aria-label], [role='button'][aria-label]",
+          ),
         );
 
         const nextControl = controls.find((node) => {
@@ -840,13 +846,17 @@ async function fetchDetail(
         }
 
         const attrDateRaw =
-          (button.getAttribute("data-date") ||
+          (
+            button.getAttribute("data-date") ||
             button.getAttribute("value") ||
-            "")
+            ""
+          )
             .trim()
             .match(/^\d{4}-\d{2}-\d{2}$/)?.[0] || "";
 
-        const parsedDate = attrDateRaw ? new Date(attrDateRaw) : new Date(label);
+        const parsedDate = attrDateRaw
+          ? new Date(attrDateRaw)
+          : new Date(label);
         if (Number.isNaN(parsedDate.getTime())) {
           continue;
         }

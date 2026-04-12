@@ -304,14 +304,51 @@ function normalizeGalleryUrl(rawUrl: string): string {
   }
 }
 
+function extractGoogleMapsLlFromHtml(html: string): {
+  latitude: number;
+  longitude: number;
+} | null {
+  const hrefMatch = html.match(
+    /href=["']https?:\/\/maps\.google\.com\/maps\?([^"']+)["']/i,
+  );
+  const querySource = hrefMatch?.[1] ?? "";
+  if (!querySource) {
+    return null;
+  }
+
+  const decodedQuery = querySource.replace(/&amp;/gi, "&");
+  const llMatch = decodedQuery.match(
+    /(?:^|[&?])ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+  );
+  if (!llMatch) {
+    return null;
+  }
+
+  const latitude = Number(llMatch[1]);
+  const longitude = Number(llMatch[2]);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+  };
+}
+
 function extractFieldLocationFromHtml(html: string): {
   street: string;
   latitude: number | null;
   longitude: number | null;
 } {
-  const widgetMatch = html.match(
-    /<div[^>]+class=["'][^"']*be-property-widget[^"']*["'][^>]*>/i,
-  );
+  const widgetMatch =
+    html.match(
+      /<div[^>]*data-latitude=["'][^"']+["'][^>]*data-longitude=["'][^"']+["'][^>]*>/i,
+    ) ||
+    html.match(
+      /<div[^>]*data-longitude=["'][^"']+["'][^>]*data-latitude=["'][^"']+["'][^>]*>/i,
+    ) ||
+    html.match(/<div[^>]*data-straddress1=["'][^"']+["'][^>]*>/i);
   const widgetTag = widgetMatch?.[0] ?? "";
 
   const attrValue = (name: string): string => {
@@ -374,6 +411,10 @@ function extractFieldLocationFromHtml(html: string): {
   );
   const atCoordMatch = html.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/i);
   const maps3d4dMatch = html.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/i);
+  const googleMapsLl = extractGoogleMapsLlFromHtml(html);
+  const genericLlMatch = html.match(
+    /[?&]ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+  );
 
   const latitudeFallback = latLngPairMatch?.[1]
     ? Number(latLngPairMatch[1])
@@ -383,7 +424,11 @@ function extractFieldLocationFromHtml(html: string): {
         ? Number(atCoordMatch[1])
         : maps3d4dMatch?.[1]
           ? Number(maps3d4dMatch[1])
-          : NaN;
+          : googleMapsLl?.latitude !== undefined
+            ? googleMapsLl.latitude
+            : genericLlMatch?.[1]
+              ? Number(genericLlMatch[1])
+              : NaN;
   const longitudeFallback = latLngPairMatch?.[2]
     ? Number(latLngPairMatch[2])
     : lngLatPairMatch?.[1]
@@ -392,7 +437,11 @@ function extractFieldLocationFromHtml(html: string): {
         ? Number(atCoordMatch[2])
         : maps3d4dMatch?.[2]
           ? Number(maps3d4dMatch[2])
-          : NaN;
+          : googleMapsLl?.longitude !== undefined
+            ? googleMapsLl.longitude
+            : genericLlMatch?.[2]
+              ? Number(genericLlMatch[2])
+              : NaN;
 
   const latitudeResolved = Number.isFinite(latitude)
     ? latitude
