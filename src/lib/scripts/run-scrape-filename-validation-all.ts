@@ -12,6 +12,22 @@ type AdapterResult = {
   summaryLine: string;
 };
 
+function colorizeWarningCount(summaryLine: string): string {
+  return summaryLine.replace(/warnings=(\d+)/gi, (_, digits: string) => {
+    const parsed = Number(digits);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return `warnings=${chalk.hex("#ff8c00")(digits)}`;
+    }
+    return `warnings=${digits}`;
+  });
+}
+
+function formatAdapterResultLine(entry: AdapterResult): string {
+  const statusLabel = entry.pass ? chalk.green("PASS") : chalk.red("FAIL");
+  const summaryLine = colorizeWarningCount(entry.summaryLine);
+  return `${statusLabel} ${chalk.bold(entry.adapter)} :: ${summaryLine}`;
+}
+
 function parseArgs(argv: string[]): CliOptions {
   let maxAdapters: number | null = null;
 
@@ -83,9 +99,25 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
     return 1;
   }
 
-  const results = selected.map((adapter) =>
-    runAdapterValidation(root, adapter),
+  const results: AdapterResult[] = [];
+
+  console.log(
+    chalk.cyan(
+      `Starting scrape filename validation for ${selected.length} adapter(s)...`,
+    ),
   );
+
+  for (let index = 0; index < selected.length; index += 1) {
+    const adapter = selected[index];
+    console.log(
+      chalk.dim(`[${index + 1}/${selected.length}] validating ${adapter}...`),
+    );
+
+    const entry = runAdapterValidation(root, adapter);
+    results.push(entry);
+    console.log(formatAdapterResultLine(entry));
+  }
+
   const passed = results.filter((entry) => entry.pass).length;
   const failed = results.length - passed;
 
@@ -98,13 +130,6 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
           `adapters_checked=${results.length} passed=${passed} failed=0`,
         ),
   );
-
-  for (const entry of results) {
-    const statusLabel = entry.pass ? chalk.green("PASS") : chalk.red("FAIL");
-    console.log(
-      `${statusLabel} ${chalk.bold(entry.adapter)} :: ${entry.summaryLine}`,
-    );
-  }
 
   return failed > 0 ? 1 : 0;
 }

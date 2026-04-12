@@ -331,26 +331,101 @@ function parseJsonLdObjects(html: string): Record<string, unknown>[] {
   return objects;
 }
 
+function parseSchemaTypes(value: unknown): string[] {
+  if (typeof value === "string") {
+    return [value.toLowerCase()];
+  }
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.toLowerCase());
+}
+
 function pickVacationRentalSchema(
   schemaObjects: Record<string, unknown>[],
 ): Record<string, unknown> | null {
+  const preferredTypes = new Set([
+    "vacationrental",
+    "accommodation",
+    "house",
+    "product",
+    "lodgingbusiness",
+  ]);
+
+  let best: { item: Record<string, unknown>; score: number } | null = null;
+
   for (const item of schemaObjects) {
-    const type = item["@type"];
-    if (typeof type === "string" && type.toLowerCase() === "vacationrental") {
-      return item;
+    const types = parseSchemaTypes(item["@type"]);
+    const hasPreferredType = types.some((entry) => preferredTypes.has(entry));
+    if (!hasPreferredType) {
+      continue;
     }
-    if (
-      Array.isArray(type) &&
-      type.some(
-        (entry) =>
-          typeof entry === "string" && entry.toLowerCase() === "vacationrental",
-      )
-    ) {
-      return item;
+
+    let score = 1;
+    if (item.numberOfBedrooms != null) {
+      score += 3;
+    }
+    if (item.numberOfBathroomsTotal != null) {
+      score += 3;
+    }
+    if (item.occupancy != null) {
+      score += 2;
+    }
+    if (item.containsPlace != null) {
+      score += 2;
+    }
+    if (item.address != null) {
+      score += 1;
+    }
+    if (item.geo != null) {
+      score += 1;
+    }
+
+    if (!best || score > best.score) {
+      best = { item, score };
     }
   }
 
-  return null;
+  if (best) {
+    return best.item;
+  }
+
+  return schemaObjects[0] ?? null;
+}
+
+function extractFirstNumber(regex: RegExp, value: string): number | null {
+  const match = value.match(regex);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractCapacityStatFromHtml(
+  html: string,
+  label: "Bedrooms" | "Baths" | "Sleeps",
+): number | null {
+  const classPattern = "prop-stat-label\\s+property-title-custom-color[^\"']*";
+
+  const beforeLabel = new RegExp(
+    `<span[^>]*class=["'][^"']*${classPattern}["'][^>]*>\\s*(\\d+(?:\\.\\d+)?)\\s*<\\/span>\\s*<span[^>]*class=["'][^"']*${classPattern}["'][^>]*>\\s*${label}\\b`,
+    "i",
+  );
+  const beforeValue = extractFirstNumber(beforeLabel, html);
+  if (beforeValue != null) {
+    return beforeValue;
+  }
+
+  const afterLabel = new RegExp(
+    `<span[^>]*class=["'][^"']*${classPattern}["'][^>]*>\\s*${label}\\b\\s*<\\/span>\\s*<span[^>]*class=["'][^"']*${classPattern}["'][^>]*>\\s*(\\d+(?:\\.\\d+)?)\\s*<\\/span>`,
+    "i",
+  );
+  return extractFirstNumber(afterLabel, html);
 }
 
 function normalizeDetailUrl(value: string): string | null {
@@ -867,15 +942,27 @@ async function fetchDetail(
     );
     const sleepsFromSchema = parseNumberLike(
       (
-        vacationRentalSchema?.containsPlace as
+        vacationRentalSchema?.occupancy as
           | {
-              occupancy?: {
-                value?: unknown;
-              };
+              value?: unknown;
             }
           | undefined
-      )?.occupancy?.value ?? null,
+      )?.value ??
+        (
+          vacationRentalSchema?.containsPlace as
+            | {
+                occupancy?: {
+                  value?: unknown;
+                };
+              }
+            | undefined
+        )?.occupancy?.value ??
+        null,
     );
+
+    const bedsFromHtml = extractCapacityStatFromHtml(html, "Bedrooms");
+    const bathsFromHtml = extractCapacityStatFromHtml(html, "Baths");
+    const sleepsFromHtml = extractCapacityStatFromHtml(html, "Sleeps");
 
     return {
       external_listing_id: listingSlug,
@@ -910,9 +997,9 @@ async function fetchDetail(
         unit_id: propertyId || listingSlug,
         area: "30A",
         location: locationLabel,
-        beds: bedsFromSchema,
-        baths: bathsFromSchema,
-        sleeps: sleepsFromSchema,
+        beds: bedsFromSchema ?? bedsFromHtml,
+        baths: bathsFromSchema ?? bathsFromHtml,
+        sleeps: sleepsFromSchema ?? sleepsFromHtml,
         city,
         state,
       },

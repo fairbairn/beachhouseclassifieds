@@ -252,6 +252,44 @@ function dedupePreserveOrder(values: string[]): string[] {
   return out;
 }
 
+function toCanonicalGalleryImageUrl(value: string): string | null {
+  const candidate = value.trim();
+  if (!candidate) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hostname.toLowerCase() !== "gallery.streamlinevrs.com") {
+    return null;
+  }
+
+  const normalizedPath = parsed.pathname.replace(/\/+/g, "/");
+  if (!normalizedPath.includes("/units-gallery/")) {
+    return null;
+  }
+
+  const fileName = normalizedPath.split("/").pop() ?? "";
+  if (!/^image_[^/]+\.(?:jpe?g|png|webp)$/i.test(fileName)) {
+    return null;
+  }
+
+  return `https://gallery.streamlinevrs.com${normalizedPath}`;
+}
+
+function filterCanonicalGalleryImageUrls(values: string[]): string[] {
+  const canonical = values
+    .map((value) => toCanonicalGalleryImageUrl(value))
+    .filter((value): value is string => value !== null);
+
+  return dedupePreserveOrder(canonical);
+}
+
 function parseNumberLike(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -646,7 +684,7 @@ function extractImageUrlsFromListingRow(
   if (!row) {
     return [];
   }
-  return dedupePreserveOrder(row.imageUrls);
+  return filterCanonicalGalleryImageUrls(row.imageUrls);
 }
 
 async function callStreamlineApi<T = unknown>(
@@ -1495,11 +1533,11 @@ async function fetchDetail(
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
 
-    const mediaImageUrls = dedupePreserveOrder([
+    const mediaImageUrls = filterCanonicalGalleryImageUrls([
       ...extractImageUrlsFromListingRow(listingRow),
       ...Array.from(
         html.matchAll(
-          /https?:\/\/[^"'\s>]+(?:gallery\.streamlinevrs\.com|streamlinevrs\.com)[^"'\s>]*/gi,
+          /https?:\/\/gallery\.streamlinevrs\.com\/[^"'\s>]*/gi,
         ),
       ).map((match) => match[0] ?? ""),
     ]);
