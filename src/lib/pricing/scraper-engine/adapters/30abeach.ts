@@ -1536,9 +1536,7 @@ async function fetchDetail(
     const mediaImageUrls = filterCanonicalGalleryImageUrls([
       ...extractImageUrlsFromListingRow(listingRow),
       ...Array.from(
-        html.matchAll(
-          /https?:\/\/gallery\.streamlinevrs\.com\/[^"'\s>]*/gi,
-        ),
+        html.matchAll(/https?:\/\/gallery\.streamlinevrs\.com\/[^"'\s>]*/gi),
       ).map((match) => match[0] ?? ""),
     ]);
 

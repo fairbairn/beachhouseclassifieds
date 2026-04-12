@@ -360,6 +360,44 @@ function normalizeSeoLookupKey(value: string): string {
   return canonicalizeExternalListingId(normalizeSeoPath(value));
 }
 
+function toCanonicalGalleryImageUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hostname.toLowerCase() !== "gallery.streamlinevrs.com") {
+    return null;
+  }
+
+  const normalizedPath = parsed.pathname.replace(/\/+/g, "/");
+  if (!normalizedPath.includes("/units-gallery/")) {
+    return null;
+  }
+
+  const fileName = normalizedPath.split("/").filter(Boolean).pop() ?? "";
+  if (!/^image_[^/]+\.(?:jpe?g|png|webp|gif)$/i.test(fileName)) {
+    return null;
+  }
+
+  return `https://gallery.streamlinevrs.com${normalizedPath}`;
+}
+
+function filterCanonicalGalleryImageUrls(values: string[]): string[] {
+  return dedupePreserveOrder(
+    values
+      .map((value) => toCanonicalGalleryImageUrl(value))
+      .filter((value): value is string => Boolean(value)),
+  );
+}
+
 function detailUrlFromSeoPath(origin: string, seoPath: string): string {
   const normalized = normalizeSeoPath(seoPath);
   if (!normalized) {
@@ -458,7 +496,7 @@ function extractImageUrlsFromListingRow(row: DuneListingRow | null): string[] {
   if (!row) {
     return [];
   }
-  return dedupePreserveOrder(row.imageUrls);
+  return filterCanonicalGalleryImageUrls(row.imageUrls);
 }
 
 async function callStreamlineApi<T = unknown>(
@@ -1280,7 +1318,7 @@ async function fetchDetail(
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
 
-    const mediaImageUrls = dedupePreserveOrder([
+    const mediaImageUrls = filterCanonicalGalleryImageUrls([
       ...extractImageUrlsFromListingRow(listingRow),
       ...Array.from(
         html.matchAll(

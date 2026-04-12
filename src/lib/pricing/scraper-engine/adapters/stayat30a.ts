@@ -255,6 +255,13 @@ function parseCityStateFromAddress(address: string): {
   return { city, state };
 }
 
+function normalizeCoordinate(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+  return value === 0 ? null : value;
+}
+
 function normalizeGalleryUrl(rawUrl: string): string {
   const cleaned = rawUrl.trim();
   if (!cleaned) {
@@ -283,6 +290,129 @@ function normalizeGalleryUrl(rawUrl: string): string {
   } catch {
     return "";
   }
+}
+
+function toCanonicalUnitImageUrl(rawUrl: string): string | null {
+  const normalized = normalizeGalleryUrl(rawUrl);
+  if (!normalized) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    return null;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname !== "www.stayat30avacationrentals.com" &&
+    hostname !== "stayat30avacationrentals.com"
+  ) {
+    return null;
+  }
+
+  const normalizedPath = parsed.pathname.replace(/\/+/g, "/");
+  if (!normalizedPath.toLowerCase().includes("/unitimages/")) {
+    return null;
+  }
+
+  const fileName = normalizedPath.split("/").filter(Boolean).pop() ?? "";
+  if (!/\.(?:jpe?g|png|webp|gif)$/i.test(fileName)) {
+    return null;
+  }
+  // Keep only native gallery images; drop sized variants like sm-image_*.
+  if (!/^image_/i.test(fileName)) {
+    return null;
+  }
+  if (/^thumbnail_/i.test(fileName)) {
+    return null;
+  }
+
+  return `https://www.stayat30avacationrentals.com${normalizedPath}`;
+}
+
+function dedupeCanonicalImagesPreferPng(values: string[]): string[] {
+  const extPriority = ["png", "jpg", "jpeg", "webp", "gif"] as const;
+  const firstSeenOrder: string[] = [];
+  const baseToChoice = new Map<
+    string,
+    {
+      firstUrl: string;
+      byExt: Map<string, string>;
+    }
+  >();
+
+  for (const value of values) {
+    const canonical = toCanonicalUnitImageUrl(value);
+    if (!canonical) {
+      continue;
+    }
+
+    const match = canonical.match(/^(.*)\.([a-z0-9]+)$/i);
+    if (!match) {
+      continue;
+    }
+
+    const baseKey = match[1].toLowerCase();
+    const ext = match[2].toLowerCase();
+    const existing = baseToChoice.get(baseKey);
+
+    if (!existing) {
+      firstSeenOrder.push(baseKey);
+      const byExt = new Map<string, string>();
+      byExt.set(ext, canonical);
+      baseToChoice.set(baseKey, {
+        firstUrl: canonical,
+        byExt,
+      });
+      continue;
+    }
+
+    if (!existing.byExt.has(ext)) {
+      existing.byExt.set(ext, canonical);
+    }
+  }
+
+  const out: string[] = [];
+  for (const baseKey of firstSeenOrder) {
+    const choice = baseToChoice.get(baseKey);
+    if (!choice) {
+      continue;
+    }
+
+    let selected = choice.firstUrl;
+    for (const ext of extPriority) {
+      const candidate = choice.byExt.get(ext);
+      if (candidate) {
+        selected = candidate;
+        break;
+      }
+    }
+    out.push(selected);
+  }
+
+  return out;
+}
+
+function filterCanonicalImagesToUnitId(
+  values: string[],
+  unitId: string,
+): string[] {
+  const normalizedUnitId = unitId.trim();
+  if (!normalizedUnitId) {
+    return values;
+  }
+
+  const needle = `/unitimages/${normalizedUnitId}/`;
+  return values.filter((value) => {
+    try {
+      return new URL(value).pathname.toLowerCase().includes(needle);
+    } catch {
+      return false;
+    }
+  });
 }
 
 function extractFieldLocationFromHtml(html: string): {
@@ -435,6 +565,69 @@ function parseJsonLdSignals(html: string): {
   let baths: number | null = null;
   let sleeps: number | null = null;
 
+  const trySetText = (
+    current: string,
+    raw: string | undefined,
+    decodeUnicode = false,
+  ): string => {
+    if (current) {
+      return current;
+    }
+    const value = (raw ?? "").trim();
+    if (!value) {
+      return "";
+    }
+    if (!decodeUnicode) {
+      return value;
+    }
+    return value.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+      String.fromCharCode(Number.parseInt(hex, 16)),
+    );
+  };
+
+  const parseRawGeoFallback = (rawScript: string): void => {
+    // Some JSON-LD blocks are malformed because of embedded HTML/text; regex fallback preserves geo/address capture.
+    const geoBlock =
+      rawScript.match(/"geo"\s*:\s*\{[\s\S]{0,280}?\}/i)?.[0] ?? "";
+    const latitudeRaw =
+      geoBlock.match(/"latitude"\s*:\s*"?(-?\d+(?:\.\d+)?)"?/i)?.[1] ??
+      rawScript.match(/"latitude"\s*:\s*"?(-?\d+(?:\.\d+)?)"?/i)?.[1] ??
+      "";
+    const longitudeRaw =
+      geoBlock.match(/"longitude"\s*:\s*"?(-?\d+(?:\.\d+)?)"?/i)?.[1] ??
+      rawScript.match(/"longitude"\s*:\s*"?(-?\d+(?:\.\d+)?)"?/i)?.[1] ??
+      "";
+
+    if (latitude === null) {
+      const parsed = latitudeRaw ? Number(latitudeRaw) : NaN;
+      if (Number.isFinite(parsed)) {
+        latitude = parsed;
+      }
+    }
+    if (longitude === null) {
+      const parsed = longitudeRaw ? Number(longitudeRaw) : NaN;
+      if (Number.isFinite(parsed)) {
+        longitude = parsed;
+      }
+    }
+
+    city = trySetText(
+      city,
+      rawScript.match(/"addressLocality"\s*:\s*"([^"]*)"/i)?.[1],
+      true,
+    );
+    state = trySetText(
+      state,
+      rawScript.match(/"addressRegion"\s*:\s*"([^"]*)"/i)?.[1],
+      true,
+    );
+    street = trySetText(
+      street,
+      rawScript.match(/"streetAddress"\s*:\s*"([^"]*)"/i)?.[1],
+      true,
+    );
+  };
+
   const trySetNumber = (raw: unknown): number | null => {
     if (typeof raw === "number" && Number.isFinite(raw)) {
       return raw;
@@ -556,7 +749,7 @@ function parseJsonLdSignals(html: string): {
       const parsed = JSON.parse(script) as unknown;
       walkObject(parsed);
     } catch {
-      // Ignore malformed JSON-LD blocks.
+      parseRawGeoFallback(script);
     }
   }
 
@@ -2119,18 +2312,14 @@ async function fetchDetail(
       extracted.neighborhoodText || jsonLdSignals.city,
     ).slice(0, 240);
 
-    const latitudeRaw =
-      locationPayload.latitude ??
-      unitCardSignals.latitude ??
-      jsonLdSignals.latitude ??
-      null;
-    const longitudeRaw =
-      locationPayload.longitude ??
-      unitCardSignals.longitude ??
-      jsonLdSignals.longitude ??
-      null;
-    const latitude = latitudeRaw === 0 ? null : latitudeRaw;
-    const longitude = longitudeRaw === 0 ? null : longitudeRaw;
+    const latitude =
+      normalizeCoordinate(locationPayload.latitude) ??
+      normalizeCoordinate(unitCardSignals.latitude) ??
+      normalizeCoordinate(jsonLdSignals.latitude);
+    const longitude =
+      normalizeCoordinate(locationPayload.longitude) ??
+      normalizeCoordinate(unitCardSignals.longitude) ??
+      normalizeCoordinate(jsonLdSignals.longitude);
 
     const streetAddress = stripHtml(
       locationPayload.street ||
@@ -2195,25 +2384,12 @@ async function fetchDetail(
       all: amenitiesAll,
     };
 
-    const mediaUrls = dedupePreserveOrder(
-      [...extracted.galleryUrls, ...jsonLdSignals.imageUrls]
-        .map((url) => normalizeGalleryUrl(url))
-        .filter((url) => {
-          if (!url.includes("/unitimages/")) {
-            return true;
-          }
-          if (!extractedUnitId) {
-            return true;
-          }
-          return url.includes(`/${extractedUnitId}/`);
-        })
-        .filter(
-          (url) =>
-            !/30a-vacay-logo|\/themes\/rtapi\/images\/lightning\.png/i.test(
-              url,
-            ),
-        )
-        .filter(Boolean),
+    const mediaUrls = filterCanonicalImagesToUnitId(
+      dedupeCanonicalImagesPreferPng([
+        ...extracted.galleryUrls,
+        ...jsonLdSignals.imageUrls,
+      ]),
+      extractedUnitId || propertyProfile.unit_id,
     );
     const mediaGallery: StayAt30ADetailRecord["media_gallery"] = {
       image_count: mediaUrls.length,

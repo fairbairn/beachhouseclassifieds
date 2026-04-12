@@ -75,7 +75,8 @@ type ValidationWarningCode =
   | "missing_lat_lon_with_address"
   | "orphan_artifact"
   | "null_property_profile_capacity"
-  | "image_url_pattern_outlier";
+  | "image_url_pattern_outlier"
+  | "image_url_double_https";
 
 type ValidationWarning = {
   code: ValidationWarningCode;
@@ -300,21 +301,34 @@ function getImageUrlPatternSignature(value: string): string | null {
   }
 }
 
-function getImageUrlPatternSignatureFine(value: string): string | null {
+function getImageUrlPatternSignatureFine(
+  value: string,
+  adapterKey?: string,
+): string | null {
   try {
     const parsed = new URL(value);
-    const segments = parsed.pathname
-      .split("/")
-      .filter(Boolean)
-      .slice(0, 2)
-      .join("/");
+
+    const segmentsRaw = parsed.pathname.split("/").filter(Boolean);
+    if (
+      adapterKey === "30aescapes" &&
+      parsed.hostname === "track-pm.s3.amazonaws.com" &&
+      segmentsRaw[0] === "30aescapes" &&
+      (segmentsRaw[1] === "image" || segmentsRaw[1] === "unit-images")
+    ) {
+      return `${parsed.origin}/30aescapes/images`;
+    }
+
+    const segments = segmentsRaw.slice(0, 2).join("/");
     return `${parsed.origin}/${segments}`;
   } catch {
     return null;
   }
 }
 
-function getImageUrlPatternOutliers(imageUrls: string[]): {
+function getImageUrlPatternOutliers(
+  imageUrls: string[],
+  adapterKey?: string,
+): {
   baselinePattern: string | null;
   outliers: string[];
 } {
@@ -332,7 +346,7 @@ function getImageUrlPatternOutliers(imageUrls: string[]): {
 
   for (const url of imageUrls) {
     const coarsePattern = getImageUrlPatternSignature(url);
-    const finePattern = getImageUrlPatternSignatureFine(url);
+    const finePattern = getImageUrlPatternSignatureFine(url, adapterKey);
     urlPatterns.push({ url, coarsePattern, finePattern });
 
     if (coarsePattern) {
@@ -390,6 +404,11 @@ function getImageUrlPatternOutliers(imageUrls: string[]): {
     .map((entry) => entry.url);
 
   return { baselinePattern, outliers };
+}
+
+function hasDoubleHttpsSegment(value: string): boolean {
+  const matches = value.match(/https:\/\//gi);
+  return (matches?.length ?? 0) >= 2;
 }
 
 function isIsoDate(value: string): boolean {
@@ -740,7 +759,24 @@ export async function runValidateScrapeFilenameAlignmentCli(
         .filter((value): value is string => typeof value === "string")
         .map((value) => value.trim())
         .filter(Boolean);
-      const patternCheck = getImageUrlPatternOutliers(imageUrls);
+
+      const doubleHttpsUrls = imageUrls.filter((url) =>
+        hasDoubleHttpsSegment(url),
+      );
+      if (doubleHttpsUrls.length > 0) {
+        const sample = doubleHttpsUrls.slice(0, 3).join(", ");
+        warnings.push({
+          code: "image_url_double_https",
+          message:
+            `details/json/${fileName} has ${doubleHttpsUrls.length} image_urls ` +
+            `containing multiple https:// segments (sample: ${sample})`,
+        });
+      }
+
+      const patternCheck = getImageUrlPatternOutliers(
+        imageUrls,
+        options.adapterKey,
+      );
       if (patternCheck.outliers.length > 0 && patternCheck.baselinePattern) {
         const sample = patternCheck.outliers.slice(0, 3).join(", ");
         warnings.push({

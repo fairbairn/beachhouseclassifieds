@@ -302,6 +302,24 @@ function normalizeGalleryUrl(rawUrl: string): string {
   try {
     const decoded = cleaned.replace(/&amp;/gi, "&");
 
+    // Rezfusion wrappers often look like
+    // https://images.rezfusion.com/.../https://pictures.escapia.com/...jpg
+    // where the second https URL is the canonical asset.
+    const firstHttpsIndex = decoded.indexOf("https://");
+    const secondHttpsIndex =
+      firstHttpsIndex >= 0
+        ? decoded.indexOf("https://", firstHttpsIndex + "https://".length)
+        : -1;
+    if (secondHttpsIndex > firstHttpsIndex) {
+      const embeddedCandidate = decoded.slice(secondHttpsIndex).trim();
+      try {
+        const embedded = new URL(embeddedCandidate);
+        return `${embedded.origin}${embedded.pathname}`;
+      } catch {
+        // Fall through to other parsing paths.
+      }
+    }
+
     // Some Rezfusion URLs embed the canonical image URL directly in the path.
     const embeddedUrlMatch = decoded.match(
       /(https?:\/\/[^\s"']+\.(?:jpe?g|png|webp|gif))/i,

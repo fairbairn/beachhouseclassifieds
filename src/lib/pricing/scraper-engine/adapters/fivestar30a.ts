@@ -185,6 +185,36 @@ function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
 }
 
+function toCanonicalGalleryImageUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hostname.toLowerCase() !== "gallery.streamlinevrs.com") {
+    return null;
+  }
+
+  const normalizedPath = parsed.pathname.replace(/\/+/g, "/");
+  if (!normalizedPath.includes("/units-gallery/")) {
+    return null;
+  }
+
+  const fileName = normalizedPath.split("/").filter(Boolean).pop() ?? "";
+  if (!/^image_[^/]+\.(?:jpe?g|png|webp|gif)$/i.test(fileName)) {
+    return null;
+  }
+
+  return `https://gallery.streamlinevrs.com${normalizedPath}`;
+}
+
 function stripHtml(value: string): string {
   return value
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
@@ -1285,12 +1315,16 @@ async function fetchDetail(
       if (!normalized) {
         return;
       }
-      const key = normalized.toLowerCase();
+      const canonical = toCanonicalGalleryImageUrl(normalized);
+      if (!canonical) {
+        return;
+      }
+      const key = canonical.toLowerCase();
       if (seenImage.has(key)) {
         return;
       }
       seenImage.add(key);
-      imageUrls.push(normalized);
+      imageUrls.push(canonical);
     };
 
     for (const image of propImages) {

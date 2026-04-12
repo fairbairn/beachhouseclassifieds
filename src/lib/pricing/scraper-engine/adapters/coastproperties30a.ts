@@ -139,6 +139,36 @@ function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/$/, "") ?? url;
 }
 
+function toCanonicalGalleryImageUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hostname.toLowerCase() !== "gallery.streamlinevrs.com") {
+    return null;
+  }
+
+  const normalizedPath = parsed.pathname.replace(/\/+/g, "/");
+  if (!normalizedPath.includes("/units-gallery/")) {
+    return null;
+  }
+
+  const fileName = normalizedPath.split("/").filter(Boolean).pop() ?? "";
+  if (!/^image_[^/]+\.(?:jpe?g|png|webp|gif)$/i.test(fileName)) {
+    return null;
+  }
+
+  return `https://gallery.streamlinevrs.com${normalizedPath}`;
+}
+
 function extractFirst(regex: RegExp, value: string): string {
   const match = value.match(regex);
   if (!match?.[1]) {
@@ -655,7 +685,11 @@ async function fetchDetail(
         continue;
       }
       try {
-        imageUrls.add(new URL(src, detailUrl).toString());
+        const absolute = new URL(src, detailUrl).toString();
+        const canonical = toCanonicalGalleryImageUrl(absolute);
+        if (canonical) {
+          imageUrls.add(canonical);
+        }
       } catch {
         // Ignore malformed image URLs.
       }
@@ -666,7 +700,11 @@ async function fetchDetail(
     );
     if (ogImage) {
       try {
-        imageUrls.add(new URL(ogImage, detailUrl).toString());
+        const absolute = new URL(ogImage, detailUrl).toString();
+        const canonical = toCanonicalGalleryImageUrl(absolute);
+        if (canonical) {
+          imageUrls.add(canonical);
+        }
       } catch {
         // Ignore malformed og:image URL.
       }

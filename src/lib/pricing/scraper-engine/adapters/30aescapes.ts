@@ -893,20 +893,28 @@ function parseCityStateFromAddress(address: string): {
 function extractLatLngFromHtml(
   html: string,
 ): { lat: number; lng: number } | null {
-  const match = html.match(
+  const candidates: RegExp[] = [
     /google\.maps\.LatLng\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/i,
-  );
-  if (!match) {
-    return null;
+    /maps\.google\.com\/maps\?[^"'\s>]*\bll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+    /[?&]ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+  ];
+
+  for (const pattern of candidates) {
+    const match = html.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    const lat = Number(match[1]);
+    const lng = Number(match[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      continue;
+    }
+
+    return { lat, lng };
   }
 
-  const lat = Number(match[1]);
-  const lng = Number(match[2]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return null;
-  }
-
-  return { lat, lng };
+  return null;
 }
 
 function normalizeGalleryUrl(rawUrl: string): string {
@@ -915,15 +923,33 @@ function normalizeGalleryUrl(rawUrl: string): string {
     return "";
   }
 
+  const firstHttpsIndex = cleaned.indexOf("https://");
+  const secondHttpsIndex =
+    firstHttpsIndex >= 0
+      ? cleaned.indexOf("https://", firstHttpsIndex + "https://".length)
+      : -1;
+  if (secondHttpsIndex > firstHttpsIndex) {
+    const embeddedCandidate = cleaned.slice(secondHttpsIndex).trim();
+    try {
+      return new URL(embeddedCandidate).toString();
+    } catch {
+      // Fall through to URL parsing fallback below.
+    }
+  }
+
   try {
     const parsed = new URL(cleaned);
-    if (
-      parsed.hostname === "img.trackhs.com" &&
-      parsed.pathname.startsWith("/")
-    ) {
-      const candidate = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
-      if (candidate.startsWith("http://") || candidate.startsWith("https://")) {
-        return candidate;
+    if (parsed.hostname === "img.trackhs.com") {
+      const rawEmbedded = `${parsed.pathname}${parsed.search ? parsed.search : ""}`;
+      const decodedEmbedded = decodeURIComponent(rawEmbedded);
+      const embeddedUrlMatch = decodedEmbedded.match(/https?:\/\/[^\s"'<>]+/i);
+      const embeddedUrl = embeddedUrlMatch?.[0]?.trim() ?? "";
+      if (embeddedUrl) {
+        try {
+          return new URL(embeddedUrl).toString();
+        } catch {
+          // Fall back to the original URL when embedded payload is malformed.
+        }
       }
     }
     return parsed.toString();

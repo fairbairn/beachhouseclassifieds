@@ -165,6 +165,36 @@ function toAbsoluteHttpUrl(value: string, baseUrl: string): string | null {
   }
 }
 
+function toCanonicalGalleryImageUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hostname.toLowerCase() !== "gallery.streamlinevrs.com") {
+    return null;
+  }
+
+  const normalizedPath = parsed.pathname.replace(/\/+/g, "/");
+  if (!normalizedPath.includes("/units-gallery/")) {
+    return null;
+  }
+
+  const fileName = normalizedPath.split("/").filter(Boolean).pop() ?? "";
+  if (!/^image_[^/]+\.(?:jpe?g|png|webp|gif)$/i.test(fileName)) {
+    return null;
+  }
+
+  return `https://gallery.streamlinevrs.com${normalizedPath}`;
+}
+
 function extractSectionBetween(
   html: string,
   startMarker: string,
@@ -230,8 +260,13 @@ function collectMediaUrls(
     const image = object.image;
     if (typeof image === "string") {
       const absolute = toAbsoluteHttpUrl(image, baseUrl);
-      if (absolute) {
-        urls.add(absolute);
+      if (!absolute) {
+        continue;
+      }
+
+      const canonical = toCanonicalGalleryImageUrl(absolute);
+      if (canonical) {
+        urls.add(canonical);
       }
     }
     if (Array.isArray(image)) {
@@ -240,8 +275,13 @@ function collectMediaUrls(
           continue;
         }
         const absolute = toAbsoluteHttpUrl(entry, baseUrl);
-        if (absolute) {
-          urls.add(absolute);
+        if (!absolute) {
+          continue;
+        }
+
+        const canonical = toCanonicalGalleryImageUrl(absolute);
+        if (canonical) {
+          urls.add(canonical);
         }
       }
     }
@@ -259,12 +299,10 @@ function collectMediaUrls(
     if (!absolute) {
       continue;
     }
-    if (
-      absolute.includes("gallery.streamlinevrs.com") ||
-      absolute.includes("streamlinevrs.com") ||
-      absolute.includes("stayon30a.com/wp-content")
-    ) {
-      urls.add(absolute);
+
+    const canonical = toCanonicalGalleryImageUrl(absolute);
+    if (canonical) {
+      urls.add(canonical);
     }
   }
 
