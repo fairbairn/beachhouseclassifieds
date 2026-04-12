@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-04-11T19:42:09.575Z
+Audit date: 2026-04-12T21:48:53.584Z
 
 Data source:
 
@@ -62,48 +62,49 @@ Preferred (non-blocking):
 
 ## Conformance Matrix
 
-| Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Rates | Pricing Records | Image URLs | Avg Img/List | API Avail | API Rates | API Quote | Quote Runtime | Ready |
-| ----------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ----: | --------------: | ---------: | -----------: | :-------: | :-------: | :-------: | :-----------: | :---: |
-| 30abeach                |    17 |   17 |      17 |           17 |           17 |         17 |        17 |     17 |    17 |              17 |       1652 |       97.18 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
-| 30aescapes              |   170 |  170 |     170 |          170 |          170 |        170 |       170 |    170 |   170 |             170 |       6277 |       36.92 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
-| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     0 |             105 |       5242 |       49.92 |         - |         - |         ✅ |             ✅ |     ✅   |
-| 30avacay                |   115 |  115 |     115 |          115 |          115 |        115 |       115 |    115 |     0 |             115 |       5230 |       45.48 |         - |         - |         ✅ |             ✅ |     ✅   |
-| 360blue                 |   590 |  590 |     590 |          590 |          590 |        590 |       590 |    590 |   590 |             590 |      29471 |       49.95 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
-| benchmark30a            |   129 |  129 |     129 |          129 |          129 |        129 |       129 |    129 |     0 |             129 |       8646 |       67.02 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
-| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |    30 |              30 |       2063 |       68.77 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
-| dunevr30a               |    97 |   97 |      97 |           97 |           97 |         97 |        97 |     97 |    97 |              97 |       4515 |       46.55 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
-| exclusive30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |             106 |       5666 |       53.45 |         - |         - |         ✅ |             ✅ |     ✅   |
-| fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |    63 |              63 |       6546 |      103.90 |         - |         - |         ✅ |             ✅ |     ✅   |
-| funvacay30a             |    46 |   46 |      46 |           46 |           46 |         46 |        46 |     46 |     0 |              46 |        170 |        3.70 |         - |         - |         ✅ |             ✅ |     ✅   |
-| grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |     0 |              35 |       4495 |      128.43 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
-| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |   208 |             208 |      10776 |       51.81 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
-| keyco30a                |   390 |  390 |     390 |          390 |          390 |        390 |       390 |    390 |   390 |             390 |      28034 |       71.88 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
-| localvr30a              |    43 |   43 |      43 |           43 |           43 |         43 |        43 |     43 |     0 |              43 |       1826 |       42.47 |         - |         - |         ✅ |             ✅ |     ✅   |
-| oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |     0 |             112 |       8314 |       74.23 |         - |         - |         ✅ |             ✅ |     ✅   |
-| oversee30a              |   104 |  104 |     104 |          104 |          104 |        104 |       104 |    104 |     0 |             104 |       6763 |       65.03 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
-| panhandle30a            |    51 |   51 |      51 |           51 |           51 |         51 |        51 |     51 |     0 |              51 |       2640 |       51.76 |         - |         - |         ✅ |             ✅ |     ✅   |
-| realjoy30a              |   140 |  140 |     140 |          140 |          140 |        140 |       140 |    140 |     0 |             140 |      16328 |      116.63 |         - |         - |         ✅ |             ✅ |     ✅   |
-| royaldestinations       |   142 |  142 |     142 |          142 |          142 |        142 |       142 |    142 |     0 |             142 |       6627 |       46.67 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
-| sandersbeach30a         |    74 |   74 |      74 |           74 |           74 |         74 |        74 |     74 |     0 |              74 |       3696 |       49.95 |         - |         - |         ✅ |             ✅ |     ✅   |
-| sandpiper30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     0 |             106 |       5458 |       51.49 |         - |         - |         ✅ |             ✅ |     ✅   |
-| scenicstays30a          |    44 |   44 |      44 |           44 |           44 |         44 |        44 |     44 |    43 |              44 |       2452 |       55.73 |         ✅ |         ✅ |         ✅ |             ✅ |     ✅   |
-| stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |     0 |              37 |       2418 |       65.35 |         - |         - |         ✅ |             ✅ |     ✅   |
-| stayon30a               |    82 |   82 |      82 |           82 |           82 |         82 |        82 |     82 |     0 |              82 |      11628 |      141.80 |         ✅ |         - |         ✅ |             ✅ |     ✅   |
-| **TOTAL**               |  3036 | 3036 |    3036 |         3036 |         3036 |       3036 |      3036 |   3036 |  1608 |            3036 |     186933 |       61.57 |         — |         — |         — |             — | 25/25 |
+| Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Pricing Records | Image URLs | Avg Img/List | API Quote | Quote Runtime | Ready |
+| :------------------------ | ------: | -----: | --------: | -------------: | -------------: | -----------: | ----------: | -------: | ----------------: | -----------: | -------------: | ----------: | --------------: | ------: |
+| 30abeach                |    17 |   17 |      17 |           17 |           17 |         17 |        17 |     17 |              17 |        807 |        47.47 |         ✅ |             ✅ |     ✅ |
+| 30aescapes              |   169 |  169 |     169 |          169 |          169 |        169 |       169 |    169 |             169 |       6223 |        36.82 |         ✅ |             ✅ |     ✅ |
+| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |             105 |       5240 |        49.90 |         ✅ |             ✅ |     ✅ |
+| 30avacay                |   115 |  115 |     115 |          115 |          115 |        115 |       115 |    115 |             115 |       5303 |        46.11 |         ✅ |             ✅ |     ✅ |
+| 360blue                 |   617 |  617 |     617 |          617 |          617 |        617 |       617 |    617 |             617 |      30787 |        49.90 |         ✅ |             ✅ |     ✅ |
+| benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |             128 |       8553 |        66.82 |         ✅ |             ✅ |     ✅ |
+| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |              30 |       1433 |        47.77 |         ✅ |             ✅ |     ✅ |
+| dunevr30a               |    90 |   90 |      90 |           90 |           90 |         90 |        90 |     90 |              90 |       3774 |        41.93 |         ✅ |             ✅ |     ✅ |
+| exclusive30a            |   104 |  104 |     104 |          104 |          104 |        104 |       104 |    104 |             104 |       5673 |        54.55 |         ✅ |             ✅ |     ✅ |
+| fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |              63 |       3273 |        51.95 |         ✅ |             ✅ |     ✅ |
+| funvacay30a             |    46 |   46 |      46 |           46 |           46 |         46 |        46 |     46 |              46 |       2496 |        54.26 |         ✅ |             ✅ |     ✅ |
+| grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |              35 |       2151 |        61.46 |         ✅ |             ✅ |     ✅ |
+| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |             208 |      10773 |        51.79 |         ✅ |             ✅ |     ✅ |
+| keyco30a                |   391 |  391 |     391 |          391 |          391 |        391 |       391 |    391 |             391 |      25365 |        64.87 |         ✅ |             ✅ |     ✅ |
+| localvr30a              |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |              37 |       1542 |        41.68 |         ✅ |             ✅ |     ✅ |
+| oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |             112 |       3161 |        28.22 |         ✅ |             ✅ |     ✅ |
+| oversee30a              |   107 |  107 |     107 |          107 |          107 |        107 |       107 |    107 |             107 |       6593 |        61.62 |         ✅ |             ✅ |     ✅ |
+| panhandle30a            |    53 |   53 |      53 |           53 |           53 |         53 |        53 |     53 |              53 |       2676 |        50.49 |         ✅ |             ✅ |     ✅ |
+| realjoy30a              |   138 |  138 |     138 |          138 |          138 |        138 |       138 |    138 |             138 |       7903 |        57.27 |         ✅ |             ✅ |     ✅ |
+| royaldestinations       |   142 |  142 |     142 |          142 |          142 |        142 |       142 |    142 |             142 |       6762 |        47.62 |         ✅ |             ✅ |     ✅ |
+| sandersbeach30a         |    74 |   74 |      74 |           74 |           74 |         74 |        74 |     74 |              74 |       3670 |        49.59 |         ✅ |             ✅ |     ✅ |
+| sandpiper30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |             106 |       5145 |        48.54 |         ✅ |             ✅ |     ✅ |
+| scenicstays30a          |    45 |   45 |      45 |           45 |           44 |         45 |        45 |     45 |              45 |       2524 |        56.09 |         ✅ |             ✅ |     ❌ |
+| stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |              37 |       2267 |        61.27 |         ✅ |             ✅ |     ✅ |
+| stayon30a               |    83 |   83 |      83 |           83 |           83 |         83 |        83 |     83 |              83 |       4237 |        51.05 |         ✅ |             ✅ |     ✅ |
+| **TOTAL**               |  3052 | 3052 |    3052 |         3052 |         3051 |       3052 |      3052 |   3052 |            3052 |     158331 |        51.88 |         — |             — | 24/25 |
 
 ## Current Snapshot Summary
 
 - 25 adapters audited.
 - All 25 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 25 / 25.
-- Rates coverage signal: 1608 / 3036 files currently include normalized_rates.days.
-- Pricing-records coverage signal: 3036 / 3036 files currently have per-listing pricing JSON records.
-- API capability signal:
-  - Availability API present: 13 / 25 adapters.
-  - Rates API present: 6 / 25 adapters.
-  - Pre-reservation API present: 25 / 25 adapters.
+- Combined-ready adapters (Ready = ✅): 24 / 25.
+
+- Pricing-records coverage signal: 3052 / 3052 files currently have per-listing pricing JSON records.
+
+
+
+- Quote API capability signal: 25 / 25 adapters expose pre-reservation quote APIs.
 - Geo location minimum (required): 25 / 25 adapters currently have 100% numeric lat/lng coverage.
 - Preferred horizon (>=730d) remains non-blocking and is tracked in probe metrics, outside this matrix.
+
 ## Quote Runtime Migration Ledger (API Quote = ✅, Highest Listings First)
 
 This queue defines migration order for adapters that already have direct quote API support. Adapters without `API Quote = ✅` are intentionally deferred until this list is complete.
@@ -167,6 +168,7 @@ Active next runtime discovery target: none.
 
 - Backlog tracks remaining quality-threshold or pricing-parity deficits until adapters earn Ready = ✅.
 - Continue running the probe script after parser changes to prevent regressions.
+- Source-data exception: `scenicstays30a` listing `oceans-20` has no property description content on the provider detail page (`description_expanded` remains empty by source), so this adapter remains `Ready = ❌` under strict Description+ gating unless a policy waiver is adopted.
 
 ## Definition of Done for Conformance
 
@@ -211,3 +213,4 @@ Expected impact:
 
 - As stricter checks roll out, more adapters will likely show warnings initially.
 - That is intended and should be treated as a quality-discovery phase, not validator noise.
+

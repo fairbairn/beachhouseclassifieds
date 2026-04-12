@@ -349,6 +349,7 @@ export async function executePanhandle30aSingleQuote(
           listingId: input.listingId,
           startDate: raw.startDate,
           endDate: raw.endDate,
+          handoff_url: raw.handoffUrl,
         },
       },
     };

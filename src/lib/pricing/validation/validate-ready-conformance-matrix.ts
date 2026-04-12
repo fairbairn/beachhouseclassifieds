@@ -11,12 +11,9 @@ export type MatrixRow = {
   amenitiesPlus: number;
   locationPlus: number;
   mediaPlus: number;
-  rates: number;
   pricingRecords: number;
   imageUrls: number;
   avgImgList: number;
-  apiAvail: string;
-  apiRates: string;
   apiQuote: string;
   quoteRuntime: string;
   ready: string;
@@ -52,7 +49,6 @@ export type ReadyConformanceValidationSummary = {
     amenitiesPlus: number;
     locationPlus: number;
     mediaPlus: number;
-    rates: number;
     pricingRecords: number;
     imageUrls: number;
     avgImgList: number;
@@ -66,7 +62,6 @@ export type ReadyConformanceValidationSummary = {
     amenitiesPlus: number;
     locationPlus: number;
     mediaPlus: number;
-    rates: number;
     pricingRecords: number;
     imageUrls: number;
     avgImgList: number;
@@ -83,7 +78,6 @@ type AdapterMetrics = {
   amenitiesPlus: number;
   locationPlus: number;
   mediaPlus: number;
-  rates: number;
   pricingRecords: number;
   imageUrls: number;
   avgImgList: number;
@@ -96,7 +90,7 @@ function parseMatrixRow(line: string): MatrixRow | null {
     .map((cell) => cell.trim())
     .filter((cell) => cell.length > 0);
 
-  if (cells.length < 18) {
+  if (cells.length < 15) {
     return null;
   }
 
@@ -123,15 +117,12 @@ function parseMatrixRow(line: string): MatrixRow | null {
     amenitiesPlus: Number(cells[6]),
     locationPlus: Number(cells[7]),
     mediaPlus: Number(cells[8]),
-    rates: Number(cells[9]),
-    pricingRecords: Number(cells[10]),
-    imageUrls: Number(cells[11]),
-    avgImgList: Number(cells[12]),
-    apiAvail: cells[13],
-    apiRates: cells[14],
-    apiQuote: cells[15],
-    quoteRuntime: cells[16],
-    ready: cells[17],
+    pricingRecords: Number(cells[9]),
+    imageUrls: Number(cells[10]),
+    avgImgList: Number(cells[11]),
+    apiQuote: cells[12],
+    quoteRuntime: cells[13],
+    ready: cells[14],
   };
 }
 
@@ -171,7 +162,6 @@ async function computeAdapterMetrics(
   let amenitiesPlus = 0;
   let locationPlus = 0;
   let mediaPlus = 0;
-  let rates = 0;
   let imageUrls = 0;
 
   for (const fileName of jsonFiles) {
@@ -244,15 +234,6 @@ async function computeAdapterMetrics(
       mediaPlus += 1;
       imageUrls += imageCount;
     }
-
-    if (
-      parsed.normalized_rates &&
-      typeof parsed.normalized_rates === "object" &&
-      Array.isArray((parsed.normalized_rates as { days?: unknown }).days) &&
-      ((parsed.normalized_rates as { days?: unknown[] }).days?.length ?? 0) > 0
-    ) {
-      rates += 1;
-    }
   }
 
   const files = jsonFiles.length;
@@ -272,7 +253,6 @@ async function computeAdapterMetrics(
     amenitiesPlus,
     locationPlus,
     mediaPlus,
-    rates,
     pricingRecords: pricingFiles.length,
     imageUrls,
     avgImgList,
@@ -310,7 +290,6 @@ export async function validateReadyConformanceMatrix(
     amenitiesPlus: 0,
     locationPlus: 0,
     mediaPlus: 0,
-    rates: 0,
     pricingRecords: 0,
     imageUrls: 0,
     avgImgList: 0,
@@ -324,7 +303,6 @@ export async function validateReadyConformanceMatrix(
     amenitiesPlus: 0,
     locationPlus: 0,
     mediaPlus: 0,
-    rates: 0,
     pricingRecords: 0,
     imageUrls: 0,
     avgImgList: 0,
@@ -345,7 +323,6 @@ export async function validateReadyConformanceMatrix(
     docTotals.amenitiesPlus += row.amenitiesPlus;
     docTotals.locationPlus += row.locationPlus;
     docTotals.mediaPlus += row.mediaPlus;
-    docTotals.rates += row.rates;
     docTotals.pricingRecords += row.pricingRecords;
     docTotals.imageUrls += row.imageUrls;
 
@@ -363,7 +340,6 @@ export async function validateReadyConformanceMatrix(
     actualTotals.amenitiesPlus += actual.amenitiesPlus;
     actualTotals.locationPlus += actual.locationPlus;
     actualTotals.mediaPlus += actual.mediaPlus;
-    actualTotals.rates += actual.rates;
     actualTotals.pricingRecords += actual.pricingRecords;
     actualTotals.imageUrls += actual.imageUrls;
 
@@ -378,7 +354,6 @@ export async function validateReadyConformanceMatrix(
       ["amenitiesPlus", row.amenitiesPlus, actual.amenitiesPlus],
       ["locationPlus", row.locationPlus, actual.locationPlus],
       ["mediaPlus", row.mediaPlus, actual.mediaPlus],
-      ["rates", row.rates, actual.rates],
       ["pricingRecords", row.pricingRecords, actual.pricingRecords],
       ["imageUrls", row.imageUrls, actual.imageUrls],
       ["avgImgList", Number(row.avgImgList.toFixed(2)), actual.avgImgList],
@@ -388,22 +363,6 @@ export async function validateReadyConformanceMatrix(
       if (expected !== got) {
         mismatches.push({ column: name, expected, actual: got });
       }
-    }
-
-    if (row.apiAvail !== "✅" && row.apiAvail !== "-") {
-      mismatches.push({
-        column: "apiAvail",
-        expected: "✅ or -",
-        actual: row.apiAvail,
-      });
-    }
-
-    if (row.apiRates !== "✅" && row.apiRates !== "-") {
-      mismatches.push({
-        column: "apiRates",
-        expected: "✅ or -",
-        actual: row.apiRates,
-      });
     }
 
     if (row.apiQuote !== "✅" && row.apiQuote !== "❌") {

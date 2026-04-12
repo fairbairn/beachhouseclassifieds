@@ -264,11 +264,11 @@ export function validateCanonicalQuoteSidecar(
   const quoteMaxQueries = sidecar.quote_max_queries;
   if (
     !isFiniteNumber(quoteMaxQueries) ||
-    quoteMaxQueries !== expectedMaxQueries
+    quoteMaxQueries < expectedMaxQueries
   ) {
     issues.push({
       code: "invalid_quote_max_queries",
-      message: `quote_max_queries must equal ${expectedMaxQueries}`,
+      message: `quote_max_queries must be >= ${expectedMaxQueries}`,
     });
   }
 

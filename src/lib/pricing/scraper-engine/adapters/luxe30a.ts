@@ -1,8 +1,11 @@
+import { executeLuxe30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/luxe30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Page } from "playwright";
 
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxeDayCode = "A" | "U" | "X";
@@ -1259,6 +1262,24 @@ export function createLuxe30AAdapter(): ScraperAdapter<LuxeDetailRecord> {
         context.detailUrl,
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
+      );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "luxe30a",
+        argv,
+      );
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "luxe30a",
+          executeSingleQuote: executeLuxe30aSingleQuote,
+          defaultQuoteTimeoutMs: 30000,
+          defaultQuoteMaxAttempts: 1,
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 600,
+        },
+        normalizedArgs,
+        progress,
       );
     },
   };
