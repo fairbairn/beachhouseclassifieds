@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { pgDb } from "@/core/server/db";
 import {
@@ -398,39 +398,26 @@ function inferCanonicalPropertyType(input: {
 }): "condo" | "cottage" | "carriage" | "townhome" | "house" {
   const profile = asObject(input.detail.property_profile);
   const sourcePropertyType = asString(profile?.property_type).toLowerCase();
+  const rawSourceTitle = asString(input.detail.title);
 
   const bedrooms = input.bedrooms ?? 0;
 
-  const amenities = extractAmenities(input.detail).join("\n");
-  const textBlob = [
-    input.canonicalName,
-    input.externalListingId,
-    asString(input.detail.title),
-    asString(input.detail.h1),
-    asString(input.detail.description_expanded),
-    asString(input.detail.meta_description),
-    amenities,
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  const nameAndDescriptionBlob = [
-    input.canonicalName,
-    asString(input.detail.title),
-    asString(input.detail.h1),
+  const descriptionBlob = [
     asString(input.detail.description_expanded),
     asString(input.detail.meta_description),
   ]
     .filter(Boolean)
     .join("\n");
 
-  const hasCarriageSignal =
-    /\bcarriage\s+house\b|\bcarriage\b/i.test(sourcePropertyType) ||
-    /\bcarriage\s+house\b|\bcarriage\b/i.test(nameAndDescriptionBlob);
-  const hasCottageSignal =
-    /\bcottage\b/i.test(sourcePropertyType) ||
-    /\bcottage\b/i.test(nameAndDescriptionBlob);
+  const hasTownhomeSignal = /\btown(?:home|house)s?\b/i.test(descriptionBlob);
+  const hasCondoSignal = /\bcondo(?:minium)?s?\b/i.test(descriptionBlob);
 
+  const hasCarriageSignal = /\bcarriage\s+house\b|\bcarriage\b/i.test(
+    rawSourceTitle,
+  );
+  const hasCottageSignal = /\bcottage\b/i.test(rawSourceTitle);
+
+  // Carriage/cottage retain classification only when explicitly present in the actual source title.
   if (hasCarriageSignal) {
     return "carriage";
   }
@@ -438,43 +425,24 @@ function inferCanonicalPropertyType(input: {
     return "cottage";
   }
 
-  if (/\btown(?:home|house)s?\b/i.test(sourcePropertyType)) {
-    return "townhome";
+  // Condo requires explicit condo wording in source description/meta text.
+  if (hasCondoSignal) {
+    if (bedrooms > 3) {
+      return "house";
+    }
+    return "condo";
   }
-  if (/\btown(?:home|house)s?\b/i.test(textBlob)) {
+
+  // Townhome requires explicit description signal and a strict bedroom cap.
+  if (hasTownhomeSignal) {
+    if (bedrooms >= 4) {
+      return "house";
+    }
     return "townhome";
   }
 
-  // For larger inventory, default to house unless very explicit condo evidence is present.
   if (bedrooms >= 3) {
     return "house";
-  }
-
-  const hasUnitNumericSignal =
-    /\B#\s*\d+\b/i.test(textBlob) ||
-    /\bunit\s*#\s*\d+\b/i.test(textBlob) ||
-    /\bunit\s+\d+\b/i.test(textBlob) ||
-    /\b\d{1,4}\s*-\s*\d{1,4}\b/i.test(textBlob);
-
-  const hasCondoWordInDescription = /\bcondo(?:minium)?s?\b/i.test(
-    [
-      asString(input.detail.description_expanded),
-      asString(input.detail.meta_description),
-    ]
-      .filter(Boolean)
-      .join("\n"),
-  );
-
-  const hasNameOrDescriptionCottageCarriage = /\bcottage\b|\bcarriage\b/i.test(
-    nameAndDescriptionBlob,
-  );
-
-  if (hasUnitNumericSignal) {
-    return "condo";
-  }
-
-  if (hasCondoWordInDescription && !hasNameOrDescriptionCottageCarriage) {
-    return "condo";
   }
 
   if (/\b(vacation\s+home|house|home|villa)\b/i.test(sourcePropertyType)) {
@@ -1180,9 +1148,9 @@ export async function ingestAdapterDetailsToCanonical(
             slug_hash8: listingValues.slug_hash8,
             canonical_name: listingValues.canonical_name,
             property_type: listingValues.property_type,
-            bedrooms: listingValues.bedrooms,
-            bathrooms: listingValues.bathrooms,
-            sleeps: listingValues.sleeps,
+            bedrooms: sql`coalesce(${listingValues.bedrooms}, ${listing.bedrooms})`,
+            bathrooms: sql`coalesce(${listingValues.bathrooms}, ${listing.bathrooms})`,
+            sleeps: sql`coalesce(${listingValues.sleeps}, ${listing.sleeps})`,
             lat: listingValues.lat,
             lng: listingValues.lng,
             city: listingValues.city,

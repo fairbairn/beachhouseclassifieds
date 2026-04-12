@@ -239,6 +239,58 @@ export const listing_geocode_cache = pgTable(
   }),
 );
 
+export const listing_ai_refinement_cache = pgTable(
+  "listing_ai_refinement_cache",
+  {
+    id: text("id").primaryKey(),
+    listing_id: text("listing_id")
+      .notNull()
+      .references(() => listing.id, { onDelete: "cascade" }),
+    source_link_id: text("source_link_id").references(
+      () => listing_source_link.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    adapter_key: text("adapter_key"),
+    source_content_hash: text("source_content_hash").notNull(),
+    status: text("status").notNull().default("staged"),
+    model: text("model").notNull(),
+    prompt_version: text("prompt_version").notNull(),
+    output_hash: text("output_hash").notNull(),
+    output_payload: jsonb("output_payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    usage_payload: jsonb("usage_payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    generated_at: timestamp("generated_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    applied_at: timestamp("applied_at", { mode: "string", withTimezone: true }),
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    listing_id_idx: index("listing_ai_refinement_cache_listing_id_idx").on(
+      table.listing_id,
+    ),
+    status_idx: index("listing_ai_refinement_cache_status_idx").on(
+      table.status,
+    ),
+    listing_hash_prompt_unique_idx: uniqueIndex(
+      "listing_ai_refinement_cache_listing_hash_prompt_unique_idx",
+    ).on(table.listing_id, table.source_content_hash, table.prompt_version),
+  }),
+);
+
 export const users = pgTable(
   "user",
   {

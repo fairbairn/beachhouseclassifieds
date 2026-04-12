@@ -110,7 +110,7 @@ type GuestyProperty = {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://stay.golocalvr.com/listings?city=Carillon+Beach%2CDestin%2CInlet+Beach%2CMiramar+Beach%2CPanama+City+Beach%2CRosemary+Beach%2CSanta+Rosa+Beach%2CSeacrest%2CSeagrove%2CWatersound&guests=1&view=list&adults=1&children=0&infants=0";
+  "https://stay.golocalvr.com/listings?city=Inlet+Beach%2CRosemary+Beach%2CSanta+Rosa+Beach%2CSeacrest%2CSeagrove%2CWatersound&guests=1&view=list&adults=1&children=0&infants=0";
 
 const EXPECTED_LISTING_COUNT = 42;
 

@@ -86,7 +86,9 @@ function RootDocument({ children }: { children: ReactNode }) {
     select: (state) => state.location.pathname,
   });
   const isLoginPage = pathname === "/login";
+  const isDevRefinementPage = pathname === "/dev/listing-refinement";
   const isChromeFreePage =
+    isDevRefinementPage ||
     pathname === "/" ||
     pathname === "/home" ||
     pathname === "/discover" ||

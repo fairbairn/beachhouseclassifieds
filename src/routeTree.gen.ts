@@ -15,10 +15,12 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as DiscoverRouteImport } from './routes/discover'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DevListingRefinementRouteImport } from './routes/dev/listing-refinement'
 import { Route as ApiSessionRouteImport } from './routes/api/session'
 import { Route as ApiLogoutRouteImport } from './routes/api/logout'
 import { Route as ApiLoginRouteImport } from './routes/api/login'
 import { Route as ApiDiscoverListingsRouteImport } from './routes/api/discover/listings'
+import { Route as ApiDevListingRefinementRouteImport } from './routes/api/dev/listing-refinement'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const LogoutRoute = LogoutRouteImport.update({
@@ -51,6 +53,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevListingRefinementRoute = DevListingRefinementRouteImport.update({
+  id: '/dev/listing-refinement',
+  path: '/dev/listing-refinement',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionRoute = ApiSessionRouteImport.update({
   id: '/api/session',
   path: '/api/session',
@@ -71,6 +78,11 @@ const ApiDiscoverListingsRoute = ApiDiscoverListingsRouteImport.update({
   path: '/api/discover/listings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDevListingRefinementRoute = ApiDevListingRefinementRouteImport.update({
+  id: '/api/dev/listing-refinement',
+  path: '/api/dev/listing-refinement',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -87,7 +99,9 @@ export interface FileRoutesByFullPath {
   '/api/login': typeof ApiLoginRoute
   '/api/logout': typeof ApiLogoutRoute
   '/api/session': typeof ApiSessionRoute
+  '/dev/listing-refinement': typeof DevListingRefinementRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/dev/listing-refinement': typeof ApiDevListingRefinementRoute
   '/api/discover/listings': typeof ApiDiscoverListingsRoute
 }
 export interface FileRoutesByTo {
@@ -100,7 +114,9 @@ export interface FileRoutesByTo {
   '/api/login': typeof ApiLoginRoute
   '/api/logout': typeof ApiLogoutRoute
   '/api/session': typeof ApiSessionRoute
+  '/dev/listing-refinement': typeof DevListingRefinementRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/dev/listing-refinement': typeof ApiDevListingRefinementRoute
   '/api/discover/listings': typeof ApiDiscoverListingsRoute
 }
 export interface FileRoutesById {
@@ -114,7 +130,9 @@ export interface FileRoutesById {
   '/api/login': typeof ApiLoginRoute
   '/api/logout': typeof ApiLogoutRoute
   '/api/session': typeof ApiSessionRoute
+  '/dev/listing-refinement': typeof DevListingRefinementRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/dev/listing-refinement': typeof ApiDevListingRefinementRoute
   '/api/discover/listings': typeof ApiDiscoverListingsRoute
 }
 export interface FileRouteTypes {
@@ -129,7 +147,9 @@ export interface FileRouteTypes {
     | '/api/login'
     | '/api/logout'
     | '/api/session'
+    | '/dev/listing-refinement'
     | '/api/auth/$'
+    | '/api/dev/listing-refinement'
     | '/api/discover/listings'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -142,7 +162,9 @@ export interface FileRouteTypes {
     | '/api/login'
     | '/api/logout'
     | '/api/session'
+    | '/dev/listing-refinement'
     | '/api/auth/$'
+    | '/api/dev/listing-refinement'
     | '/api/discover/listings'
   id:
     | '__root__'
@@ -155,7 +177,9 @@ export interface FileRouteTypes {
     | '/api/login'
     | '/api/logout'
     | '/api/session'
+    | '/dev/listing-refinement'
     | '/api/auth/$'
+    | '/api/dev/listing-refinement'
     | '/api/discover/listings'
   fileRoutesById: FileRoutesById
 }
@@ -169,7 +193,9 @@ export interface RootRouteChildren {
   ApiLoginRoute: typeof ApiLoginRoute
   ApiLogoutRoute: typeof ApiLogoutRoute
   ApiSessionRoute: typeof ApiSessionRoute
+  DevListingRefinementRoute: typeof DevListingRefinementRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiDevListingRefinementRoute: typeof ApiDevListingRefinementRoute
   ApiDiscoverListingsRoute: typeof ApiDiscoverListingsRoute
 }
 
@@ -217,6 +243,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/listing-refinement': {
+      id: '/dev/listing-refinement'
+      path: '/dev/listing-refinement'
+      fullPath: '/dev/listing-refinement'
+      preLoaderRoute: typeof DevListingRefinementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/session': {
       id: '/api/session'
       path: '/api/session'
@@ -245,6 +278,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDiscoverListingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/dev/listing-refinement': {
+      id: '/api/dev/listing-refinement'
+      path: '/api/dev/listing-refinement'
+      fullPath: '/api/dev/listing-refinement'
+      preLoaderRoute: typeof ApiDevListingRefinementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -265,7 +305,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiLoginRoute: ApiLoginRoute,
   ApiLogoutRoute: ApiLogoutRoute,
   ApiSessionRoute: ApiSessionRoute,
+  DevListingRefinementRoute: DevListingRefinementRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiDevListingRefinementRoute: ApiDevListingRefinementRoute,
   ApiDiscoverListingsRoute: ApiDiscoverListingsRoute,
 }
 export const routeTree = rootRouteImport
