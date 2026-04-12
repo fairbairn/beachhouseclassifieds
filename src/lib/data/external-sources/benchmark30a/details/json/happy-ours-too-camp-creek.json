@@ -6,7 +6,7 @@
     "ids_tuple": "2261-280390",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/happy-ours-too-camp-creek"
   },
-  "fetched_at": "2026-04-12T02:05:01.326Z",
+  "fetched_at": "2026-04-12T14:24:09.531Z",
   "title": "Happy Ours Too at Camp Creek | Benchmark Management Vacation Rental",
   "h1": "Happy Ours Too at Camp Creek",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/happy-ours-too-camp-creek",
@@ -155,8 +155,8 @@
     "location_label": "30A | Private Home | No Beach View",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=197+Cottage+Way%20&saddr=Current%20Location",
     "directions_daddr": "197 Cottage Way",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.289389,
+    "longitude": -86.042887
   },
   "media_gallery": {
     "image_count": 70,
@@ -259,21 +259,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "happy-ours-too-camp-creek",
-    "captured_at": "2026-04-12T02:05:01.326Z",
+    "captured_at": "2026-04-12T14:24:09.531Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2027-10-05",
         "min_nights": 3,
-        "raw_rule": "2026-04-12..2027-10-05:3"
+        "raw_rule": "2026-04-13..2027-10-05:3"
       }
     ],
     "window_start": "2026-04-12",
@@ -285,16 +285,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -6868,21 +6868,21 @@
       }
     ],
     "counts": {
-      "available": 713,
+      "available": 712,
       "unavailable": 12,
       "checkin_only": 3,
-      "checkout_only": 3,
+      "checkout_only": 4,
       "other": 0,
-      "booking_available": 713,
+      "booking_available": 712,
       "booking_unavailable": 12,
-      "booking_unknown": 6
+      "booking_unknown": 7
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/happy-ours-too-camp-creek.html",
   "scrape_metrics": {
-    "total_ms": 5770,
-    "page_load_ms": 3875,
-    "extraction_ms": 1721,
+    "total_ms": 6074,
+    "page_load_ms": 4436,
+    "extraction_ms": 1515,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

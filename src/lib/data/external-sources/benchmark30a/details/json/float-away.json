@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175646",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/float-away"
   },
-  "fetched_at": "2026-04-12T02:04:38.182Z",
+  "fetched_at": "2026-04-12T14:23:50.312Z",
   "title": "Beautiful 4BR Seacrest Beach Rental on 30A with a Shared Pool",
   "h1": "Float Away",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/float-away",
@@ -140,8 +140,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=41+Seabreeze+Trail%20&saddr=Current%20Location",
     "directions_daddr": "41 Seabreeze Trail",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.291118,
+    "longitude": -86.050963
   },
   "media_gallery": {
     "image_count": 72,
@@ -246,27 +246,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "float-away",
-    "captured_at": "2026-04-12T02:04:38.182Z",
+    "captured_at": "2026-04-12T14:23:50.312Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-30",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-30:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-05-01",
-        "end_date": "2027-10-05",
+        "start_date": "2026-04-13",
+        "end_date": "2026-05-01",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-05-01:2"
+      },
+      {
+        "start_date": "2026-05-02",
+        "end_date": "2027-10-06",
         "min_nights": 3,
-        "raw_rule": "2026-05-01..2027-10-05:3"
+        "raw_rule": "2026-05-02..2027-10-06:3"
       }
     ],
     "window_start": "2026-04-12",
@@ -278,16 +278,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAOUUIAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAOUUIAAOUUUUUIOUUUIAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAOUUIAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAOUUIAAOUUUUUIOUUUIAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 2
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -458,7 +458,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-02",
@@ -5165,7 +5165,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": null
+        "min_nights_required": 3
       },
       {
         "date": "2027-10-07",
@@ -6861,21 +6861,21 @@
       }
     ],
     "counts": {
-      "available": 670,
+      "available": 669,
       "unavailable": 47,
       "checkin_only": 7,
-      "checkout_only": 7,
+      "checkout_only": 8,
       "other": 0,
-      "booking_available": 670,
+      "booking_available": 669,
       "booking_unavailable": 47,
-      "booking_unknown": 14
+      "booking_unknown": 15
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/float-away.html",
   "scrape_metrics": {
-    "total_ms": 5976,
-    "page_load_ms": 3781,
-    "extraction_ms": 2049,
+    "total_ms": 4646,
+    "page_load_ms": 2616,
+    "extraction_ms": 1939,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

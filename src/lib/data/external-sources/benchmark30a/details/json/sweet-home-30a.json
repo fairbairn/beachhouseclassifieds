@@ -6,7 +6,7 @@
     "ids_tuple": "2261-129726",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sweet-home-30a"
   },
-  "fetched_at": "2026-04-12T02:06:53.255Z",
+  "fetched_at": "2026-04-12T14:25:37.667Z",
   "title": "Sweet Home 30A | Benchmark Management Vacation Rental",
   "h1": "Sweet Home 30A",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sweet-home-30a",
@@ -175,8 +175,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=25+West+Chester+St%20&saddr=Current%20Location",
     "directions_daddr": "25 West Chester St",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.300083,
+    "longitude": -86.065114
   },
   "media_gallery": {
     "image_count": 59,
@@ -268,33 +268,33 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "sweet-home-30a",
-    "captured_at": "2026-04-12T02:06:53.256Z",
+    "captured_at": "2026-04-12T14:25:37.667Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-05-09",
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
+      },
+      {
+        "start_date": "2026-04-13",
+        "end_date": "2026-05-10",
         "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-05-09:2"
+        "raw_rule": "2026-04-13..2026-05-10:2"
       },
       {
-        "start_date": "2026-05-10",
-        "end_date": "2026-06-07",
+        "start_date": "2026-05-11",
+        "end_date": "2026-06-08",
         "min_nights": 3,
-        "raw_rule": "2026-05-10..2026-06-07:3"
+        "raw_rule": "2026-05-11..2026-06-08:3"
       },
       {
-        "start_date": "2026-06-08",
+        "start_date": "2026-06-09",
         "end_date": "2026-07-11",
         "min_nights": 4,
-        "raw_rule": "2026-06-08..2026-07-11:4"
+        "raw_rule": "2026-06-09..2026-07-11:4"
       },
       {
         "start_date": "2026-07-12",
@@ -330,16 +330,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAOUUUUUUIAAAOUUUIOUUUUUIAAAOUUUUUUIOUUUIAAAAAOUUUUUIAAOUUUUIAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAOUUUUUUIAAAOUUUIOUUUUUIAAAOUUUUUUIOUUUIAAAAAOUUUUUIAAOUUUUIAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 2
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -591,7 +591,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "unknown",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-11",
@@ -852,7 +852,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "unknown",
-        "min_nights_required": 4
+        "min_nights_required": 3
       },
       {
         "date": "2026-06-09",
@@ -6913,21 +6913,21 @@
       }
     ],
     "counts": {
-      "available": 642,
+      "available": 641,
       "unavailable": 67,
       "checkin_only": 11,
-      "checkout_only": 11,
+      "checkout_only": 12,
       "other": 0,
-      "booking_available": 642,
+      "booking_available": 641,
       "booking_unavailable": 67,
-      "booking_unknown": 22
+      "booking_unknown": 23
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/sweet-home-30a.html",
   "scrape_metrics": {
-    "total_ms": 6713,
-    "page_load_ms": 3647,
-    "extraction_ms": 2911,
+    "total_ms": 4786,
+    "page_load_ms": 2659,
+    "extraction_ms": 2033,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175692",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/mon-petit-chateau"
   },
-  "fetched_at": "2026-04-12T02:05:35.537Z",
+  "fetched_at": "2026-04-12T14:24:36.114Z",
   "title": "Charming 3BR 30A Vacation Home with a Communal Pool",
   "h1": "Mon Petit Chateau",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/mon-petit-chateau",
@@ -146,8 +146,8 @@
     "location_label": "30A | Private Home | Beach Side",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=10140+E+County+Highway+30A+%2312%20&saddr=Current%20Location",
     "directions_daddr": "10140 E County Highway 30A #12",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.281864,
+    "longitude": -86.022149
   },
   "media_gallery": {
     "image_count": 82,
@@ -262,27 +262,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "mon-petit-chateau",
-    "captured_at": "2026-04-12T02:05:35.537Z",
+    "captured_at": "2026-04-12T14:24:36.114Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-29",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-30",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-30",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-30:2"
+      },
+      {
+        "start_date": "2026-05-01",
         "end_date": "2026-05-02",
         "min_nights": 3,
-        "raw_rule": "2026-04-30..2026-05-02:3"
+        "raw_rule": "2026-05-01..2026-05-02:3"
       },
       {
         "start_date": "2026-05-03",
@@ -346,15 +346,15 @@
       },
       {
         "start_date": "2026-06-07",
-        "end_date": "2026-06-08",
+        "end_date": "2026-06-09",
         "min_nights": 2,
-        "raw_rule": "2026-06-07..2026-06-08:2"
+        "raw_rule": "2026-06-07..2026-06-09:2"
       },
       {
-        "start_date": "2026-06-09",
+        "start_date": "2026-06-10",
         "end_date": "2026-06-26",
         "min_nights": 3,
-        "raw_rule": "2026-06-09..2026-06-26:3"
+        "raw_rule": "2026-06-10..2026-06-26:3"
       },
       {
         "start_date": "2026-06-27",
@@ -822,16 +822,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUUUUUUUIAAAAAAAAAAAAAOUUUUUUIAAAAAOUUIAAOUUUIAAAOUUIAAAAAAAAAAOUUUUUIAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUUUUUUUUIAAAAAAAAAAAAAOUUUUUUIAAAAAOUUIAAOUUUIAAAOUUIAAAAAAAAAAOUUUUUIAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -993,7 +993,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-01",
@@ -1353,7 +1353,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-06-10",
@@ -7406,20 +7406,20 @@
     ],
     "counts": {
       "available": 667,
-      "unavailable": 47,
+      "unavailable": 46,
       "checkin_only": 9,
-      "checkout_only": 8,
+      "checkout_only": 9,
       "other": 0,
       "booking_available": 667,
-      "booking_unavailable": 47,
-      "booking_unknown": 17
+      "booking_unavailable": 46,
+      "booking_unknown": 18
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/mon-petit-chateau.html",
   "scrape_metrics": {
-    "total_ms": 7030,
-    "page_load_ms": 4635,
-    "extraction_ms": 2254,
+    "total_ms": 3713,
+    "page_load_ms": 2636,
+    "extraction_ms": 970,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

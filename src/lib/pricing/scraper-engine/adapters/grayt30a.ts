@@ -346,6 +346,149 @@ function normalizeGalleryUrl(rawUrl: string): string {
   }
 }
 
+function extractCandidateImageWidth(url: URL): number {
+  const searchWidth = Number(url.searchParams.get("width") ?? "");
+  const searchW = Number(url.searchParams.get("w") ?? "");
+  const pathWidthMatch = url.pathname.match(/\/width=(\d+)/i);
+  const pathWidth = pathWidthMatch ? Number(pathWidthMatch[1]) : NaN;
+
+  return Math.max(
+    Number.isFinite(searchWidth) ? searchWidth : 0,
+    Number.isFinite(searchW) ? searchW : 0,
+    Number.isFinite(pathWidth) ? pathWidth : 0,
+  );
+}
+
+function buildGalleryVariantKey(url: URL): string {
+  const filtered = new URLSearchParams();
+  const variantParams = new Set([
+    "width",
+    "w",
+    "height",
+    "h",
+    "quality",
+    "q",
+    "dpr",
+    "fit",
+    "crop",
+    "auto",
+    "format",
+    "fm",
+  ]);
+
+  for (const [key, value] of url.searchParams.entries()) {
+    if (variantParams.has(key.toLowerCase())) {
+      continue;
+    }
+    filtered.append(key, value);
+  }
+
+  const query = filtered.toString();
+  return `${url.origin}${url.pathname}${query ? `?${query}` : ""}`;
+}
+
+function dedupePreferLargestGalleryVariants(values: string[]): string[] {
+  const byKey = new Map<
+    string,
+    {
+      key: string;
+      url: string;
+      width: number;
+      firstSeen: number;
+    }
+  >();
+
+  for (const [index, value] of values.entries()) {
+    const normalized = value.trim();
+    if (!normalized) {
+      continue;
+    }
+
+    try {
+      const parsed = new URL(normalized);
+      const key = buildGalleryVariantKey(parsed);
+      const width = extractCandidateImageWidth(parsed);
+      const existing = byKey.get(key);
+
+      if (!existing) {
+        byKey.set(key, {
+          key,
+          url: normalized,
+          width,
+          firstSeen: index,
+        });
+        continue;
+      }
+
+      if (width > existing.width) {
+        byKey.set(key, {
+          ...existing,
+          url: normalized,
+          width,
+        });
+      }
+    } catch {
+      const existing = byKey.get(normalized);
+      if (!existing) {
+        byKey.set(normalized, {
+          key: normalized,
+          url: normalized,
+          width: 0,
+          firstSeen: index,
+        });
+      }
+    }
+  }
+
+  return Array.from(byKey.values())
+    .sort((left, right) => left.firstSeen - right.firstSeen)
+    .map((entry) => entry.url);
+}
+
+function filterGallerySourceNoise(values: string[]): string[] {
+  const hasRezfusion = values.some(
+    (value) =>
+      /images\.rezfusion\.com/i.test(value) || /\/vrm-img\//i.test(value),
+  );
+  if (!hasRezfusion) {
+    return values;
+  }
+
+  return values.filter((value) => !/picturehandler\.ashx/i.test(value));
+}
+
+function extractGoogleMapsLlFromHtml(html: string): {
+  latitude: number;
+  longitude: number;
+} | null {
+  const hrefMatch = html.match(
+    /href=["']https?:\/\/maps\.google\.com\/maps\?([^"']+)["']/i,
+  );
+  const querySource = hrefMatch?.[1] ?? "";
+  if (!querySource) {
+    return null;
+  }
+
+  const decodedQuery = querySource.replace(/&amp;/gi, "&");
+  const llMatch = decodedQuery.match(
+    /(?:^|[&?])ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+  );
+  if (!llMatch) {
+    return null;
+  }
+
+  const latitude = Number(llMatch[1]);
+  const longitude = Number(llMatch[2]);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+  };
+}
+
 function extractFieldLocationFromHtml(html: string): {
   street: string;
   latitude: number | null;
@@ -361,23 +504,18 @@ function extractFieldLocationFromHtml(html: string): {
     return (match?.[1] ?? "").trim();
   };
 
-  const streetFromWidget = attrValue("data-straddress1");
-  const latitudeFromWidget = Number(attrValue("data-latitude"));
-  const longitudeFromWidget = Number(attrValue("data-longitude"));
+  const numericAttrValue = (name: string): number => {
+    const raw = attrValue(name);
+    if (!raw) {
+      return Number.NaN;
+    }
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  };
 
-  if (
-    streetFromWidget ||
-    Number.isFinite(latitudeFromWidget) ||
-    Number.isFinite(longitudeFromWidget)
-  ) {
-    return {
-      street: streetFromWidget,
-      latitude: Number.isFinite(latitudeFromWidget) ? latitudeFromWidget : null,
-      longitude: Number.isFinite(longitudeFromWidget)
-        ? longitudeFromWidget
-        : null,
-    };
-  }
+  const streetFromWidget = attrValue("data-straddress1");
+  const latitudeFromWidget = numericAttrValue("data-latitude");
+  const longitudeFromWidget = numericAttrValue("data-longitude");
 
   const fieldLocationChunkMatch = html.match(
     /["']field_location["']\s*:\s*\{[\s\S]*?\}\s*,\s*["']field_teaser_image["']/i,
@@ -387,13 +525,13 @@ function extractFieldLocationFromHtml(html: string): {
     : html;
 
   const streetMatch = fieldLocationChunk.match(
-    /street\s*:\s*["']([^"']*)["']/i,
+    /["']?street["']?\s*:\s*["']([^"']*)["']/i,
   );
   const latitudeMatch = fieldLocationChunk.match(
-    /latitude\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
+    /["']?latitude["']?\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
   );
   const longitudeMatch = fieldLocationChunk.match(
-    /longitude\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
+    /["']?longitude["']?\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
   );
 
   const street = streetMatch?.[1]
@@ -416,6 +554,10 @@ function extractFieldLocationFromHtml(html: string): {
   );
   const atCoordMatch = html.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/i);
   const maps3d4dMatch = html.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/i);
+  const googleMapsLl = extractGoogleMapsLlFromHtml(html);
+  const genericLlMatch = html.match(
+    /[?&]ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+  );
 
   const latitudeFallback = latLngPairMatch?.[1]
     ? Number(latLngPairMatch[1])
@@ -425,7 +567,11 @@ function extractFieldLocationFromHtml(html: string): {
         ? Number(atCoordMatch[1])
         : maps3d4dMatch?.[1]
           ? Number(maps3d4dMatch[1])
-          : NaN;
+          : googleMapsLl?.latitude
+            ? googleMapsLl.latitude
+            : genericLlMatch?.[1]
+              ? Number(genericLlMatch[1])
+              : NaN;
   const longitudeFallback = latLngPairMatch?.[2]
     ? Number(latLngPairMatch[2])
     : lngLatPairMatch?.[1]
@@ -434,18 +580,26 @@ function extractFieldLocationFromHtml(html: string): {
         ? Number(atCoordMatch[2])
         : maps3d4dMatch?.[2]
           ? Number(maps3d4dMatch[2])
-          : NaN;
+          : googleMapsLl?.longitude
+            ? googleMapsLl.longitude
+            : genericLlMatch?.[2]
+              ? Number(genericLlMatch[2])
+              : NaN;
 
-  const latitudeResolved = Number.isFinite(latitude)
-    ? latitude
-    : Number.isFinite(latitudeFallback)
-      ? latitudeFallback
-      : NaN;
-  const longitudeResolved = Number.isFinite(longitude)
-    ? longitude
-    : Number.isFinite(longitudeFallback)
-      ? longitudeFallback
-      : NaN;
+  const latitudeResolved = Number.isFinite(latitudeFromWidget)
+    ? latitudeFromWidget
+    : Number.isFinite(latitude)
+      ? latitude
+      : Number.isFinite(latitudeFallback)
+        ? latitudeFallback
+        : NaN;
+  const longitudeResolved = Number.isFinite(longitudeFromWidget)
+    ? longitudeFromWidget
+    : Number.isFinite(longitude)
+      ? longitude
+      : Number.isFinite(longitudeFallback)
+        ? longitudeFallback
+        : NaN;
 
   const aboutAddressMatch = html.match(
     /listing-about[\s\S]*?<strong>[^<~]*~\s*([^<~]+?)\s*~\s*([^<]+?)<\/strong>/i,
@@ -455,7 +609,7 @@ function extractFieldLocationFromHtml(html: string): {
     : "";
 
   return {
-    street: street || aboutAddress,
+    street: streetFromWidget || street || aboutAddress,
     latitude: Number.isFinite(latitudeResolved) ? latitudeResolved : null,
     longitude: Number.isFinite(longitudeResolved) ? longitudeResolved : null,
   };
@@ -1239,21 +1393,20 @@ async function fetchDetail(
         })(),
         galleryUrls: (() => {
           const urls: string[] = [];
-          const mediaRoot =
-            document.querySelector("#property-slick-slider-alt") ??
-            document.querySelector(".group-photos") ??
-            document.querySelector("#Media") ??
-            document.querySelector('[id="media"]') ??
-            document.querySelector("#pdpHiddenGallery") ??
-            document.querySelector(".pdp-property-widget-img-area") ??
-            document;
-          if (!mediaRoot) {
+          const mediaRoots = Array.from(
+            document.querySelectorAll(
+              "#property-slick-slider-alt, .group-photos, #Media, #media, #pdpHiddenGallery, .pdp-property-widget-img-area, .slick-slider, .fancybox-container, .fancybox-stage, .modal .gallery, .gallery-modal, [class*='lightbox'], [class*='gallery']",
+            ),
+          );
+          if (mediaRoots.length === 0) {
             return urls;
           }
 
-          const attrValues = Array.from(
-            mediaRoot.querySelectorAll(
-              "a[href], a[data-srcset], a[data-thumb], img[src], img[srcset], img[data-src], img[data-rstmb], [data-rsbigimg], [data-image]",
+          const attrValues = mediaRoots.flatMap((root) =>
+            Array.from(
+              root.querySelectorAll(
+                "a[href], a[data-srcset], a[data-thumb], img[src], img[srcset], img[data-src], img[data-rstmb], [data-rsbigimg], [data-image]",
+              ),
             ),
           );
 
@@ -1526,10 +1679,12 @@ async function fetchDetail(
       all: amenitiesAll,
     };
 
-    const mediaUrls = dedupePreserveOrder(
-      extracted.galleryUrls
-        .map((url) => normalizeGalleryUrl(url))
-        .filter(Boolean),
+    const mediaUrls = dedupePreferLargestGalleryVariants(
+      filterGallerySourceNoise(
+        extracted.galleryUrls
+          .map((url) => normalizeGalleryUrl(url))
+          .filter(Boolean),
+      ),
     );
     const mediaGallery: LuxuryDetailRecord["media_gallery"] = {
       image_count: mediaUrls.length,
@@ -1542,15 +1697,23 @@ async function fetchDetail(
     const longitudeFallbackMatch = html.match(
       /longitude[^0-9-]*(-?\d+(?:\.\d+)?)/i,
     );
+    const googleMapsLlFallback = extractGoogleMapsLlFromHtml(html);
+    const genericLlFallbackMatch = html.match(
+      /[?&]ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+    );
     const aboutAddressFallbackMatch = descriptionExpanded.match(
       /~\s*([^~]+?)\s*~\s*([^~]+?\b[A-Z]{2}\s+\d{5}(?:-\d{4})?)/,
     );
 
     const latitudeRaw =
       locationPayload.latitude ??
+      googleMapsLlFallback?.latitude ??
+      (genericLlFallbackMatch ? Number(genericLlFallbackMatch[1]) : null) ??
       (latitudeFallbackMatch ? Number(latitudeFallbackMatch[1]) : null);
     const longitudeRaw =
       locationPayload.longitude ??
+      googleMapsLlFallback?.longitude ??
+      (genericLlFallbackMatch ? Number(genericLlFallbackMatch[2]) : null) ??
       (longitudeFallbackMatch ? Number(longitudeFallbackMatch[1]) : null);
 
     const latitude = latitudeRaw === 0 ? null : latitudeRaw;

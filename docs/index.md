@@ -17,6 +17,7 @@ Welcome to the docs site scaffold.
 - Use [Discover Experience Reference](./discover-experience-reference.md) as the implementation contract for Discover panel layout, feature naming, map behavior, and demo data rules.
 - Use [Discovery Workspace and Planner Vision](./discovery-workspace-and-planner-vision.md) as the living product record for search UX, favoriting flow, route decisions, and planner boundaries.
 - Use [Pricing and Conformance System Reference](./pricing-system-reference.md) as the hub for scrape, quote, cache, validation, and readiness workflows.
+- Use [CLI Runner Reference](./cli-runner-reference.md) for primary operational commands and their main flags.
 - Use [Adapter Scrape and Extraction](./adapter-scrape-and-extraction.md) for how primary adapters discover, fetch, and normalize listing detail payloads.
 - Use [Quote Modules and Platform Strategy](./quote-modules-platform-strategy.md) for quote-sidecar behavior and stack-specific extraction strategy.
 - Use [Quote Runtime Isolation Evolution](./quote-runtime-isolation-evolution.md) for the runtime portability boundary, migration phases, and adapter task tracker.

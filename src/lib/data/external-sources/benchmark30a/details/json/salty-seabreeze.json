@@ -6,7 +6,7 @@
     "ids_tuple": "2261-280391",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/salty-seabreeze"
   },
-  "fetched_at": "2026-04-12T02:06:16.855Z",
+  "fetched_at": "2026-04-12T14:25:10.036Z",
   "title": "Salty Seabreeze | Benchmark Management Vacation Rental",
   "h1": "Salty Seabreeze",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/salty-seabreeze",
@@ -150,8 +150,8 @@
     "location_label": "30A | Private Home | Beach View",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=33+Seabreeze+Trail%20&saddr=Current%20Location",
     "directions_daddr": "33 Seabreeze Trail",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.291079,
+    "longitude": -86.050792
   },
   "media_gallery": {
     "image_count": 77,
@@ -261,21 +261,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "salty-seabreeze",
-    "captured_at": "2026-04-12T02:06:16.855Z",
+    "captured_at": "2026-04-12T14:25:10.036Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2027-10-05",
         "min_nights": 3,
-        "raw_rule": "2026-04-12..2027-10-05:3"
+        "raw_rule": "2026-04-13..2027-10-05:3"
       }
     ],
     "window_start": "2026-04-12",
@@ -287,42 +287,42 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "IAAOUUUUIAAAAAAAAAAAAAAAAAOUUUUIAOUUUUUUIOUUIOUUUUUUUUUUIOUUUUIAOUUUUUUUUUUIAOUUUUUUIOUUUUUUUUUUUUIOUUUUUUUUUUUUUIAOUUUUIAOUUUIAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAOUUIAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUUUIAAAAAAAAAAAAAAAAAOUUUUIAOUUUUUUIOUUIOUUUUUUUUUUIOUUUUIAOUUUUUUUUUUIAOUUUUUUIOUUUUUUUUUUUUIOUUUUUUUUUUUUUIAOUUUUIAOUUUIAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAOUUIAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "I",
-        "is_available": false,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": false,
-        "booking_day_state": "unknown",
-        "min_nights_required": 3
-      },
-      {
-        "date": "2026-04-13",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 3
-      },
-      {
-        "date": "2026-04-14",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 3
-      },
-      {
-        "date": "2026-04-15",
         "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "unknown",
+        "min_nights_required": 1
+      },
+      {
+        "date": "2026-04-13",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
+        "min_nights_required": 3
+      },
+      {
+        "date": "2026-04-14",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
+        "min_nights_required": 3
+      },
+      {
+        "date": "2026-04-15",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 3
       },
       {
@@ -6870,21 +6870,21 @@
       }
     ],
     "counts": {
-      "available": 606,
-      "unavailable": 92,
-      "checkin_only": 17,
+      "available": 604,
+      "unavailable": 95,
+      "checkin_only": 16,
       "checkout_only": 16,
       "other": 0,
-      "booking_available": 606,
-      "booking_unavailable": 92,
-      "booking_unknown": 33
+      "booking_available": 604,
+      "booking_unavailable": 95,
+      "booking_unknown": 32
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/salty-seabreeze.html",
   "scrape_metrics": {
-    "total_ms": 7056,
-    "page_load_ms": 4886,
-    "extraction_ms": 2033,
+    "total_ms": 5394,
+    "page_load_ms": 3507,
+    "extraction_ms": 1678,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

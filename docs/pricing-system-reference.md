@@ -38,6 +38,7 @@ These checks are enforced by `npm run pricing:audit:quote-isolation` and are the
 
 ## Reference Map
 
+- [CLI Runner Reference](./cli-runner-reference.md)
 - [Adapter Scrape and Extraction](./adapter-scrape-and-extraction.md)
 - [Quote Modules and Platform Strategy](./quote-modules-platform-strategy.md)
 - [Pricing Cache Builder](./pricing-cache-builder.md)

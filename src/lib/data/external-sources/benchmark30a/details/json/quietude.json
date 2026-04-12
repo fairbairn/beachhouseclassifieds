@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175728",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/quietude"
   },
-  "fetched_at": "2026-04-12T02:06:00.597Z",
+  "fetched_at": "2026-04-12T14:24:55.944Z",
   "title": "Pet-Friendly 3BR Vacation Rental on 30A with a Shared Pool",
   "h1": "Quietude",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/quietude",
@@ -178,8 +178,8 @@
     "location_label": "30A | Private Home | Beach Side",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=95+May+Dr%20&saddr=Current%20Location",
     "directions_daddr": "95 May Dr",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.310957,
+    "longitude": -86.098238
   },
   "media_gallery": {
     "image_count": 49,
@@ -261,21 +261,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "quietude",
-    "captured_at": "2026-04-12T02:06:00.597Z",
+    "captured_at": "2026-04-12T14:24:55.944Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2026-04-29",
         "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "raw_rule": "2026-04-13..2026-04-29:2"
       },
       {
         "start_date": "2026-04-30",
@@ -293,16 +293,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAOUUUIAAOUUUUUUUUUUUUUIAAAAOUUUUUUUIAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAOUUUIAAOUUUUUUUUUUUUUIAAAAOUUUUUUUIAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 2
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -6876,21 +6876,21 @@
       }
     ],
     "counts": {
-      "available": 687,
+      "available": 686,
       "unavailable": 34,
       "checkin_only": 5,
-      "checkout_only": 5,
+      "checkout_only": 6,
       "other": 0,
-      "booking_available": 687,
+      "booking_available": 686,
       "booking_unavailable": 34,
-      "booking_unknown": 10
+      "booking_unknown": 11
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/quietude.html",
   "scrape_metrics": {
-    "total_ms": 6714,
-    "page_load_ms": 4319,
-    "extraction_ms": 2233,
+    "total_ms": 5127,
+    "page_load_ms": 3613,
+    "extraction_ms": 1414,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175690",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/moon-glow"
   },
-  "fetched_at": "2026-04-12T02:05:38.698Z",
+  "fetched_at": "2026-04-12T14:24:39.407Z",
   "title": "3BR Family-Friendly Private Home on 30A with a Shared Pool",
   "h1": "Moon Glow",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/moon-glow",
@@ -164,8 +164,8 @@
     "location_label": "30A | Private Home | Beach Side",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=15+Majestica+Circle%20&saddr=Current%20Location",
     "directions_daddr": "15 Majestica Circle",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.310251,
+    "longitude": -86.105822
   },
   "media_gallery": {
     "image_count": 61,
@@ -259,27 +259,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "moon-glow",
-    "captured_at": "2026-04-12T02:05:38.698Z",
+    "captured_at": "2026-04-12T14:24:39.407Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-29",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-30",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-30",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-30:2"
+      },
+      {
+        "start_date": "2026-05-01",
         "end_date": "2026-05-02",
         "min_nights": 3,
-        "raw_rule": "2026-04-30..2026-05-02:3"
+        "raw_rule": "2026-05-01..2026-05-02:3"
       },
       {
         "start_date": "2026-05-03",
@@ -343,15 +343,15 @@
       },
       {
         "start_date": "2026-06-07",
-        "end_date": "2026-06-08",
+        "end_date": "2026-06-09",
         "min_nights": 2,
-        "raw_rule": "2026-06-07..2026-06-08:2"
+        "raw_rule": "2026-06-07..2026-06-09:2"
       },
       {
-        "start_date": "2026-06-09",
+        "start_date": "2026-06-10",
         "end_date": "2026-06-12",
         "min_nights": 3,
-        "raw_rule": "2026-06-09..2026-06-12:3"
+        "raw_rule": "2026-06-10..2026-06-12:3"
       },
       {
         "start_date": "2026-06-13",
@@ -831,16 +831,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUIAAAOUUIAAAAAOUUUUUUIAAAAAAOUUUUUUUUUUUIAOUUUUUUUUUUUUUIAOUUUUIAAAAAAAAAAOUUUUUUUUIOUUUUUUIAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUUIAAAOUUIAAAAAOUUUUUUIAAAAAAOUUUUUUUUUUUIAOUUUUUUUUUUUUUIAOUUUUIAAAAAAAAAAOUUUUUUUUIOUUUUUUIAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -1002,7 +1002,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-01",
@@ -1362,7 +1362,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-06-10",
@@ -7415,20 +7415,20 @@
     ],
     "counts": {
       "available": 612,
-      "unavailable": 96,
+      "unavailable": 95,
       "checkin_only": 12,
-      "checkout_only": 11,
+      "checkout_only": 12,
       "other": 0,
       "booking_available": 612,
-      "booking_unavailable": 96,
-      "booking_unknown": 23
+      "booking_unavailable": 95,
+      "booking_unknown": 24
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/moon-glow.html",
   "scrape_metrics": {
-    "total_ms": 7263,
-    "page_load_ms": 5438,
-    "extraction_ms": 1599,
+    "total_ms": 4546,
+    "page_load_ms": 3471,
+    "extraction_ms": 981,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

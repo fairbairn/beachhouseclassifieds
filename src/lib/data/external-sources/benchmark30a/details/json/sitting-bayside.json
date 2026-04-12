@@ -6,7 +6,7 @@
     "ids_tuple": "2261-253180",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sitting-bayside"
   },
-  "fetched_at": "2026-04-12T02:06:35.853Z",
+  "fetched_at": "2026-04-12T14:25:24.842Z",
   "title": "Stunning 3BR 30A Vacation Rental with Beach Access",
   "h1": "Sitting Bayside",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sitting-bayside",
@@ -140,8 +140,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=36+Tyler+James+Way%20&saddr=Current%20Location",
     "directions_daddr": "36 Tyler James Way",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.39793,
+    "longitude": -86.227949
   },
   "media_gallery": {
     "image_count": 51,
@@ -225,27 +225,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "sitting-bayside",
-    "captured_at": "2026-04-12T02:06:35.853Z",
+    "captured_at": "2026-04-12T14:25:24.842Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-29",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-30",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-30",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-30:2"
+      },
+      {
+        "start_date": "2026-05-01",
         "end_date": "2026-05-02",
         "min_nights": 3,
-        "raw_rule": "2026-04-30..2026-05-02:3"
+        "raw_rule": "2026-05-01..2026-05-02:3"
       },
       {
         "start_date": "2026-05-03",
@@ -309,15 +309,15 @@
       },
       {
         "start_date": "2026-06-07",
-        "end_date": "2026-06-07",
+        "end_date": "2026-06-09",
         "min_nights": 2,
-        "raw_rule": "2026-06-07..2026-06-07:2"
+        "raw_rule": "2026-06-07..2026-06-09:2"
       },
       {
-        "start_date": "2026-06-08",
+        "start_date": "2026-06-10",
         "end_date": "2026-06-26",
         "min_nights": 3,
-        "raw_rule": "2026-06-08..2026-06-26:3"
+        "raw_rule": "2026-06-10..2026-06-26:3"
       },
       {
         "start_date": "2026-06-27",
@@ -785,16 +785,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -956,7 +956,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-01",
@@ -1307,7 +1307,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-06-09",
@@ -1316,7 +1316,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-06-10",
@@ -7369,20 +7369,20 @@
     ],
     "counts": {
       "available": 712,
-      "unavailable": 14,
+      "unavailable": 13,
       "checkin_only": 3,
-      "checkout_only": 2,
+      "checkout_only": 3,
       "other": 0,
       "booking_available": 712,
-      "booking_unavailable": 14,
-      "booking_unknown": 5
+      "booking_unavailable": 13,
+      "booking_unknown": 6
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/sitting-bayside.html",
   "scrape_metrics": {
-    "total_ms": 6760,
-    "page_load_ms": 5709,
-    "extraction_ms": 906,
+    "total_ms": 5323,
+    "page_load_ms": 3418,
+    "extraction_ms": 1818,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

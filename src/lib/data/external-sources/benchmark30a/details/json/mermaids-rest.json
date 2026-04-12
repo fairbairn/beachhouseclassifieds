@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175691",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/mermaids-rest"
   },
-  "fetched_at": "2026-04-12T02:05:35.469Z",
+  "fetched_at": "2026-04-12T14:24:35.590Z",
   "title": "4BR Beach Home on 30A in Seagrove Beach with a Shared Pool",
   "h1": "Mermaids' Rest",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/mermaids-rest",
@@ -154,8 +154,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=294+Cassine+Garden+Circle%20&saddr=Current%20Location",
     "directions_daddr": "294 Cassine Garden Circle",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.313646,
+    "longitude": -86.106645
   },
   "media_gallery": {
     "image_count": 54,
@@ -242,21 +242,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "mermaids-rest",
-    "captured_at": "2026-04-12T02:05:35.469Z",
+    "captured_at": "2026-04-12T14:24:35.590Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2026-05-20",
         "min_nights": 3,
-        "raw_rule": "2026-04-12..2026-05-20:3"
+        "raw_rule": "2026-04-13..2026-05-20:3"
       },
       {
         "start_date": "2026-05-21",
@@ -358,16 +358,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOOOUOOOOOOIOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOOOOOOOOUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOOOUOOOOOOIOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOOOOOOOOUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -6941,21 +6941,21 @@
       }
     ],
     "counts": {
-      "available": 653,
+      "available": 652,
       "unavailable": 8,
       "checkin_only": 2,
-      "checkout_only": 68,
+      "checkout_only": 69,
       "other": 0,
-      "booking_available": 653,
+      "booking_available": 652,
       "booking_unavailable": 8,
-      "booking_unknown": 70
+      "booking_unknown": 71
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/mermaids-rest.html",
   "scrape_metrics": {
-    "total_ms": 7012,
-    "page_load_ms": 4856,
-    "extraction_ms": 2026,
+    "total_ms": 4460,
+    "page_load_ms": 2707,
+    "extraction_ms": 1651,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

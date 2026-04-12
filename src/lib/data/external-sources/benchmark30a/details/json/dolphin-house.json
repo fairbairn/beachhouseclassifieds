@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175616",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/dolphin-house"
   },
-  "fetched_at": "2026-04-12T02:04:29.804Z",
+  "fetched_at": "2026-04-12T14:23:45.397Z",
   "title": "Dolphin House | Benchmark Management Vacation Rental",
   "h1": "Dolphin House",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/dolphin-house",
@@ -158,8 +158,8 @@
     "location_label": "30A | Private Home | Beach Side",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=15+Sea+Walk+Circle%20&saddr=Current%20Location",
     "directions_daddr": "15 Sea Walk Circle",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.314305,
+    "longitude": -86.119514
   },
   "media_gallery": {
     "image_count": 63,
@@ -255,27 +255,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "dolphin-house",
-    "captured_at": "2026-04-12T02:04:29.804Z",
+    "captured_at": "2026-04-12T14:23:45.397Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-29",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-30",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-30",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-30:2"
+      },
+      {
+        "start_date": "2026-05-01",
         "end_date": "2026-05-02",
         "min_nights": 3,
-        "raw_rule": "2026-04-30..2026-05-02:3"
+        "raw_rule": "2026-05-01..2026-05-02:3"
       },
       {
         "start_date": "2026-05-03",
@@ -339,15 +339,15 @@
       },
       {
         "start_date": "2026-06-07",
-        "end_date": "2026-06-08",
+        "end_date": "2026-06-09",
         "min_nights": 2,
-        "raw_rule": "2026-06-07..2026-06-08:2"
+        "raw_rule": "2026-06-07..2026-06-09:2"
       },
       {
-        "start_date": "2026-06-09",
+        "start_date": "2026-06-10",
         "end_date": "2026-07-31",
         "min_nights": 4,
-        "raw_rule": "2026-06-09..2026-07-31:4"
+        "raw_rule": "2026-06-10..2026-07-31:4"
       },
       {
         "start_date": "2026-08-01",
@@ -869,16 +869,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUIAAAOUUUUUUUUUUUUUUIAAAOUUUUUUUUUUUUIAOUUIAAAAOUUUUUUUUUUUUUIAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAOUUUUIAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUIAAAOUUUUUUUUUUUUUUIAAAOUUUUUUUUUUUUIAOUUIAAAAOUUUUUUUUUUUUUIAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAOUUUUIAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -1040,7 +1040,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-01",
@@ -1400,7 +1400,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 4
+        "min_nights_required": 2
       },
       {
         "date": "2026-06-10",
@@ -7453,20 +7453,20 @@
     ],
     "counts": {
       "available": 644,
-      "unavailable": 70,
+      "unavailable": 69,
       "checkin_only": 9,
-      "checkout_only": 8,
+      "checkout_only": 9,
       "other": 0,
       "booking_available": 644,
-      "booking_unavailable": 70,
-      "booking_unknown": 17
+      "booking_unavailable": 69,
+      "booking_unknown": 18
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/dolphin-house.html",
   "scrape_metrics": {
-    "total_ms": 5813,
-    "page_load_ms": 3642,
-    "extraction_ms": 1997,
+    "total_ms": 4385,
+    "page_load_ms": 2653,
+    "extraction_ms": 1608,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

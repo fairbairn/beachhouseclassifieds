@@ -2,7 +2,7 @@
   "adapter_key": "keyco30a",
   "external_listing_id": "4QCiaIECyR",
   "detail_url": "https://key.co/listings/4QCiaIECyR",
-  "captured_at": "2026-04-12T05:48:05.681Z",
+  "captured_at": "2026-04-12T14:45:34.203Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_sat_to_sat",
   "quote_window_gap_policy": "record_unavailable_without_date_shift",
@@ -11,11 +11,10 @@
   "quote_sample_step_days": 7,
   "quote_nights": 7,
   "quote_max_queries": 24,
-  "endpoint_path": "/api/listing/{listingId}/pricing-context",
   "observations": [
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-04-18",
@@ -30,20 +29,44 @@
       "base_total": 2959,
       "taxes_total": 521.23,
       "fees_total_excl_taxes": 2353.55,
-      "fee_lines": [],
-      "grand_total": 5833.780000000001,
-      "quoted_total": 5833.780000000001,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 140.55
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
+      "grand_total": 5833.78,
+      "quoted_total": 5833.78,
       "fee_pct_of_base": 0.795387,
       "tax_pct_of_base": 0.176151,
       "non_base_pct_of_total": 0.492782,
       "all_in_multiplier": 1.971538,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-04-18&listing_end_date=2026-04-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-04-25",
@@ -51,27 +74,26 @@
       "check_in_date": "2026-04-25",
       "check_out_date": "2026-05-02",
       "nights": 7,
-      "base_nightly": 1398.29,
-      "all_in_nightly": 1594.05,
+      "base_nightly": 422.71,
+      "all_in_nightly": 836.97,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 9788.03,
-      "taxes_total": 1370.32,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 2958.97,
+      "taxes_total": 532.61,
+      "fees_total_excl_taxes": 2367.18,
       "fee_lines": [],
-      "grand_total": 11158.35,
-      "quoted_total": 11158.35,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "grand_total": 5858.76,
+      "quoted_total": 5858.76,
+      "fee_pct_of_base": 0.800001,
+      "tax_pct_of_base": 0.179998,
+      "non_base_pct_of_total": 0.494949,
+      "all_in_multiplier": 1.98,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-04-25&listing_end_date=2026-05-02&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-05-02",
@@ -79,27 +101,26 @@
       "check_in_date": "2026-05-02",
       "check_out_date": "2026-05-09",
       "nights": 7,
-      "base_nightly": 1398.29,
-      "all_in_nightly": 1594.05,
+      "base_nightly": 422.71,
+      "all_in_nightly": 836.97,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 9788.03,
-      "taxes_total": 1370.32,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 2958.97,
+      "taxes_total": 532.61,
+      "fees_total_excl_taxes": 2367.18,
       "fee_lines": [],
-      "grand_total": 11158.35,
-      "quoted_total": 11158.35,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "grand_total": 5858.76,
+      "quoted_total": 5858.76,
+      "fee_pct_of_base": 0.800001,
+      "tax_pct_of_base": 0.179998,
+      "non_base_pct_of_total": 0.494949,
+      "all_in_multiplier": 1.98,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-05-02&listing_end_date=2026-05-09&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-05-09",
@@ -107,27 +128,26 @@
       "check_in_date": "2026-05-09",
       "check_out_date": "2026-05-16",
       "nights": 7,
-      "base_nightly": 1398.29,
-      "all_in_nightly": 1594.05,
+      "base_nightly": 422.71,
+      "all_in_nightly": 836.97,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 9788.03,
-      "taxes_total": 1370.32,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 2958.97,
+      "taxes_total": 532.61,
+      "fees_total_excl_taxes": 2367.18,
       "fee_lines": [],
-      "grand_total": 11158.35,
-      "quoted_total": 11158.35,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "grand_total": 5858.76,
+      "quoted_total": 5858.76,
+      "fee_pct_of_base": 0.800001,
+      "tax_pct_of_base": 0.179998,
+      "non_base_pct_of_total": 0.494949,
+      "all_in_multiplier": 1.98,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-05-09&listing_end_date=2026-05-16&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-05-16",
@@ -135,27 +155,26 @@
       "check_in_date": "2026-05-16",
       "check_out_date": "2026-05-23",
       "nights": 7,
-      "base_nightly": 1398.29,
-      "all_in_nightly": 1594.05,
+      "base_nightly": 422.71,
+      "all_in_nightly": 836.97,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 9788.03,
-      "taxes_total": 1370.32,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 2958.97,
+      "taxes_total": 532.61,
+      "fees_total_excl_taxes": 2367.18,
       "fee_lines": [],
-      "grand_total": 11158.35,
-      "quoted_total": 11158.35,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "grand_total": 5858.76,
+      "quoted_total": 5858.76,
+      "fee_pct_of_base": 0.800001,
+      "tax_pct_of_base": 0.179998,
+      "non_base_pct_of_total": 0.494949,
+      "all_in_multiplier": 1.98,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-05-16&listing_end_date=2026-05-23&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-05-23",
@@ -170,7 +189,32 @@
       "base_total": 11347,
       "taxes_total": 1575.6,
       "fees_total_excl_taxes": 2751.98,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 538.98
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 15674.58,
       "quoted_total": 15674.58,
       "fee_pct_of_base": 0.242529,
@@ -178,12 +222,11 @@
       "non_base_pct_of_total": 0.276089,
       "all_in_multiplier": 1.381385,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-05-23&listing_end_date=2026-05-30&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-05-30",
@@ -198,7 +241,32 @@
       "base_total": 9763,
       "taxes_total": 1376.49,
       "fees_total_excl_taxes": 2676.74,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 463.74
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 13816.23,
       "quoted_total": 13816.23,
       "fee_pct_of_base": 0.274172,
@@ -206,12 +274,11 @@
       "non_base_pct_of_total": 0.293367,
       "all_in_multiplier": 1.415162,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-05-30&listing_end_date=2026-06-06&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-06-06",
@@ -226,7 +293,32 @@
       "base_total": 10134,
       "taxes_total": 1423.13,
       "fees_total_excl_taxes": 2694.37,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 481.37
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 14251.5,
       "quoted_total": 14251.5,
       "fee_pct_of_base": 0.265874,
@@ -234,12 +326,11 @@
       "non_base_pct_of_total": 0.288917,
       "all_in_multiplier": 1.406306,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-06-06&listing_end_date=2026-06-13&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-06-13",
@@ -254,7 +345,32 @@
       "base_total": 11259,
       "taxes_total": 1564.54,
       "fees_total_excl_taxes": 2747.8,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 534.8
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 15571.34,
       "quoted_total": 15571.34,
       "fee_pct_of_base": 0.244054,
@@ -262,12 +378,11 @@
       "non_base_pct_of_total": 0.276941,
       "all_in_multiplier": 1.383013,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-06-13&listing_end_date=2026-06-20&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-06-20",
@@ -282,7 +397,32 @@
       "base_total": 11868,
       "taxes_total": 1641.09,
       "fees_total_excl_taxes": 2776.73,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 563.73
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 16285.82,
       "quoted_total": 16285.82,
       "fee_pct_of_base": 0.233968,
@@ -290,12 +430,11 @@
       "non_base_pct_of_total": 0.271268,
       "all_in_multiplier": 1.372246,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-06-20&listing_end_date=2026-06-27&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-06-27",
@@ -310,20 +449,44 @@
       "base_total": 11198,
       "taxes_total": 1556.87,
       "fees_total_excl_taxes": 2744.91,
-      "fee_lines": [],
-      "grand_total": 15499.779999999999,
-      "quoted_total": 15499.779999999999,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 531.91
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
+      "grand_total": 15499.78,
+      "quoted_total": 15499.78,
       "fee_pct_of_base": 0.245125,
       "tax_pct_of_base": 0.139031,
       "non_base_pct_of_total": 0.277538,
       "all_in_multiplier": 1.384156,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-06-27&listing_end_date=2026-07-04&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-07-04",
@@ -336,9 +499,34 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 11636,
-      "taxes_total": 1611.9299999999998,
+      "taxes_total": 1611.93,
       "fees_total_excl_taxes": 2765.71,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 552.71
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 16013.64,
       "quoted_total": 16013.64,
       "fee_pct_of_base": 0.237686,
@@ -346,12 +534,11 @@
       "non_base_pct_of_total": 0.273369,
       "all_in_multiplier": 1.376215,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-07-04&listing_end_date=2026-07-11&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-07-11",
@@ -366,7 +553,32 @@
       "base_total": 11879,
       "taxes_total": 1642.47,
       "fees_total_excl_taxes": 2777.25,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 564.25
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 16298.72,
       "quoted_total": 16298.72,
       "fee_pct_of_base": 0.233795,
@@ -374,12 +586,11 @@
       "non_base_pct_of_total": 0.27117,
       "all_in_multiplier": 1.372062,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-07-11&listing_end_date=2026-07-18&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-07-18",
@@ -394,20 +605,44 @@
       "base_total": 11495,
       "taxes_total": 1594.2,
       "fees_total_excl_taxes": 2759.01,
-      "fee_lines": [],
-      "grand_total": 15848.210000000001,
-      "quoted_total": 15848.210000000001,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 546.01
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
+      "grand_total": 15848.21,
+      "quoted_total": 15848.21,
       "fee_pct_of_base": 0.240018,
       "tax_pct_of_base": 0.138686,
       "non_base_pct_of_total": 0.274681,
       "all_in_multiplier": 1.378705,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-07-18&listing_end_date=2026-07-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-07-25",
@@ -422,7 +657,32 @@
       "base_total": 10738,
       "taxes_total": 1499.04,
       "fees_total_excl_taxes": 2723.06,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 510.06
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 14960.1,
       "quoted_total": 14960.1,
       "fee_pct_of_base": 0.253591,
@@ -430,12 +690,11 @@
       "non_base_pct_of_total": 0.282224,
       "all_in_multiplier": 1.393192,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-07-25&listing_end_date=2026-08-01&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-08-01",
@@ -450,20 +709,44 @@
       "base_total": 9813,
       "taxes_total": 1382.78,
       "fees_total_excl_taxes": 2679.12,
-      "fee_lines": [],
-      "grand_total": 13874.900000000001,
-      "quoted_total": 13874.900000000001,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 466.12
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
+      "grand_total": 13874.9,
+      "quoted_total": 13874.9,
       "fee_pct_of_base": 0.273017,
       "tax_pct_of_base": 0.140913,
       "non_base_pct_of_total": 0.292752,
       "all_in_multiplier": 1.413931,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-08-01&listing_end_date=2026-08-08&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-08-08",
@@ -478,7 +761,32 @@
       "base_total": 5921,
       "taxes_total": 893.55,
       "fees_total_excl_taxes": 2494.25,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 281.25
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 9308.8,
       "quoted_total": 9308.8,
       "fee_pct_of_base": 0.421255,
@@ -486,12 +794,11 @@
       "non_base_pct_of_total": 0.363935,
       "all_in_multiplier": 1.572167,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-08-08&listing_end_date=2026-08-15&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-08-15",
@@ -504,9 +811,34 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 5070,
-      "taxes_total": 786.5799999999999,
+      "taxes_total": 786.58,
       "fees_total_excl_taxes": 2453.83,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 240.83
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 8310.41,
       "quoted_total": 8310.41,
       "fee_pct_of_base": 0.48399,
@@ -514,12 +846,11 @@
       "non_base_pct_of_total": 0.389922,
       "all_in_multiplier": 1.639134,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-08-15&listing_end_date=2026-08-22&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-08-22",
@@ -534,7 +865,32 @@
       "base_total": 4592,
       "taxes_total": 726.5,
       "fees_total_excl_taxes": 2431.12,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 218.12
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 7749.62,
       "quoted_total": 7749.62,
       "fee_pct_of_base": 0.529425,
@@ -542,12 +898,11 @@
       "non_base_pct_of_total": 0.407455,
       "all_in_multiplier": 1.687635,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-08-22&listing_end_date=2026-08-29&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-08-29",
@@ -561,8 +916,33 @@
       "quote_unavailable_reason": null,
       "base_total": 4691,
       "taxes_total": 738.94,
-      "fees_total_excl_taxes": 2435.8199999999997,
-      "fee_lines": [],
+      "fees_total_excl_taxes": 2435.82,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 222.82
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 7865.76,
       "quoted_total": 7865.76,
       "fee_pct_of_base": 0.519254,
@@ -570,12 +950,11 @@
       "non_base_pct_of_total": 0.403618,
       "all_in_multiplier": 1.676777,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-08-29&listing_end_date=2026-09-05&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-09-05",
@@ -590,7 +969,32 @@
       "base_total": 5001,
       "taxes_total": 777.91,
       "fees_total_excl_taxes": 2450.55,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 237.55
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 8229.46,
       "quoted_total": 8229.46,
       "fee_pct_of_base": 0.490012,
@@ -598,12 +1002,11 @@
       "non_base_pct_of_total": 0.392305,
       "all_in_multiplier": 1.645563,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-09-05&listing_end_date=2026-09-12&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-09-12",
@@ -617,8 +1020,33 @@
       "quote_unavailable_reason": null,
       "base_total": 5167,
       "taxes_total": 798.77,
-      "fees_total_excl_taxes": 2458.4300000000003,
-      "fee_lines": [],
+      "fees_total_excl_taxes": 2458.43,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 245.43
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 8424.2,
       "quoted_total": 8424.2,
       "fee_pct_of_base": 0.475794,
@@ -626,12 +1054,11 @@
       "non_base_pct_of_total": 0.386648,
       "all_in_multiplier": 1.630385,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-09-12&listing_end_date=2026-09-19&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-09-19",
@@ -646,7 +1073,32 @@
       "base_total": 5480,
       "taxes_total": 838.12,
       "fees_total_excl_taxes": 2473.3,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 260.3
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
       "grand_total": 8791.42,
       "quoted_total": 8791.42,
       "fee_pct_of_base": 0.451332,
@@ -654,12 +1106,11 @@
       "non_base_pct_of_total": 0.376665,
       "all_in_multiplier": 1.604274,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-09-19&listing_end_date=2026-09-26&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:48:05.681Z",
-      "captured_at": "2026-04-12T05:48:05.681Z",
+      "sampled_at": "2026-04-12T14:45:34.203Z",
+      "captured_at": "2026-04-12T14:45:34.203Z",
       "source_listing_id": "4QCiaIECyR",
       "currency": "USD",
       "start_date": "2026-09-26",
@@ -674,16 +1125,40 @@
       "base_total": 5401,
       "taxes_total": 828.19,
       "fees_total_excl_taxes": 2469.55,
-      "fee_lines": [],
-      "grand_total": 8698.740000000002,
-      "quoted_total": 8698.740000000002,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 256.55
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 900
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        }
+      ],
+      "grand_total": 8698.74,
+      "quoted_total": 8698.74,
       "fee_pct_of_base": 0.457239,
       "tax_pct_of_base": 0.15334,
       "non_base_pct_of_total": 0.379105,
       "all_in_multiplier": 1.61058,
       "handoff_url": "https://itinerary.key.co/listings/4QCiaIECyR/checkout?listing_start_date=2026-09-26&listing_end_date=2026-10-03&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     }
   ]
 }

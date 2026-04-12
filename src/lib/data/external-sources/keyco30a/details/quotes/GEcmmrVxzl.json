@@ -2,7 +2,7 @@
   "adapter_key": "keyco30a",
   "external_listing_id": "GEcmmrVxzl",
   "detail_url": "https://key.co/listings/GEcmmrVxzl",
-  "captured_at": "2026-04-12T05:59:29.348Z",
+  "captured_at": "2026-04-12T14:49:08.036Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_sat_to_sat",
   "quote_window_gap_policy": "record_unavailable_without_date_shift",
@@ -11,11 +11,10 @@
   "quote_sample_step_days": 7,
   "quote_nights": 7,
   "quote_max_queries": 24,
-  "endpoint_path": "/api/listing/{listingId}/pricing-context",
   "observations": [
     {
-      "sampled_at": "2026-04-12T05:59:29.347Z",
-      "captured_at": "2026-04-12T05:59:29.347Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-04-18",
@@ -23,27 +22,26 @@
       "check_in_date": "2026-04-18",
       "check_out_date": "2026-04-25",
       "nights": 7,
-      "base_nightly": 1682.79,
-      "all_in_nightly": 1918.38,
+      "base_nightly": 1350,
+      "all_in_nightly": 1984.5,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 11779.53,
-      "taxes_total": 1649.13,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 9450,
+      "taxes_total": 1323,
+      "fees_total_excl_taxes": 3118.5,
       "fee_lines": [],
-      "grand_total": 13428.66,
-      "quoted_total": 13428.66,
-      "fee_pct_of_base": 0,
+      "grand_total": 13891.5,
+      "quoted_total": 13891.5,
+      "fee_pct_of_base": 0.33,
       "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "non_base_pct_of_total": 0.319728,
+      "all_in_multiplier": 1.47,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-04-18&listing_end_date=2026-04-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.347Z",
-      "captured_at": "2026-04-12T05:59:29.347Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-04-25",
@@ -56,9 +54,38 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 9450,
-      "taxes_total": 1343.1399999999999,
+      "taxes_total": 1343.14,
       "fees_total_excl_taxes": 3796.88,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 448.88
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 14590.02,
       "quoted_total": 14590.02,
       "fee_pct_of_base": 0.401786,
@@ -66,12 +93,11 @@
       "non_base_pct_of_total": 0.352297,
       "all_in_multiplier": 1.543917,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-04-25&listing_end_date=2026-05-02&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.347Z",
-      "captured_at": "2026-04-12T05:59:29.347Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-05-02",
@@ -79,27 +105,26 @@
       "check_in_date": "2026-05-02",
       "check_out_date": "2026-05-09",
       "nights": 7,
-      "base_nightly": 1682.79,
-      "all_in_nightly": 1918.38,
+      "base_nightly": 1350,
+      "all_in_nightly": 2079,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 11779.53,
-      "taxes_total": 1649.13,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 9450,
+      "taxes_total": 1323,
+      "fees_total_excl_taxes": 3780,
       "fee_lines": [],
-      "grand_total": 13428.66,
-      "quoted_total": 13428.66,
-      "fee_pct_of_base": 0,
+      "grand_total": 14553,
+      "quoted_total": 14553,
+      "fee_pct_of_base": 0.4,
       "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "non_base_pct_of_total": 0.350649,
+      "all_in_multiplier": 1.54,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-05-02&listing_end_date=2026-05-09&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.347Z",
-      "captured_at": "2026-04-12T05:59:29.347Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-05-09",
@@ -114,7 +139,36 @@
       "base_total": 11270,
       "taxes_total": 1571.92,
       "fees_total_excl_taxes": 3883.33,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 535.33
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 16725.25,
       "quoted_total": 16725.25,
       "fee_pct_of_base": 0.344572,
@@ -122,12 +176,11 @@
       "non_base_pct_of_total": 0.326169,
       "all_in_multiplier": 1.484051,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-05-09&listing_end_date=2026-05-16&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.347Z",
-      "captured_at": "2026-04-12T05:59:29.347Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-05-16",
@@ -135,27 +188,26 @@
       "check_in_date": "2026-05-16",
       "check_out_date": "2026-05-23",
       "nights": 7,
-      "base_nightly": 1682.79,
-      "all_in_nightly": 1918.38,
+      "base_nightly": 1480,
+      "all_in_nightly": 2234.8,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 11779.53,
-      "taxes_total": 1649.13,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 10360,
+      "taxes_total": 1450.4,
+      "fees_total_excl_taxes": 3833.2,
       "fee_lines": [],
-      "grand_total": 13428.66,
-      "quoted_total": 13428.66,
-      "fee_pct_of_base": 0,
+      "grand_total": 15643.6,
+      "quoted_total": 15643.6,
+      "fee_pct_of_base": 0.37,
       "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "non_base_pct_of_total": 0.337748,
+      "all_in_multiplier": 1.51,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-05-16&listing_end_date=2026-05-23&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.347Z",
-      "captured_at": "2026-04-12T05:59:29.347Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-05-23",
@@ -163,27 +215,26 @@
       "check_in_date": "2026-05-23",
       "check_out_date": "2026-05-30",
       "nights": 7,
-      "base_nightly": 1682.79,
-      "all_in_nightly": 1918.38,
+      "base_nightly": 1480,
+      "all_in_nightly": 2234.8,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 11779.53,
-      "taxes_total": 1649.13,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 10360,
+      "taxes_total": 1450.4,
+      "fees_total_excl_taxes": 3833.2,
       "fee_lines": [],
-      "grand_total": 13428.66,
-      "quoted_total": 13428.66,
-      "fee_pct_of_base": 0,
+      "grand_total": 15643.6,
+      "quoted_total": 15643.6,
+      "fee_pct_of_base": 0.37,
       "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "non_base_pct_of_total": 0.337748,
+      "all_in_multiplier": 1.51,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-05-23&listing_end_date=2026-05-30&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-05-30",
@@ -196,9 +247,38 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 22614,
-      "taxes_total": 2997.8599999999997,
+      "taxes_total": 2997.86,
       "fees_total_excl_taxes": 4422.17,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 1074.17
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 30034.03,
       "quoted_total": 30034.03,
       "fee_pct_of_base": 0.19555,
@@ -206,12 +286,11 @@
       "non_base_pct_of_total": 0.247054,
       "all_in_multiplier": 1.328117,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-05-30&listing_end_date=2026-06-06&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-06-06",
@@ -219,27 +298,26 @@
       "check_in_date": "2026-06-06",
       "check_out_date": "2026-06-13",
       "nights": 7,
-      "base_nightly": 1682.79,
-      "all_in_nightly": 1918.38,
+      "base_nightly": 1610,
+      "all_in_nightly": 2382.8,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 11779.53,
-      "taxes_total": 1649.13,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 11270,
+      "taxes_total": 1577.8,
+      "fees_total_excl_taxes": 3831.8,
       "fee_lines": [],
-      "grand_total": 13428.66,
-      "quoted_total": 13428.66,
-      "fee_pct_of_base": 0,
+      "grand_total": 16679.6,
+      "quoted_total": 16679.6,
+      "fee_pct_of_base": 0.34,
       "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "non_base_pct_of_total": 0.324324,
+      "all_in_multiplier": 1.48,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-06-06&listing_end_date=2026-06-13&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-06-13",
@@ -247,27 +325,26 @@
       "check_in_date": "2026-06-13",
       "check_out_date": "2026-06-20",
       "nights": 7,
-      "base_nightly": 1682.79,
-      "all_in_nightly": 1918.38,
+      "base_nightly": 1610,
+      "all_in_nightly": 2382.8,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 11779.53,
-      "taxes_total": 1649.13,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 11270,
+      "taxes_total": 1577.8,
+      "fees_total_excl_taxes": 3831.8,
       "fee_lines": [],
-      "grand_total": 13428.66,
-      "quoted_total": 13428.66,
-      "fee_pct_of_base": 0,
+      "grand_total": 16679.6,
+      "quoted_total": 16679.6,
+      "fee_pct_of_base": 0.34,
       "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "non_base_pct_of_total": 0.324324,
+      "all_in_multiplier": 1.48,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-06-13&listing_end_date=2026-06-20&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-06-20",
@@ -282,7 +359,36 @@
       "base_total": 22647,
       "taxes_total": 3002.01,
       "fees_total_excl_taxes": 4423.73,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 1075.73
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 30072.74,
       "quoted_total": 30072.74,
       "fee_pct_of_base": 0.195334,
@@ -290,12 +396,11 @@
       "non_base_pct_of_total": 0.246926,
       "all_in_multiplier": 1.327891,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-06-20&listing_end_date=2026-06-27&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-06-27",
@@ -310,7 +415,36 @@
       "base_total": 23371,
       "taxes_total": 3093.02,
       "fees_total_excl_taxes": 4458.12,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 1110.12
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 30922.14,
       "quoted_total": 30922.14,
       "fee_pct_of_base": 0.190754,
@@ -318,12 +452,11 @@
       "non_base_pct_of_total": 0.244198,
       "all_in_multiplier": 1.323099,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-06-27&listing_end_date=2026-07-04&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-07-04",
@@ -336,9 +469,38 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 23663,
-      "taxes_total": 3129.7200000000003,
+      "taxes_total": 3129.72,
       "fees_total_excl_taxes": 4471.99,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 1123.99
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 31264.71,
       "quoted_total": 31264.71,
       "fee_pct_of_base": 0.188987,
@@ -346,12 +508,11 @@
       "non_base_pct_of_total": 0.24314,
       "all_in_multiplier": 1.321249,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-07-04&listing_end_date=2026-07-11&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-07-11",
@@ -366,7 +527,36 @@
       "base_total": 22230,
       "taxes_total": 2949.6,
       "fees_total_excl_taxes": 4403.93,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 1055.93
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 29583.53,
       "quoted_total": 29583.53,
       "fee_pct_of_base": 0.198108,
@@ -374,12 +564,11 @@
       "non_base_pct_of_total": 0.248568,
       "all_in_multiplier": 1.330793,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-07-11&listing_end_date=2026-07-18&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-07-18",
@@ -392,9 +581,38 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 22056,
-      "taxes_total": 2927.7200000000003,
+      "taxes_total": 2927.72,
       "fees_total_excl_taxes": 4395.66,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 1047.66
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 29379.38,
       "quoted_total": 29379.38,
       "fee_pct_of_base": 0.199295,
@@ -402,12 +620,11 @@
       "non_base_pct_of_total": 0.249269,
       "all_in_multiplier": 1.332036,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-07-18&listing_end_date=2026-07-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-07-25",
@@ -415,27 +632,26 @@
       "check_in_date": "2026-07-25",
       "check_out_date": "2026-08-01",
       "nights": 7,
-      "base_nightly": 1682.79,
-      "all_in_nightly": 1918.38,
+      "base_nightly": 3203.14,
+      "all_in_nightly": 4260.18,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 11779.53,
-      "taxes_total": 1649.13,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 22421.98,
+      "taxes_total": 2914.86,
+      "fees_total_excl_taxes": 4484.4,
       "fee_lines": [],
-      "grand_total": 13428.66,
-      "quoted_total": 13428.66,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "grand_total": 29821.24,
+      "quoted_total": 29821.24,
+      "fee_pct_of_base": 0.2,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.24812,
+      "all_in_multiplier": 1.33,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-07-25&listing_end_date=2026-08-01&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-08-01",
@@ -443,27 +659,26 @@
       "check_in_date": "2026-08-01",
       "check_out_date": "2026-08-08",
       "nights": 7,
-      "base_nightly": 1682.79,
-      "all_in_nightly": 1918.38,
+      "base_nightly": 3203.14,
+      "all_in_nightly": 4260.18,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 11779.53,
-      "taxes_total": 1649.13,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 22421.98,
+      "taxes_total": 2914.86,
+      "fees_total_excl_taxes": 4484.4,
       "fee_lines": [],
-      "grand_total": 13428.66,
-      "quoted_total": 13428.66,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.14,
-      "non_base_pct_of_total": 0.122807,
-      "all_in_multiplier": 1.14,
+      "grand_total": 29821.24,
+      "quoted_total": 29821.24,
+      "fee_pct_of_base": 0.2,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.24812,
+      "all_in_multiplier": 1.33,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-08-01&listing_end_date=2026-08-08&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-08-08",
@@ -478,7 +693,36 @@
       "base_total": 11155,
       "taxes_total": 1557.46,
       "fees_total_excl_taxes": 3877.86,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 529.86
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 16590.32,
       "quoted_total": 16590.32,
       "fee_pct_of_base": 0.347634,
@@ -486,12 +730,11 @@
       "non_base_pct_of_total": 0.32762,
       "all_in_multiplier": 1.487254,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-08-08&listing_end_date=2026-08-15&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-08-15",
@@ -506,7 +749,36 @@
       "base_total": 9635,
       "taxes_total": 1366.4,
       "fees_total_excl_taxes": 3805.66,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 457.66
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 14807.06,
       "quoted_total": 14807.06,
       "fee_pct_of_base": 0.394983,
@@ -514,12 +786,11 @@
       "non_base_pct_of_total": 0.349297,
       "all_in_multiplier": 1.536799,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-08-15&listing_end_date=2026-08-22&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-08-22",
@@ -534,20 +805,48 @@
       "base_total": 9466,
       "taxes_total": 1345.15,
       "fees_total_excl_taxes": 3797.64,
-      "fee_lines": [],
-      "grand_total": 14608.789999999999,
-      "quoted_total": 14608.789999999999,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 449.64
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
+      "grand_total": 14608.79,
+      "quoted_total": 14608.79,
       "fee_pct_of_base": 0.401187,
       "tax_pct_of_base": 0.142103,
       "non_base_pct_of_total": 0.352034,
       "all_in_multiplier": 1.543291,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-08-22&listing_end_date=2026-08-29&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-08-29",
@@ -562,7 +861,36 @@
       "base_total": 10011,
       "taxes_total": 1413.67,
       "fees_total_excl_taxes": 3823.52,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 475.52
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 15248.19,
       "quoted_total": 15248.19,
       "fee_pct_of_base": 0.381932,
@@ -570,12 +898,11 @@
       "non_base_pct_of_total": 0.343463,
       "all_in_multiplier": 1.523144,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-08-29&listing_end_date=2026-09-05&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-09-05",
@@ -590,20 +917,48 @@
       "base_total": 10864,
       "taxes_total": 1520.88,
       "fees_total_excl_taxes": 3864.04,
-      "fee_lines": [],
-      "grand_total": 16248.920000000002,
-      "quoted_total": 16248.920000000002,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 516.04
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
+      "grand_total": 16248.92,
+      "quoted_total": 16248.92,
       "fee_pct_of_base": 0.355674,
       "tax_pct_of_base": 0.139993,
       "non_base_pct_of_total": 0.331402,
       "all_in_multiplier": 1.495666,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-09-05&listing_end_date=2026-09-12&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-09-12",
@@ -618,7 +973,36 @@
       "base_total": 11419,
       "taxes_total": 1590.65,
       "fees_total_excl_taxes": 3890.4,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 542.4
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 16900.05,
       "quoted_total": 16900.05,
       "fee_pct_of_base": 0.340695,
@@ -626,12 +1010,11 @@
       "non_base_pct_of_total": 0.324322,
       "all_in_multiplier": 1.479994,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-09-12&listing_end_date=2026-09-19&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-09-19",
@@ -646,7 +1029,36 @@
       "base_total": 12140,
       "taxes_total": 1681.28,
       "fees_total_excl_taxes": 3924.65,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 576.65
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 17745.93,
       "quoted_total": 17745.93,
       "fee_pct_of_base": 0.323283,
@@ -654,12 +1066,11 @@
       "non_base_pct_of_total": 0.315899,
       "all_in_multiplier": 1.461773,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-09-19&listing_end_date=2026-09-26&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T05:59:29.348Z",
-      "captured_at": "2026-04-12T05:59:29.348Z",
+      "sampled_at": "2026-04-12T14:49:08.036Z",
+      "captured_at": "2026-04-12T14:49:08.036Z",
       "source_listing_id": "GEcmmrVxzl",
       "currency": "USD",
       "start_date": "2026-09-26",
@@ -672,9 +1083,38 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 12771,
-      "taxes_total": 1760.5900000000001,
+      "taxes_total": 1760.59,
       "fees_total_excl_taxes": 3954.62,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 606.62
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 950
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "Golf Cart Rental",
+          "amount": 770
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 1085
+        }
+      ],
       "grand_total": 18486.21,
       "quoted_total": 18486.21,
       "fee_pct_of_base": 0.309656,
@@ -682,8 +1122,7 @@
       "non_base_pct_of_total": 0.309161,
       "all_in_multiplier": 1.447515,
       "handoff_url": "https://itinerary.key.co/listings/GEcmmrVxzl/checkout?listing_start_date=2026-09-26&listing_end_date=2026-10-03&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     }
   ]
 }

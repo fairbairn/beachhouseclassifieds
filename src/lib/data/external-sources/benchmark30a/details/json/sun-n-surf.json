@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175749",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sun-n-surf"
   },
-  "fetched_at": "2026-04-12T02:06:49.523Z",
+  "fetched_at": "2026-04-12T14:25:36.360Z",
   "title": "3BR 30A Beachfront Vacation Rental with Panoramic Views",
   "h1": "Sun 'n Surf",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sun-n-surf",
@@ -159,8 +159,8 @@
     "location_label": "30A | Private Home | Beach Front",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=339+Pompano+St%20&saddr=Current%20Location",
     "directions_daddr": "339 Pompano St",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.274758,
+    "longitude": -86.009426
   },
   "media_gallery": {
     "image_count": 71,
@@ -264,27 +264,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "sun-n-surf",
-    "captured_at": "2026-04-12T02:06:49.523Z",
+    "captured_at": "2026-04-12T14:25:36.360Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-29",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-30",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-30",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-30:2"
+      },
+      {
+        "start_date": "2026-05-01",
         "end_date": "2026-05-02",
         "min_nights": 3,
-        "raw_rule": "2026-04-30..2026-05-02:3"
+        "raw_rule": "2026-05-01..2026-05-02:3"
       },
       {
         "start_date": "2026-05-03",
@@ -348,15 +348,15 @@
       },
       {
         "start_date": "2026-06-07",
-        "end_date": "2026-06-08",
+        "end_date": "2026-06-09",
         "min_nights": 2,
-        "raw_rule": "2026-06-07..2026-06-08:2"
+        "raw_rule": "2026-06-07..2026-06-09:2"
       },
       {
-        "start_date": "2026-06-09",
+        "start_date": "2026-06-10",
         "end_date": "2026-06-26",
         "min_nights": 3,
-        "raw_rule": "2026-06-09..2026-06-26:3"
+        "raw_rule": "2026-06-10..2026-06-26:3"
       },
       {
         "start_date": "2026-06-27",
@@ -446,16 +446,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUIAAAAAOUUUIAAAAOUUUUUUIOUUUUUIAAAAOUUUUUUUUUUIAAOUUUIAAAAOUUUUUUUUUIOUUUUIAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAOUUIAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUIAAAAAOUUUIAAAAOUUUUUUIOUUUUUIAAAAOUUUUUUUUUUIAAOUUUIAAAAOUUUUUUUUUIOUUUUIAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAOUUIAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -617,7 +617,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-01",
@@ -977,7 +977,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-06-10",
@@ -7030,20 +7030,20 @@
     ],
     "counts": {
       "available": 624,
-      "unavailable": 84,
+      "unavailable": 83,
       "checkin_only": 12,
-      "checkout_only": 11,
+      "checkout_only": 12,
       "other": 0,
       "booking_available": 624,
-      "booking_unavailable": 84,
-      "booking_unknown": 23
+      "booking_unavailable": 83,
+      "booking_unknown": 24
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/sun-n-surf.html",
   "scrape_metrics": {
-    "total_ms": 6603,
-    "page_load_ms": 4051,
-    "extraction_ms": 2409,
+    "total_ms": 4781,
+    "page_load_ms": 3053,
+    "extraction_ms": 1622,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

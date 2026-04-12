@@ -6,7 +6,7 @@
     "ids_tuple": "2261-242009",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/salty-paws-bungalow"
   },
-  "fetched_at": "2026-04-12T02:06:14.601Z",
+  "fetched_at": "2026-04-12T14:25:08.486Z",
   "title": "Dog-Friendly 2BR Vacation Retreat on 30A with a Shared Pool",
   "h1": "Salty Paws Bungalow",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/salty-paws-bungalow",
@@ -134,8 +134,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=198+Somerset+Bridge+Rd.%2C+134%20&saddr=Current%20Location",
     "directions_daddr": "198 Somerset Bridge Rd., 134",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.314593,
+    "longitude": -86.112629
   },
   "media_gallery": {
     "image_count": 50,
@@ -218,15 +218,15 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "salty-paws-bungalow",
-    "captured_at": "2026-04-12T02:06:14.602Z",
+    "captured_at": "2026-04-12T14:25:08.486Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-23",
+        "start_date": "2026-04-24",
         "end_date": "2026-05-13",
         "min_nights": 2,
-        "raw_rule": "2026-04-23..2026-05-13:2"
+        "raw_rule": "2026-04-24..2026-05-13:2"
       },
       {
         "start_date": "2026-05-14",
@@ -976,15 +976,15 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAOUUUUUUIAAAAAAOUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAOUUUUUUIAAAAAAOUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "booking_day_state": "unknown",
         "min_nights_required": null
       },
       {
@@ -1084,7 +1084,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 2
+        "min_nights_required": null
       },
       {
         "date": "2026-04-24",
@@ -7559,21 +7559,21 @@
       }
     ],
     "counts": {
-      "available": 709,
+      "available": 708,
       "unavailable": 16,
       "checkin_only": 3,
-      "checkout_only": 3,
+      "checkout_only": 4,
       "other": 0,
-      "booking_available": 709,
+      "booking_available": 708,
       "booking_unavailable": 16,
-      "booking_unknown": 6
+      "booking_unknown": 7
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/salty-paws-bungalow.html",
   "scrape_metrics": {
-    "total_ms": 6790,
-    "page_load_ms": 4306,
-    "extraction_ms": 2343,
+    "total_ms": 6082,
+    "page_load_ms": 4378,
+    "extraction_ms": 1611,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

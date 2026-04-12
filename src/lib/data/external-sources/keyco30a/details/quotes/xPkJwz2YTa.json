@@ -2,7 +2,7 @@
   "adapter_key": "keyco30a",
   "external_listing_id": "xPkJwz2YTa",
   "detail_url": "https://key.co/listings/xPkJwz2YTa",
-  "captured_at": "2026-04-12T06:21:39.022Z",
+  "captured_at": "2026-04-12T15:01:04.887Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_sat_to_sat",
   "quote_window_gap_policy": "record_unavailable_without_date_shift",
@@ -11,11 +11,10 @@
   "quote_sample_step_days": 7,
   "quote_nights": 7,
   "quote_max_queries": 24,
-  "endpoint_path": "/api/listing/{listingId}/pricing-context",
   "observations": [
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-04-18",
@@ -30,7 +29,32 @@
       "base_total": 3500,
       "taxes_total": 577.23,
       "fees_total_excl_taxes": 2314.25,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 166.25
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 6391.48,
       "quoted_total": 6391.48,
       "fee_pct_of_base": 0.661214,
@@ -38,12 +62,11 @@
       "non_base_pct_of_total": 0.452396,
       "all_in_multiplier": 1.826137,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-04-18&listing_end_date=2026-04-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-04-25",
@@ -51,27 +74,26 @@
       "check_in_date": "2026-04-25",
       "check_out_date": "2026-05-02",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 500,
+      "all_in_nightly": 910,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 3500,
+      "taxes_total": 560,
+      "fees_total_excl_taxes": 2310,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "grand_total": 6370,
+      "quoted_total": 6370,
+      "fee_pct_of_base": 0.66,
+      "tax_pct_of_base": 0.16,
+      "non_base_pct_of_total": 0.450549,
+      "all_in_multiplier": 1.82,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-04-25&listing_end_date=2026-05-02&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-05-02",
@@ -79,27 +101,26 @@
       "check_in_date": "2026-05-02",
       "check_out_date": "2026-05-09",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 500,
+      "all_in_nightly": 910,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 3500,
+      "taxes_total": 560,
+      "fees_total_excl_taxes": 2310,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "grand_total": 6370,
+      "quoted_total": 6370,
+      "fee_pct_of_base": 0.66,
+      "tax_pct_of_base": 0.16,
+      "non_base_pct_of_total": 0.450549,
+      "all_in_multiplier": 1.82,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-05-02&listing_end_date=2026-05-09&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-05-09",
@@ -112,9 +133,34 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 4728,
-      "taxes_total": 731.5899999999999,
+      "taxes_total": 731.59,
       "fees_total_excl_taxes": 2372.58,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 224.58
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 7832.17,
       "quoted_total": 7832.17,
       "fee_pct_of_base": 0.501815,
@@ -122,12 +168,11 @@
       "non_base_pct_of_total": 0.396336,
       "all_in_multiplier": 1.65655,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-05-09&listing_end_date=2026-05-16&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-05-16",
@@ -135,27 +180,26 @@
       "check_in_date": "2026-05-16",
       "check_out_date": "2026-05-23",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 587.71,
+      "all_in_nightly": 1022.62,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 4113.97,
+      "taxes_total": 658.24,
+      "fees_total_excl_taxes": 2386.1,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "grand_total": 7158.31,
+      "quoted_total": 7158.31,
+      "fee_pct_of_base": 0.579999,
+      "tax_pct_of_base": 0.160001,
+      "non_base_pct_of_total": 0.425288,
+      "all_in_multiplier": 1.740001,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-05-16&listing_end_date=2026-05-23&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-05-23",
@@ -163,27 +207,26 @@
       "check_in_date": "2026-05-23",
       "check_out_date": "2026-05-30",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 587.71,
+      "all_in_nightly": 1022.62,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 4113.97,
+      "taxes_total": 658.24,
+      "fees_total_excl_taxes": 2386.1,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "grand_total": 7158.31,
+      "quoted_total": 7158.31,
+      "fee_pct_of_base": 0.579999,
+      "tax_pct_of_base": 0.160001,
+      "non_base_pct_of_total": 0.425288,
+      "all_in_multiplier": 1.740001,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-05-23&listing_end_date=2026-05-30&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-05-30",
@@ -196,9 +239,34 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 7779,
-      "taxes_total": 1115.1100000000001,
+      "taxes_total": 1115.11,
       "fees_total_excl_taxes": 2517.5,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 369.5
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 11411.61,
       "quoted_total": 11411.61,
       "fee_pct_of_base": 0.323628,
@@ -206,12 +274,11 @@
       "non_base_pct_of_total": 0.318326,
       "all_in_multiplier": 1.466976,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-05-30&listing_end_date=2026-06-06&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-06-06",
@@ -219,27 +286,26 @@
       "check_in_date": "2026-06-06",
       "check_out_date": "2026-06-13",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 675.43,
+      "all_in_nightly": 1114.46,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 4728.01,
+      "taxes_total": 709.2,
+      "fees_total_excl_taxes": 2364.01,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
+      "grand_total": 7801.22,
+      "quoted_total": 7801.22,
+      "fee_pct_of_base": 0.500001,
       "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "non_base_pct_of_total": 0.39394,
+      "all_in_multiplier": 1.650001,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-06-06&listing_end_date=2026-06-13&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-06-13",
@@ -252,9 +318,34 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 8018,
-      "taxes_total": 1145.1399999999999,
+      "taxes_total": 1145.14,
       "fees_total_excl_taxes": 2528.86,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 380.86
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 11692,
       "quoted_total": 11692,
       "fee_pct_of_base": 0.315398,
@@ -262,12 +353,11 @@
       "non_base_pct_of_total": 0.314232,
       "all_in_multiplier": 1.458219,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-06-13&listing_end_date=2026-06-20&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-06-20",
@@ -282,7 +372,32 @@
       "base_total": 8671,
       "taxes_total": 1227.22,
       "fees_total_excl_taxes": 2559.87,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 411.87
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 12458.09,
       "quoted_total": 12458.09,
       "fee_pct_of_base": 0.295222,
@@ -290,12 +405,11 @@
       "non_base_pct_of_total": 0.303986,
       "all_in_multiplier": 1.436754,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-06-20&listing_end_date=2026-06-27&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-06-27",
@@ -303,27 +417,26 @@
       "check_in_date": "2026-06-27",
       "check_out_date": "2026-07-04",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 1111.29,
+      "all_in_nightly": 1622.48,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 7779.03,
+      "taxes_total": 1089.06,
+      "fees_total_excl_taxes": 2489.29,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "grand_total": 11357.38,
+      "quoted_total": 11357.38,
+      "fee_pct_of_base": 0.32,
+      "tax_pct_of_base": 0.139999,
+      "non_base_pct_of_total": 0.315068,
+      "all_in_multiplier": 1.46,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-06-27&listing_end_date=2026-07-04&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-07-04",
@@ -331,27 +444,26 @@
       "check_in_date": "2026-07-04",
       "check_out_date": "2026-07-11",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 1111.29,
+      "all_in_nightly": 1622.48,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 7779.03,
+      "taxes_total": 1089.06,
+      "fees_total_excl_taxes": 2489.29,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "grand_total": 11357.38,
+      "quoted_total": 11357.38,
+      "fee_pct_of_base": 0.32,
+      "tax_pct_of_base": 0.139999,
+      "non_base_pct_of_total": 0.315068,
+      "all_in_multiplier": 1.46,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-07-04&listing_end_date=2026-07-11&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-07-11",
@@ -359,27 +471,26 @@
       "check_in_date": "2026-07-11",
       "check_out_date": "2026-07-18",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 1111.29,
+      "all_in_nightly": 1622.48,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 7779.03,
+      "taxes_total": 1089.06,
+      "fees_total_excl_taxes": 2489.29,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "grand_total": 11357.38,
+      "quoted_total": 11357.38,
+      "fee_pct_of_base": 0.32,
+      "tax_pct_of_base": 0.139999,
+      "non_base_pct_of_total": 0.315068,
+      "all_in_multiplier": 1.46,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-07-11&listing_end_date=2026-07-18&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-07-18",
@@ -394,20 +505,44 @@
       "base_total": 8124,
       "taxes_total": 1158.46,
       "fees_total_excl_taxes": 2533.89,
-      "fee_lines": [],
-      "grand_total": 11816.349999999999,
-      "quoted_total": 11816.349999999999,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 385.89
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
+      "grand_total": 11816.35,
+      "quoted_total": 11816.35,
       "fee_pct_of_base": 0.311902,
       "tax_pct_of_base": 0.142597,
       "non_base_pct_of_total": 0.312478,
       "all_in_multiplier": 1.454499,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-07-18&listing_end_date=2026-07-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-07-25",
@@ -420,22 +555,46 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 7833,
-      "taxes_total": 1121.8799999999999,
-      "fees_total_excl_taxes": 2520.0699999999997,
-      "fee_lines": [],
-      "grand_total": 11474.949999999999,
-      "quoted_total": 11474.949999999999,
+      "taxes_total": 1121.88,
+      "fees_total_excl_taxes": 2520.07,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 372.07
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
+      "grand_total": 11474.95,
+      "quoted_total": 11474.95,
       "fee_pct_of_base": 0.321725,
       "tax_pct_of_base": 0.143225,
       "non_base_pct_of_total": 0.317383,
       "all_in_multiplier": 1.46495,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-07-25&listing_end_date=2026-08-01&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-08-01",
@@ -450,7 +609,32 @@
       "base_total": 7342,
       "taxes_total": 1060.17,
       "fees_total_excl_taxes": 2496.75,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 348.75
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 10898.92,
       "quoted_total": 10898.92,
       "fee_pct_of_base": 0.340064,
@@ -458,12 +642,11 @@
       "non_base_pct_of_total": 0.326355,
       "all_in_multiplier": 1.484462,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-08-01&listing_end_date=2026-08-08&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-08-08",
@@ -478,7 +661,32 @@
       "base_total": 4629,
       "taxes_total": 719.14,
       "fees_total_excl_taxes": 2367.88,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 219.88
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 7716.02,
       "quoted_total": 7716.02,
       "fee_pct_of_base": 0.511532,
@@ -486,12 +694,11 @@
       "non_base_pct_of_total": 0.400079,
       "all_in_multiplier": 1.666887,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-08-08&listing_end_date=2026-08-15&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-08-15",
@@ -506,7 +713,32 @@
       "base_total": 4011,
       "taxes_total": 641.47,
       "fees_total_excl_taxes": 2338.52,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 190.52
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 6990.99,
       "quoted_total": 6990.99,
       "fee_pct_of_base": 0.583027,
@@ -514,12 +746,11 @@
       "non_base_pct_of_total": 0.426262,
       "all_in_multiplier": 1.742954,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-08-15&listing_end_date=2026-08-22&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-08-22",
@@ -534,7 +765,32 @@
       "base_total": 3849,
       "taxes_total": 621.1,
       "fees_total_excl_taxes": 2330.83,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 182.83
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 6800.93,
       "quoted_total": 6800.93,
       "fee_pct_of_base": 0.605568,
@@ -542,12 +798,11 @@
       "non_base_pct_of_total": 0.434048,
       "all_in_multiplier": 1.766934,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-08-22&listing_end_date=2026-08-29&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-08-29",
@@ -555,27 +810,26 @@
       "check_in_date": "2026-08-29",
       "check_out_date": "2026-09-05",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 1048.86,
+      "all_in_nightly": 1552.31,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 7342.02,
+      "taxes_total": 1027.88,
+      "fees_total_excl_taxes": 2496.29,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "grand_total": 10866.19,
+      "quoted_total": 10866.19,
+      "fee_pct_of_base": 0.34,
+      "tax_pct_of_base": 0.14,
+      "non_base_pct_of_total": 0.324324,
+      "all_in_multiplier": 1.48,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-08-29&listing_end_date=2026-09-05&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-09-05",
@@ -583,27 +837,26 @@
       "check_in_date": "2026-09-05",
       "check_out_date": "2026-09-12",
       "nights": 7,
-      "base_nightly": 671,
-      "all_in_nightly": 771.65,
+      "base_nightly": 1048.86,
+      "all_in_nightly": 1552.31,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 4697,
-      "taxes_total": 704.55,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 7342.02,
+      "taxes_total": 1027.88,
+      "fees_total_excl_taxes": 2496.29,
       "fee_lines": [],
-      "grand_total": 5401.55,
-      "quoted_total": 5401.55,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.15,
-      "non_base_pct_of_total": 0.130435,
-      "all_in_multiplier": 1.15,
+      "grand_total": 10866.19,
+      "quoted_total": 10866.19,
+      "fee_pct_of_base": 0.34,
+      "tax_pct_of_base": 0.14,
+      "non_base_pct_of_total": 0.324324,
+      "all_in_multiplier": 1.48,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-09-05&listing_end_date=2026-09-12&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-09-12",
@@ -618,20 +871,44 @@
       "base_total": 4082,
       "taxes_total": 650.39,
       "fees_total_excl_taxes": 2341.9,
-      "fee_lines": [],
-      "grand_total": 7074.290000000001,
-      "quoted_total": 7074.290000000001,
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 193.9
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
+      "grand_total": 7074.29,
+      "quoted_total": 7074.29,
       "fee_pct_of_base": 0.573714,
       "tax_pct_of_base": 0.159331,
       "non_base_pct_of_total": 0.422981,
       "all_in_multiplier": 1.733045,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-09-12&listing_end_date=2026-09-19&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-09-19",
@@ -644,9 +921,34 @@
       "quote_available": true,
       "quote_unavailable_reason": null,
       "base_total": 4215,
-      "taxes_total": 667.0999999999999,
+      "taxes_total": 667.1,
       "fees_total_excl_taxes": 2348.21,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 200.21
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 7230.31,
       "quoted_total": 7230.31,
       "fee_pct_of_base": 0.557108,
@@ -654,12 +956,11 @@
       "non_base_pct_of_total": 0.417037,
       "all_in_multiplier": 1.715376,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-09-19&listing_end_date=2026-09-26&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-12T06:21:39.022Z",
-      "captured_at": "2026-04-12T06:21:39.022Z",
+      "sampled_at": "2026-04-12T15:01:04.887Z",
+      "captured_at": "2026-04-12T15:01:04.887Z",
       "source_listing_id": "xPkJwz2YTa",
       "currency": "USD",
       "start_date": "2026-09-26",
@@ -674,7 +975,32 @@
       "base_total": 4666,
       "taxes_total": 723.79,
       "fees_total_excl_taxes": 2369.64,
-      "fee_lines": [],
+      "fee_lines": [
+        {
+          "name": "Administration Fee",
+          "amount": 221.64
+        },
+        {
+          "name": "Bicycle Fee",
+          "amount": 245
+        },
+        {
+          "name": "Booking Fee",
+          "amount": 99
+        },
+        {
+          "name": "Cleaning Fee (Guest)",
+          "amount": 800
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 199
+        },
+        {
+          "name": "HOA Amenity Fee",
+          "amount": 805
+        }
+      ],
       "grand_total": 7759.43,
       "quoted_total": 7759.43,
       "fee_pct_of_base": 0.507853,
@@ -682,8 +1008,7 @@
       "non_base_pct_of_total": 0.398667,
       "all_in_multiplier": 1.662973,
       "handoff_url": "https://itinerary.key.co/listings/xPkJwz2YTa/checkout?listing_start_date=2026-09-26&listing_end_date=2026-10-03&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     }
   ]
 }

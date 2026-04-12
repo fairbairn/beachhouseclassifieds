@@ -2,48 +2,19 @@
   "adapter_key": "keyco30a",
   "external_listing_id": "GEA1yJfqsU",
   "detail_url": "https://key.co/listings/GEA1yJfqsU",
-  "captured_at": "2026-04-05T03:25:09.136Z",
+  "captured_at": "2026-04-12T14:49:09.709Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_sat_to_sat",
   "quote_window_gap_policy": "record_unavailable_without_date_shift",
-  "quote_window_anchor_date": "2026-04-11",
+  "quote_window_anchor_date": "2026-04-18",
   "quote_window_days": 168,
   "quote_sample_step_days": 7,
   "quote_nights": 7,
   "quote_max_queries": 24,
-  "endpoint_path": "/api/listing/{listingId}/pricing-context",
   "observations": [
     {
-      "sampled_at": "2026-04-05T03:25:09.135Z",
-      "captured_at": "2026-04-05T03:25:09.135Z",
-      "source_listing_id": "GEA1yJfqsU",
-      "currency": "USD",
-      "start_date": "2026-04-11",
-      "end_date": "2026-04-18",
-      "check_in_date": "2026-04-11",
-      "check_out_date": "2026-04-18",
-      "nights": 7,
-      "base_nightly": 184.89,
-      "all_in_nightly": 212.62,
-      "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is unavailable - We have no inventory available for the selected dates.",
-      "base_total": 1294.23,
-      "taxes_total": 194.13,
-      "fees_total_excl_taxes": 0,
-      "fee_lines": [],
-      "grand_total": 1488.36,
-      "quoted_total": 1488.36,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.149997,
-      "non_base_pct_of_total": 0.130432,
-      "all_in_multiplier": 1.149997,
-      "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-04-11&listing_end_date=2026-04-18&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
-    },
-    {
-      "sampled_at": "2026-04-05T03:25:09.135Z",
-      "captured_at": "2026-04-05T03:25:09.135Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-04-18",
@@ -57,8 +28,25 @@
       "quote_unavailable_reason": null,
       "base_total": 1360.5,
       "taxes_total": 201.16,
-      "fees_total_excl_taxes": 313.03999999999996,
-      "fee_lines": [],
+      "fees_total_excl_taxes": 313.04,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 34.01
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 68.03
+        }
+      ],
       "grand_total": 1874.7,
       "quoted_total": 1874.7,
       "fee_pct_of_base": 0.230092,
@@ -66,12 +54,11 @@
       "non_base_pct_of_total": 0.274284,
       "all_in_multiplier": 1.377949,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-04-18&listing_end_date=2026-04-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.135Z",
-      "captured_at": "2026-04-05T03:25:09.135Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-04-25",
@@ -86,20 +73,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-04-25&listing_end_date=2026-05-02&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.135Z",
-      "captured_at": "2026-04-05T03:25:09.135Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-05-02",
@@ -114,20 +117,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-05-02&listing_end_date=2026-05-09&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.135Z",
-      "captured_at": "2026-04-05T03:25:09.135Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-05-09",
@@ -142,20 +161,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-05-09&listing_end_date=2026-05-16&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.135Z",
-      "captured_at": "2026-04-05T03:25:09.135Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-05-16",
@@ -170,20 +205,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-05-16&listing_end_date=2026-05-23&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.135Z",
-      "captured_at": "2026-04-05T03:25:09.135Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-05-23",
@@ -198,20 +249,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-05-23&listing_end_date=2026-05-30&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.135Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-05-30",
@@ -226,20 +293,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-05-30&listing_end_date=2026-06-06&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-06-06",
@@ -254,20 +337,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-06-06&listing_end_date=2026-06-13&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-06-13",
@@ -276,26 +375,25 @@
       "check_out_date": "2026-06-20",
       "nights": 7,
       "base_nightly": 184.89,
-      "all_in_nightly": 212.62,
+      "all_in_nightly": 257,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is unavailable - We have no inventory available for the selected dates.",
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
       "base_total": 1294.23,
       "taxes_total": 194.13,
-      "fees_total_excl_taxes": 0,
+      "fees_total_excl_taxes": 310.62,
       "fee_lines": [],
-      "grand_total": 1488.36,
-      "quoted_total": 1488.36,
-      "fee_pct_of_base": 0,
+      "grand_total": 1798.98,
+      "quoted_total": 1798.98,
+      "fee_pct_of_base": 0.240004,
       "tax_pct_of_base": 0.149997,
-      "non_base_pct_of_total": 0.130432,
-      "all_in_multiplier": 1.149997,
+      "non_base_pct_of_total": 0.280576,
+      "all_in_multiplier": 1.39,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-06-13&listing_end_date=2026-06-20&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-06-20",
@@ -304,26 +402,25 @@
       "check_out_date": "2026-06-27",
       "nights": 7,
       "base_nightly": 184.89,
-      "all_in_nightly": 212.62,
+      "all_in_nightly": 257,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is unavailable - We have no inventory available for the selected dates.",
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
       "base_total": 1294.23,
       "taxes_total": 194.13,
-      "fees_total_excl_taxes": 0,
+      "fees_total_excl_taxes": 310.62,
       "fee_lines": [],
-      "grand_total": 1488.36,
-      "quoted_total": 1488.36,
-      "fee_pct_of_base": 0,
+      "grand_total": 1798.98,
+      "quoted_total": 1798.98,
+      "fee_pct_of_base": 0.240004,
       "tax_pct_of_base": 0.149997,
-      "non_base_pct_of_total": 0.130432,
-      "all_in_multiplier": 1.149997,
+      "non_base_pct_of_total": 0.280576,
+      "all_in_multiplier": 1.39,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-06-20&listing_end_date=2026-06-27&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-06-27",
@@ -332,26 +429,25 @@
       "check_out_date": "2026-07-04",
       "nights": 7,
       "base_nightly": 184.89,
-      "all_in_nightly": 212.62,
+      "all_in_nightly": 257,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is unavailable - We have no inventory available for the selected dates.",
+      "quote_unavailable_reason": "Home is unavailable - We have no inventory available for the selected dates.",
       "base_total": 1294.23,
       "taxes_total": 194.13,
-      "fees_total_excl_taxes": 0,
+      "fees_total_excl_taxes": 310.62,
       "fee_lines": [],
-      "grand_total": 1488.36,
-      "quoted_total": 1488.36,
-      "fee_pct_of_base": 0,
+      "grand_total": 1798.98,
+      "quoted_total": 1798.98,
+      "fee_pct_of_base": 0.240004,
       "tax_pct_of_base": 0.149997,
-      "non_base_pct_of_total": 0.130432,
-      "all_in_multiplier": 1.149997,
+      "non_base_pct_of_total": 0.280576,
+      "all_in_multiplier": 1.39,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-06-27&listing_end_date=2026-07-04&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-07-04",
@@ -359,27 +455,43 @@
       "check_in_date": "2026-07-04",
       "check_out_date": "2026-07-11",
       "nights": 7,
-      "base_nightly": 265.45,
-      "all_in_nightly": 353.43,
+      "base_nightly": 246.18,
+      "all_in_nightly": 330.22,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 1858.16,
-      "taxes_total": 265.46,
-      "fees_total_excl_taxes": 350.36,
-      "fee_lines": [],
-      "grand_total": 2473.98,
-      "quoted_total": 2473.98,
-      "fee_pct_of_base": 0.188552,
-      "tax_pct_of_base": 0.142862,
-      "non_base_pct_of_total": 0.248919,
-      "all_in_multiplier": 1.331414,
+      "base_total": 1723.28,
+      "taxes_total": 248.04,
+      "fees_total_excl_taxes": 340.24,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 43.08
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 86.16
+        }
+      ],
+      "grand_total": 2311.56,
+      "quoted_total": 2311.56,
+      "fee_pct_of_base": 0.197437,
+      "tax_pct_of_base": 0.143935,
+      "non_base_pct_of_total": 0.254495,
+      "all_in_multiplier": 1.341372,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-07-04&listing_end_date=2026-07-11&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-07-11",
@@ -387,27 +499,43 @@
       "check_in_date": "2026-07-11",
       "check_out_date": "2026-07-18",
       "nights": 7,
-      "base_nightly": 240.53,
-      "all_in_nightly": 323.42,
+      "base_nightly": 234.89,
+      "all_in_nightly": 316.62,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 1683.73,
-      "taxes_total": 242.93,
-      "fees_total_excl_taxes": 337.28,
-      "fee_lines": [],
-      "grand_total": 2263.94,
-      "quoted_total": 2263.94,
-      "fee_pct_of_base": 0.200317,
-      "tax_pct_of_base": 0.144281,
-      "non_base_pct_of_total": 0.256283,
-      "all_in_multiplier": 1.344598,
+      "base_total": 1644.2,
+      "taxes_total": 237.82,
+      "fees_total_excl_taxes": 334.32,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 41.11
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 82.21
+        }
+      ],
+      "grand_total": 2216.34,
+      "quoted_total": 2216.34,
+      "fee_pct_of_base": 0.203333,
+      "tax_pct_of_base": 0.144642,
+      "non_base_pct_of_total": 0.258146,
+      "all_in_multiplier": 1.347975,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-07-11&listing_end_date=2026-07-18&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-07-18",
@@ -415,27 +543,43 @@
       "check_in_date": "2026-07-18",
       "check_out_date": "2026-07-25",
       "nights": 7,
-      "base_nightly": 243.02,
-      "all_in_nightly": 326.42,
+      "base_nightly": 236.05,
+      "all_in_nightly": 318.02,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 1701.15,
-      "taxes_total": 245.18,
-      "fees_total_excl_taxes": 338.59000000000003,
-      "fee_lines": [],
-      "grand_total": 2284.92,
-      "quoted_total": 2284.92,
-      "fee_pct_of_base": 0.199036,
-      "tax_pct_of_base": 0.144126,
-      "non_base_pct_of_total": 0.255488,
-      "all_in_multiplier": 1.343162,
+      "base_total": 1652.34,
+      "taxes_total": 238.87,
+      "fees_total_excl_taxes": 334.93,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 41.31
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 82.62
+        }
+      ],
+      "grand_total": 2226.14,
+      "quoted_total": 2226.14,
+      "fee_pct_of_base": 0.2027,
+      "tax_pct_of_base": 0.144565,
+      "non_base_pct_of_total": 0.257756,
+      "all_in_multiplier": 1.347265,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-07-18&listing_end_date=2026-07-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-07-25",
@@ -443,27 +587,43 @@
       "check_in_date": "2026-07-25",
       "check_out_date": "2026-08-01",
       "nights": 7,
-      "base_nightly": 234.06,
-      "all_in_nightly": 315.62,
+      "base_nightly": 221.6,
+      "all_in_nightly": 300.62,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 1638.39,
-      "taxes_total": 237.07,
-      "fees_total_excl_taxes": 333.88,
-      "fee_lines": [],
-      "grand_total": 2209.34,
-      "quoted_total": 2209.34,
-      "fee_pct_of_base": 0.203785,
-      "tax_pct_of_base": 0.144697,
-      "non_base_pct_of_total": 0.258426,
-      "all_in_multiplier": 1.348482,
+      "base_total": 1551.17,
+      "taxes_total": 225.8,
+      "fees_total_excl_taxes": 327.34,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 38.78
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 77.56
+        }
+      ],
+      "grand_total": 2104.31,
+      "quoted_total": 2104.31,
+      "fee_pct_of_base": 0.211028,
+      "tax_pct_of_base": 0.145568,
+      "non_base_pct_of_total": 0.262861,
+      "all_in_multiplier": 1.356595,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-07-25&listing_end_date=2026-08-01&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-08-01",
@@ -471,27 +631,43 @@
       "check_in_date": "2026-08-01",
       "check_out_date": "2026-08-08",
       "nights": 7,
-      "base_nightly": 233.89,
-      "all_in_nightly": 315.42,
+      "base_nightly": 216.11,
+      "all_in_nightly": 294.01,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 1637.2300000000002,
-      "taxes_total": 236.92,
-      "fees_total_excl_taxes": 333.79,
-      "fee_lines": [],
-      "grand_total": 2207.9400000000005,
-      "quoted_total": 2207.9400000000005,
-      "fee_pct_of_base": 0.203875,
-      "tax_pct_of_base": 0.144708,
-      "non_base_pct_of_total": 0.258481,
-      "all_in_multiplier": 1.348583,
+      "base_total": 1512.8,
+      "taxes_total": 220.84,
+      "fees_total_excl_taxes": 324.46,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 37.82
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 75.64
+        }
+      ],
+      "grand_total": 2058.1,
+      "quoted_total": 2058.1,
+      "fee_pct_of_base": 0.214476,
+      "tax_pct_of_base": 0.145981,
+      "non_base_pct_of_total": 0.264953,
+      "all_in_multiplier": 1.360457,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-08-01&listing_end_date=2026-08-08&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-08-08",
@@ -499,27 +675,43 @@
       "check_in_date": "2026-08-08",
       "check_out_date": "2026-08-15",
       "nights": 7,
-      "base_nightly": 187.05,
-      "all_in_nightly": 259.01,
+      "base_nightly": 186.22,
+      "all_in_nightly": 258.01,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 1309.3399999999997,
-      "taxes_total": 194.55,
-      "fees_total_excl_taxes": 309.2,
-      "fee_lines": [],
-      "grand_total": 1813.0899999999997,
-      "quoted_total": 1813.0899999999997,
-      "fee_pct_of_base": 0.23615,
-      "tax_pct_of_base": 0.148586,
-      "non_base_pct_of_total": 0.277841,
-      "all_in_multiplier": 1.384736,
+      "base_total": 1303.53,
+      "taxes_total": 193.8,
+      "fees_total_excl_taxes": 308.77,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.59
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 65.18
+        }
+      ],
+      "grand_total": 1806.1,
+      "quoted_total": 1806.1,
+      "fee_pct_of_base": 0.236872,
+      "tax_pct_of_base": 0.148673,
+      "non_base_pct_of_total": 0.278263,
+      "all_in_multiplier": 1.385545,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-08-08&listing_end_date=2026-08-15&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-08-15",
@@ -534,20 +726,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-08-15&listing_end_date=2026-08-22&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-08-22",
@@ -562,20 +770,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-08-22&listing_end_date=2026-08-29&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-08-29",
@@ -590,20 +814,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-08-29&listing_end_date=2026-09-05&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-09-05",
@@ -611,27 +851,43 @@
       "check_in_date": "2026-09-05",
       "check_out_date": "2026-09-12",
       "nights": 7,
-      "base_nightly": 185.22,
-      "all_in_nightly": 256.81,
+      "base_nightly": 184.89,
+      "all_in_nightly": 256.41,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 1296.5499999999997,
-      "taxes_total": 192.9,
-      "fees_total_excl_taxes": 308.24,
-      "fee_lines": [],
-      "grand_total": 1797.6899999999998,
-      "quoted_total": 1797.6899999999998,
-      "fee_pct_of_base": 0.237739,
-      "tax_pct_of_base": 0.148779,
-      "non_base_pct_of_total": 0.278769,
-      "all_in_multiplier": 1.386518,
+      "base_total": 1294.23,
+      "taxes_total": 192.6,
+      "fees_total_excl_taxes": 308.07,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
+      "fee_pct_of_base": 0.238033,
+      "tax_pct_of_base": 0.148814,
+      "non_base_pct_of_total": 0.27894,
+      "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-09-05&listing_end_date=2026-09-12&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-09-12",
@@ -646,20 +902,36 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-09-12&listing_end_date=2026-09-19&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:25:09.136Z",
-      "captured_at": "2026-04-05T03:25:09.136Z",
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
       "source_listing_id": "GEA1yJfqsU",
       "currency": "USD",
       "start_date": "2026-09-19",
@@ -674,16 +946,76 @@
       "base_total": 1294.23,
       "taxes_total": 192.6,
       "fees_total_excl_taxes": 308.07,
-      "fee_lines": [],
-      "grand_total": 1794.8999999999999,
-      "quoted_total": 1794.8999999999999,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
       "fee_pct_of_base": 0.238033,
       "tax_pct_of_base": 0.148814,
       "non_base_pct_of_total": 0.27894,
       "all_in_multiplier": 1.386848,
       "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-09-19&listing_end_date=2026-09-26&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-04-12T14:49:09.709Z",
+      "captured_at": "2026-04-12T14:49:09.709Z",
+      "source_listing_id": "GEA1yJfqsU",
+      "currency": "USD",
+      "start_date": "2026-09-26",
+      "end_date": "2026-10-03",
+      "check_in_date": "2026-09-26",
+      "check_out_date": "2026-10-03",
+      "nights": 7,
+      "base_nightly": 184.89,
+      "all_in_nightly": 256.41,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 1294.23,
+      "taxes_total": 192.6,
+      "fees_total_excl_taxes": 308.07,
+      "fee_lines": [
+        {
+          "name": "Departure Cleaning",
+          "amount": 162
+        },
+        {
+          "name": "Canyons Resort Village Management Association",
+          "amount": 32.36
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 49
+        },
+        {
+          "name": "Miscellaneous",
+          "amount": 64.71
+        }
+      ],
+      "grand_total": 1794.9,
+      "quoted_total": 1794.9,
+      "fee_pct_of_base": 0.238033,
+      "tax_pct_of_base": 0.148814,
+      "non_base_pct_of_total": 0.27894,
+      "all_in_multiplier": 1.386848,
+      "handoff_url": "https://itinerary.key.co/listings/GEA1yJfqsU/checkout?listing_start_date=2026-09-26&listing_end_date=2026-10-03&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
+      "source": "quote_api"
     }
   ]
 }

@@ -6,7 +6,7 @@
     "ids_tuple": "2261-238824",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/boho-beach-house"
   },
-  "fetched_at": "2026-04-12T02:04:10.923Z",
+  "fetched_at": "2026-04-12T14:23:32.002Z",
   "title": "Stunning 3BR 30A Vacation Home Close to the Beach",
   "h1": "Boho Beach House",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/boho-beach-house",
@@ -156,8 +156,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=214+Valdare+Ln%20&saddr=Current%20Location",
     "directions_daddr": "214 Valdare Ln",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.28042,
+    "longitude": -86.00556
   },
   "media_gallery": {
     "image_count": 83,
@@ -273,21 +273,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "boho-beach-house",
-    "captured_at": "2026-04-12T02:04:10.923Z",
+    "captured_at": "2026-04-12T14:23:32.002Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2026-04-29",
         "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "raw_rule": "2026-04-13..2026-04-29:2"
       },
       {
         "start_date": "2026-04-30",
@@ -845,16 +845,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUIAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUIAAAOUUUIOUUUUIAAAAAAAAAAAAAOUUUUIAAAAOUUUIAAAAAAAAAAAAAOUUUUUUIOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUIAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUIAAAOUUUIOUUUUIAAAAAAAAAAAAAOUUUUIAAAAOUUUIAAAAAAAAAAAAAOUUUUUUIOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -7429,20 +7429,20 @@
     ],
     "counts": {
       "available": 677,
-      "unavailable": 37,
+      "unavailable": 36,
       "checkin_only": 9,
-      "checkout_only": 8,
+      "checkout_only": 9,
       "other": 0,
       "booking_available": 677,
-      "booking_unavailable": 37,
-      "booking_unknown": 17
+      "booking_unavailable": 36,
+      "booking_unknown": 18
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/boho-beach-house.html",
   "scrape_metrics": {
-    "total_ms": 6040,
-    "page_load_ms": 4257,
-    "extraction_ms": 1510,
+    "total_ms": 4772,
+    "page_load_ms": 3380,
+    "extraction_ms": 1306,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

@@ -25,6 +25,9 @@ type CliOptions = {
   maxAttempts: number;
   skipFreshQuotes: boolean;
   freshHours: number;
+  backfillOnly: boolean;
+  backfillWindowHours: number;
+  dryRun: boolean;
 };
 
 type CanonicalIndexEntry = {
@@ -37,6 +40,22 @@ type ListingSeed = {
   externalListingId: string;
   detailUrl: string;
   quoteContext: Record<string, unknown> | null;
+};
+
+type QuoteBackfillStatus = {
+  listingId: string;
+  shouldProcess: boolean;
+  reason:
+    | "missing_quote_sidecar"
+    | "missing_quote_captured_at"
+    | "missing_detail_json"
+    | "missing_detail_fetched_at"
+    | "quote_before_detail_window"
+    | "quote_after_detail_window"
+    | "quote_within_detail_window";
+  detailFetchedAt: string | null;
+  quoteCapturedAt: string | null;
+  deltaMinutes: number | null;
 };
 
 type EstimatedPricing = {
@@ -103,6 +122,7 @@ const DEFAULT_ENDPOINT_PATH = "/api/nrbe/reservation-quotes.json";
 const DEFAULT_TAX_PCT = 0.12;
 const DEFAULT_BASE_NIGHTLY = 500;
 const DEFAULT_FRESH_HOURS = 24;
+const DEFAULT_BACKFILL_WINDOW_HOURS = 1;
 
 function parseArgs(
   argv: string[],
@@ -132,6 +152,19 @@ function parseArgs(
     Number(process.env.QUOTE_CAPTURE_FRESH_HOURS ?? DEFAULT_FRESH_HOURS) ||
       DEFAULT_FRESH_HOURS,
   );
+  let backfillOnly =
+    process.env.QUOTE_CAPTURE_BACKFILL_ONLY === "1" ||
+    process.env.QUOTE_CAPTURE_BACKFILL_ONLY === "true";
+  let backfillWindowHours = Math.max(
+    1,
+    Number(
+      process.env.QUOTE_CAPTURE_BACKFILL_WINDOW_HOURS ??
+        DEFAULT_BACKFILL_WINDOW_HOURS,
+    ) || DEFAULT_BACKFILL_WINDOW_HOURS,
+  );
+  let dryRun =
+    process.env.QUOTE_CAPTURE_DRY_RUN === "1" ||
+    process.env.QUOTE_CAPTURE_DRY_RUN === "true";
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -242,6 +275,25 @@ function parseArgs(
       index += 1;
       continue;
     }
+
+    if (arg === "--backfill-only") {
+      backfillOnly = true;
+      continue;
+    }
+
+    if (arg === "--backfill-window-hours" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        backfillWindowHours = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
   }
 
   return {
@@ -255,6 +307,9 @@ function parseArgs(
     maxAttempts: Math.max(1, maxAttempts),
     skipFreshQuotes,
     freshHours: Math.max(1, freshHours),
+    backfillOnly,
+    backfillWindowHours: Math.max(1, backfillWindowHours),
+    dryRun,
   };
 }
 
@@ -286,6 +341,156 @@ async function hasFreshQuoteSidecar(input: {
   } catch {
     return false;
   }
+}
+
+async function loadDetailFetchedAt(input: {
+  detailsJsonDir: string;
+  externalListingId: string;
+}): Promise<string | null> {
+  const detailPath = resolve(
+    input.detailsJsonDir,
+    `${input.externalListingId}.json`,
+  );
+  try {
+    const raw = await readFile(detailPath, "utf8");
+    const parsed = JSON.parse(raw) as { fetched_at?: unknown };
+    if (typeof parsed.fetched_at !== "string" || !parsed.fetched_at.trim()) {
+      return null;
+    }
+    return parsed.fetched_at;
+  } catch {
+    return null;
+  }
+}
+
+async function loadQuoteCapturedAt(input: {
+  quotesDir: string;
+  externalListingId: string;
+}): Promise<string | null> {
+  const quotePath = resolve(input.quotesDir, `${input.externalListingId}.json`);
+  try {
+    const raw = await readFile(quotePath, "utf8");
+    const parsed = JSON.parse(raw) as { captured_at?: unknown };
+    if (typeof parsed.captured_at !== "string" || !parsed.captured_at.trim()) {
+      return null;
+    }
+    return parsed.captured_at;
+  } catch {
+    return null;
+  }
+}
+
+function evaluateQuoteBackfillStatus(input: {
+  listingId: string;
+  detailFetchedAt: string | null;
+  quoteCapturedAt: string | null;
+  backfillWindowHours: number;
+}): QuoteBackfillStatus {
+  const { listingId, detailFetchedAt, quoteCapturedAt, backfillWindowHours } =
+    input;
+
+  if (quoteCapturedAt === null) {
+    return {
+      listingId,
+      shouldProcess: true,
+      reason: "missing_quote_sidecar",
+      detailFetchedAt,
+      quoteCapturedAt,
+      deltaMinutes: null,
+    };
+  }
+
+  if (!quoteCapturedAt.trim()) {
+    return {
+      listingId,
+      shouldProcess: true,
+      reason: "missing_quote_captured_at",
+      detailFetchedAt,
+      quoteCapturedAt,
+      deltaMinutes: null,
+    };
+  }
+
+  if (detailFetchedAt === null) {
+    return {
+      listingId,
+      shouldProcess: true,
+      reason: "missing_detail_json",
+      detailFetchedAt,
+      quoteCapturedAt,
+      deltaMinutes: null,
+    };
+  }
+
+  if (!detailFetchedAt.trim()) {
+    return {
+      listingId,
+      shouldProcess: true,
+      reason: "missing_detail_fetched_at",
+      detailFetchedAt,
+      quoteCapturedAt,
+      deltaMinutes: null,
+    };
+  }
+
+  const detailMs = Date.parse(detailFetchedAt);
+  if (!Number.isFinite(detailMs)) {
+    return {
+      listingId,
+      shouldProcess: true,
+      reason: "missing_detail_fetched_at",
+      detailFetchedAt,
+      quoteCapturedAt,
+      deltaMinutes: null,
+    };
+  }
+
+  const quoteMs = Date.parse(quoteCapturedAt);
+  if (!Number.isFinite(quoteMs)) {
+    return {
+      listingId,
+      shouldProcess: true,
+      reason: "missing_quote_captured_at",
+      detailFetchedAt,
+      quoteCapturedAt,
+      deltaMinutes: null,
+    };
+  }
+
+  const windowMs = backfillWindowHours * 60 * 60 * 1000;
+  const deltaMinutes = Math.round((quoteMs - detailMs) / (60 * 1000));
+  const diffMs = quoteMs - detailMs;
+
+  if (diffMs < -windowMs) {
+    return {
+      listingId,
+      shouldProcess: true,
+      reason: "quote_before_detail_window",
+      detailFetchedAt,
+      quoteCapturedAt,
+      deltaMinutes,
+    };
+  }
+
+  if (diffMs > windowMs) {
+    return {
+      listingId,
+      shouldProcess: true,
+      reason: "quote_after_detail_window",
+      detailFetchedAt,
+      quoteCapturedAt,
+      deltaMinutes,
+    };
+  }
+
+  return {
+    listingId,
+    shouldProcess: false,
+    reason: "quote_within_detail_window",
+    detailFetchedAt,
+    quoteCapturedAt,
+    deltaMinutes,
+  };
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -984,6 +1189,81 @@ export async function runRuntimeAdapterQuoteCli(
     progress?.tick(
       `quote freshness evaluation complete skipped_fresh=${skippedFresh}/${listings.length} to_process=${listingsToProcess.length}`,
     );
+  }
+
+  let backfillStatuses: QuoteBackfillStatus[] = [];
+  if (options.backfillOnly) {
+    progress?.phase(
+      `evaluating quote backfill candidates (window_hours=${options.backfillWindowHours})`,
+    );
+
+    for (const listing of listingsToProcess) {
+      const detailFetchedAt = await loadDetailFetchedAt({
+        detailsJsonDir: resolve(
+          process.cwd(),
+          "src",
+          "lib",
+          "data",
+          "external-sources",
+          config.adapterKey,
+          "details",
+          "json",
+        ),
+        externalListingId: listing.externalListingId,
+      });
+      const quoteCapturedAt = await loadQuoteCapturedAt({
+        quotesDir,
+        externalListingId: listing.externalListingId,
+      });
+
+      backfillStatuses.push(
+        evaluateQuoteBackfillStatus({
+          listingId: listing.externalListingId,
+          detailFetchedAt,
+          quoteCapturedAt,
+          backfillWindowHours: options.backfillWindowHours,
+        }),
+      );
+    }
+
+    const byReason = new Map<string, number>();
+    for (const status of backfillStatuses) {
+      byReason.set(status.reason, (byReason.get(status.reason) ?? 0) + 1);
+    }
+
+    listingsToProcess = listingsToProcess.filter((listing) => {
+      const status = backfillStatuses.find(
+        (entry) => entry.listingId === listing.externalListingId,
+      );
+      return status?.shouldProcess ?? false;
+    });
+
+    const reasonsSummary = Array.from(byReason.entries())
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([reason, count]) => `${reason}:${count}`)
+      .join(", ");
+
+    progress?.tick(
+      `quote backfill evaluation complete candidates=${listingsToProcess.length}/${backfillStatuses.length}${reasonsSummary ? ` reasons=[${reasonsSummary}]` : ""}`,
+    );
+  }
+
+  if (options.dryRun) {
+    const selectedIds = listingsToProcess.map(
+      (listing) => listing.externalListingId,
+    );
+    const sampleIds = selectedIds.slice(0, 20).join(", ");
+
+    progress?.success(
+      [
+        `quote-capture dry-run complete adapter=${config.adapterKey}`,
+        `selected=${selectedIds.length}`,
+        `skipped_fresh=${skippedFresh}`,
+        `backfill_only=${options.backfillOnly}`,
+        `sample_listing_ids=${sampleIds || "none"}`,
+      ].join(" "),
+    );
+    return;
   }
 
   if (listingsToProcess.length === 0) {

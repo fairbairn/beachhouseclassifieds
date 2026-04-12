@@ -49,6 +49,8 @@ export type RunOptions = {
   quoteMaxQueries: number | null;
   quoteAnchorDate: string | null;
   quoteObservationRetryDelaysMs: string | null;
+  allowCanonicalPrune: boolean;
+  allowEmptyCanonicalIndexPrune: boolean;
   logLevel: ScraperLogLevel;
 };
 

@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175689",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/margarita-days"
   },
-  "fetched_at": "2026-04-12T02:05:29.862Z",
+  "fetched_at": "2026-04-12T14:24:31.204Z",
   "title": "Charming 1BR Beach Cottage on 30A with a Shared Pool",
   "h1": "Margarita Days",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/margarita-days",
@@ -150,8 +150,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=24+Tupelo+St++-+Behind+Red+Hse%20&saddr=Current%20Location",
     "directions_daddr": "24 Tupelo St - Behind Red Hse",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.319066,
+    "longitude": -86.134281
   },
   "media_gallery": {
     "image_count": 30,
@@ -214,21 +214,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "margarita-days",
-    "captured_at": "2026-04-12T02:05:29.863Z",
+    "captured_at": "2026-04-12T14:24:31.204Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-22",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-23",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-22:1"
+        "raw_rule": "2026-04-12..2026-04-23:1"
       },
       {
-        "start_date": "2026-04-23",
+        "start_date": "2026-04-24",
         "end_date": "2026-05-13",
         "min_nights": 2,
-        "raw_rule": "2026-04-23..2026-05-13:2"
+        "raw_rule": "2026-04-24..2026-05-13:2"
       },
       {
         "start_date": "2026-05-14",
@@ -966,15 +966,15 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAOUUUUUUIAOUUUUUIAOUUUIAAOUUUUUIAAAAAAAAAOUUUIAAAAOUUUIAAAAAOUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAAAAAAOUUIAAAAAAAAAOUUIAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAOUUUUUUIAOUUUUUIAOUUUIAAOUUUUUIAAAAAAAAAOUUUIAAAAOUUUIAAAAAOUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAAAAAAOUUIAAAAAAAAAOUUIAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
         "min_nights_required": 1
       },
       {
@@ -1074,7 +1074,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-24",
@@ -7550,20 +7550,20 @@
     ],
     "counts": {
       "available": 560,
-      "unavailable": 146,
+      "unavailable": 145,
       "checkin_only": 13,
-      "checkout_only": 12,
+      "checkout_only": 13,
       "other": 0,
       "booking_available": 560,
-      "booking_unavailable": 146,
-      "booking_unknown": 25
+      "booking_unavailable": 145,
+      "booking_unknown": 26
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/margarita-days.html",
   "scrape_metrics": {
-    "total_ms": 6785,
-    "page_load_ms": 4744,
-    "extraction_ms": 1897,
+    "total_ms": 3909,
+    "page_load_ms": 2698,
+    "extraction_ms": 1121,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

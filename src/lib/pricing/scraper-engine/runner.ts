@@ -145,6 +145,8 @@ function buildUsageText(defaultAnchorUrl: string): string {
     "  --quote-max-queries <n>             Override quote sample count",
     "  --quote-anchor-date <YYYY-MM-DD>    Override quote anchor date",
     "  --quote-observation-retry-delays-ms <csv> Override quote retry delays",
+    "  --allow-canonical-prune             Allow canonical index entry removals (manual approval)",
+    "  --allow-empty-canonical-index-prune Allow writing an empty canonical index (manual approval)",
     "  --mode, --refresh-mode, --detail-url, --detail-urls-file,",
     "  --refresh-known, --discover-only, --max-listings, --start-index,",
     "  --max-scroll-steps, --scroll-pause-ms, --network-idle-wait-ms",
@@ -154,6 +156,84 @@ function buildUsageText(defaultAnchorUrl: string): string {
     "Mode constraints:",
     "  --target-detail-url cannot be combined with --target-detail-urls-file, --target-refresh-known, or --run-discover-only.",
   ].join("\n");
+}
+
+type CanonicalIndexEntry = {
+  detail_url: string;
+  external_listing_id: string;
+  quote_context?: Record<string, unknown>;
+};
+
+async function loadCanonicalIndexUrls(
+  canonicalIndexPath: string,
+): Promise<Set<string>> {
+  try {
+    const raw = await readFile(canonicalIndexPath, "utf8");
+    const parsed = JSON.parse(raw) as Array<{ detail_url?: unknown }>;
+    if (!Array.isArray(parsed)) {
+      return new Set();
+    }
+
+    return new Set(
+      parsed
+        .map((entry) =>
+          typeof entry?.detail_url === "string"
+            ? normalizeLink(entry.detail_url)
+            : "",
+        )
+        .filter(Boolean),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+async function writeCanonicalIndexWithPruneGuard(params: {
+  canonicalIndexPath: string;
+  canonicalIndex: CanonicalIndexEntry[];
+  allowCanonicalPrune: boolean;
+  allowEmptyCanonicalIndexPrune: boolean;
+}): Promise<void> {
+  const {
+    canonicalIndexPath,
+    canonicalIndex,
+    allowCanonicalPrune,
+    allowEmptyCanonicalIndexPrune,
+  } = params;
+
+  const existingUrls = await loadCanonicalIndexUrls(canonicalIndexPath);
+  const nextUrls = new Set(
+    canonicalIndex
+      .map((entry) => normalizeLink(entry.detail_url))
+      .filter(Boolean),
+  );
+
+  const prunedUrls = Array.from(existingUrls).filter(
+    (url) => !nextUrls.has(url),
+  );
+  if (prunedUrls.length > 0 && !allowCanonicalPrune) {
+    const sample = prunedUrls.slice(0, 5).join(", ");
+    throw new Error(
+      `Canonical index prune blocked for ${canonicalIndexPath}: existing=${existingUrls.size}, next=${nextUrls.size}, pruned=${prunedUrls.length}. ` +
+        `Manual approval required. Re-run with --allow-canonical-prune. Sample removed URLs: ${sample}`,
+    );
+  }
+
+  if (
+    nextUrls.size === 0 &&
+    existingUrls.size > 0 &&
+    !allowEmptyCanonicalIndexPrune
+  ) {
+    throw new Error(
+      `Empty canonical index write blocked for ${canonicalIndexPath}: existing entries=${existingUrls.size}, next entries=0. ` +
+        "Manual approval required. Re-run with --allow-empty-canonical-index-prune after verification.",
+    );
+  }
+
+  await writeTextFileDurable(
+    canonicalIndexPath,
+    `${JSON.stringify(canonicalIndex, null, 2)}\n`,
+  );
 }
 
 async function writeTextFileDurable(
@@ -241,6 +321,14 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
   let quoteMaxQueries: number | null = null;
   let quoteAnchorDate: string | null = null;
   let quoteObservationRetryDelaysMs: string | null = null;
+  const allowCanonicalPruneFromEnv =
+    process.env.SCRAPER_ALLOW_CANONICAL_PRUNE === "1" ||
+    process.env.SCRAPER_ALLOW_CANONICAL_PRUNE === "true";
+  let allowCanonicalPrune = allowCanonicalPruneFromEnv;
+  const allowEmptyCanonicalIndexPruneFromEnv =
+    process.env.SCRAPER_ALLOW_EMPTY_CANONICAL_INDEX_PRUNE === "1" ||
+    process.env.SCRAPER_ALLOW_EMPTY_CANONICAL_INDEX_PRUNE === "true";
+  let allowEmptyCanonicalIndexPrune = allowEmptyCanonicalIndexPruneFromEnv;
   const skipFreshFromEnv =
     process.env.SCRAPER_SKIP_FRESH_DETAILS === "1" ||
     process.env.SCRAPER_SKIP_FRESH_DETAILS === "true";
@@ -628,6 +716,16 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
       continue;
     }
 
+    if (arg === "--allow-canonical-prune") {
+      allowCanonicalPrune = true;
+      continue;
+    }
+
+    if (arg === "--allow-empty-canonical-index-prune") {
+      allowEmptyCanonicalIndexPrune = true;
+      continue;
+    }
+
     if (arg.startsWith("--")) {
       errors.push(`Unknown flag: ${arg}`);
       continue;
@@ -727,6 +825,8 @@ function parseRunOptions(argv: string[], defaultAnchorUrl: string): RunOptions {
     quoteMaxQueries,
     quoteAnchorDate,
     quoteObservationRetryDelaysMs,
+    allowCanonicalPrune,
+    allowEmptyCanonicalIndexPrune,
     logLevel: "default",
   };
 }
@@ -1244,7 +1344,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         ? "discover-only"
         : "collection-discovery";
   progress.info(
-    `target_scope=${targetScope}, inventory_mode=${options.inventoryMode}, run_mode=${options.mode}, refresh_mode=${options.refreshMode}, avail_horizon_days=${availabilityHorizonDays}, avail_max_calendar_months=${maxCalendarAdvanceMonths}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}, detail_timeout_ms=${options.detailTimeoutMs}, detail_retry_attempts=${options.detailRetryAttempts}, detail_retry_delay_ms=${options.detailRetryDelayMs}, skip_existing_details=${options.skipExistingDetails}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}`,
+    `target_scope=${targetScope}, inventory_mode=${options.inventoryMode}, run_mode=${options.mode}, refresh_mode=${options.refreshMode}, avail_horizon_days=${availabilityHorizonDays}, avail_max_calendar_months=${maxCalendarAdvanceMonths}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}, detail_timeout_ms=${options.detailTimeoutMs}, detail_retry_attempts=${options.detailRetryAttempts}, detail_retry_delay_ms=${options.detailRetryDelayMs}, skip_existing_details=${options.skipExistingDetails}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}, allow_canonical_prune=${options.allowCanonicalPrune}, allow_empty_canonical_index_prune=${options.allowEmptyCanonicalIndexPrune}`,
   );
 
   if (options.quoteWindowDays !== null) {
@@ -1564,10 +1664,12 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
             : {}),
         }))
         .sort((left, right) => left.detail_url.localeCompare(right.detail_url));
-      await writeTextFileDurable(
+      await writeCanonicalIndexWithPruneGuard({
         canonicalIndexPath,
-        `${JSON.stringify(canonicalIndex, null, 2)}\n`,
-      );
+        canonicalIndex,
+        allowCanonicalPrune: options.allowCanonicalPrune,
+        allowEmptyCanonicalIndexPrune: options.allowEmptyCanonicalIndexPrune,
+      });
       progress.info(
         `canonical index updated: ${toProjectRelativePath(canonicalIndexPath, root)} entries=${canonicalIndex.length}`,
       );
@@ -1821,10 +1923,12 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
           ...(quoteContext ? { quote_context: quoteContext } : {}),
         };
       });
-      await writeTextFileDurable(
+      await writeCanonicalIndexWithPruneGuard({
         canonicalIndexPath,
-        `${JSON.stringify(canonicalIndex, null, 2)}\n`,
-      );
+        canonicalIndex,
+        allowCanonicalPrune: options.allowCanonicalPrune,
+        allowEmptyCanonicalIndexPrune: options.allowEmptyCanonicalIndexPrune,
+      });
       progress.info(
         `canonical index updated: ${toProjectRelativePath(canonicalIndexPath, root)} entries=${canonicalIndex.length}`,
       );

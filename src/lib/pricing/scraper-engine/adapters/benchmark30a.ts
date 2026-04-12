@@ -138,7 +138,7 @@ type BenchmarkDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://www.benchmark30a.com/emerald-coast-vacation-rentals/30a?name=Private%20Home#fq=%7B!tag%3DRiotSolrWidget%2CRiotSolrFacetList-sm_nid%24rc_core_term_type%24name%7Dsm_nid%24rc_core_term_type%24name%3A%22Private%20Home%22&q=im_nid%24rc_core_term_landing_pages%24tid%3A%22115%22";
+  "https://www.benchmark30a.com/emerald-coast-vacation-rentals/30a#fq=%7B!tag%3DRiotSolrWidget%2CRiotSolrFacetList-sm_nid%24rc_core_term_type%24name%7Dsm_nid%24rc_core_term_type%24name%3A%22Private%20Home%22&q=im_nid%24rc_core_term_landing_pages%24tid%3A%22115%22";
 const OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
@@ -202,27 +202,81 @@ function extractLatLngFromHtml(html: string): {
   latitude: number | null;
   longitude: number | null;
 } {
-  const latCandidates = Array.from(
-    html.matchAll(/"latitude"\s*:\s*(-?\d{1,2}(?:\.\d+)?)/gi),
-  )
-    .map((match) => Number(match[1]))
-    .filter((value) => Number.isFinite(value) && value >= -90 && value <= 90);
-
-  const lonCandidates = Array.from(
-    html.matchAll(/"longitude"\s*:\s*(-?\d{1,3}(?:\.\d+)?)/gi),
-  )
-    .map((match) => Number(match[1]))
-    .filter((value) => Number.isFinite(value) && value >= -180 && value <= 180);
-
-  const floridaLat = latCandidates.find((value) => value >= 24 && value <= 32);
-  const floridaLon = lonCandidates.find(
-    (value) => value >= -88 && value <= -79,
-  );
-
-  return {
-    latitude: floridaLat ?? latCandidates[0] ?? null,
-    longitude: floridaLon ?? lonCandidates[0] ?? null,
+  const toFiniteInRange = (
+    raw: string | undefined,
+    min: number,
+    max: number,
+  ): number | null => {
+    if (!raw) {
+      return null;
+    }
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+      return null;
+    }
+    return parsed;
   };
+
+  // Prefer explicit field_location coordinates from the detail payload object.
+  const fieldLocationMatch = html.match(
+    /"field_location"[\s\S]{0,1500}?"latitude"\s*:\s*"?(-?\d{1,2}(?:\.\d+)?)"?\s*,\s*"longitude"\s*:\s*"?(-?\d{1,3}(?:\.\d+)?)"?/i,
+  );
+  if (fieldLocationMatch) {
+    const latitude = toFiniteInRange(fieldLocationMatch[1], -90, 90);
+    const longitude = toFiniteInRange(fieldLocationMatch[2], -180, 180);
+    if (latitude !== null && longitude !== null) {
+      return { latitude, longitude };
+    }
+  }
+
+  const pairCandidates = Array.from(
+    html.matchAll(
+      /"latitude"\s*:\s*"?(-?\d{1,2}(?:\.\d+)?)"?\s*,\s*"longitude"\s*:\s*"?(-?\d{1,3}(?:\.\d+)?)"?/gi,
+    ),
+  )
+    .map((match) => ({
+      latitude: toFiniteInRange(match[1], -90, 90),
+      longitude: toFiniteInRange(match[2], -180, 180),
+    }))
+    .filter(
+      (candidate): candidate is { latitude: number; longitude: number } =>
+        candidate.latitude !== null && candidate.longitude !== null,
+    );
+
+  const floridaPair = pairCandidates.find(
+    (candidate) =>
+      candidate.latitude >= 24 &&
+      candidate.latitude <= 32 &&
+      candidate.longitude >= -88 &&
+      candidate.longitude <= -79,
+  );
+  if (floridaPair) {
+    return floridaPair;
+  }
+
+  const ptMatch = html.match(
+    /"pt"\s*:\s*"\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*"/i,
+  );
+  if (ptMatch) {
+    const latitude = toFiniteInRange(ptMatch[1], -90, 90);
+    const longitude = toFiniteInRange(ptMatch[2], -180, 180);
+    if (latitude !== null && longitude !== null) {
+      return { latitude, longitude };
+    }
+  }
+
+  const llMatch = html.match(
+    /maps\.google\.com\/maps\?[^"']*\bll=(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/i,
+  );
+  if (llMatch) {
+    const latitude = toFiniteInRange(llMatch[1], -90, 90);
+    const longitude = toFiniteInRange(llMatch[2], -180, 180);
+    if (latitude !== null && longitude !== null) {
+      return { latitude, longitude };
+    }
+  }
+
+  return pairCandidates[0] ?? { latitude: null, longitude: null };
 }
 
 function extractExternalListingId(detailUrl: string): string {
@@ -681,22 +735,72 @@ async function discoverListings(
       return false;
     });
 
+  const runIncrementalScrollPass = async (): Promise<void> => {
+    await page.evaluate(async () => {
+      const wait = (ms: number): Promise<void> =>
+        new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+
+      const scroller =
+        document.scrollingElement ?? document.documentElement ?? document.body;
+      const stepPx = Math.max(260, Math.floor(window.innerHeight * 0.8));
+
+      let unchangedTicks = 0;
+      let previousHeight = scroller.scrollHeight;
+      let previousTop = scroller.scrollTop;
+
+      for (let tick = 0; tick < 32; tick += 1) {
+        window.scrollBy(0, stepPx);
+        window.dispatchEvent(new Event("scroll"));
+        await wait(220);
+
+        const topNow = scroller.scrollTop;
+        const heightNow = scroller.scrollHeight;
+        const nearBottom =
+          topNow + window.innerHeight >= Math.max(0, heightNow - 220);
+
+        if (nearBottom) {
+          // Let infinite-list observers and async fetches hydrate additional cards.
+          await wait(420);
+          window.dispatchEvent(new Event("scroll"));
+          await wait(260);
+        }
+
+        const progressed = topNow > previousTop || heightNow > previousHeight;
+        if (!progressed) {
+          unchangedTicks += 1;
+        } else {
+          unchangedTicks = 0;
+        }
+
+        previousTop = topNow;
+        previousHeight = heightNow;
+
+        if (unchangedTicks >= 6 && nearBottom) {
+          break;
+        }
+      }
+    });
+  };
+
   let discovery = await readDiscoverySnapshot();
-  let previousCount = discovery.rows.length;
+  const cumulativeLinks = new Map<string, string>();
+  for (const row of discovery.rows) {
+    cumulativeLinks.set(normalizeDetailUrl(row.href), row.text);
+  }
+
+  let previousCount = cumulativeLinks.size;
   let stagnantSteps = 0;
   const effectiveScrollSteps = Math.max(12, maxScrollSteps);
   const effectivePauseMs = Math.max(500, Math.min(scrollPauseMs, 1600));
 
   if (discovery.expectedCount !== null) {
     reportProgress(
-      `discovery expected count from page=${discovery.expectedCount}, initial dom captured=${discovery.rows.length}`,
+      `discovery expected count from page=${discovery.expectedCount}, initial dom captured=${discovery.rows.length}, cumulative=${cumulativeLinks.size}`,
     );
   }
 
   for (let step = 0; step < effectiveScrollSteps; step += 1) {
-    await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight);
-    });
+    await runIncrementalScrollPass();
     await page.waitForTimeout(effectivePauseMs);
 
     const clickedLoadMore = await clickLoadMoreIfVisible();
@@ -705,7 +809,10 @@ async function discoverListings(
     }
 
     discovery = await readDiscoverySnapshot();
-    const combinedCount = new Set(discovery.rows.map((row) => row.href)).size;
+    for (const row of discovery.rows) {
+      cumulativeLinks.set(normalizeDetailUrl(row.href), row.text);
+    }
+    const combinedCount = cumulativeLinks.size;
 
     if (combinedCount > previousCount) {
       reportProgress(
@@ -715,11 +822,24 @@ async function discoverListings(
       );
       previousCount = combinedCount;
       stagnantSteps = 0;
+      if (
+        discovery.expectedCount !== null &&
+        combinedCount >= discovery.expectedCount
+      ) {
+        break;
+      }
       continue;
     }
 
     stagnantSteps += 1;
-    if (stagnantSteps >= 4) {
+    if (
+      discovery.expectedCount !== null &&
+      combinedCount >= discovery.expectedCount
+    ) {
+      break;
+    }
+
+    if (stagnantSteps >= 20) {
       break;
     }
   }
@@ -728,6 +848,9 @@ async function discoverListings(
   const finalDom = await readDiscoverySnapshot();
 
   const merged = new Map<string, string>();
+  for (const [href, text] of cumulativeLinks.entries()) {
+    merged.set(href, text);
+  }
   for (const row of finalDom.rows) {
     merged.set(normalizeDetailUrl(row.href), row.text);
   }

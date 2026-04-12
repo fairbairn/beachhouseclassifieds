@@ -6,7 +6,7 @@
     "ids_tuple": "2261-275577",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sunset-sawgrass"
   },
-  "fetched_at": "2026-04-12T02:06:50.532Z",
+  "fetched_at": "2026-04-12T14:25:37.372Z",
   "title": "Sunset on Sawgrass | Benchmark Management Vacation Rental",
   "h1": "Sunset on Sawgrass",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sunset-sawgrass",
@@ -150,8 +150,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=75+Sawgrass+Lane%20&saddr=Current%20Location",
     "directions_daddr": "75 Sawgrass Lane",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.313946,
+    "longitude": -86.109274
   },
   "media_gallery": {
     "image_count": 81,
@@ -265,27 +265,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "sunset-sawgrass",
-    "captured_at": "2026-04-12T02:06:50.532Z",
+    "captured_at": "2026-04-12T14:25:37.372Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-17",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-17:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-18",
-        "end_date": "2027-10-03",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-19",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-19:2"
+      },
+      {
+        "start_date": "2026-04-20",
+        "end_date": "2027-10-05",
         "min_nights": 3,
-        "raw_rule": "2026-04-18..2027-10-03:3"
+        "raw_rule": "2026-04-20..2027-10-05:3"
       }
     ],
     "window_start": "2026-04-12",
@@ -297,16 +297,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "IAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUIAAAAAAAAAAOUUUUUUUUUUUUIAAOUUUIAAAAAAAAAOUUUIAAAAAAAAAAOUUUUIAAAAAAAAOUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUIAAAAAAAAAAOUUUUUUUUUUUUIAAOUUUIAAAAAAAAAOUUUIAAAAAAAAAAOUUUUIAAAAAAAAOUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "I",
+        "status_code": "O",
         "is_available": false,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": true,
         "booking_day_state": "unknown",
-        "min_nights_required": 2
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -360,7 +360,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-04-19",
@@ -369,7 +369,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-04-20",
@@ -5166,7 +5166,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": null
+        "min_nights_required": 3
       },
       {
         "date": "2027-10-05",
@@ -5175,7 +5175,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": null
+        "min_nights_required": 3
       },
       {
         "date": "2027-10-06",
@@ -6882,8 +6882,8 @@
     "counts": {
       "available": 684,
       "unavailable": 34,
-      "checkin_only": 7,
-      "checkout_only": 6,
+      "checkin_only": 6,
+      "checkout_only": 7,
       "other": 0,
       "booking_available": 684,
       "booking_unavailable": 34,
@@ -6892,9 +6892,9 @@
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/sunset-sawgrass.html",
   "scrape_metrics": {
-    "total_ms": 6876,
-    "page_load_ms": 4337,
-    "extraction_ms": 2336,
+    "total_ms": 4531,
+    "page_load_ms": 2796,
+    "extraction_ms": 1645,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

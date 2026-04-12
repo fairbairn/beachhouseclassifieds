@@ -6,7 +6,7 @@
     "ids_tuple": "2261-272773",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/walking-waves"
   },
-  "fetched_at": "2026-04-12T02:06:59.381Z",
+  "fetched_at": "2026-04-12T14:25:42.753Z",
   "title": "Walking on Waves | Benchmark Management Vacation Rental",
   "h1": "Walking on Waves",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/walking-waves",
@@ -166,8 +166,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=35+Dune+Rosemary+Ct%20&saddr=Current%20Location",
     "directions_daddr": "35 Dune Rosemary Ct",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.313854,
+    "longitude": -86.105498
   },
   "media_gallery": {
     "image_count": 65,
@@ -265,21 +265,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "walking-waves",
-    "captured_at": "2026-04-12T02:06:59.381Z",
+    "captured_at": "2026-04-12T14:25:42.753Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-26",
-        "end_date": "2026-06-03",
+        "start_date": "2026-04-27",
+        "end_date": "2026-06-04",
         "min_nights": 2,
-        "raw_rule": "2026-04-26..2026-06-03:2"
+        "raw_rule": "2026-04-27..2026-06-04:2"
       },
       {
-        "start_date": "2026-06-04",
+        "start_date": "2026-06-05",
         "end_date": "2027-10-05",
         "min_nights": 3,
-        "raw_rule": "2026-06-04..2027-10-05:3"
+        "raw_rule": "2026-06-05..2027-10-05:3"
       }
     ],
     "window_start": "2026-04-12",
@@ -291,14 +291,14 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "IAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAOUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAOUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "I",
+        "status_code": "O",
         "is_available": false,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": true,
         "booking_day_state": "unknown",
         "min_nights_required": null
       },
@@ -426,7 +426,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 2
+        "min_nights_required": null
       },
       {
         "date": "2026-04-27",
@@ -777,7 +777,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-06-05",
@@ -6876,8 +6876,8 @@
     "counts": {
       "available": 719,
       "unavailable": 7,
-      "checkin_only": 3,
-      "checkout_only": 2,
+      "checkin_only": 2,
+      "checkout_only": 3,
       "other": 0,
       "booking_available": 719,
       "booking_unavailable": 7,
@@ -6886,9 +6886,9 @@
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/walking-waves.html",
   "scrape_metrics": {
-    "total_ms": 6801,
-    "page_load_ms": 3562,
-    "extraction_ms": 3097,
+    "total_ms": 4923,
+    "page_load_ms": 3213,
+    "extraction_ms": 1614,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

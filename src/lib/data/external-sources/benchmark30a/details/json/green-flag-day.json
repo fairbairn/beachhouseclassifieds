@@ -6,7 +6,7 @@
     "ids_tuple": "2261-230687",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/green-flag-day"
   },
-  "fetched_at": "2026-04-12T02:04:55.715Z",
+  "fetched_at": "2026-04-12T14:24:03.299Z",
   "title": "30A Vacation Home with 3BRs and a Community Pool",
   "h1": "Green Flag Day",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/green-flag-day",
@@ -134,8 +134,8 @@
     "location_label": "30A | Private Home | Beach Side",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=59+Eastern+Lake+Ct%20&saddr=Current%20Location",
     "directions_daddr": "59 Eastern Lake Ct",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.310762,
+    "longitude": -86.088193
   },
   "media_gallery": {
     "image_count": 44,
@@ -212,21 +212,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "green-flag-day",
-    "captured_at": "2026-04-12T02:04:55.715Z",
+    "captured_at": "2026-04-12T14:24:03.299Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2026-04-29",
         "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "raw_rule": "2026-04-13..2026-04-29:2"
       },
       {
         "start_date": "2026-04-30",
@@ -502,16 +502,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UIAAAAAAAAOUUIOUUUUUIOUUUUUIAAAAOUUIAAAAAOUUUUUUUUUUUUUIAAAOOOOUUUUUUUUUUUUUIOOOOOOOUUUUUUIOOOOOOAOOOOOOAOOOOOOAOOOOOOOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OIAAAAAAAAOUUIOUUUUUIOUUUUUIAAAAOUUIAAAAAOUUUUUUUUUUUUUIAAAOOOOUUUUUUUUUUUUUIOOOOOOOUUUUUUIOOOOOOAOOOOOOAOOOOOOAOOOOOOOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -7086,20 +7086,20 @@
     ],
     "counts": {
       "available": 542,
-      "unavailable": 82,
+      "unavailable": 81,
       "checkin_only": 11,
-      "checkout_only": 96,
+      "checkout_only": 97,
       "other": 0,
       "booking_available": 542,
-      "booking_unavailable": 82,
-      "booking_unknown": 107
+      "booking_unavailable": 81,
+      "booking_unknown": 108
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/green-flag-day.html",
   "scrape_metrics": {
-    "total_ms": 4923,
-    "page_load_ms": 4047,
-    "extraction_ms": 701,
+    "total_ms": 3828,
+    "page_load_ms": 2793,
+    "extraction_ms": 917,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

@@ -6,7 +6,7 @@
     "ids_tuple": "2261-269291",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/all-decked-out-30a"
   },
-  "fetched_at": "2026-04-12T02:03:48.201Z",
+  "fetched_at": "2026-04-12T14:23:11.874Z",
   "title": "All Decked Out on 30A | Benchmark Management Vacation Rental",
   "h1": "All Decked Out on 30A",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/all-decked-out-30a",
@@ -179,8 +179,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=95+Betty+St%20&saddr=Current%20Location",
     "directions_daddr": "95 Betty St",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.345615,
+    "longitude": -86.219491
   },
   "media_gallery": {
     "image_count": 89,
@@ -302,21 +302,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "all-decked-out-30a",
-    "captured_at": "2026-04-12T02:03:48.201Z",
+    "captured_at": "2026-04-12T14:23:11.874Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2026-05-21",
         "min_nights": 3,
-        "raw_rule": "2026-04-12..2026-05-21:3"
+        "raw_rule": "2026-04-13..2026-05-21:3"
       },
       {
         "start_date": "2026-05-24",
@@ -430,16 +430,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAOUUUUUUIAOUUUUUIOUUUUUUUUUUUUUUUUUUUIOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAOUUUUUUIAOUUUUUIOUUUUUUUUUUUUUUUUUUUIOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -7013,21 +7013,21 @@
       }
     ],
     "counts": {
-      "available": 639,
+      "available": 638,
       "unavailable": 44,
       "checkin_only": 6,
-      "checkout_only": 42,
+      "checkout_only": 43,
       "other": 0,
-      "booking_available": 639,
+      "booking_available": 638,
       "booking_unavailable": 44,
-      "booking_unknown": 48
+      "booking_unknown": 49
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/all-decked-out-30a.html",
   "scrape_metrics": {
-    "total_ms": 6524,
-    "page_load_ms": 3970,
-    "extraction_ms": 2391,
+    "total_ms": 4089,
+    "page_load_ms": 2886,
+    "extraction_ms": 1108,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

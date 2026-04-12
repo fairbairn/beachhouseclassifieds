@@ -983,9 +983,17 @@ function parseAvailabilityCalendarFromHtml(
 
     const rawKey = String(
       (entry as { availabilityKey?: unknown }).availabilityKey ?? "",
-    ).trim();
+    )
+      .trim()
+      .toUpperCase();
     const availabilityKey: KeycoDayCode =
-      rawKey === "A" || rawKey === "U" || rawKey === "M" ? rawKey : "X";
+      rawKey === "A" || rawKey === "E"
+        ? "A"
+        : rawKey === "U"
+          ? "U"
+          : rawKey === "M"
+            ? "M"
+            : "X";
 
     const rawMinStay = Number((entry as { minStay?: unknown }).minStay);
     const minStay =
@@ -2373,29 +2381,6 @@ async function fetchDetail(
       });
     }
 
-    const dayCodes = availabilityDays.map((day) => day.status_code).join("");
-
-    const counts = {
-      available: availabilityDays.filter((day) => day.status_code === "A")
-        .length,
-      unavailable: availabilityDays.filter((day) => day.status_code === "U")
-        .length,
-      checkin_only: 0,
-      checkout_only: 0,
-      other: availabilityDays.filter(
-        (day) => day.status_code === "M" || day.status_code === "X",
-      ).length,
-      booking_available: availabilityDays.filter(
-        (day) => day.booking_day_state === "bookable",
-      ).length,
-      booking_unavailable: availabilityDays.filter(
-        (day) => day.booking_day_state === "blocked",
-      ).length,
-      booking_unknown: availabilityDays.filter(
-        (day) => day.booking_day_state === "unknown",
-      ).length,
-    };
-
     const ratesWindowDays = Math.max(
       168,
       Number(process.env.KEYCO30A_RATES_WINDOW_DAYS ?? "168") || 168,
@@ -2765,6 +2750,26 @@ async function fetchDetail(
       "API_RATE_CALLS",
       `done calls=${rateObservations.length} sampled_rates=${sampledRatesByDate.size}`,
     );
+
+    // Backfill availability from pricing-context quote outcomes when embedded calendar
+    // does not provide future coverage for the normalized window.
+    for (const observation of rateObservations) {
+      const day = availabilityByDate.get(observation.start_date);
+      if (!day) {
+        continue;
+      }
+
+      const inferredStatus: KeycoDayCode = observation.is_available ? "A" : "U";
+      day.status_code = inferredStatus;
+      day.is_available = inferredStatus === "A";
+      day.is_available_for_checkin = inferredStatus === "A";
+      day.is_available_for_checkout = inferredStatus === "A";
+      day.booking_day_state = inferredStatus === "A" ? "bookable" : "blocked";
+      if (observation.nights > 0) {
+        day.min_nights_required = observation.nights;
+      }
+    }
+
     logStage(
       "API_AVAIL_REFRESH",
       "skipped (availability sourced from embedded calendar in full mode)",
@@ -2837,6 +2842,29 @@ async function fetchDetail(
             100,
         ) / 100
       : null;
+
+    const dayCodes = availabilityDays.map((day) => day.status_code).join("");
+
+    const counts = {
+      available: availabilityDays.filter((day) => day.status_code === "A")
+        .length,
+      unavailable: availabilityDays.filter((day) => day.status_code === "U")
+        .length,
+      checkin_only: 0,
+      checkout_only: 0,
+      other: availabilityDays.filter(
+        (day) => day.status_code === "M" || day.status_code === "X",
+      ).length,
+      booking_available: availabilityDays.filter(
+        (day) => day.booking_day_state === "bookable",
+      ).length,
+      booking_unavailable: availabilityDays.filter(
+        (day) => day.booking_day_state === "blocked",
+      ).length,
+      booking_unknown: availabilityDays.filter(
+        (day) => day.booking_day_state === "unknown",
+      ).length,
+    };
 
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,

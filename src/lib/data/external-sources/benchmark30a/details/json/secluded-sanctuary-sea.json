@@ -6,7 +6,7 @@
     "ids_tuple": "2261-274889",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/secluded-sanctuary-sea"
   },
-  "fetched_at": "2026-04-12T02:06:29.239Z",
+  "fetched_at": "2026-04-12T14:25:19.109Z",
   "title": "Secluded Sanctuary By the Sea | Benchmark Management Vacation Rental",
   "h1": "Secluded Sanctuary By the Sea",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/secluded-sanctuary-sea",
@@ -179,8 +179,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=387+Seabreeze+Blvd%20&saddr=Current%20Location",
     "directions_daddr": "387 Seabreeze Blvd",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.296455,
+    "longitude": -86.050306
   },
   "media_gallery": {
     "image_count": 71,
@@ -284,27 +284,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "secluded-sanctuary-sea",
-    "captured_at": "2026-04-12T02:06:29.239Z",
+    "captured_at": "2026-04-12T14:25:19.109Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-19",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-19:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-20",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-20",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-20:2"
+      },
+      {
+        "start_date": "2026-04-21",
         "end_date": "2026-06-12",
         "min_nights": 3,
-        "raw_rule": "2026-04-20..2026-06-12:3"
+        "raw_rule": "2026-04-21..2026-06-12:3"
       },
       {
         "start_date": "2026-06-13",
@@ -328,16 +328,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "IAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAOUUUUIOUUUUUUIAOUUUIOUUUUUUUUUUUUUUUUUUIAAOUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAOUUUUIOUUUUUUIAOUUUIOUUUUUUUUUUUUUUUUUUIAAOUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "I",
+        "status_code": "O",
         "is_available": false,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": true,
         "booking_day_state": "unknown",
-        "min_nights_required": 2
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -409,7 +409,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-04-21",
@@ -6913,8 +6913,8 @@
     "counts": {
       "available": 646,
       "unavailable": 68,
-      "checkin_only": 9,
-      "checkout_only": 8,
+      "checkin_only": 8,
+      "checkout_only": 9,
       "other": 0,
       "booking_available": 646,
       "booking_unavailable": 68,
@@ -6923,9 +6923,9 @@
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/secluded-sanctuary-sea.html",
   "scrape_metrics": {
-    "total_ms": 5678,
-    "page_load_ms": 3512,
-    "extraction_ms": 2016,
+    "total_ms": 4081,
+    "page_load_ms": 2961,
+    "extraction_ms": 967,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

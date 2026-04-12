@@ -6,7 +6,7 @@
     "ids_tuple": "2261-253026",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/aidens-seagrove-serenity"
   },
-  "fetched_at": "2026-04-12T02:03:47.039Z",
+  "fetched_at": "2026-04-12T14:23:11.024Z",
   "title": "3‑BR Vacation Home in 30A Seagrove Beach with Communal Pool",
   "h1": "Aiden's Seagrove Serenity",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/aidens-seagrove-serenity",
@@ -158,8 +158,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=69+Sawgrass+Lane%20&saddr=Current%20Location",
     "directions_daddr": "69 Sawgrass Lane",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.31393,
+    "longitude": -86.109522
   },
   "media_gallery": {
     "image_count": 42,
@@ -234,21 +234,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "aidens-seagrove-serenity",
-    "captured_at": "2026-04-12T02:03:47.039Z",
+    "captured_at": "2026-04-12T14:23:11.024Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2027-10-04",
         "min_nights": 4,
-        "raw_rule": "2026-04-12..2027-10-04:4"
+        "raw_rule": "2026-04-13..2027-10-04:4"
       }
     ],
     "window_start": "2026-04-12",
@@ -260,16 +260,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUIAAAAAAAAOUUIAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAOUUUUIAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUUIAAAAAAAAOUUIAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAOUUUUIAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 4
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -6844,20 +6844,20 @@
     ],
     "counts": {
       "available": 678,
-      "unavailable": 38,
+      "unavailable": 37,
       "checkin_only": 8,
-      "checkout_only": 7,
+      "checkout_only": 8,
       "other": 0,
       "booking_available": 678,
-      "booking_unavailable": 38,
-      "booking_unknown": 15
+      "booking_unavailable": 37,
+      "booking_unknown": 16
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/aidens-seagrove-serenity.html",
   "scrape_metrics": {
-    "total_ms": 5896,
-    "page_load_ms": 3602,
-    "extraction_ms": 2161,
+    "total_ms": 6061,
+    "page_load_ms": 4189,
+    "extraction_ms": 1786,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

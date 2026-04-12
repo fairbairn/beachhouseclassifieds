@@ -232,6 +232,48 @@ function parseFirstNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseLabeledMetricNumber(
+  source: string,
+  labels: string[],
+): number | null {
+  const compact = source
+    .toLowerCase()
+    .replace(/\b(\d+)\s*(?:and|&)\s*(?:a\s+)?half\b/g, "$1.5")
+    .replace(/\b(\d+)\s*1\/2\b/g, "$1.5")
+    .replace(/[^a-z0-9.\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!compact) {
+    return null;
+  }
+
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const beforeLabel = compact.match(
+      new RegExp(`(\\d+(?:\\.\\d+)?)\\s*${escaped}\\b`, "i"),
+    );
+    if (beforeLabel) {
+      const parsed = Number(beforeLabel[1]);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    const afterLabel = compact.match(
+      new RegExp(`${escaped}\\s*(?:is|:)?\\s*(\\d+(?:\\.\\d+)?)\\b`, "i"),
+    );
+    if (afterLabel) {
+      const parsed = Number(afterLabel[1]);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
 function parseCityStateFromAddress(address: string): {
   city: string;
   state: string;
@@ -266,6 +308,22 @@ function normalizeGalleryUrl(rawUrl: string): string {
   try {
     const decoded = cleaned.replace(/&amp;/gi, "&");
     const parsed = new URL(decoded);
+
+    // TrackHS often wraps canonical S3 image URLs in `/x/<encoded-url>`.
+    if (
+      parsed.hostname.includes("img.trackhs.com") &&
+      parsed.pathname.startsWith("/x/")
+    ) {
+      const wrapped = parsed.pathname.slice(3);
+      if (wrapped) {
+        try {
+          const resolvedWrapped = new URL(decodeURIComponent(wrapped));
+          return `${resolvedWrapped.origin}${resolvedWrapped.pathname}${resolvedWrapped.search}`;
+        } catch {
+          // Fall through to normalized TrackHS URL.
+        }
+      }
+    }
 
     // Rezfusion image endpoints encode the real image in `source`.
     const source = parsed.searchParams.get("source")?.trim();
@@ -307,7 +365,6 @@ function extractFieldLocationFromHtml(html: string): {
   const longitudeFromWidget = Number(attrValue("data-longitude"));
 
   if (
-    streetFromWidget ||
     Number.isFinite(latitudeFromWidget) ||
     Number.isFinite(longitudeFromWidget)
   ) {
@@ -331,10 +388,10 @@ function extractFieldLocationFromHtml(html: string): {
     /["']street["']\s*:\s*["']([^"']*)["']/i,
   );
   const latitudeMatch = fieldLocationChunk.match(
-    /["']latitude["']\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
+    /(?:["']?latitude["']?)\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
   );
   const longitudeMatch = fieldLocationChunk.match(
-    /["']longitude["']\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
+    /(?:["']?longitude["']?)\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
   );
 
   const street = streetMatch?.[1]
@@ -350,10 +407,10 @@ function extractFieldLocationFromHtml(html: string): {
   const latitude = latitudeMatch ? Number(latitudeMatch[1]) : NaN;
   const longitude = longitudeMatch ? Number(longitudeMatch[1]) : NaN;
   const latLngPairMatch = html.match(
-    /["']latitude["']\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]{0,120}?["']longitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i,
+    /(?:["']?latitude["']?)\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]{0,120}?(?:["']?longitude["']?)\s*:\s*(-?\d+(?:\.\d+)?)/i,
   );
   const lngLatPairMatch = html.match(
-    /["']longitude["']\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]{0,120}?["']latitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i,
+    /(?:["']?longitude["']?)\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]{0,120}?(?:["']?latitude["']?)\s*:\s*(-?\d+(?:\.\d+)?)/i,
   );
   const atCoordMatch = html.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/i);
   const maps3d4dMatch = html.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/i);
@@ -389,7 +446,7 @@ function extractFieldLocationFromHtml(html: string): {
       : NaN;
 
   return {
-    street,
+    street: street || streetFromWidget,
     latitude: Number.isFinite(latitudeResolved) ? latitudeResolved : null,
     longitude: Number.isFinite(longitudeResolved) ? longitudeResolved : null,
   };
@@ -576,6 +633,64 @@ function parseJsonLdSignals(html: string): {
   };
 }
 
+function extractLocalBusinessStreetFromJsonLd(html: string): string {
+  const scriptPattern =
+    /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
+  for (const match of html.matchAll(scriptPattern)) {
+    const body = (match[1] ?? "").trim();
+    if (!body) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(body) as unknown;
+      const queue: unknown[] = [parsed];
+
+      while (queue.length > 0) {
+        const node = queue.shift();
+        if (!node || typeof node !== "object") {
+          continue;
+        }
+
+        if (Array.isArray(node)) {
+          queue.push(...node);
+          continue;
+        }
+
+        const record = node as Record<string, unknown>;
+        const typeRaw = record["@type"];
+        const types = Array.isArray(typeRaw)
+          ? typeRaw.map((value) => String(value))
+          : [String(typeRaw ?? "")];
+        const isLocalBusiness = types.some(
+          (type) => type.toLowerCase() === "localbusiness",
+        );
+
+        if (isLocalBusiness) {
+          const address = record.address;
+          if (address && typeof address === "object") {
+            const street = String(
+              (address as Record<string, unknown>).streetAddress ?? "",
+            )
+              .replace(/\s+/g, " ")
+              .trim();
+            if (street) {
+              return street;
+            }
+          }
+        }
+
+        queue.push(...Object.values(record));
+      }
+    } catch {
+      // Ignore malformed JSON-LD blocks.
+    }
+  }
+
+  return "";
+}
+
 function extractUnitCardSignals(
   html: string,
   unitId: string,
@@ -659,6 +774,64 @@ function extractPrimaryUnitTypeFromHtml(html: string): string {
       .trim() || "";
 
   return raw;
+}
+
+function extractMapMarkerCoordinatesFromHtml(html: string): {
+  latitude: number | null;
+  longitude: number | null;
+} {
+  const toNumber = (value: string | undefined): number | null => {
+    if (!value) {
+      return null;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const isUsLikely = (latitude: number | null, longitude: number | null) => {
+    if (latitude === null || longitude === null) {
+      return false;
+    }
+    if (latitude === 0 && longitude === 0) {
+      return false;
+    }
+    return (
+      latitude >= 20 && latitude <= 40 && longitude >= -100 && longitude <= -70
+    );
+  };
+
+  const llHref = html.match(/\bll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i);
+  if (llHref) {
+    const latitude = toNumber(llHref[1]);
+    const longitude = toNumber(llHref[2]);
+    if (isUsLikely(latitude, longitude)) {
+      return { latitude, longitude };
+    }
+  }
+
+  const latLngPair = html.match(
+    /(?:["']?latitude["']?)\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]{0,120}?(?:["']?longitude["']?)\s*:\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (latLngPair) {
+    const latitude = toNumber(latLngPair[1]);
+    const longitude = toNumber(latLngPair[2]);
+    if (isUsLikely(latitude, longitude)) {
+      return { latitude, longitude };
+    }
+  }
+
+  const lngLatPair = html.match(
+    /(?:["']?longitude["']?)\s*:\s*(-?\d+(?:\.\d+)?)[\s\S]{0,120}?(?:["']?latitude["']?)\s*:\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (lngLatPair) {
+    const longitude = toNumber(lngLatPair[1]);
+    const latitude = toNumber(lngLatPair[2]);
+    if (isUsLikely(latitude, longitude)) {
+      return { latitude, longitude };
+    }
+  }
+
+  return { latitude: null, longitude: null };
 }
 
 function extractExternalListingId(detailUrl: string): string {
@@ -797,7 +970,13 @@ async function clickVisibleControlsByLabel(
 }
 
 function extractJsArrayLiteralByKey(html: string, key: string): string | null {
-  const keyIndex = html.indexOf(`${key}:`);
+  const keyCandidates = [`${key}:`, `'${key}':`, `"${key}":`];
+  const keyIndexes = keyCandidates
+    .map((candidate) => html.indexOf(candidate))
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right);
+
+  const keyIndex = keyIndexes[0] ?? -1;
   if (keyIndex < 0) {
     return null;
   }
@@ -930,7 +1109,11 @@ function extractAvailabilityFromRightWidgetHtml(
   }>;
 } {
   const hasCalendarWidget =
-    html.includes('id="rt-datepick-app"') || html.includes("bookings:");
+    html.includes('id="rt-datepick-app"') ||
+    html.includes("bookings:") ||
+    html.includes("rcItemAvailForm") ||
+    html.includes("'avail':[") ||
+    html.includes('"avail":[');
   if (!hasCalendarWidget) {
     return {
       hasCalendarWidget: false,
@@ -942,6 +1125,13 @@ function extractAvailabilityFromRightWidgetHtml(
 
   type BookingRange = { start: string; end: string };
   type MinDayRule = { startDate: string; endDate: string; minimum: number };
+  type LegacyAvailRange = {
+    b?: string;
+    e?: string;
+    a?: string | number;
+    q?: string | number;
+    s?: string | number;
+  };
 
   const parseArray = <T>(key: string): T[] => {
     const literal = extractJsArrayLiteralByKey(html, key);
@@ -956,8 +1146,40 @@ function extractAvailabilityFromRightWidgetHtml(
     }
   };
 
+  const parseLegacyAvailArray = (): LegacyAvailRange[] => {
+    const literal = extractJsArrayLiteralByKey(html, "avail");
+    if (!literal) {
+      return [];
+    }
+
+    const out: LegacyAvailRange[] = [];
+    const objectLiterals = literal.match(/\{[^{}]*\}/g) ?? [];
+    for (const objectLiteral of objectLiterals) {
+      const record: LegacyAvailRange = {};
+      for (const key of ["b", "e", "a", "q", "s"] as const) {
+        const quoted = objectLiteral.match(
+          new RegExp(`['\"]${key}['\"]\\s*:\\s*['\"]([^'\"]*)['\"]`, "i"),
+        );
+        const numeric = objectLiteral.match(
+          new RegExp(`['\"]${key}['\"]\\s*:\\s*(\\d+)`, "i"),
+        );
+        const value = quoted?.[1] ?? numeric?.[1];
+        if (typeof value === "string") {
+          record[key] = value;
+        }
+      }
+
+      if (record.b || record.e) {
+        out.push(record);
+      }
+    }
+
+    return out;
+  };
+
   const bookings = parseArray<BookingRange>("bookings");
   const minDays = parseArray<MinDayRule>("minDays");
+  const legacyAvail = parseLegacyAvailArray();
 
   const startOffsetDays = extractCalendarOffsetDays(html, "calStartDate", 1);
   const endOffsetDays = extractCalendarOffsetDays(html, "calEndDate", 365);
@@ -1019,6 +1241,41 @@ function extractAvailabilityFromRightWidgetHtml(
       }
 
       cursor = addUtcDays(cursor, 1);
+    }
+  }
+
+  if (legacyAvail.length > 0) {
+    for (const range of legacyAvail) {
+      const start = parseSlashDateToIso(String(range.b ?? ""));
+      const end = parseSlashDateToIso(String(range.e ?? ""));
+      if (!start || !end || end < start) {
+        continue;
+      }
+
+      const arrivalAllowed = Number(range.a ?? 0) === 1;
+      const departureAllowed = Number(range.q ?? 0) === 1;
+      const stayAllowed = Number(range.s ?? 0) === 1;
+
+      let cursor = start;
+      while (cursor <= end) {
+        if (cursor >= todayIso && cursor <= horizonIso) {
+          let code: LuxuryDayCode = "U";
+          if (stayAllowed || (arrivalAllowed && departureAllowed)) {
+            code = "A";
+          } else if (arrivalAllowed) {
+            code = "I";
+          } else if (departureAllowed) {
+            code = "O";
+          }
+
+          const previous = statusByDate.get(cursor);
+          if (!previous || codePriority[code] >= codePriority[previous]) {
+            statusByDate.set(cursor, code);
+          }
+        }
+
+        cursor = addUtcDays(cursor, 1);
+      }
     }
   }
 
@@ -1662,6 +1919,30 @@ async function fetchDetail(
       "lightbox",
     ]);
 
+    const openedFullscreenGallery = await page.evaluate(() => {
+      const trigger = document.querySelector(
+        ".fs-trigger-icon, .fs-trigger, [class*='fs-trigger']",
+      ) as HTMLElement | null;
+      if (!trigger) {
+        return false;
+      }
+
+      trigger.click();
+      return true;
+    });
+
+    if (openedFullscreenGallery) {
+      await page
+        .waitForSelector(
+          "body > .slick-fullscreen-wrapper, body .slick-fullscreen-wrapper, .slick-fullscreen-wrapper",
+          {
+            timeout: 1800,
+          },
+        )
+        .catch(() => undefined);
+      await page.waitForTimeout(350);
+    }
+
     const pageLoadMs = Date.now() - beforeLoad;
 
     const extracted = await page.evaluate(() => {
@@ -1747,6 +2028,16 @@ async function fetchDetail(
           }
           return "";
         })(),
+        statsSummaryText: Array.from(
+          document.querySelectorAll(
+            ".group-beds-baths-wrapper, .rc-lodging-detail, .be-property-widget-info, .be-property-widget-info-label, [class*='beds-baths'], [class*='lodging-detail']",
+          ),
+        )
+          .map((element) =>
+            (element.textContent ?? "").replace(/\s+/g, " ").trim(),
+          )
+          .filter(Boolean)
+          .join(" | "),
         neighborhoodText:
           document
             .querySelector(
@@ -1890,68 +2181,97 @@ async function fetchDetail(
           return categories;
         })(),
         galleryUrls: (() => {
-          const urls: string[] = [];
-          const mediaRoot =
-            document.querySelector("#Media") ??
-            document.querySelector('[id="media"]') ??
-            document.querySelector("#pdpHiddenGallery") ??
-            document.querySelector(".pdp-property-widget-img-area") ??
-            document;
-          if (!mediaRoot) {
-            return urls;
-          }
+          const collected = new Set<string>();
 
-          const attrValues = Array.from(
-            mediaRoot.querySelectorAll(
-              "a[href], a[data-srcset], a[data-thumb], a.fancygallery[href], img[src], img[srcset], img[data-src], img[data-lazy-src], img[data-rstmb], [data-rsbigimg], [data-image], .image-canvas[style*='background-image']",
-            ),
-          );
+          const galleryRoots = [
+            document.querySelector("body > .slick-fullscreen-wrapper"),
+            document.querySelector("body .slick-fullscreen-wrapper"),
+            document.querySelector(".slick-fullscreen-wrapper"),
+            document.querySelector("#property-slick-slider"),
+            document.querySelector("#pdpHiddenGallery"),
+            document.querySelector(".carousel-wrapper"),
+          ].filter(Boolean) as Element[];
 
-          for (const node of attrValues) {
-            const attrs = [
-              node.getAttribute("href"),
-              node.getAttribute("src"),
-              node.getAttribute("srcset"),
-              node.getAttribute("data-src"),
-              node.getAttribute("data-lazy-src"),
-              node.getAttribute("data-rstmb"),
-              node.getAttribute("data-rsbigimg"),
-              node.getAttribute("data-srcset"),
-              node.getAttribute("data-thumb"),
-              node.getAttribute("data-image"),
-              node.getAttribute("style"),
-            ];
-            for (const raw of attrs) {
-              if (!raw) {
-                continue;
-              }
+          const roots = galleryRoots.length > 0 ? galleryRoots : [document];
+
+          const addCandidate = (rawValue: string | null) => {
+            if (!rawValue) {
+              return;
+            }
+
+            const backgroundMatch = rawValue.match(
+              /background-image:\s*url\((['"]?)([^)'"]+)\1\)/i,
+            );
+            const source = backgroundMatch?.[2] ?? rawValue;
+            const candidates = source
+              .split(",")
+              .map((part) => part.trim())
+              .filter(Boolean)
+              .map((part) => part.split(/\s+/)[0] ?? "")
+              .filter(Boolean);
+
+            for (const candidate of candidates) {
               try {
-                const backgroundMatch = raw.match(
-                  /background-image:\s*url\((['"]?)([^)'"]+)\1\)/i,
-                );
-                const candidate =
-                  backgroundMatch?.[2] ??
-                  raw.split(",")[0]?.trim().split(/\s+/)[0] ??
-                  "";
                 const absolute = new URL(
                   candidate,
                   window.location.origin,
                 ).toString();
+                const lower = absolute.toLowerCase();
+
                 if (
-                  /\.(jpe?g|png|webp|gif)(\?|$)/i.test(absolute) ||
-                  absolute.includes("/unitimages/") ||
-                  absolute.includes("picturehandler.ashx") ||
-                  absolute.includes("/evrn/") ||
-                  absolute.includes("/images.")
+                  lower.includes("800x600-gradient.jpg") ||
+                  lower.includes("30a-vacay-logo") ||
+                  lower.includes("/ngt_logo/") ||
+                  lower.includes("/themes/rtapi/images/lightning.png")
                 ) {
-                  urls.push(absolute);
+                  continue;
                 }
+
+                const isFunvacayImage =
+                  lower.includes("track-pm.s3.amazonaws.com/funvacay/image/") ||
+                  lower.includes(
+                    "img.trackhs.com/x/https://track-pm.s3.amazonaws.com/funvacay/image/",
+                  ) ||
+                  lower.includes("/unitimages/");
+
+                if (!isFunvacayImage) {
+                  continue;
+                }
+
+                collected.add(absolute);
               } catch {
                 // Skip invalid URL fragments.
               }
             }
+          };
+
+          for (const root of roots) {
+            const attrNodes = Array.from(
+              root.querySelectorAll(
+                "a[href], a[data-srcset], a[data-thumb], img[src], img[srcset], img[data-src], img[data-lazy-src], img[data-rstmb], [data-rsbigimg], [data-image], .image-canvas[style*='background-image']",
+              ),
+            );
+
+            for (const node of attrNodes) {
+              if (node.closest(".slick-slide.slick-cloned")) {
+                continue;
+              }
+
+              addCandidate(node.getAttribute("href"));
+              addCandidate(node.getAttribute("src"));
+              addCandidate(node.getAttribute("srcset"));
+              addCandidate(node.getAttribute("data-src"));
+              addCandidate(node.getAttribute("data-lazy-src"));
+              addCandidate(node.getAttribute("data-rstmb"));
+              addCandidate(node.getAttribute("data-rsbigimg"));
+              addCandidate(node.getAttribute("data-srcset"));
+              addCandidate(node.getAttribute("data-thumb"));
+              addCandidate(node.getAttribute("data-image"));
+              addCandidate(node.getAttribute("style"));
+            }
           }
-          return urls;
+
+          return Array.from(collected);
         })(),
       };
     });
@@ -2161,36 +2481,68 @@ async function fetchDetail(
     }
 
     const jsonLdSignals = parseJsonLdSignals(html);
+    const localBusinessStreet = extractLocalBusinessStreetFromJsonLd(html);
     const locationPayload = extractFieldLocationFromHtml(html);
+    const mapMarkerCoordinates = extractMapMarkerCoordinatesFromHtml(html);
     const extractedUnitId =
       stripHtml(extracted.unitId).trim() || extractUnitIdFromHtml(html);
     const unitCardSignals = extractUnitCardSignals(html, extractedUnitId);
     const primaryUnitType = extractPrimaryUnitTypeFromHtml(html);
 
     const beds =
-      parseFirstNumber(extracted.bedroomsText) ?? jsonLdSignals.beds ?? null;
+      parseFirstNumber(extracted.bedroomsText) ??
+      parseLabeledMetricNumber(extracted.statsSummaryText, [
+        "bedroom",
+        "bedrooms",
+        "bed",
+        "beds",
+      ]) ??
+      jsonLdSignals.beds ??
+      null;
     const baths =
-      parseFirstNumber(extracted.bathroomsText) ?? jsonLdSignals.baths ?? null;
+      parseFirstNumber(extracted.bathroomsText) ??
+      parseLabeledMetricNumber(extracted.statsSummaryText, [
+        "bath",
+        "baths",
+        "bathroom",
+        "bathrooms",
+      ]) ??
+      jsonLdSignals.baths ??
+      null;
     const sleeps =
-      parseFirstNumber(extracted.sleepsText) ?? jsonLdSignals.sleeps ?? null;
+      parseFirstNumber(extracted.sleepsText) ??
+      parseLabeledMetricNumber(extracted.statsSummaryText, [
+        "sleep",
+        "sleeps",
+        "guest",
+        "guests",
+        "occupancy",
+      ]) ??
+      jsonLdSignals.sleeps ??
+      null;
     const neighborhood = stripHtml(
       extracted.neighborhoodText || jsonLdSignals.city,
     ).slice(0, 240);
 
+    const normalizeCoordinate = (value: number | null): number | null =>
+      value === 0 ? null : value;
+
     const latitudeRaw =
-      locationPayload.latitude ??
-      unitCardSignals.latitude ??
-      jsonLdSignals.latitude ??
+      normalizeCoordinate(mapMarkerCoordinates.latitude) ??
+      normalizeCoordinate(locationPayload.latitude) ??
+      normalizeCoordinate(unitCardSignals.latitude) ??
+      normalizeCoordinate(jsonLdSignals.latitude) ??
       null;
     const longitudeRaw =
-      locationPayload.longitude ??
-      unitCardSignals.longitude ??
-      jsonLdSignals.longitude ??
+      normalizeCoordinate(mapMarkerCoordinates.longitude) ??
+      normalizeCoordinate(locationPayload.longitude) ??
+      normalizeCoordinate(unitCardSignals.longitude) ??
+      normalizeCoordinate(jsonLdSignals.longitude) ??
       null;
-    const latitude = latitudeRaw === 0 ? null : latitudeRaw;
-    const longitude = longitudeRaw === 0 ? null : longitudeRaw;
+    const latitude = latitudeRaw;
+    const longitude = longitudeRaw;
 
-    const streetAddress = stripHtml(
+    const streetAddressCandidate = stripHtml(
       locationPayload.street ||
         unitCardSignals.street ||
         jsonLdSignals.street ||
@@ -2198,6 +2550,12 @@ async function fetchDetail(
           .filter(Boolean)
           .join(", "),
     ).slice(0, 240);
+
+    const streetAddress =
+      localBusinessStreet &&
+      streetAddressCandidate.toLowerCase() === localBusinessStreet.toLowerCase()
+        ? ""
+        : streetAddressCandidate;
 
     const cityStateFromAddress = parseCityStateFromAddress(streetAddress);
     const profileCity =
@@ -2267,7 +2625,7 @@ async function fetchDetail(
         })
         .filter(
           (url) =>
-            !/30a-vacay-logo|\/themes\/rtapi\/images\/lightning\.png/i.test(
+            !/30a-vacay-logo|\/ngt_logo\/|\/themes\/rtapi\/images\/lightning\.png/i.test(
               url,
             ),
         )

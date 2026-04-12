@@ -185,3 +185,29 @@ Per adapter, refinement is complete when:
 - Regenerate conformance snapshot after significant adapter parser changes.
 - Keep this file as the canonical backlog tracker for schema alignment.
 - Keep docs/universal-detail-json-structure.md as the contract definition; this file tracks implementation status against that contract.
+
+## 2026-04-12 Data Quality Notes (FunVacay + Cross-Adapter Priority)
+
+What was fixed in `funvacay30a` and why:
+
+- Beds/baths/sleeps were occasionally null despite clear page signals.
+  - Why it happened: extraction depended on narrow selectors and missed summary blocks (`rc-lodging-*` content) in some render states.
+  - Fix applied: added broader summary-text fallback parsing and label-aware metric extraction for bedrooms, bathrooms, and occupancy.
+- Rogue image references were leaking into `media_gallery.image_urls`.
+  - Why it happened: non-gallery assets (site logo/static UI images) can appear in DOM/image payloads during gallery collection.
+  - Fix applied: tightened gallery source filtering and explicit exclusion for known non-listing assets (for example `ngt_logo`, logo/static-theme artifacts).
+- Added validator guardrails so these issues surface quickly.
+  - Warning when `property_profile` has all three nullish fields (`beds`, `baths`, `sleeps`).
+  - Warning when listing `image_urls` include out-of-pattern URL groups relative to the listing baseline pattern.
+
+Cross-adapter priority order (enforced going forward):
+
+1. Latitude/longitude coverage is paramount and must be treated as highest priority for every listing across every adapter.
+2. Beds/baths/sleeps are equally critical profile fields; adapters should pursue every viable extraction source before accepting null.
+3. `image_urls` must be listing-gallery specific, pattern-consistent, and free of rogue references.
+4. Image count sanity checks should remain active to flag suspicious under/over-capture early.
+
+Expected impact:
+
+- As stricter checks roll out, more adapters will likely show warnings initially.
+- That is intended and should be treated as a quality-discovery phase, not validator noise.

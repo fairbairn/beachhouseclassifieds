@@ -2,48 +2,19 @@
   "adapter_key": "keyco30a",
   "external_listing_id": "20BEvzYiOa",
   "detail_url": "https://key.co/listings/20BEvzYiOa",
-  "captured_at": "2026-04-05T03:17:14.097Z",
+  "captured_at": "2026-04-12T14:44:48.695Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_sat_to_sat",
   "quote_window_gap_policy": "record_unavailable_without_date_shift",
-  "quote_window_anchor_date": "2026-04-11",
+  "quote_window_anchor_date": "2026-04-18",
   "quote_window_days": 168,
   "quote_sample_step_days": 7,
   "quote_nights": 7,
   "quote_max_queries": 24,
-  "endpoint_path": "/api/listing/{listingId}/pricing-context",
   "observations": [
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
-      "source_listing_id": "20BEvzYiOa",
-      "currency": "USD",
-      "start_date": "2026-04-11",
-      "end_date": "2026-04-18",
-      "check_in_date": "2026-04-11",
-      "check_out_date": "2026-04-18",
-      "nights": 7,
-      "base_nightly": 701.29,
-      "all_in_nightly": 997.13,
-      "quote_available": true,
-      "quote_unavailable_reason": null,
-      "base_total": 4909,
-      "taxes_total": 890.32,
-      "fees_total_excl_taxes": 1180.6100000000001,
-      "fee_lines": [],
-      "grand_total": 6979.93,
-      "quoted_total": 6979.93,
-      "fee_pct_of_base": 0.240499,
-      "tax_pct_of_base": 0.181365,
-      "non_base_pct_of_total": 0.296698,
-      "all_in_multiplier": 1.421864,
-      "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-04-11&listing_end_date=2026-04-18&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
-    },
-    {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-04-18",
@@ -51,27 +22,43 @@
       "check_in_date": "2026-04-18",
       "check_out_date": "2026-04-25",
       "nights": 7,
-      "base_nightly": 730.86,
-      "all_in_nightly": 1035.21,
+      "base_nightly": 710.57,
+      "all_in_nightly": 1009.09,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5116,
-      "taxes_total": 924.3199999999999,
-      "fees_total_excl_taxes": 1206.18,
-      "fee_lines": [],
-      "grand_total": 7246.5,
-      "quoted_total": 7246.5,
-      "fee_pct_of_base": 0.235766,
-      "tax_pct_of_base": 0.180672,
-      "non_base_pct_of_total": 0.294004,
-      "all_in_multiplier": 1.416439,
+      "base_total": 4974,
+      "taxes_total": 900.99,
+      "fees_total_excl_taxes": 1188.64,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 348.18
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 293.46
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7063.63,
+      "quoted_total": 7063.63,
+      "fee_pct_of_base": 0.238971,
+      "tax_pct_of_base": 0.18114,
+      "non_base_pct_of_total": 0.295829,
+      "all_in_multiplier": 1.420111,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-04-18&listing_end_date=2026-04-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-04-25",
@@ -79,27 +66,43 @@
       "check_in_date": "2026-04-25",
       "check_out_date": "2026-05-02",
       "nights": 7,
-      "base_nightly": 756.71,
-      "all_in_nightly": 1068.51,
+      "base_nightly": 702.86,
+      "all_in_nightly": 999.14,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5297,
-      "taxes_total": 954.03,
-      "fees_total_excl_taxes": 1228.53,
-      "fee_lines": [],
-      "grand_total": 7479.5599999999995,
-      "quoted_total": 7479.5599999999995,
-      "fee_pct_of_base": 0.231929,
-      "tax_pct_of_base": 0.180108,
-      "non_base_pct_of_total": 0.291803,
-      "all_in_multiplier": 1.412037,
+      "base_total": 4920,
+      "taxes_total": 892.04,
+      "fees_total_excl_taxes": 1181.97,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 344.4
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 290.57
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6994.01,
+      "quoted_total": 6994.01,
+      "fee_pct_of_base": 0.240238,
+      "tax_pct_of_base": 0.181309,
+      "non_base_pct_of_total": 0.296541,
+      "all_in_multiplier": 1.421547,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-04-25&listing_end_date=2026-05-02&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-05-02",
@@ -107,27 +110,43 @@
       "check_in_date": "2026-05-02",
       "check_out_date": "2026-05-09",
       "nights": 7,
-      "base_nightly": 720.57,
-      "all_in_nightly": 1021.96,
+      "base_nightly": 678.57,
+      "all_in_nightly": 967.88,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5044,
-      "taxes_total": 912.4300000000001,
-      "fees_total_excl_taxes": 1197.28,
-      "fee_lines": [],
-      "grand_total": 7153.71,
-      "quoted_total": 7153.71,
-      "fee_pct_of_base": 0.237367,
-      "tax_pct_of_base": 0.180894,
-      "non_base_pct_of_total": 0.294911,
-      "all_in_multiplier": 1.418261,
+      "base_total": 4750,
+      "taxes_total": 864.18,
+      "fees_total_excl_taxes": 1160.98,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 332.5
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 281.48
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6775.16,
+      "quoted_total": 6775.16,
+      "fee_pct_of_base": 0.244417,
+      "tax_pct_of_base": 0.181933,
+      "non_base_pct_of_total": 0.29891,
+      "all_in_multiplier": 1.426349,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-05-02&listing_end_date=2026-05-09&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-05-09",
@@ -135,27 +154,43 @@
       "check_in_date": "2026-05-09",
       "check_out_date": "2026-05-16",
       "nights": 7,
-      "base_nightly": 692.86,
-      "all_in_nightly": 986.28,
+      "base_nightly": 673.86,
+      "all_in_nightly": 961.82,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 4850,
-      "taxes_total": 880.6,
-      "fees_total_excl_taxes": 1173.33,
-      "fee_lines": [],
-      "grand_total": 6903.93,
-      "quoted_total": 6903.93,
-      "fee_pct_of_base": 0.241924,
-      "tax_pct_of_base": 0.181567,
-      "non_base_pct_of_total": 0.297502,
-      "all_in_multiplier": 1.423491,
+      "base_total": 4717,
+      "taxes_total": 858.82,
+      "fees_total_excl_taxes": 1156.9,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 330.19
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 279.71
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6732.72,
+      "quoted_total": 6732.72,
+      "fee_pct_of_base": 0.245262,
+      "tax_pct_of_base": 0.182069,
+      "non_base_pct_of_total": 0.299392,
+      "all_in_multiplier": 1.427331,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-05-09&listing_end_date=2026-05-16&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-05-16",
@@ -163,27 +198,43 @@
       "check_in_date": "2026-05-16",
       "check_out_date": "2026-05-23",
       "nights": 7,
-      "base_nightly": 682.86,
-      "all_in_nightly": 973.39,
+      "base_nightly": 680.29,
+      "all_in_nightly": 970.09,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 4780,
-      "taxes_total": 869.08,
-      "fees_total_excl_taxes": 1164.68,
-      "fee_lines": [],
-      "grand_total": 6813.76,
-      "quoted_total": 6813.76,
-      "fee_pct_of_base": 0.243657,
-      "tax_pct_of_base": 0.181816,
-      "non_base_pct_of_total": 0.298478,
-      "all_in_multiplier": 1.425473,
+      "base_total": 4762,
+      "taxes_total": 866.15,
+      "fees_total_excl_taxes": 1162.46,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 333.34
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 282.12
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6790.61,
+      "quoted_total": 6790.61,
+      "fee_pct_of_base": 0.244112,
+      "tax_pct_of_base": 0.181888,
+      "non_base_pct_of_total": 0.298738,
+      "all_in_multiplier": 1.426,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-05-16&listing_end_date=2026-05-23&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-05-23",
@@ -191,27 +242,43 @@
       "check_in_date": "2026-05-23",
       "check_out_date": "2026-05-30",
       "nights": 7,
-      "base_nightly": 766,
-      "all_in_nightly": 1080.47,
+      "base_nightly": 699.57,
+      "all_in_nightly": 994.93,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5362,
-      "taxes_total": 964.76,
-      "fees_total_excl_taxes": 1236.56,
-      "fee_lines": [],
-      "grand_total": 7563.32,
-      "quoted_total": 7563.32,
-      "fee_pct_of_base": 0.230615,
-      "tax_pct_of_base": 0.179925,
-      "non_base_pct_of_total": 0.291052,
-      "all_in_multiplier": 1.410541,
+      "base_total": 4897,
+      "taxes_total": 888.39,
+      "fees_total_excl_taxes": 1179.13,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 342.79
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 289.34
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6964.52,
+      "quoted_total": 6964.52,
+      "fee_pct_of_base": 0.240786,
+      "tax_pct_of_base": 0.181415,
+      "non_base_pct_of_total": 0.296865,
+      "all_in_multiplier": 1.422201,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-05-23&listing_end_date=2026-05-30&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-05-30",
@@ -219,27 +286,43 @@
       "check_in_date": "2026-05-30",
       "check_out_date": "2026-06-06",
       "nights": 7,
-      "base_nightly": 722.71,
-      "all_in_nightly": 1024.73,
+      "base_nightly": 700.14,
+      "all_in_nightly": 995.66,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5059,
-      "taxes_total": 914.99,
-      "fees_total_excl_taxes": 1199.1399999999999,
-      "fee_lines": [],
-      "grand_total": 7173.129999999999,
-      "quoted_total": 7173.129999999999,
-      "fee_pct_of_base": 0.237031,
-      "tax_pct_of_base": 0.180864,
-      "non_base_pct_of_total": 0.294729,
-      "all_in_multiplier": 1.417895,
+      "base_total": 4901,
+      "taxes_total": 889,
+      "fees_total_excl_taxes": 1179.62,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 343.07
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 289.55
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6969.62,
+      "quoted_total": 6969.62,
+      "fee_pct_of_base": 0.24069,
+      "tax_pct_of_base": 0.181392,
+      "non_base_pct_of_total": 0.296805,
+      "all_in_multiplier": 1.422081,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-05-30&listing_end_date=2026-06-06&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-06-06",
@@ -247,27 +330,43 @@
       "check_in_date": "2026-06-06",
       "check_out_date": "2026-06-13",
       "nights": 7,
-      "base_nightly": 768.29,
-      "all_in_nightly": 1083.41,
+      "base_nightly": 736.14,
+      "all_in_nightly": 1042.01,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5378,
-      "taxes_total": 967.3299999999999,
-      "fees_total_excl_taxes": 1238.53,
-      "fee_lines": [],
-      "grand_total": 7583.86,
-      "quoted_total": 7583.86,
-      "fee_pct_of_base": 0.230296,
-      "tax_pct_of_base": 0.179868,
-      "non_base_pct_of_total": 0.290862,
-      "all_in_multiplier": 1.410164,
+      "base_total": 5153,
+      "taxes_total": 930.35,
+      "fees_total_excl_taxes": 1210.75,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 360.71
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 303.04
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7294.1,
+      "quoted_total": 7294.1,
+      "fee_pct_of_base": 0.23496,
+      "tax_pct_of_base": 0.180545,
+      "non_base_pct_of_total": 0.293539,
+      "all_in_multiplier": 1.415506,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-06-06&listing_end_date=2026-06-13&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-06-13",
@@ -275,27 +374,43 @@
       "check_in_date": "2026-06-13",
       "check_out_date": "2026-06-20",
       "nights": 7,
-      "base_nightly": 761.29,
-      "all_in_nightly": 1074.39,
+      "base_nightly": 700.71,
+      "all_in_nightly": 996.39,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5329,
-      "taxes_total": 959.24,
-      "fees_total_excl_taxes": 1232.48,
-      "fee_lines": [],
-      "grand_total": 7520.719999999999,
-      "quoted_total": 7520.719999999999,
-      "fee_pct_of_base": 0.231278,
-      "tax_pct_of_base": 0.180004,
-      "non_base_pct_of_total": 0.291424,
-      "all_in_multiplier": 1.411282,
+      "base_total": 4905,
+      "taxes_total": 889.62,
+      "fees_total_excl_taxes": 1180.12,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 343.35
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 289.77
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6974.74,
+      "quoted_total": 6974.74,
+      "fee_pct_of_base": 0.240595,
+      "tax_pct_of_base": 0.18137,
+      "non_base_pct_of_total": 0.296748,
+      "all_in_multiplier": 1.421965,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-06-13&listing_end_date=2026-06-20&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-06-20",
@@ -303,27 +418,43 @@
       "check_in_date": "2026-06-20",
       "check_out_date": "2026-06-27",
       "nights": 7,
-      "base_nightly": 786,
-      "all_in_nightly": 1106.22,
+      "base_nightly": 777.86,
+      "all_in_nightly": 1095.74,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5502,
-      "taxes_total": 987.71,
-      "fees_total_excl_taxes": 1253.85,
-      "fee_lines": [],
-      "grand_total": 7743.5599999999995,
-      "quoted_total": 7743.5599999999995,
-      "fee_pct_of_base": 0.22789,
-      "tax_pct_of_base": 0.179518,
-      "non_base_pct_of_total": 0.289474,
-      "all_in_multiplier": 1.407408,
+      "base_total": 5445,
+      "taxes_total": 978.36,
+      "fees_total_excl_taxes": 1246.81,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 381.15
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 318.66
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7670.17,
+      "quoted_total": 7670.17,
+      "fee_pct_of_base": 0.228983,
+      "tax_pct_of_base": 0.17968,
+      "non_base_pct_of_total": 0.290107,
+      "all_in_multiplier": 1.408663,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-06-20&listing_end_date=2026-06-27&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-06-27",
@@ -331,27 +462,26 @@
       "check_in_date": "2026-06-27",
       "check_out_date": "2026-07-04",
       "nights": 7,
-      "base_nightly": 761.43,
-      "all_in_nightly": 898.49,
+      "base_nightly": 700.43,
+      "all_in_nightly": 994.61,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 5330.01,
-      "taxes_total": 959.4,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 4903.01,
+      "taxes_total": 882.54,
+      "fees_total_excl_taxes": 1176.72,
       "fee_lines": [],
-      "grand_total": 6289.41,
-      "quoted_total": 6289.41,
-      "fee_pct_of_base": 0,
+      "grand_total": 6962.27,
+      "quoted_total": 6962.27,
+      "fee_pct_of_base": 0.24,
       "tax_pct_of_base": 0.18,
-      "non_base_pct_of_total": 0.152542,
-      "all_in_multiplier": 1.18,
+      "non_base_pct_of_total": 0.295774,
+      "all_in_multiplier": 1.419999,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-06-27&listing_end_date=2026-07-04&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-07-04",
@@ -359,27 +489,26 @@
       "check_in_date": "2026-07-04",
       "check_out_date": "2026-07-11",
       "nights": 7,
-      "base_nightly": 761.43,
-      "all_in_nightly": 898.49,
+      "base_nightly": 700.43,
+      "all_in_nightly": 994.61,
       "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Home is Unavailable - error",
-      "base_total": 5330.01,
-      "taxes_total": 959.4,
-      "fees_total_excl_taxes": 0,
+      "quote_unavailable_reason": "Home is Unavailable - error ",
+      "base_total": 4903.01,
+      "taxes_total": 882.54,
+      "fees_total_excl_taxes": 1176.72,
       "fee_lines": [],
-      "grand_total": 6289.41,
-      "quoted_total": 6289.41,
-      "fee_pct_of_base": 0,
+      "grand_total": 6962.27,
+      "quoted_total": 6962.27,
+      "fee_pct_of_base": 0.24,
       "tax_pct_of_base": 0.18,
-      "non_base_pct_of_total": 0.152542,
-      "all_in_multiplier": 1.18,
+      "non_base_pct_of_total": 0.295774,
+      "all_in_multiplier": 1.419999,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-07-04&listing_end_date=2026-07-11&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-07-11",
@@ -387,27 +516,43 @@
       "check_in_date": "2026-07-11",
       "check_out_date": "2026-07-18",
       "nights": 7,
-      "base_nightly": 827.57,
-      "all_in_nightly": 1159.75,
+      "base_nightly": 775.57,
+      "all_in_nightly": 1092.79,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5793,
-      "taxes_total": 1035.48,
-      "fees_total_excl_taxes": 1289.79,
-      "fee_lines": [],
-      "grand_total": 8118.2699999999995,
-      "quoted_total": 8118.2699999999995,
-      "fee_pct_of_base": 0.222646,
-      "tax_pct_of_base": 0.178747,
-      "non_base_pct_of_total": 0.286424,
-      "all_in_multiplier": 1.401393,
+      "base_total": 5429,
+      "taxes_total": 975.73,
+      "fees_total_excl_taxes": 1244.83,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 380.03
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 317.8
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7649.56,
+      "quoted_total": 7649.56,
+      "fee_pct_of_base": 0.229293,
+      "tax_pct_of_base": 0.179726,
+      "non_base_pct_of_total": 0.290286,
+      "all_in_multiplier": 1.409018,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-07-11&listing_end_date=2026-07-18&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-07-18",
@@ -415,27 +560,43 @@
       "check_in_date": "2026-07-18",
       "check_out_date": "2026-07-25",
       "nights": 7,
-      "base_nightly": 828.14,
-      "all_in_nightly": 1160.48,
+      "base_nightly": 770.57,
+      "all_in_nightly": 1086.36,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5797,
-      "taxes_total": 1036.1100000000001,
-      "fees_total_excl_taxes": 1290.28,
-      "fee_lines": [],
-      "grand_total": 8123.39,
-      "quoted_total": 8123.39,
-      "fee_pct_of_base": 0.222577,
-      "tax_pct_of_base": 0.178732,
-      "non_base_pct_of_total": 0.286382,
-      "all_in_multiplier": 1.401309,
+      "base_total": 5394,
+      "taxes_total": 969.98,
+      "fees_total_excl_taxes": 1240.51,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 377.58
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 315.93
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7604.49,
+      "quoted_total": 7604.49,
+      "fee_pct_of_base": 0.22998,
+      "tax_pct_of_base": 0.179826,
+      "non_base_pct_of_total": 0.290682,
+      "all_in_multiplier": 1.409805,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-07-18&listing_end_date=2026-07-25&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-07-25",
@@ -443,27 +604,43 @@
       "check_in_date": "2026-07-25",
       "check_out_date": "2026-08-01",
       "nights": 7,
-      "base_nightly": 818.29,
-      "all_in_nightly": 1147.8,
+      "base_nightly": 765,
+      "all_in_nightly": 1079.17,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5728,
-      "taxes_total": 1024.83,
-      "fees_total_excl_taxes": 1281.76,
-      "fee_lines": [],
-      "grand_total": 8034.59,
-      "quoted_total": 8034.59,
-      "fee_pct_of_base": 0.223771,
-      "tax_pct_of_base": 0.178916,
-      "non_base_pct_of_total": 0.287082,
-      "all_in_multiplier": 1.402687,
+      "base_total": 5355,
+      "taxes_total": 963.52,
+      "fees_total_excl_taxes": 1235.69,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 374.85
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 313.84
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7554.21,
+      "quoted_total": 7554.21,
+      "fee_pct_of_base": 0.230754,
+      "tax_pct_of_base": 0.179929,
+      "non_base_pct_of_total": 0.291124,
+      "all_in_multiplier": 1.410683,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-07-25&listing_end_date=2026-08-01&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-08-01",
@@ -471,27 +648,43 @@
       "check_in_date": "2026-08-01",
       "check_out_date": "2026-08-08",
       "nights": 7,
-      "base_nightly": 824.29,
-      "all_in_nightly": 1155.52,
+      "base_nightly": 790.71,
+      "all_in_nightly": 1112.29,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5770,
-      "taxes_total": 1031.6599999999999,
-      "fees_total_excl_taxes": 1286.95,
-      "fee_lines": [],
-      "grand_total": 8088.61,
-      "quoted_total": 8088.61,
-      "fee_pct_of_base": 0.223042,
-      "tax_pct_of_base": 0.178797,
-      "non_base_pct_of_total": 0.286651,
-      "all_in_multiplier": 1.401839,
+      "base_total": 5535,
+      "taxes_total": 993.08,
+      "fees_total_excl_taxes": 1257.92,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 387.45
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 323.47
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7786,
+      "quoted_total": 7786,
+      "fee_pct_of_base": 0.227266,
+      "tax_pct_of_base": 0.179418,
+      "non_base_pct_of_total": 0.289109,
+      "all_in_multiplier": 1.406685,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-08-01&listing_end_date=2026-08-08&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-08-08",
@@ -499,27 +692,43 @@
       "check_in_date": "2026-08-08",
       "check_out_date": "2026-08-15",
       "nights": 7,
-      "base_nightly": 777.57,
-      "all_in_nightly": 1095.37,
+      "base_nightly": 739.29,
+      "all_in_nightly": 1046.06,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5443,
-      "taxes_total": 978.06,
-      "fees_total_excl_taxes": 1246.56,
-      "fee_lines": [],
-      "grand_total": 7667.619999999999,
-      "quoted_total": 7667.619999999999,
-      "fee_pct_of_base": 0.229021,
-      "tax_pct_of_base": 0.179691,
-      "non_base_pct_of_total": 0.290132,
-      "all_in_multiplier": 1.408712,
+      "base_total": 5175,
+      "taxes_total": 933.97,
+      "fees_total_excl_taxes": 1213.46,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 362.25
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 304.21
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7322.43,
+      "quoted_total": 7322.43,
+      "fee_pct_of_base": 0.234485,
+      "tax_pct_of_base": 0.180477,
+      "non_base_pct_of_total": 0.293267,
+      "all_in_multiplier": 1.414962,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-08-08&listing_end_date=2026-08-15&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-08-15",
@@ -527,27 +736,43 @@
       "check_in_date": "2026-08-15",
       "check_out_date": "2026-08-22",
       "nights": 7,
-      "base_nightly": 762.43,
-      "all_in_nightly": 1075.87,
+      "base_nightly": 723.29,
+      "all_in_nightly": 1025.47,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5337,
-      "taxes_total": 960.64,
-      "fees_total_excl_taxes": 1233.47,
-      "fee_lines": [],
-      "grand_total": 7531.110000000001,
-      "quoted_total": 7531.110000000001,
-      "fee_pct_of_base": 0.231117,
-      "tax_pct_of_base": 0.179996,
-      "non_base_pct_of_total": 0.29134,
-      "all_in_multiplier": 1.411113,
+      "base_total": 5063,
+      "taxes_total": 915.63,
+      "fees_total_excl_taxes": 1199.63,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 354.41
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 298.22
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7178.26,
+      "quoted_total": 7178.26,
+      "fee_pct_of_base": 0.236941,
+      "tax_pct_of_base": 0.180847,
+      "non_base_pct_of_total": 0.294676,
+      "all_in_multiplier": 1.417788,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-08-15&listing_end_date=2026-08-22&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-08-22",
@@ -555,27 +780,43 @@
       "check_in_date": "2026-08-22",
       "check_out_date": "2026-08-29",
       "nights": 7,
-      "base_nightly": 747.14,
-      "all_in_nightly": 1056.18,
+      "base_nightly": 707.86,
+      "all_in_nightly": 1005.59,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5230,
-      "taxes_total": 942.99,
-      "fees_total_excl_taxes": 1220.26,
-      "fee_lines": [],
-      "grand_total": 7393.25,
-      "quoted_total": 7393.25,
-      "fee_pct_of_base": 0.233319,
-      "tax_pct_of_base": 0.180304,
-      "non_base_pct_of_total": 0.292598,
-      "all_in_multiplier": 1.413623,
+      "base_total": 4955,
+      "taxes_total": 897.85,
+      "fees_total_excl_taxes": 1186.29,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 346.85
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 292.44
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7039.14,
+      "quoted_total": 7039.14,
+      "fee_pct_of_base": 0.239413,
+      "tax_pct_of_base": 0.181201,
+      "non_base_pct_of_total": 0.296079,
+      "all_in_multiplier": 1.420614,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-08-22&listing_end_date=2026-08-29&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-08-29",
@@ -583,27 +824,43 @@
       "check_in_date": "2026-08-29",
       "check_out_date": "2026-09-05",
       "nights": 7,
-      "base_nightly": 761.57,
-      "all_in_nightly": 1074.76,
+      "base_nightly": 721.29,
+      "all_in_nightly": 1022.88,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 5331,
-      "taxes_total": 959.58,
-      "fees_total_excl_taxes": 1232.73,
-      "fee_lines": [],
-      "grand_total": 7523.3099999999995,
-      "quoted_total": 7523.3099999999995,
-      "fee_pct_of_base": 0.231238,
-      "tax_pct_of_base": 0.18,
-      "non_base_pct_of_total": 0.291402,
-      "all_in_multiplier": 1.411238,
+      "base_total": 5049,
+      "taxes_total": 913.27,
+      "fees_total_excl_taxes": 1197.9,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 353.43
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 297.47
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 7160.17,
+      "quoted_total": 7160.17,
+      "fee_pct_of_base": 0.237255,
+      "tax_pct_of_base": 0.180881,
+      "non_base_pct_of_total": 0.294849,
+      "all_in_multiplier": 1.418136,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-08-29&listing_end_date=2026-09-05&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-09-05",
@@ -611,27 +868,43 @@
       "check_in_date": "2026-09-05",
       "check_out_date": "2026-09-12",
       "nights": 7,
-      "base_nightly": 884.43,
-      "all_in_nightly": 1232.97,
+      "base_nightly": 834.71,
+      "all_in_nightly": 1168.95,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 6191,
-      "taxes_total": 1100.88,
-      "fees_total_excl_taxes": 1338.94,
-      "fee_lines": [],
-      "grand_total": 8630.82,
-      "quoted_total": 8630.82,
-      "fee_pct_of_base": 0.216272,
-      "tax_pct_of_base": 0.177819,
-      "non_base_pct_of_total": 0.282687,
-      "all_in_multiplier": 1.394091,
+      "base_total": 5843,
+      "taxes_total": 1043.71,
+      "fees_total_excl_taxes": 1295.96,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 409.01
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 339.95
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 8182.67,
+      "quoted_total": 8182.67,
+      "fee_pct_of_base": 0.221797,
+      "tax_pct_of_base": 0.178626,
+      "non_base_pct_of_total": 0.28593,
+      "all_in_multiplier": 1.400423,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-09-05&listing_end_date=2026-09-12&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-09-12",
@@ -639,27 +912,43 @@
       "check_in_date": "2026-09-12",
       "check_out_date": "2026-09-19",
       "nights": 7,
-      "base_nightly": 699.71,
-      "all_in_nightly": 995.11,
+      "base_nightly": 680.57,
+      "all_in_nightly": 970.45,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 4898,
-      "taxes_total": 888.52,
-      "fees_total_excl_taxes": 1179.25,
-      "fee_lines": [],
-      "grand_total": 6965.77,
-      "quoted_total": 6965.77,
-      "fee_pct_of_base": 0.240762,
-      "tax_pct_of_base": 0.181405,
-      "non_base_pct_of_total": 0.296847,
-      "all_in_multiplier": 1.422166,
+      "base_total": 4764,
+      "taxes_total": 866.45,
+      "fees_total_excl_taxes": 1162.7,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 333.48
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 282.22
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6793.15,
+      "quoted_total": 6793.15,
+      "fee_pct_of_base": 0.24406,
+      "tax_pct_of_base": 0.181874,
+      "non_base_pct_of_total": 0.298705,
+      "all_in_multiplier": 1.425934,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-09-12&listing_end_date=2026-09-19&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
     },
     {
-      "sampled_at": "2026-04-05T03:17:14.097Z",
-      "captured_at": "2026-04-05T03:17:14.097Z",
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
       "source_listing_id": "20BEvzYiOa",
       "currency": "USD",
       "start_date": "2026-09-19",
@@ -667,23 +956,83 @@
       "check_in_date": "2026-09-19",
       "check_out_date": "2026-09-26",
       "nights": 7,
-      "base_nightly": 698.43,
-      "all_in_nightly": 993.44,
+      "base_nightly": 691.43,
+      "all_in_nightly": 984.44,
       "quote_available": true,
       "quote_unavailable_reason": null,
-      "base_total": 4889,
-      "taxes_total": 886.97,
-      "fees_total_excl_taxes": 1178.14,
-      "fee_lines": [],
-      "grand_total": 6954.110000000001,
-      "quoted_total": 6954.110000000001,
-      "fee_pct_of_base": 0.240978,
-      "tax_pct_of_base": 0.181422,
-      "non_base_pct_of_total": 0.296963,
-      "all_in_multiplier": 1.422399,
+      "base_total": 4840,
+      "taxes_total": 878.98,
+      "fees_total_excl_taxes": 1172.09,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 338.8
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 286.29
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6891.07,
+      "quoted_total": 6891.07,
+      "fee_pct_of_base": 0.242167,
+      "tax_pct_of_base": 0.181607,
+      "non_base_pct_of_total": 0.297642,
+      "all_in_multiplier": 1.423775,
       "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-09-19&listing_end_date=2026-09-26&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-04-12T14:44:48.695Z",
+      "captured_at": "2026-04-12T14:44:48.695Z",
+      "source_listing_id": "20BEvzYiOa",
+      "currency": "USD",
+      "start_date": "2026-09-26",
+      "end_date": "2026-10-03",
+      "check_in_date": "2026-09-26",
+      "check_out_date": "2026-10-03",
+      "nights": 7,
+      "base_nightly": 692.29,
+      "all_in_nightly": 985.54,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 4846,
+      "taxes_total": 879.98,
+      "fees_total_excl_taxes": 1172.83,
+      "fee_lines": [
+        {
+          "name": "Booking Fee",
+          "amount": 339.22
+        },
+        {
+          "name": "Channel Offset Fee",
+          "amount": 286.61
+        },
+        {
+          "name": "Damage Waiver",
+          "amount": 100
+        },
+        {
+          "name": "Guest Cleaning Fee",
+          "amount": 447
+        }
+      ],
+      "grand_total": 6898.81,
+      "quoted_total": 6898.81,
+      "fee_pct_of_base": 0.24202,
+      "tax_pct_of_base": 0.181589,
+      "non_base_pct_of_total": 0.29756,
+      "all_in_multiplier": 1.423609,
+      "handoff_url": "https://itinerary.key.co/listings/20BEvzYiOa/checkout?listing_start_date=2026-09-26&listing_end_date=2026-10-03&listing_adult_count=1&listing_child_count=0&listing_infant_count=0&listing_pet_count=0",
+      "source": "quote_api"
     }
   ]
 }

@@ -6,7 +6,7 @@
     "ids_tuple": "2261-266474",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/harmony-bay"
   },
-  "fetched_at": "2026-04-12T02:05:02.316Z",
+  "fetched_at": "2026-04-12T14:24:09.702Z",
   "title": "Spacious 4BR 30A Vacation Home with Beach Access",
   "h1": "Harmony by the Bay",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/harmony-bay",
@@ -144,8 +144,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=46+Tyler+James+Way%20&saddr=Current%20Location",
     "directions_daddr": "46 Tyler James Way",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.397958,
+    "longitude": -86.227737
   },
   "media_gallery": {
     "image_count": 56,
@@ -234,21 +234,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "harmony-bay",
-    "captured_at": "2026-04-12T02:05:02.316Z",
+    "captured_at": "2026-04-12T14:24:09.702Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2026-04-29",
         "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "raw_rule": "2026-04-13..2026-04-29:2"
       },
       {
         "start_date": "2026-04-30",
@@ -264,9 +264,21 @@
       },
       {
         "start_date": "2026-05-07",
+        "end_date": "2026-05-09",
+        "min_nights": 3,
+        "raw_rule": "2026-05-07..2026-05-09:3"
+      },
+      {
+        "start_date": "2026-05-10",
+        "end_date": "2026-05-10",
+        "min_nights": 2,
+        "raw_rule": "2026-05-10..2026-05-10:2"
+      },
+      {
+        "start_date": "2026-05-11",
         "end_date": "2026-05-20",
         "min_nights": 3,
-        "raw_rule": "2026-05-07..2026-05-20:3"
+        "raw_rule": "2026-05-11..2026-05-20:3"
       },
       {
         "start_date": "2026-05-21",
@@ -494,16 +506,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -755,7 +767,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-11",
@@ -7078,20 +7090,20 @@
     ],
     "counts": {
       "available": 604,
-      "unavailable": 6,
+      "unavailable": 5,
       "checkin_only": 1,
-      "checkout_only": 120,
+      "checkout_only": 121,
       "other": 0,
       "booking_available": 604,
-      "booking_unavailable": 6,
-      "booking_unknown": 121
+      "booking_unavailable": 5,
+      "booking_unknown": 122
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/harmony-bay.html",
   "scrape_metrics": {
-    "total_ms": 6801,
-    "page_load_ms": 4633,
-    "extraction_ms": 2018,
+    "total_ms": 6095,
+    "page_load_ms": 4553,
+    "extraction_ms": 1456,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

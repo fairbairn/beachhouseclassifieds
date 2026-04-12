@@ -6,7 +6,7 @@
     "ids_tuple": "2261-242025",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/shore-thing"
   },
-  "fetched_at": "2026-04-12T02:06:33.175Z",
+  "fetched_at": "2026-04-12T14:25:24.152Z",
   "title": "Shore Thing | Benchmark Management Vacation Rental",
   "h1": "Shore Thing",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/shore-thing",
@@ -148,8 +148,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=102+Seacrest+Beach+Blvd+E%20&saddr=Current%20Location",
     "directions_daddr": "102 Seacrest Beach Blvd E",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.28311,
+    "longitude": -86.020081
   },
   "media_gallery": {
     "image_count": 82,
@@ -264,27 +264,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "shore-thing",
-    "captured_at": "2026-04-12T02:06:33.175Z",
+    "captured_at": "2026-04-12T14:25:24.152Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-05-08",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-05-08:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-05-09",
+        "start_date": "2026-04-13",
+        "end_date": "2026-05-10",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-05-10:2"
+      },
+      {
+        "start_date": "2026-05-11",
         "end_date": "2026-05-20",
         "min_nights": 3,
-        "raw_rule": "2026-05-09..2026-05-20:3"
+        "raw_rule": "2026-05-11..2026-05-20:3"
       },
       {
         "start_date": "2026-05-21",
@@ -464,16 +464,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUIAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAOOOOOOAOOOOOOAOOOOOOAOOOOOOOOOOOOOIOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOOOOOOOOIOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUIAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAOOOOOOAOOOOOOAOOOOOOAOOOOOOOOOOOOOIOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOOOOOOOOIOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -716,7 +716,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-10",
@@ -725,7 +725,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-11",
@@ -7048,20 +7048,20 @@
     ],
     "counts": {
       "available": 574,
-      "unavailable": 30,
+      "unavailable": 29,
       "checkin_only": 5,
-      "checkout_only": 122,
+      "checkout_only": 123,
       "other": 0,
       "booking_available": 574,
-      "booking_unavailable": 30,
-      "booking_unknown": 127
+      "booking_unavailable": 29,
+      "booking_unknown": 128
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/shore-thing.html",
   "scrape_metrics": {
-    "total_ms": 5162,
-    "page_load_ms": 3311,
-    "extraction_ms": 1646,
+    "total_ms": 4885,
+    "page_load_ms": 3309,
+    "extraction_ms": 1463,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

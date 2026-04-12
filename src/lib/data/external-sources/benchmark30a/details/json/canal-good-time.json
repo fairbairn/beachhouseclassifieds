@@ -6,7 +6,7 @@
     "ids_tuple": "2261-180886",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/canal-good-time"
   },
-  "fetched_at": "2026-04-12T02:04:17.533Z",
+  "fetched_at": "2026-04-12T14:23:36.678Z",
   "title": "Canal Of A Good Time | Benchmark Management Vacation Rental",
   "h1": "Canal Of A Good Time",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/canal-good-time",
@@ -159,8 +159,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=250+Canal+Street%20&saddr=Current%20Location",
     "directions_daddr": "250 Canal Street",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.3221,
+    "longitude": -86.13095
   },
   "media_gallery": {
     "image_count": 48,
@@ -241,27 +241,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "canal-good-time",
-    "captured_at": "2026-04-12T02:04:17.533Z",
+    "captured_at": "2026-04-12T14:23:36.678Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-29",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-30",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-30",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-30:2"
+      },
+      {
+        "start_date": "2026-05-01",
         "end_date": "2026-05-02",
         "min_nights": 3,
-        "raw_rule": "2026-04-30..2026-05-02:3"
+        "raw_rule": "2026-05-01..2026-05-02:3"
       },
       {
         "start_date": "2026-05-03",
@@ -831,16 +831,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UIAAAAOUUUUUIAOUUUUIAAAAAAAAAOUUUIAAAAAAAOUUUIAAOUUUUUIOUUIAOUUUUUUUUUUUUUUUUUUIAAAOUUUUUUUUUIAOUUIAAAAOUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OIAAAAOUUUUUIAOUUUUIAAAAAAAAAOUUUIAAAAAAAOUUUIAAOUUUUUIOUUIAOUUUUUUUUUUUUUUUUUUIAAAOUUUUUUUUUIAOUUIAAAAOUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -1002,7 +1002,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-01",
@@ -6785,20 +6785,20 @@
     ],
     "counts": {
       "available": 574,
-      "unavailable": 62,
+      "unavailable": 61,
       "checkin_only": 13,
-      "checkout_only": 12,
+      "checkout_only": 13,
       "other": 0,
       "booking_available": 574,
-      "booking_unavailable": 62,
-      "booking_unknown": 25
+      "booking_unavailable": 61,
+      "booking_unknown": 26
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/canal-good-time.html",
   "scrape_metrics": {
-    "total_ms": 6453,
-    "page_load_ms": 4219,
-    "extraction_ms": 1994,
+    "total_ms": 4513,
+    "page_load_ms": 3020,
+    "extraction_ms": 1397,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

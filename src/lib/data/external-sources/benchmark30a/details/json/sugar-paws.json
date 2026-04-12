@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175757",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sugar-paws"
   },
-  "fetched_at": "2026-04-12T02:06:50.741Z",
+  "fetched_at": "2026-04-12T14:25:35.368Z",
   "title": "Sugar Paws | Benchmark Management Vacation Rental",
   "h1": "Sugar Paws",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/sugar-paws",
@@ -156,8 +156,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=211+Sugar+Sand+Ln%20&saddr=Current%20Location",
     "directions_daddr": "211 Sugar Sand Ln",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.313396,
+    "longitude": -86.112406
   },
   "media_gallery": {
     "image_count": 60,
@@ -250,21 +250,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "sugar-paws",
-    "captured_at": "2026-04-12T02:06:50.741Z",
+    "captured_at": "2026-04-12T14:25:35.368Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2026-06-30",
         "min_nights": 3,
-        "raw_rule": "2026-04-12..2026-06-30:3"
+        "raw_rule": "2026-04-13..2026-06-30:3"
       },
       {
         "start_date": "2026-07-01",
@@ -274,9 +274,9 @@
       },
       {
         "start_date": "2026-07-02",
-        "end_date": "2027-10-06",
+        "end_date": "2027-10-07",
         "min_nights": 3,
-        "raw_rule": "2026-07-02..2027-10-06:3"
+        "raw_rule": "2026-07-02..2027-10-07:3"
       }
     ],
     "window_start": "2026-04-12",
@@ -288,16 +288,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUIAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUIAAAAAOUUIAAOUUUUUUUUIAAAOUUUIAAAOUUUUUUUUUUUUIAOUUIAAAAAAOUUUUIAAAOUUUUUIAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUIAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUIAAAAAOUUIAAOUUUUUUUUIAAAOUUUIAAAOUUUUUUUUUUUUIAOUUIAAAAAAOUUUUIAAAOUUUUUIAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -5184,7 +5184,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": null
+        "min_nights_required": 3
       },
       {
         "date": "2027-10-08",
@@ -6872,20 +6872,20 @@
     ],
     "counts": {
       "available": 636,
-      "unavailable": 74,
+      "unavailable": 73,
       "checkin_only": 11,
-      "checkout_only": 10,
+      "checkout_only": 11,
       "other": 0,
       "booking_available": 636,
-      "booking_unavailable": 74,
-      "booking_unknown": 21
+      "booking_unavailable": 73,
+      "booking_unknown": 22
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/sugar-paws.html",
   "scrape_metrics": {
-    "total_ms": 8278,
-    "page_load_ms": 5780,
-    "extraction_ms": 2362,
+    "total_ms": 5616,
+    "page_load_ms": 3947,
+    "extraction_ms": 1579,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

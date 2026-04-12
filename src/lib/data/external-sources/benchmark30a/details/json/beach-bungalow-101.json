@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175527",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/beach-bungalow-101"
   },
-  "fetched_at": "2026-04-12T02:03:55.013Z",
+  "fetched_at": "2026-04-12T14:23:16.269Z",
   "title": "Beach Bungalow 101 | Benchmark Management Vacation Rental",
   "h1": "Beach Bungalow 101",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/beach-bungalow-101",
@@ -155,8 +155,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=198+Somerset+Bridge+Rd%20&saddr=Current%20Location",
     "directions_daddr": "198 Somerset Bridge Rd",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.315683,
+    "longitude": -86.112104
   },
   "media_gallery": {
     "image_count": 73,
@@ -262,15 +262,15 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "beach-bungalow-101",
-    "captured_at": "2026-04-12T02:03:55.013Z",
+    "captured_at": "2026-04-12T14:23:16.269Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-18",
+        "start_date": "2026-04-19",
         "end_date": "2026-05-28",
         "min_nights": 2,
-        "raw_rule": "2026-04-18..2026-05-28:2"
+        "raw_rule": "2026-04-19..2026-05-28:2"
       },
       {
         "start_date": "2026-05-29",
@@ -432,15 +432,15 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAOUUUIAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAAOUUUUUIOOOOOOAOOOOOOOUUUUUUIOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAOUUUIAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAAOUUUUUIOOOOOOAOOOOOOOUUUUUUIOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "booking_day_state": "unknown",
         "min_nights_required": null
       },
       {
@@ -495,7 +495,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "min_nights_required": null
       },
       {
         "date": "2026-04-19",
@@ -7015,21 +7015,21 @@
       }
     ],
     "counts": {
-      "available": 605,
+      "available": 604,
       "unavailable": 22,
       "checkin_only": 4,
-      "checkout_only": 100,
+      "checkout_only": 101,
       "other": 0,
-      "booking_available": 605,
+      "booking_available": 604,
       "booking_unavailable": 22,
-      "booking_unknown": 104
+      "booking_unknown": 105
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/beach-bungalow-101.html",
   "scrape_metrics": {
-    "total_ms": 6779,
-    "page_load_ms": 5918,
-    "extraction_ms": 734,
+    "total_ms": 4103,
+    "page_load_ms": 2700,
+    "extraction_ms": 1309,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

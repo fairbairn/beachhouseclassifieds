@@ -6,7 +6,7 @@
     "ids_tuple": "2261-256099",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/serene-near-sea"
   },
-  "fetched_at": "2026-04-12T02:06:30.831Z",
+  "fetched_at": "2026-04-12T14:25:19.363Z",
   "title": "Serene Near the Sea | Benchmark Management Vacation Rental",
   "h1": "Serene Near the Sea",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/serene-near-sea",
@@ -139,8 +139,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=16+Serene+Way%20&saddr=Current%20Location",
     "directions_daddr": "16 Serene Way",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.358078,
+    "longitude": -86.254025
   },
   "media_gallery": {
     "image_count": 64,
@@ -237,27 +237,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "serene-near-sea",
-    "captured_at": "2026-04-12T02:06:30.832Z",
+    "captured_at": "2026-04-12T14:25:19.363Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-29",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-29:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-30",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-30",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-30:2"
+      },
+      {
+        "start_date": "2026-05-01",
         "end_date": "2026-05-21",
         "min_nights": 3,
-        "raw_rule": "2026-04-30..2026-05-21:3"
+        "raw_rule": "2026-05-01..2026-05-21:3"
       },
       {
         "start_date": "2026-05-22",
@@ -299,16 +299,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UIAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAOUUUUUIOUUUUIOUUUUUIAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OIAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAOUUUUUIOUUUUIOUUUUUIAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -470,7 +470,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-05-01",
@@ -6883,20 +6883,20 @@
     ],
     "counts": {
       "available": 647,
-      "unavailable": 69,
+      "unavailable": 68,
       "checkin_only": 8,
-      "checkout_only": 7,
+      "checkout_only": 8,
       "other": 0,
       "booking_available": 647,
-      "booking_unavailable": 69,
-      "booking_unknown": 15
+      "booking_unavailable": 68,
+      "booking_unknown": 16
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/serene-near-sea.html",
   "scrape_metrics": {
-    "total_ms": 5410,
-    "page_load_ms": 3822,
-    "extraction_ms": 1392,
+    "total_ms": 4269,
+    "page_load_ms": 2916,
+    "extraction_ms": 1250,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

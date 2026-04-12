@@ -6,7 +6,7 @@
     "ids_tuple": "2261-280650",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/starbright"
   },
-  "fetched_at": "2026-04-12T02:06:42.756Z",
+  "fetched_at": "2026-04-12T14:25:31.423Z",
   "title": "Starbright | Benchmark Management Vacation Rental",
   "h1": "Starbright",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/starbright",
@@ -148,8 +148,8 @@
     "location_label": "30A | Private Home | No Beach View",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=243+Cottage+Way%20&saddr=Current%20Location",
     "directions_daddr": "243 Cottage Way",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.288688,
+    "longitude": -86.042904
   },
   "media_gallery": {
     "image_count": 49,
@@ -231,15 +231,15 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "starbright",
-    "captured_at": "2026-04-12T02:06:42.756Z",
+    "captured_at": "2026-04-12T14:25:31.423Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
+        "start_date": "2026-04-12",
         "end_date": "2026-04-28",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-28:1"
+        "raw_rule": "2026-04-12..2026-04-28:1"
       },
       {
         "start_date": "2026-04-29",
@@ -275,15 +275,15 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAOUUUUUIAAAOUUUIOUUUIOUUUUUUIOUUUUUUIAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAOUUUUUIAAAOUUUIOUUUIOUUUUUUIOUUUUUUIAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
         "min_nights_required": 1
       },
       {
@@ -6859,20 +6859,20 @@
     ],
     "counts": {
       "available": 662,
-      "unavailable": 56,
+      "unavailable": 55,
       "checkin_only": 7,
-      "checkout_only": 6,
+      "checkout_only": 7,
       "other": 0,
       "booking_available": 662,
-      "booking_unavailable": 56,
-      "booking_unknown": 13
+      "booking_unavailable": 55,
+      "booking_unknown": 14
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/starbright.html",
   "scrape_metrics": {
-    "total_ms": 5968,
-    "page_load_ms": 3374,
-    "extraction_ms": 2400,
+    "total_ms": 5564,
+    "page_load_ms": 4331,
+    "extraction_ms": 1132,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

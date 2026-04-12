@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175528",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/blue-bungalow"
   },
-  "fetched_at": "2026-04-12T02:04:04.713Z",
+  "fetched_at": "2026-04-12T14:23:25.733Z",
   "title": "Private 5BR/3.5BA Home on 30A with a Private Pool",
   "h1": "Blue Bungalow",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/blue-bungalow",
@@ -171,8 +171,8 @@
     "location_label": "30A | Private Home | Beach Side",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=240+S+Gulf+Dr%20&saddr=Current%20Location",
     "directions_daddr": "240 S Gulf Dr",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.309515,
+    "longitude": -86.096306
   },
   "media_gallery": {
     "image_count": 62,
@@ -267,21 +267,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "blue-bungalow",
-    "captured_at": "2026-04-12T02:04:04.713Z",
+    "captured_at": "2026-04-12T14:23:25.733Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
-        "end_date": "2027-09-30",
+        "start_date": "2026-04-13",
+        "end_date": "2027-10-01",
         "min_nights": 7,
-        "raw_rule": "2026-04-12..2027-09-30:7"
+        "raw_rule": "2026-04-13..2027-10-01:7"
       }
     ],
     "window_start": "2026-04-12",
@@ -293,16 +293,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UIAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAOUUUUUUIAAAAOUUUUUUIAAAOUUUUUUIAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OIAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAOUUUUUUIAAAAOUUUUUUIAAAOUUUUUUIAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 7
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -5135,7 +5135,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": null
+        "min_nights_required": 7
       },
       {
         "date": "2027-10-02",
@@ -6877,22 +6877,21 @@
     ],
     "counts": {
       "available": 654,
-      "unavailable": 60,
+      "unavailable": 59,
       "checkin_only": 9,
-      "checkout_only": 8,
+      "checkout_only": 9,
       "other": 0,
       "booking_available": 654,
-      "booking_unavailable": 60,
-      "booking_unknown": 17
+      "booking_unavailable": 59,
+      "booking_unknown": 18
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/blue-bungalow.html",
   "scrape_metrics": {
-    "total_ms": 4795,
-    "page_load_ms": 3763,
-    "extraction_ms": 828,
+    "total_ms": 4136,
+    "page_load_ms": 2691,
+    "extraction_ms": 1320,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }
 }
-

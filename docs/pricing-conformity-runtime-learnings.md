@@ -1,6 +1,6 @@
 # Pricing Conformity Runtime Learnings
 
-Last updated: 2026-03-30T13:22:00Z
+Last updated: 2026-04-12T16:55:00Z
 
 ## 360blue (Completed Learnings)
 
@@ -28,3 +28,21 @@ Last updated: 2026-03-30T13:22:00Z
 - Quote sampling completed for 143 listings over a 24-week horizon.
 - Pricing cache fulfillment completed for 143 listings.
 - Quote sidecar conformity validation passed: `validated=143`, `failed=0`.
+
+## FunVacay Remediation Learnings (2026-04-12)
+
+- Capacity profile extraction can fail when adapters rely only on a single widget label path.
+  - Action: always include fallback parsing from rendered summary blocks (for example `rc-lodging-beds`, `rc-lodging-baths`, `rc-lodging-occ`) and label-aware text parsing.
+- Bath parsing must tolerate half-bath formatting variants (`HF Bath`, `half`, `1/2`) and not silently drop values.
+- Gallery extraction should accept only listing-image host/path patterns and actively reject known non-gallery assets.
+  - Example rogue class: site logos and static theme images (for example `ngt_logo`).
+- Validator warnings should be used to force early detection:
+  - all-nullish `property_profile` capacity trio (`beds`, `baths`, `sleeps`),
+  - out-of-pattern image URL groups inside a listing's image batch.
+
+### Cross-Adapter Quality Checklist
+
+1. Geospatial first: ensure `latitude` and `longitude` are populated for every listing whenever source provides coordinates.
+2. Capacity parity: maximize population of `beds`, `baths`, and `sleeps` via all credible extraction paths.
+3. Media hygiene: keep `image_urls` pattern-consistent and purge rogue/static references.
+4. Sanity thresholds: keep image-count and pattern anomaly checks enabled to identify adapter regressions quickly.

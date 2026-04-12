@@ -6,7 +6,7 @@
     "ids_tuple": "2261-255315",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/serene-stay-30a"
   },
-  "fetched_at": "2026-04-12T02:06:31.735Z",
+  "fetched_at": "2026-04-12T14:25:22.367Z",
   "title": "4‑BR 30A Beach Vacation Home with Golf Cart & Communal Pool",
   "h1": "Serene Stay on 30A",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/serene-stay-30a",
@@ -151,8 +151,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=22+Serene+Way%20&saddr=Current%20Location",
     "directions_daddr": "22 Serene Way",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.35808,
+    "longitude": -86.254152
   },
   "media_gallery": {
     "image_count": 62,
@@ -247,21 +247,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "serene-stay-30a",
-    "captured_at": "2026-04-12T02:06:31.736Z",
+    "captured_at": "2026-04-12T14:25:22.367Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
-        "end_date": "2027-10-06",
+        "start_date": "2026-04-13",
+        "end_date": "2027-10-07",
         "min_nights": 2,
-        "raw_rule": "2026-04-12..2027-10-06:2"
+        "raw_rule": "2026-04-13..2027-10-07:2"
       }
     ],
     "window_start": "2026-04-12",
@@ -273,16 +273,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUIAAAAAAAAOUUUUUIAAAAAAAAAAAAOUUUUUUUUUUUUUIAOUUUUUUUUUUUUUUUUUUUUUUUUUIOUUUUUUIOUUUUUUUUUUUUUIAAAOUUUUUUIAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAAAOUUUUUIOUUUUUIAAAAOUUUUUIAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUIAAAAAAAAOUUUUUIAAAAAAAAAAAAOUUUUUUUUUUUUUIAOUUUUUUUUUUUUUUUUUUUUUUUUUIOUUUUUUIOUUUUUUUUUUUUUIAAAOUUUUUUIAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAAAOUUUUUIOUUUUUIAAAAOUUUUUIAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 2
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -5169,7 +5169,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": null
+        "min_nights_required": 2
       },
       {
         "date": "2027-10-08",
@@ -5219,20 +5219,20 @@
     ],
     "counts": {
       "available": 391,
-      "unavailable": 129,
+      "unavailable": 128,
       "checkin_only": 15,
-      "checkout_only": 14,
+      "checkout_only": 15,
       "other": 0,
       "booking_available": 391,
-      "booking_unavailable": 129,
-      "booking_unknown": 29
+      "booking_unavailable": 128,
+      "booking_unknown": 30
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/serene-stay-30a.html",
   "scrape_metrics": {
-    "total_ms": 6314,
-    "page_load_ms": 4345,
-    "extraction_ms": 1776,
+    "total_ms": 5477,
+    "page_load_ms": 3481,
+    "extraction_ms": 1903,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

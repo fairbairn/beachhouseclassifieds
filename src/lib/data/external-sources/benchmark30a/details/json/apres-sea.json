@@ -6,7 +6,7 @@
     "ids_tuple": "2261-200757",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/apres-sea"
   },
-  "fetched_at": "2026-04-12T02:03:48.008Z",
+  "fetched_at": "2026-04-12T14:23:14.132Z",
   "title": "Après Sea | Benchmark Management Vacation Rental",
   "h1": "Après Sea",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/apres-sea",
@@ -166,8 +166,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=699+Patina+Blvd%20&saddr=Current%20Location",
     "directions_daddr": "699 Patina Blvd",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.296875,
+    "longitude": -86.048846
   },
   "media_gallery": {
     "image_count": 92,
@@ -292,21 +292,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "apres-sea",
-    "captured_at": "2026-04-12T02:03:48.008Z",
+    "captured_at": "2026-04-12T14:23:14.132Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
-        "end_date": "2027-10-04",
+        "start_date": "2026-04-13",
+        "end_date": "2027-10-05",
         "min_nights": 3,
-        "raw_rule": "2026-04-12..2027-10-04:3"
+        "raw_rule": "2026-04-13..2027-10-05:3"
       }
     ],
     "window_start": "2026-04-12",
@@ -318,16 +318,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUIAAAAOUUIAAAAAAAAAAOUUIAAAOUUIAAAAAAAAAAAOUUUUUUIAOUUUUUUIAAOUUUIAOUUIOUUUUUUUUUUUUUUUUIAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUIAAAAOUUIAAAAAAAAAAOUUIAAAOUUIAAAAAAAAAAAOUUUUUUIAOUUUUUUIAAOUUUIAOUUIOUUUUUUUUUUUUUUUUIAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -5196,7 +5196,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": null
+        "min_nights_required": 3
       },
       {
         "date": "2027-10-06",
@@ -6902,20 +6902,20 @@
     ],
     "counts": {
       "available": 639,
-      "unavailable": 73,
+      "unavailable": 72,
       "checkin_only": 10,
-      "checkout_only": 9,
+      "checkout_only": 10,
       "other": 0,
       "booking_available": 639,
-      "booking_unavailable": 73,
-      "booking_unknown": 19
+      "booking_unavailable": 72,
+      "booking_unknown": 20
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/apres-sea.html",
   "scrape_metrics": {
-    "total_ms": 5747,
-    "page_load_ms": 3328,
-    "extraction_ms": 2293,
+    "total_ms": 4688,
+    "page_load_ms": 2879,
+    "extraction_ms": 1722,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

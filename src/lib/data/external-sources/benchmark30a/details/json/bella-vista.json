@@ -6,7 +6,7 @@
     "ids_tuple": "2261-175524",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/bella-vista"
   },
-  "fetched_at": "2026-04-12T02:04:02.184Z",
+  "fetched_at": "2026-04-12T14:23:22.686Z",
   "title": "Bella Vista | Benchmark Management Vacation Rental",
   "h1": "Bella Vista",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/bella-vista",
@@ -156,8 +156,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=24+Tupelo+St%20&saddr=Current%20Location",
     "directions_daddr": "24 Tupelo St",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.319023,
+    "longitude": -86.134437
   },
   "media_gallery": {
     "image_count": 39,
@@ -229,15 +229,15 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "bella-vista",
-    "captured_at": "2026-04-12T02:04:02.184Z",
+    "captured_at": "2026-04-12T14:23:22.686Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-22",
+        "start_date": "2026-04-24",
         "end_date": "2026-05-13",
         "min_nights": 2,
-        "raw_rule": "2026-04-22..2026-05-13:2"
+        "raw_rule": "2026-04-24..2026-05-13:2"
       },
       {
         "start_date": "2026-05-14",
@@ -993,15 +993,15 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AOUUIOUUUIAOUUUIAAAOUUUUUUUUUUUIAAOUUUUUUUUUUUUUUIOUUIAOUUUUUUUUUUUUUIAAAAOUUIAAAAAAOUUIAAAAAAOUUUUUIAOUUUUUUIAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAAOUUIAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OOUUIOUUUIAOUUUIAAAOUUUUUUUUUUUIAAOUUUUUUUUUUUUUUIOUUIAOUUUUUUUUUUUUUIAAAAOUUIAAAAAAOUUIAAAAAAOUUUUUIAOUUUUUUIAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAAOUUIAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "booking_day_state": "unknown",
         "min_nights_required": null
       },
       {
@@ -1092,7 +1092,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 2
+        "min_nights_required": null
       },
       {
         "date": "2026-04-23",
@@ -1101,7 +1101,7 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "unknown",
-        "min_nights_required": 2
+        "min_nights_required": null
       },
       {
         "date": "2026-04-24",
@@ -7576,21 +7576,21 @@
       }
     ],
     "counts": {
-      "available": 527,
+      "available": 526,
       "unavailable": 172,
       "checkin_only": 16,
-      "checkout_only": 16,
+      "checkout_only": 17,
       "other": 0,
-      "booking_available": 527,
+      "booking_available": 526,
       "booking_unavailable": 172,
-      "booking_unknown": 32
+      "booking_unknown": 33
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/bella-vista.html",
   "scrape_metrics": {
-    "total_ms": 6997,
-    "page_load_ms": 4873,
-    "extraction_ms": 1987,
+    "total_ms": 5901,
+    "page_load_ms": 4326,
+    "extraction_ms": 1485,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

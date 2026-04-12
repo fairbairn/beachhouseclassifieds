@@ -6,7 +6,7 @@
     "ids_tuple": "2261-156812",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/breakaway"
   },
-  "fetched_at": "2026-04-12T02:04:12.478Z",
+  "fetched_at": "2026-04-12T14:23:33.391Z",
   "title": "3BR Private Home on 30A with Beach Access & a Shared Pool",
   "h1": "Breakaway",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/breakaway",
@@ -144,8 +144,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=186+Emerald+Dune+Circle%20&saddr=Current%20Location",
     "directions_daddr": "186 Emerald Dune Circle",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.34545,
+    "longitude": -86.22189
   },
   "media_gallery": {
     "image_count": 60,
@@ -238,27 +238,27 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "breakaway",
-    "captured_at": "2026-04-12T02:04:12.478Z",
+    "captured_at": "2026-04-12T14:23:33.391Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
-        "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
-      },
-      {
         "start_date": "2026-04-12",
-        "end_date": "2026-04-23",
-        "min_nights": 2,
-        "raw_rule": "2026-04-12..2026-04-23:2"
+        "end_date": "2026-04-12",
+        "min_nights": 1,
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-24",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-24",
+        "min_nights": 2,
+        "raw_rule": "2026-04-13..2026-04-24:2"
+      },
+      {
+        "start_date": "2026-04-25",
         "end_date": "2026-05-29",
         "min_nights": 3,
-        "raw_rule": "2026-04-24..2026-05-29:3"
+        "raw_rule": "2026-04-25..2026-05-29:3"
       },
       {
         "start_date": "2026-05-30",
@@ -288,16 +288,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAOUUUUUUUUIAAOUUIAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OAAAAAAAAAAAAAAAAAAAOUUUUUUUUIAAOUUIAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
+        "status_code": "O",
+        "is_available": false,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 2
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -405,7 +405,7 @@
         "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
-        "min_nights_required": 3
+        "min_nights_required": 2
       },
       {
         "date": "2026-04-25",
@@ -6871,21 +6871,21 @@
       }
     ],
     "counts": {
-      "available": 693,
+      "available": 692,
       "unavailable": 26,
       "checkin_only": 6,
-      "checkout_only": 6,
+      "checkout_only": 7,
       "other": 0,
-      "booking_available": 693,
+      "booking_available": 692,
       "booking_unavailable": 26,
-      "booking_unknown": 12
+      "booking_unknown": 13
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/breakaway.html",
   "scrape_metrics": {
-    "total_ms": 4891,
-    "page_load_ms": 3941,
-    "extraction_ms": 789,
+    "total_ms": 4701,
+    "page_load_ms": 2610,
+    "extraction_ms": 2002,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

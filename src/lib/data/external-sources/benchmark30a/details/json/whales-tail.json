@@ -6,7 +6,7 @@
     "ids_tuple": "2261-162549",
     "detail_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/whales-tail"
   },
-  "fetched_at": "2026-04-12T02:07:01.409Z",
+  "fetched_at": "2026-04-12T14:25:46.998Z",
   "title": "A Whale's Tail | Benchmark Management Vacation Rental",
   "h1": "A Whale's Tail",
   "canonical_url": "https://www.benchmark30a.com/emerald-coast-vacation-rentals/whales-tail",
@@ -174,8 +174,8 @@
     "location_label": "30A | Private Home | Beach Access",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=15+Dewdrop+Lane%20&saddr=Current%20Location",
     "directions_daddr": "15 Dewdrop Lane",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.3269,
+    "longitude": -86.12497
   },
   "media_gallery": {
     "image_count": 58,
@@ -266,21 +266,21 @@
   "normalized_availability": {
     "source": "pm_benchmark30a",
     "external_listing_id": "whales-tail",
-    "captured_at": "2026-04-12T02:07:01.409Z",
+    "captured_at": "2026-04-12T14:25:46.998Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [
       {
-        "start_date": "2026-04-11",
-        "end_date": "2026-04-11",
+        "start_date": "2026-04-12",
+        "end_date": "2026-04-12",
         "min_nights": 1,
-        "raw_rule": "2026-04-11..2026-04-11:1"
+        "raw_rule": "2026-04-12..2026-04-12:1"
       },
       {
-        "start_date": "2026-04-12",
+        "start_date": "2026-04-13",
         "end_date": "2026-05-29",
         "min_nights": 3,
-        "raw_rule": "2026-04-12..2026-05-29:3"
+        "raw_rule": "2026-04-13..2026-05-29:3"
       },
       {
         "start_date": "2026-05-30",
@@ -346,16 +346,16 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAOUUUUUUIAAAAAAAAAAAAOUUUIOUUIAAAAAAAAAAAAAAAAAAAOUUUUIAAAOUUUUUIAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAOUUUUUUIAAAAAAAAAAAAOUUUIOUUIAAAAAAAAAAAAAAAAAAAOUUUUIAAAOUUUUUIAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-12",
-        "status_code": "U",
+        "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 3
+        "is_available_for_checkout": true,
+        "booking_day_state": "unknown",
+        "min_nights_required": 1
       },
       {
         "date": "2026-04-13",
@@ -6930,20 +6930,20 @@
     ],
     "counts": {
       "available": 609,
-      "unavailable": 107,
+      "unavailable": 106,
       "checkin_only": 8,
-      "checkout_only": 7,
+      "checkout_only": 8,
       "other": 0,
       "booking_available": 609,
-      "booking_unavailable": 107,
-      "booking_unknown": 15
+      "booking_unavailable": 106,
+      "booking_unknown": 16
     }
   },
   "html_path": "src/lib/data/external-sources/benchmark30a/details/html/whales-tail.html",
   "scrape_metrics": {
-    "total_ms": 5303,
-    "page_load_ms": 3538,
-    "extraction_ms": 1639,
+    "total_ms": 5365,
+    "page_load_ms": 4116,
+    "extraction_ms": 1089,
     "calendar_clicks": 0,
     "calendar_iterations": 0
   }

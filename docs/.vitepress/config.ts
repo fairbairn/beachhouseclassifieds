@@ -18,6 +18,10 @@ export default defineConfig({
             link: "/pricing-system-reference",
           },
           {
+            text: "CLI Runner Reference",
+            link: "/cli-runner-reference",
+          },
+          {
             text: "Brand and Visual Direction",
             link: "/brand-and-visual-direction",
           },

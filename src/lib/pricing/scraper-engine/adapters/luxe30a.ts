@@ -476,6 +476,7 @@ async function fetchDetail(
   >[0]["browser"],
   detailUrl: string,
   availabilityHorizonDays: number,
+  maxCalendarAdvanceMonths: number,
 ): Promise<LuxeDetailRecord | null> {
   const normalizedDetailUrl = normalizeDetailUrl(detailUrl);
   if (!normalizedDetailUrl) {
@@ -485,7 +486,7 @@ async function fetchDetail(
   const page = await browser.newPage();
   const externalListingId = extractPropertyId(normalizedDetailUrl);
   let listingApiData: Record<string, unknown> | null = null;
-  let calendarApiData: Array<Record<string, unknown>> | null = null;
+  const calendarApiDataByDate = new Map<string, Record<string, unknown>>();
 
   page.on("response", (response) => {
     void (async () => {
@@ -511,12 +512,19 @@ async function fetchDetail(
 
         if (responseUrl.includes(`${listingBasePath}/calendar`)) {
           if (Array.isArray(payload)) {
-            calendarApiData = payload
-              .filter(
-                (entry): entry is Record<string, unknown> =>
-                  typeof entry === "object" && entry !== null,
-              )
-              .slice(0, Math.max(availabilityHorizonDays + 7, 30));
+            for (const entry of payload) {
+              if (typeof entry !== "object" || entry === null) {
+                continue;
+              }
+              const date =
+                typeof (entry as Record<string, unknown>).date === "string"
+                  ? (entry as Record<string, unknown>).date
+                  : "";
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                continue;
+              }
+              calendarApiDataByDate.set(date, entry as Record<string, unknown>);
+            }
           }
           return;
         }
@@ -552,6 +560,51 @@ async function fetchDetail(
     await page.waitForTimeout(1400);
 
     await expandDetailSections(page);
+
+    for (let monthStep = 0; monthStep < maxCalendarAdvanceMonths; monthStep += 1) {
+      const advanced = await page.evaluate(() => {
+        const controls = Array.from(
+          document.querySelectorAll("button[aria-label], [role='button'][aria-label]"),
+        );
+
+        const nextControl = controls.find((node) => {
+          const label = (node.getAttribute("aria-label") || "")
+            .toLowerCase()
+            .replace(/\s+/g, " ")
+            .trim();
+          if (!label) {
+            return false;
+          }
+          if (/(previous|prev) month/.test(label)) {
+            return false;
+          }
+          return /(next month|next|forward|go to next month)/.test(label);
+        });
+
+        if (!(nextControl instanceof HTMLElement)) {
+          return false;
+        }
+
+        const disabled =
+          nextControl.hasAttribute("disabled") ||
+          (nextControl.getAttribute("aria-disabled") || "").toLowerCase() ===
+            "true";
+
+        if (disabled) {
+          return false;
+        }
+
+        nextControl.click();
+        return true;
+      });
+
+      if (!advanced) {
+        break;
+      }
+
+      await page.waitForTimeout(250);
+    }
+
     await page.waitForTimeout(800);
 
     const extracted = await page.evaluate((horizonDays: number) => {
@@ -786,7 +839,14 @@ async function fetchDetail(
           continue;
         }
 
-        const parsedDate = new Date(label);
+        const attrDateRaw =
+          (button.getAttribute("data-date") ||
+            button.getAttribute("value") ||
+            "")
+            .trim()
+            .match(/^\d{4}-\d{2}-\d{2}$/)?.[0] || "";
+
+        const parsedDate = attrDateRaw ? new Date(attrDateRaw) : new Date(label);
         if (Number.isNaN(parsedDate.getTime())) {
           continue;
         }
@@ -844,7 +904,15 @@ async function fetchDetail(
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
     const listingFromApi = listingApiData;
-    const calendarFromApi = calendarApiData;
+    const calendarFromApi = Array.from(calendarApiDataByDate.values())
+      .sort((left, right) => {
+        const leftDate =
+          typeof left.date === "string" ? left.date : "9999-99-99";
+        const rightDate =
+          typeof right.date === "string" ? right.date : "9999-99-99";
+        return leftDate.localeCompare(rightDate);
+      })
+      .slice(0, Math.max(availabilityHorizonDays + 7, 30));
 
     const titleFromApi =
       listingFromApi && typeof listingFromApi.title === "string"
@@ -1180,6 +1248,7 @@ export function createLuxe30AAdapter(): ScraperAdapter<LuxeDetailRecord> {
         context.browser,
         context.detailUrl,
         context.availabilityHorizonDays,
+        context.maxCalendarAdvanceMonths,
       );
     },
   };
