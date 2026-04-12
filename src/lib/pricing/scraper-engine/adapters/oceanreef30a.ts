@@ -240,12 +240,56 @@ function splitSrcsetCandidates(value: string): string[] {
     .filter(Boolean);
 }
 
+function unwrapTrackhsImageSource(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const decoded = decodeURIComponent(trimmed);
+  const lastHttps = decoded.lastIndexOf("https://");
+  const lastHttp = decoded.lastIndexOf("http://");
+  const startIndex = Math.max(lastHttps, lastHttp);
+
+  if (startIndex > 0) {
+    return decoded.slice(startIndex).trim();
+  }
+
+  return decoded;
+}
+
+function normalizeOceanReefGalleryUrl(value: string): string | null {
+  const unwrapped = unwrapTrackhsImageSource(value);
+  const normalized = absoluteHttpUrl(unwrapped);
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname;
+
+    const isOceanReefImageBucket =
+      host === "track-pm.s3.amazonaws.com" &&
+      path.startsWith("/oceanreefresorts/image/");
+
+    if (!isOceanReefImageBucket) {
+      return null;
+    }
+
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+  } catch {
+    return null;
+  }
+}
+
 function collectMediaUrls(html: string): string[] {
   const urls: string[] = [];
   const seen = new Set<string>();
 
   const push = (candidate: string) => {
-    const normalized = absoluteHttpUrl(candidate);
+    const normalized = normalizeOceanReefGalleryUrl(candidate);
     if (!normalized || seen.has(normalized)) {
       return;
     }

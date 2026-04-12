@@ -14,6 +14,7 @@ type CliOptions = {
   adapterKey: string;
   listingId: string | null;
   maxListings: number | null;
+  orphanMode: "listing" | "artifact";
 };
 
 type DetailRecord = {
@@ -85,6 +86,7 @@ function parseArgs(argv: string[]): CliOptions {
   let adapterKey: string | null = null;
   let listingId: string | null = null;
   let maxListings: number | null = null;
+  let orphanMode: "listing" | "artifact" = "listing";
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -113,13 +115,41 @@ function parseArgs(argv: string[]): CliOptions {
       index += 1;
       continue;
     }
+
+    if (arg === "--orphan-mode" && value) {
+      const normalized = value.trim().toLowerCase();
+      if (
+        normalized === "listing" ||
+        normalized === "default" ||
+        normalized === "unique"
+      ) {
+        orphanMode = "listing";
+      } else if (
+        normalized === "artifact" ||
+        normalized === "comprehensive" ||
+        normalized === "full"
+      ) {
+        orphanMode = "artifact";
+      } else {
+        throw new Error(
+          `Invalid --orphan-mode '${value}'. Use 'listing' or 'artifact'.`,
+        );
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--comprehensive-orphan-check") {
+      orphanMode = "artifact";
+      continue;
+    }
   }
 
   if (!adapterKey) {
     throw new Error("Missing required --adapter-key <adapterKey>");
   }
 
-  return { adapterKey, listingId, maxListings };
+  return { adapterKey, listingId, maxListings, orphanMode };
 }
 
 function normalizeFileBase(name: string, extension: string): string {
@@ -262,6 +292,20 @@ function getImageUrlPatternSignature(value: string): string | null {
     const segments = parsed.pathname
       .split("/")
       .filter(Boolean)
+      .slice(0, 1)
+      .join("/");
+    return `${parsed.origin}/${segments}`;
+  } catch {
+    return null;
+  }
+}
+
+function getImageUrlPatternSignatureFine(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    const segments = parsed.pathname
+      .split("/")
+      .filter(Boolean)
       .slice(0, 2)
       .join("/");
     return `${parsed.origin}/${segments}`;
@@ -278,37 +322,71 @@ function getImageUrlPatternOutliers(imageUrls: string[]): {
     return { baselinePattern: null, outliers: [] };
   }
 
-  const patternCount = new Map<string, number>();
-  const urlPatterns: Array<{ url: string; pattern: string | null }> = [];
+  const coarsePatternCount = new Map<string, number>();
+  const finePatternCount = new Map<string, number>();
+  const urlPatterns: Array<{
+    url: string;
+    coarsePattern: string | null;
+    finePattern: string | null;
+  }> = [];
 
   for (const url of imageUrls) {
-    const pattern = getImageUrlPatternSignature(url);
-    urlPatterns.push({ url, pattern });
-    if (!pattern) {
-      continue;
+    const coarsePattern = getImageUrlPatternSignature(url);
+    const finePattern = getImageUrlPatternSignatureFine(url);
+    urlPatterns.push({ url, coarsePattern, finePattern });
+
+    if (coarsePattern) {
+      coarsePatternCount.set(
+        coarsePattern,
+        (coarsePatternCount.get(coarsePattern) ?? 0) + 1,
+      );
     }
-    patternCount.set(pattern, (patternCount.get(pattern) ?? 0) + 1);
+
+    if (finePattern) {
+      finePatternCount.set(
+        finePattern,
+        (finePatternCount.get(finePattern) ?? 0) + 1,
+      );
+    }
   }
 
-  if (patternCount.size === 0) {
+  if (coarsePatternCount.size === 0 && finePatternCount.size === 0) {
     return { baselinePattern: null, outliers: [] };
   }
 
-  let baselinePattern: string | null = null;
-  let baselineCount = 0;
-  for (const [pattern, count] of patternCount.entries()) {
-    if (count > baselineCount) {
-      baselinePattern = pattern;
-      baselineCount = count;
+  const findTopPattern = (
+    counts: Map<string, number>,
+  ): { pattern: string | null; count: number } => {
+    let pattern: string | null = null;
+    let count = 0;
+    for (const [candidatePattern, candidateCount] of counts.entries()) {
+      if (candidateCount > count) {
+        pattern = candidatePattern;
+        count = candidateCount;
+      }
     }
-  }
+    return { pattern, count };
+  };
+
+  const topCoarse = findTopPattern(coarsePatternCount);
+  const topFine = findTopPattern(finePatternCount);
+
+  // Prefer fine patterns only when they have strong support; otherwise use
+  // coarse grouping to avoid false positives for providers with unique file keys.
+  const minFineSupport = Math.max(3, Math.ceil(imageUrls.length * 0.4));
+  const useFinePattern =
+    topFine.pattern !== null && topFine.count >= minFineSupport;
+  const baselinePattern = useFinePattern ? topFine.pattern : topCoarse.pattern;
 
   if (!baselinePattern) {
     return { baselinePattern: null, outliers: [] };
   }
 
   const outliers = urlPatterns
-    .filter((entry) => entry.pattern !== baselinePattern)
+    .filter((entry) => {
+      const pattern = useFinePattern ? entry.finePattern : entry.coarsePattern;
+      return pattern !== baselinePattern;
+    })
     .map((entry) => entry.url);
 
   return { baselinePattern, outliers };
@@ -514,6 +592,29 @@ export async function runValidateScrapeFilenameAlignmentCli(
     options.maxListings === null
       ? listingFilteredRecords
       : listingFilteredRecords.slice(0, options.maxListings);
+
+  const adapterPrimaryIds = new Set<string>();
+  for (const indexRecord of indexRecords) {
+    const indexExternalId =
+      typeof indexRecord.external_listing_id === "string"
+        ? indexRecord.external_listing_id.trim()
+        : "";
+    const indexDetailUrl =
+      typeof indexRecord.detail_url === "string"
+        ? indexRecord.detail_url.trim()
+        : "";
+
+    const canonicalIndexExternalId = indexExternalId
+      ? canonicalizeExternalListingId(indexExternalId)
+      : "";
+    const canonicalFromDetailUrl = indexDetailUrl
+      ? externalListingIdFromDetailUrl(indexDetailUrl)
+      : "";
+    const canonicalIndexId = canonicalIndexExternalId || canonicalFromDetailUrl;
+    if (canonicalIndexId) {
+      adapterPrimaryIds.add(canonicalIndexId);
+    }
+  }
 
   const primaryIds = new Set<string>();
   const primaryIdToFile = new Map<string, string>();
@@ -737,6 +838,14 @@ export async function runValidateScrapeFilenameAlignmentCli(
     },
   ];
 
+  const orphanArtifactsByListing = new Map<
+    string,
+    {
+      labels: Set<string>;
+      samplePath: string;
+    }
+  >();
+
   for (const artifact of artifactChecks) {
     let files: string[];
     try {
@@ -750,12 +859,41 @@ export async function runValidateScrapeFilenameAlignmentCli(
     for (const fileName of files) {
       const fileBase = normalizeFileBase(fileName, artifact.ext);
       const canonicalFileBase = canonicalizeExternalListingId(fileBase);
-      if (!primaryIds.has(canonicalFileBase)) {
-        warnings.push({
-          code: "orphan_artifact",
-          message: `details/${artifact.label}/${fileName} has no matching canonical index external_listing_id`,
-        });
+      if (!adapterPrimaryIds.has(canonicalFileBase)) {
+        const artifactPath = `details/${artifact.label}/${fileName}`;
+        if (options.orphanMode === "artifact") {
+          warnings.push({
+            code: "orphan_artifact",
+            message: `${artifactPath} has no matching canonical index external_listing_id`,
+          });
+        } else {
+          const existing = orphanArtifactsByListing.get(canonicalFileBase);
+          if (!existing) {
+            orphanArtifactsByListing.set(canonicalFileBase, {
+              labels: new Set([artifact.label]),
+              samplePath: artifactPath,
+            });
+          } else {
+            existing.labels.add(artifact.label);
+          }
+        }
       }
+    }
+  }
+
+  if (options.orphanMode === "listing") {
+    for (const [listingId, info] of Array.from(
+      orphanArtifactsByListing.entries(),
+    ).sort((left, right) => left[0].localeCompare(right[0]))) {
+      const folders = Array.from(info.labels).sort((a, b) =>
+        a.localeCompare(b),
+      );
+      warnings.push({
+        code: "orphan_artifact",
+        message:
+          `listing '${listingId}' has orphan artifacts in [${folders.join(", ")}] ` +
+          `(example: ${info.samplePath})`,
+      });
     }
   }
 

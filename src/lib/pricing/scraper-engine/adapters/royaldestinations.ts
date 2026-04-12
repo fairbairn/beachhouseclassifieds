@@ -1,7 +1,7 @@
 import { executeRoyaldestinationsSingleQuote } from "@/lib/pricing/quote-runtime/adapters/royaldestinations";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
@@ -393,6 +393,74 @@ function parseLocationMetadataFromHtml(html: string): {
     .replace(/%2C/gi, ",")
     .replace(/%20/gi, " ")
     .trim();
+
+  const parseCoordinatePair = (
+    rawLatitude: string | undefined,
+    rawLongitude: string | undefined,
+  ): { latitude: number; longitude: number } | null => {
+    if (!rawLatitude || !rawLongitude) {
+      return null;
+    }
+
+    const latitude = Number(rawLatitude);
+    const longitude = Number(rawLongitude);
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180
+    ) {
+      return null;
+    }
+
+    return { latitude, longitude };
+  };
+
+  const fieldLocationMatch = html.match(
+    /"field_location"\s*:\s*\{[\s\S]*?"latitude":"(-?\d+\.\d+)"[\s\S]*?"longitude":"(-?\d+\.\d+)"/i,
+  );
+  const fieldLocationCoords = parseCoordinatePair(
+    fieldLocationMatch?.[1],
+    fieldLocationMatch?.[2],
+  );
+  if (fieldLocationCoords) {
+    return {
+      address: directionsDaddr,
+      location_label: "",
+      directions_url: directionsUrl,
+      directions_daddr: directionsDaddr,
+      latitude: fieldLocationCoords.latitude,
+      longitude: fieldLocationCoords.longitude,
+    };
+  }
+
+  const mapsLlMatch = html.match(
+    /https?:\/\/maps\.google\.com\/maps\?[^"'\s>]*\bll=(-?\d+\.\d+),(-?\d+\.\d+)/i,
+  );
+  const mapsLlCoords = parseCoordinatePair(mapsLlMatch?.[1], mapsLlMatch?.[2]);
+  if (mapsLlCoords) {
+    return {
+      address: directionsDaddr,
+      location_label: "",
+      directions_url: directionsUrl,
+      directions_daddr: directionsDaddr,
+      latitude: mapsLlCoords.latitude,
+      longitude: mapsLlCoords.longitude,
+    };
+  }
+
+  const pointMatch = html.match(/"pt":"(-?\d+\.\d+),(-?\d+\.\d+)"/i);
+  const pointCoords = parseCoordinatePair(pointMatch?.[1], pointMatch?.[2]);
+  if (pointCoords) {
+    return {
+      address: directionsDaddr,
+      location_label: "",
+      directions_url: directionsUrl,
+      directions_daddr: directionsDaddr,
+      latitude: pointCoords.latitude,
+      longitude: pointCoords.longitude,
+    };
+  }
 
   const latLngPatterns = [
     /(?:lat|latitude)\s*[:=]\s*(-?\d+\.\d+)\s*[,;\s]+(?:lng|lon|longitude)\s*[:=]\s*(-?\d+\.\d+)/gi,
@@ -1145,6 +1213,54 @@ async function fetchDetail(
     referer: DEFAULT_ANCHOR_URL,
   };
 
+  const loadCachedDetailFallback =
+    async (): Promise<RoyalDestinationsDetailRecord | null> => {
+      try {
+        const externalListingId = extractExternalListingId(normalizedDetailUrl);
+        const detailJsonPath = resolve(
+          OUTPUT_ROOT,
+          "details",
+          "json",
+          `${externalListingId}.json`,
+        );
+        const detailHtmlPath = resolve(
+          OUTPUT_DETAILS_HTML_DIR,
+          `${externalListingId}.html`,
+        );
+
+        const rawJson = await readFile(detailJsonPath, "utf8");
+        const parsed = JSON.parse(rawJson) as RoyalDestinationsDetailRecord;
+        if (!parsed || typeof parsed !== "object") {
+          return null;
+        }
+
+        const rawHtml = await readFile(detailHtmlPath, "utf8");
+        const locationMetadata = parseLocationMetadataFromHtml(rawHtml);
+        const locationLabel = parsed.location.location_label;
+
+        return {
+          ...parsed,
+          detail_url: normalizedDetailUrl,
+          fetched_at: new Date().toISOString(),
+          html_path: detailHtmlPath,
+          location: {
+            ...parsed.location,
+            address: locationMetadata.address || parsed.location.address,
+            location_label: locationLabel,
+            directions_url:
+              locationMetadata.directions_url || parsed.location.directions_url,
+            directions_daddr:
+              locationMetadata.directions_daddr ||
+              parsed.location.directions_daddr,
+            latitude: locationMetadata.latitude,
+            longitude: locationMetadata.longitude,
+          },
+        };
+      } catch {
+        return null;
+      }
+    };
+
   try {
     const response = await fetch(normalizedDetailUrl, {
       method: "GET",
@@ -1156,7 +1272,7 @@ async function fetchDetail(
       response.headers.get("content-type") || ""
     ).toLowerCase();
     if (response.status !== 200 || !contentType.includes("text/html")) {
-      return null;
+      return loadCachedDetailFallback();
     }
 
     const html = await response.text();
@@ -1505,7 +1621,7 @@ async function fetchDetail(
       },
     };
   } catch {
-    return null;
+    return loadCachedDetailFallback();
   }
 }
 

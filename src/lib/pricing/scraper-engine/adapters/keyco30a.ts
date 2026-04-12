@@ -2170,6 +2170,7 @@ async function fetchDetail(
       const hasCalendarWidget = /availability|calendar/i.test(bodyText);
 
       const imageCandidates: string[] = [];
+      const galleryImageCandidates: string[] = [];
       for (const image of Array.from(document.querySelectorAll("img"))) {
         const src = image.getAttribute("src") || "";
         if (src) {
@@ -2186,6 +2187,39 @@ async function fetchDetail(
         }
       }
 
+      const modalGalleryRoot = document.evaluate(
+        "/html/body/div[6]/div[2]/div",
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null,
+      ).singleNodeValue as Element | null;
+
+      const galleryNodes = modalGalleryRoot
+        ? Array.from(modalGalleryRoot.querySelectorAll("img"))
+        : Array.from(document.querySelectorAll('img[alt^="Gallery image"]'));
+
+      for (const image of galleryNodes) {
+        const alt = (image.getAttribute("alt") || "").trim();
+        if (!/^Gallery image\s+\d+/i.test(alt)) {
+          continue;
+        }
+
+        const currentSrc = image.getAttribute("src") || "";
+        if (currentSrc) {
+          galleryImageCandidates.push(currentSrc);
+        }
+
+        const srcset = image.getAttribute("srcset") || "";
+        if (srcset) {
+          const entries = srcset
+            .split(",")
+            .map((part) => part.trim().split(/\s+/)[0] || "")
+            .filter(Boolean);
+          galleryImageCandidates.push(...entries);
+        }
+      }
+
       return {
         title,
         h1,
@@ -2195,6 +2229,7 @@ async function fetchDetail(
         amenityCandidates,
         locationCandidates,
         imageCandidates,
+        galleryImageCandidates,
         hasCalendarWidget,
       };
     });
@@ -2248,7 +2283,12 @@ async function fetchDetail(
 
     const detailUrlObject = new URL(normalizedDetailUrl);
 
-    const imageUrlsFromDom = extracted.imageCandidates
+    const sourceImageCandidates =
+      extracted.galleryImageCandidates.length > 0
+        ? extracted.galleryImageCandidates
+        : extracted.imageCandidates;
+
+    const imageUrlsFromDom = sourceImageCandidates
       .map((raw) => {
         const cleaned = decodeHtmlEntityString(raw);
         if (!cleaned) {
@@ -2273,10 +2313,8 @@ async function fetchDetail(
           return "";
         }
       })
-      .filter(
-        (value) =>
-          value.startsWith("https://service-images.key.co/service-images/") ||
-          value.includes("cloudfront.net"),
+      .filter((value) =>
+        value.startsWith("https://service-images.key.co/service-images/"),
       );
 
     const imageUrls = dedupe([

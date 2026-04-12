@@ -1,7 +1,7 @@
 {
   "external_listing_id": "shell",
   "detail_url": "https://www.royaldestinations.com/30a-vacation-rentals/shell?rcav%5Bbegin%5D=07%2F25%2F2026&rcav%5Bend%5D=08%2F01%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=318&rcav%5BIDs%5D%5B8%5D%5B0%5D=1376-225117&eid=318",
-  "fetched_at": "2026-04-12T03:37:13.879Z",
+  "fetched_at": "2026-04-12T19:59:29.947Z",
   "html_path": "src/lib/data/external-sources/royaldestinations/details/html/shell.html",
   "title": "The Shell | 5BR Rental in Seaside | Royal Destinations",
   "h1": "The Shell",
@@ -65,8 +65,8 @@
     "location_label": "Wakulla Lane Santa Rosa Beach, FL",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=31+Wakulla+Lane Santa+Rosa+Beach FL&saddr=Current Location",
     "directions_daddr": "31 Wakulla Lane Santa Rosa Beach FL",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.3219,
+    "longitude": -86.13401
   },
   "media_gallery": {
     "image_count": 52,
@@ -147,7 +147,7 @@
   "normalized_availability": {
     "source": "pm_royaldestinations",
     "external_listing_id": "shell",
-    "captured_at": "2026-04-12T03:37:13.879Z",
+    "captured_at": "2026-04-12T19:59:29.947Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [],
@@ -160,42 +160,42 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "IAAAAAAAAAAAAAAAAAAOUUUUUUIAAOUUUUUIAAAAOUUUUUUIAAAAAAOUUUUUUUUUUUUUUUUUUUUIAOUUUUUUIAAAAOUUUUUUUUUUUUUIAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "UUUIAAAAAAAAAAAAAAAOUUUUUUIAAOUUUUUIAAAAOUUUUUUIAAAAAAOUUUUUUUUUUUUUUUUUUUUIAOUUUUUUIAAAAOUUUUUUUUUUUUUIAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-13",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
+        "min_nights_required": null
+      },
+      {
+        "date": "2026-04-14",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
+        "min_nights_required": null
+      },
+      {
+        "date": "2026-04-15",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
+        "min_nights_required": null
+      },
+      {
+        "date": "2026-04-16",
         "status_code": "I",
         "is_available": false,
         "is_available_for_checkin": true,
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-14",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-15",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-16",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
         "min_nights_required": null
       },
       {
@@ -4439,13 +4439,13 @@
       }
     ],
     "counts": {
-      "available": 376,
-      "unavailable": 76,
+      "available": 373,
+      "unavailable": 79,
       "checkin_only": 12,
       "checkout_only": 11,
       "other": 0,
-      "booking_available": 376,
-      "booking_unavailable": 76,
+      "booking_available": 373,
+      "booking_unavailable": 79,
       "booking_unknown": 23
     }
   },

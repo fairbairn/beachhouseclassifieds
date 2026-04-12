@@ -1,7 +1,7 @@
 {
   "external_listing_id": "sunset-lounge",
   "detail_url": "https://www.royaldestinations.com/30a-vacation-rentals/sunset-lounge?rcav%5Bbegin%5D=07%2F18%2F2026&rcav%5Bend%5D=07%2F25%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=324&rcav%5BIDs%5D%5B8%5D%5B0%5D=1376-249403&eid=324",
-  "fetched_at": "2026-04-12T03:37:16.722Z",
+  "fetched_at": "2026-04-12T19:59:30.429Z",
   "html_path": "src/lib/data/external-sources/royaldestinations/details/html/sunset-lounge.html",
   "title": "Sunset Lounge | Royal Destinations",
   "h1": "Sunset Lounge",
@@ -82,8 +82,8 @@
     "location_label": "Sea Walk Circle Santa Rosa Beach, FL",
     "directions_url": "http://maps.google.com/maps?f=q&amp;hl=en&amp;&daddr=32+Sea+Walk+Circle Santa+Rosa+Beach FL&saddr=Current Location",
     "directions_daddr": "32 Sea Walk Circle Santa Rosa Beach FL",
-    "latitude": null,
-    "longitude": null
+    "latitude": 30.31422,
+    "longitude": -86.11998
   },
   "media_gallery": {
     "image_count": 43,
@@ -155,7 +155,7 @@
   "normalized_availability": {
     "source": "pm_royaldestinations",
     "external_listing_id": "sunset-lounge",
-    "captured_at": "2026-04-12T03:37:16.722Z",
+    "captured_at": "2026-04-12T19:59:30.429Z",
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [],
@@ -168,7 +168,7 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAOUUUUUUUIOUUUIAAAOUUUUIAAOUUUUUUUUUUUUUUUUUUUUUIAAAAAAOUUUUUUIAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUIAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "AAAAAAAOUUUUUUUIOUUUIAAAOUUUUIAAOUUUUUUUUUUUUUUUUUUUUUIAAAAAAOUUUUUUIAAAAAAOUUUUUUUIAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUIAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-13",
@@ -847,20 +847,20 @@
       },
       {
         "date": "2026-06-27",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-06-28",
         "status_code": "O",
         "is_available": false,
         "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "unknown",
+        "min_nights_required": null
+      },
+      {
+        "date": "2026-06-28",
+        "status_code": "U",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": null
       },
       {
@@ -4447,13 +4447,13 @@
       }
     ],
     "counts": {
-      "available": 385,
-      "unavailable": 70,
+      "available": 384,
+      "unavailable": 71,
       "checkin_only": 10,
       "checkout_only": 10,
       "other": 0,
-      "booking_available": 385,
-      "booking_unavailable": 70,
+      "booking_available": 384,
+      "booking_unavailable": 71,
       "booking_unknown": 20
     }
   },

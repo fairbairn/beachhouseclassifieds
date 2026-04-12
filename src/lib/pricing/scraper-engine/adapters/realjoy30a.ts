@@ -257,6 +257,68 @@ function collectRealJoyMediaUrls(
   const parseSource = (
     absolute: string,
   ): { source: string; width: number; height: number } | null => {
+    const tryParseTrackhsWrappedSource = (
+      value: string,
+    ): { source: string; width: number; height: number } | null => {
+      const wrappedDirectMatch = value.match(
+        /img\.trackhs\.com\/(\d+)x(\d+)\/(https?:\/\/track-pm\.s3\.amazonaws\.com\/realjoy\/image\/[^?&#]+)/i,
+      );
+      if (
+        wrappedDirectMatch?.[1] &&
+        wrappedDirectMatch[2] &&
+        wrappedDirectMatch[3]
+      ) {
+        return {
+          source: wrappedDirectMatch[3],
+          width: Number(wrappedDirectMatch[1]) || 0,
+          height: Number(wrappedDirectMatch[2]) || 0,
+        };
+      }
+
+      try {
+        const parsed = new URL(value);
+        if (!parsed.hostname.endsWith("img.trackhs.com")) {
+          return null;
+        }
+
+        const sizeMatch = parsed.pathname.match(/\/(\d+)x(\d+)\//i);
+        const width = sizeMatch?.[1] ? Number(sizeMatch[1]) || 0 : 0;
+        const height = sizeMatch?.[2] ? Number(sizeMatch[2]) || 0 : 0;
+
+        const encodedMatch = parsed.pathname.match(
+          /(https%3A%2F%2Ftrack-pm\.s3\.amazonaws\.com%2Frealjoy%2Fimage%2F[^/?#]+)/i,
+        );
+        if (encodedMatch?.[1]) {
+          const decoded = decodeURIComponent(encodedMatch[1]);
+          return {
+            source: decoded,
+            width,
+            height,
+          };
+        }
+
+        const noSchemeMatch = parsed.pathname.match(
+          /(track-pm\.s3\.amazonaws\.com\/realjoy\/image\/[^/?#]+)/i,
+        );
+        if (noSchemeMatch?.[1]) {
+          return {
+            source: `https://${noSchemeMatch[1]}`,
+            width,
+            height,
+          };
+        }
+      } catch {
+        return null;
+      }
+
+      return null;
+    };
+
+    const wrapped = tryParseTrackhsWrappedSource(absolute);
+    if (wrapped) {
+      return wrapped;
+    }
+
     const wrappedMatch = absolute.match(
       /img\.trackhs\.com\/(\d+)x(\d+)\/(https?:\/\/track-pm\.s3\.amazonaws\.com\/realjoy\/image\/[^?&#]+)/i,
     );
