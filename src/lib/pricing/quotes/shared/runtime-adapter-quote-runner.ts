@@ -32,12 +32,14 @@ type CliOptions = {
 };
 
 type CanonicalIndexEntry = {
+  file_id?: unknown;
   detail_url?: unknown;
   external_listing_id?: unknown;
   quote_context?: unknown;
 };
 
 type ListingSeed = {
+  fileId: string;
   externalListingId: string;
   detailUrl: string;
   quoteContext: Record<string, unknown> | null;
@@ -325,13 +327,10 @@ function isIsoWithinHours(iso: string, hours: number): boolean {
 
 async function hasFreshQuoteSidecar(input: {
   quotesDir: string;
-  externalListingId: string;
+  fileId: string;
   freshHours: number;
 }): Promise<boolean> {
-  const sidecarPath = resolve(
-    input.quotesDir,
-    `${input.externalListingId}.json`,
-  );
+  const sidecarPath = resolve(input.quotesDir, `${input.fileId}.json`);
   try {
     const raw = await readFile(sidecarPath, "utf8");
     const parsed = JSON.parse(raw) as { captured_at?: unknown };
@@ -346,12 +345,9 @@ async function hasFreshQuoteSidecar(input: {
 
 async function loadDetailFetchedAt(input: {
   detailsJsonDir: string;
-  externalListingId: string;
+  fileId: string;
 }): Promise<string | null> {
-  const detailPath = resolve(
-    input.detailsJsonDir,
-    `${input.externalListingId}.json`,
-  );
+  const detailPath = resolve(input.detailsJsonDir, `${input.fileId}.json`);
   try {
     const raw = await readFile(detailPath, "utf8");
     const parsed = JSON.parse(raw) as { fetched_at?: unknown };
@@ -366,9 +362,9 @@ async function loadDetailFetchedAt(input: {
 
 async function loadQuoteCapturedAt(input: {
   quotesDir: string;
-  externalListingId: string;
+  fileId: string;
 }): Promise<string | null> {
-  const quotePath = resolve(input.quotesDir, `${input.externalListingId}.json`);
+  const quotePath = resolve(input.quotesDir, `${input.fileId}.json`);
   try {
     const raw = await readFile(quotePath, "utf8");
     const parsed = JSON.parse(raw) as { captured_at?: unknown };
@@ -516,6 +512,14 @@ function externalListingIdFromDetailUrl(detailUrl: string): string {
   }
 }
 
+function normalizeListingLookupKey(value: string): string {
+  const canonical = canonicalizeExternalListingId(value);
+  if (canonical) {
+    return canonical;
+  }
+  return value.trim().toLowerCase();
+}
+
 function addDays(isoDate: string, days: number): string {
   const date = new Date(`${isoDate}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -647,15 +651,21 @@ async function loadListingSeeds(
         ? entry.external_listing_id.trim()
         : "";
     const externalListingId =
-      canonicalizeExternalListingId(externalListingIdRaw) ||
-      externalListingIdFromDetailUrl(detailUrl);
-    if (!externalListingId) {
+      externalListingIdRaw || externalListingIdFromDetailUrl(detailUrl);
+    const fileIdRaw =
+      typeof entry.file_id === "string" ? entry.file_id.trim() : "";
+    const fileId =
+      canonicalizeExternalListingId(fileIdRaw) ||
+      canonicalizeExternalListingId(externalListingId) ||
+      canonicalizeExternalListingId(externalListingIdFromDetailUrl(detailUrl));
+    if (!externalListingId || !fileId) {
       continue;
     }
 
     const quoteContext = asObject(entry.quote_context);
 
     seeds.push({
+      fileId,
       externalListingId,
       detailUrl,
       quoteContext,
@@ -671,8 +681,12 @@ async function loadListingSeeds(
 
   let selected = seeds;
   if (options.listingId) {
+    const requestedListingKey = normalizeListingLookupKey(options.listingId);
     selected = seeds.filter(
-      (seed) => seed.externalListingId === options.listingId,
+      (seed) =>
+        normalizeListingLookupKey(seed.externalListingId) ===
+          requestedListingKey ||
+        normalizeListingLookupKey(seed.fileId) === requestedListingKey,
     );
   } else {
     selected = seeds.slice(0, options.maxListings);
@@ -1178,7 +1192,7 @@ export async function runRuntimeAdapterQuoteCli(
     for (const listing of listings) {
       const fresh = await hasFreshQuoteSidecar({
         quotesDir,
-        externalListingId: listing.externalListingId,
+        fileId: listing.fileId,
         freshHours: options.freshHours,
       });
       if (fresh) {
@@ -1211,11 +1225,11 @@ export async function runRuntimeAdapterQuoteCli(
           "details",
           "json",
         ),
-        externalListingId: listing.externalListingId,
+        fileId: listing.fileId,
       });
       const quoteCapturedAt = await loadQuoteCapturedAt({
         quotesDir,
-        externalListingId: listing.externalListingId,
+        fileId: listing.fileId,
       });
 
       backfillStatuses.push(
@@ -1307,10 +1321,7 @@ export async function runRuntimeAdapterQuoteCli(
         },
       });
 
-      const outputPath = resolve(
-        quotesDir,
-        `${sidecar.external_listing_id}.json`,
-      );
+      const outputPath = resolve(quotesDir, `${listing.fileId}.json`);
       await writeFile(
         outputPath,
         `${JSON.stringify(sidecar, null, 2)}\n`,

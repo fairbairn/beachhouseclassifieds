@@ -1,13 +1,16 @@
+import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 type CanonicalIndexEntry = {
+  file_id?: unknown;
   external_listing_id?: unknown;
   detail_url?: unknown;
   quote_context?: unknown;
 };
 
 export type CanonicalListing = {
+  fileId: string;
   externalListingId: string;
   detailUrl: string;
   detailFileBaseName: string;
@@ -67,6 +70,7 @@ function matchesListingKey(
   }
 
   return (
+    normalizeListingKey(listing.fileId) === requested ||
     normalizeListingKey(listing.externalListingId) === requested ||
     normalizeListingKey(listing.detailFileBaseName) === requested
   );
@@ -103,12 +107,19 @@ export async function loadCanonicalListings(
 
     const detailUrl = normalizeDetailUrl(detailUrlRaw);
     const detailFileBaseName = listingIdFromDetailUrl(detailUrl);
+    const fileIdRaw =
+      typeof entry.file_id === "string" ? entry.file_id.trim() : "";
+    const fileIdFromIndex = canonicalizeExternalListingId(fileIdRaw);
     const externalListingIdRaw =
       typeof entry.external_listing_id === "string"
         ? entry.external_listing_id.trim()
         : "";
     const externalListingId = externalListingIdRaw || detailFileBaseName;
-    if (!externalListingId || !detailFileBaseName) {
+    const fileId =
+      fileIdFromIndex ||
+      canonicalizeExternalListingId(externalListingId) ||
+      canonicalizeExternalListingId(detailFileBaseName);
+    if (!externalListingId || !detailFileBaseName || !fileId) {
       continue;
     }
 
@@ -120,6 +131,7 @@ export async function loadCanonicalListings(
     }
 
     listings.push({
+      fileId,
       externalListingId,
       detailUrl,
       detailFileBaseName,
@@ -161,9 +173,12 @@ export async function selectCanonicalArtifactFiles(
   const listings = await selectCanonicalListings(input);
   const listingIds = listings.map((listing) => listing.externalListingId);
 
-  let entries: Awaited<ReturnType<typeof readdir>> = [];
+  let entries: Array<{ isFile: () => boolean; name: string }> = [];
   try {
-    entries = await readdir(input.artifactDir, { withFileTypes: true });
+    entries = await readdir(input.artifactDir, {
+      withFileTypes: true,
+      encoding: "utf8",
+    });
   } catch {
     entries = [];
   }
@@ -177,10 +192,13 @@ export async function selectCanonicalArtifactFiles(
   const fileNames: string[] = [];
   const missingListingIds: string[] = [];
   for (const listing of listings) {
-    const candidates = [
-      `${listing.externalListingId}.json`,
-      `${listing.detailFileBaseName}.json`,
-    ];
+    const candidates = Array.from(
+      new Set([
+        `${listing.fileId}.json`,
+        `${listing.externalListingId}.json`,
+        `${listing.detailFileBaseName}.json`,
+      ]),
+    );
     const resolvedFileName = candidates.find((candidate) =>
       existingFileNames.has(candidate),
     );

@@ -9,6 +9,7 @@ import { create30AEscapesAdapter } from "./adapters/30aescapes";
 import { create30ALuxuryAdapter } from "./adapters/30aluxury";
 import { createThirtyAVacayAdapter } from "./adapters/30avacay";
 import { create360BlueAdapter } from "./adapters/360blue";
+import { createAlysBeach30AAdapter } from "./adapters/alysbeach30a";
 import { createBenchmark30AAdapter } from "./adapters/benchmark30a";
 import { createCoastProperties30AAdapter } from "./adapters/coastproperties30a";
 import { createDuneVR30AAdapter } from "./adapters/dunevr30a";
@@ -46,6 +47,7 @@ type AdapterFactory = () => ScraperAdapter<DetailRecordBase>;
 
 const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   "30abeach": create30ABeachAdapter,
+  alysbeach30a: createAlysBeach30AAdapter,
   "30acottages": createThirtyACottagesAdapter,
   "30aescapes": create30AEscapesAdapter,
   "30aluxury": create30ALuxuryAdapter,

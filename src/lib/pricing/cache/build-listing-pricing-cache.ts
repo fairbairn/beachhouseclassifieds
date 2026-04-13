@@ -354,6 +354,7 @@ export async function buildListingPricingCacheForAdapter(
 
   for (const listing of selectedListings) {
     const detailPathCandidates = [
+      resolve(detailsJsonDir, `${listing.fileId}.json`),
       resolve(detailsJsonDir, `${listing.detailFileBaseName}.json`),
       resolve(detailsJsonDir, `${listing.externalListingId}.json`),
     ];
@@ -374,10 +375,7 @@ export async function buildListingPricingCacheForAdapter(
 
     let quoteAnchorsByDate = new Map<string, number>();
     try {
-      const quotePath = resolve(
-        quotesDir,
-        `${detail.external_listing_id}.json`,
-      );
+      const quotePath = resolve(quotesDir, `${listing.fileId}.json`);
       const quoteRaw = await readFile(quotePath, "utf8");
       const quoteSidecar = readJson<QuoteSidecarRecord>(quoteRaw);
       quoteAnchorsByDate = readQuoteAnchorsByDate(quoteSidecar.observations);
@@ -522,7 +520,7 @@ export async function buildListingPricingCacheForAdapter(
 
     assertListingPricingCacheRecord(listingCache);
 
-    const cachePath = resolve(pricingDir, `${detail.external_listing_id}.json`);
+    const cachePath = resolve(pricingDir, `${listing.fileId}.json`);
 
     if (!input.options.dryRun) {
       await writeFile(

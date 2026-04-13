@@ -6,6 +6,7 @@ import {
   createScrapeProgress,
   formatModeProgressLine,
 } from "@/core/tooling/terminal/scrape-progress";
+import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 
 import type {
   DetailRecordBase,
@@ -18,6 +19,27 @@ import type {
 } from "./types";
 
 const RUN_MODE_ORDER = ["detail", "avail", "quote"] as const;
+const LOWERCASE_ARTIFACT_FILENAME_EXEMPT_ADAPTERS = new Set(["keyco30a"]);
+
+function shouldLowercaseArtifactFilenames(adapterKey: string): boolean {
+  return !LOWERCASE_ARTIFACT_FILENAME_EXEMPT_ADAPTERS.has(adapterKey);
+}
+
+function resolveDetailJsonFileBase(input: {
+  adapterKey: string;
+  externalListingId: string;
+}): string {
+  const raw = input.externalListingId.trim();
+  if (!raw) {
+    return raw;
+  }
+
+  if (!shouldLowercaseArtifactFilenames(input.adapterKey)) {
+    return raw;
+  }
+
+  return canonicalizeExternalListingId(raw) || raw;
+}
 
 function normalizeMode(value: string): ScraperRunMode | null {
   const tokens = value
@@ -1175,9 +1197,13 @@ async function pullDetails<TDetail extends DetailRecordBase>(
           ...detail,
           html_path: toProjectRelativePath(detail.html_path, root),
         };
+        const detailJsonFileBase = resolveDetailJsonFileBase({
+          adapterKey: adapter.managerKey,
+          externalListingId: detail.external_listing_id,
+        });
         const detailPath = resolve(
           outputDetailsJsonDir,
-          `${detail.external_listing_id}.json`,
+          `${detailJsonFileBase}.json`,
         );
         await writeTextFileDurable(
           detailPath,
@@ -1257,9 +1283,13 @@ async function pullDetails<TDetail extends DetailRecordBase>(
             ...detail,
             html_path: toProjectRelativePath(detail.html_path, root),
           };
+          const detailJsonFileBase = resolveDetailJsonFileBase({
+            adapterKey: adapter.managerKey,
+            externalListingId: detail.external_listing_id,
+          });
           const detailPath = resolve(
             outputDetailsJsonDir,
-            `${detail.external_listing_id}.json`,
+            `${detailJsonFileBase}.json`,
           );
           await writeTextFileDurable(
             detailPath,
@@ -1434,7 +1464,10 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
 
       const detailPath = resolve(
         outputDetailsJsonDir,
-        `${detail.external_listing_id}.json`,
+        `${resolveDetailJsonFileBase({
+          adapterKey: adapter.managerKey,
+          externalListingId: detail.external_listing_id,
+        })}.json`,
       );
       const detailPathRel = toProjectRelativePath(detailPath, root);
       const detailForStorage = {
@@ -1884,6 +1917,10 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
           pulledExternalListingIdByUrl.get(detailUrl) ??
           existingDetailArtifacts.get(detailUrl)?.externalListingId ??
           externalListingIdFromDetailUrl(detailUrl);
+        const fileId = resolveDetailJsonFileBase({
+          adapterKey: adapter.managerKey,
+          externalListingId,
+        });
         const quoteContext =
           pulledQuoteContextByUrl.get(detailUrl) ??
           existingDetailArtifacts.get(detailUrl)?.quoteContext ??
@@ -1891,6 +1928,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
 
         return {
           detail_url: detailUrl,
+          file_id: fileId,
           external_listing_id: externalListingId,
           ...(quoteContext ? { quote_context: quoteContext } : {}),
         };

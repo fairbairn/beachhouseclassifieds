@@ -10,6 +10,8 @@ import {
 
 const chalk = new Chalk({ level: 1 });
 
+const LOWERCASE_FILENAME_ENFORCEMENT_EXEMPT_ADAPTERS = new Set(["keyco30a"]);
+
 type CliOptions = {
   adapterKey: string;
   listingId: string | null;
@@ -64,6 +66,7 @@ type ValidationIssueCode =
   | "detail_url_identifier_invalid"
   | "external_id_not_from_detail_url"
   | "json_filename_mismatch"
+  | "artifact_filename_not_lowercase"
   | "duplicate_primary_external_id";
 
 type ValidationIssue = {
@@ -516,6 +519,8 @@ export async function runValidateScrapeFilenameAlignmentCli(
 
   const issues: ValidationIssue[] = [];
   const warnings: ValidationWarning[] = [];
+  const enforceLowercaseFilenames =
+    !LOWERCASE_FILENAME_ENFORCEMENT_EXEMPT_ADAPTERS.has(options.adapterKey);
 
   let jsonFiles: string[];
   try {
@@ -894,6 +899,15 @@ export async function runValidateScrapeFilenameAlignmentCli(
 
     for (const fileName of files) {
       const fileBase = normalizeFileBase(fileName, artifact.ext);
+      if (enforceLowercaseFilenames && fileBase !== fileBase.toLowerCase()) {
+        issues.push({
+          code: "artifact_filename_not_lowercase",
+          message:
+            `details/${artifact.label}/${fileName} basename must be lowercase ` +
+            `(actual='${fileBase}', expected='${fileBase.toLowerCase()}')`,
+        });
+      }
+
       const canonicalFileBase = canonicalizeExternalListingId(fileBase);
       if (!adapterPrimaryIds.has(canonicalFileBase)) {
         const artifactPath = `details/${artifact.label}/${fileName}`;
