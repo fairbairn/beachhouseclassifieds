@@ -12,6 +12,7 @@ import { create360BlueAdapter } from "./adapters/360blue";
 import { createBenchmark30AAdapter } from "./adapters/benchmark30a";
 import { createCoastProperties30AAdapter } from "./adapters/coastproperties30a";
 import { createDuneVR30AAdapter } from "./adapters/dunevr30a";
+import { createElp30AAdapter } from "./adapters/elp30a";
 import { createExclusive30AAdapter } from "./adapters/exclusive30a";
 import { createFiveStar30AAdapter } from "./adapters/fivestar30a";
 import { createFunVacay30AAdapter } from "./adapters/funvacay30a";
@@ -52,6 +53,7 @@ const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   benchmark30a: createBenchmark30AAdapter,
   coastproperties30a: createCoastProperties30AAdapter,
   dunevr30a: createDuneVR30AAdapter,
+  elp30a: createElp30AAdapter,
   exclusive30a: createExclusive30AAdapter,
   fivestar30a: createFiveStar30AAdapter,
   funvacay30a: createFunVacay30AAdapter,
