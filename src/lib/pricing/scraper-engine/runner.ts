@@ -1795,12 +1795,6 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         : `${adapter.managerKey}-playwright-links.json`,
     );
     const reportPathRel = toProjectRelativePath(reportPath, root);
-    const sourcePath = resolve(
-      outputRoot,
-      "working",
-      isSubsetMode ? "listings_subset.json" : "listings.json",
-    );
-    const sourcePathRel = toProjectRelativePath(sourcePath, root);
     const detailsManifestPath = resolve(
       reportsDir,
       isSubsetMode
@@ -1815,10 +1809,6 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     await writeTextFileDurable(
       reportPath,
       `${JSON.stringify(payload, null, 2)}\n`,
-    );
-    await writeTextFileDurable(
-      sourcePath,
-      `${JSON.stringify(subsetRows, null, 2)}\n`,
     );
     await writeTextFileDurable(
       detailsManifestPath,
@@ -1935,7 +1925,6 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     progress.info(`- detail_pages_pulled: ${detailRecords.length}`);
     progress.info(`- detail_pages_failed: ${failedDetailUrls.length}`);
     progress.info(`- report_json: ${reportPathRel}`);
-    progress.info(`- external_source_json: ${sourcePathRel}`);
     progress.info(`- details_manifest_json: ${detailsManifestPathRel}`);
   } finally {
     const closeStartedAt = Date.now();

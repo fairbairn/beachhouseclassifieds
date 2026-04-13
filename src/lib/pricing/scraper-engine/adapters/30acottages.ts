@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Browser, Page } from "playwright";
+import type { Browser, Frame, Page } from "playwright";
 
 import { executeThirtyACottagesSingleQuote } from "@/lib/pricing/quote-runtime/adapters/30acottages";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
@@ -114,8 +114,10 @@ type LuxuryDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://www.30acottagesandconcierge.com/30a-vacation-rentals#q=*%3A*";
-const EXPECTED_LISTING_COUNT = 60;
+  "https://www.30acottagesandconcierge.com/vacation-rentals#q=*%3A*";
+const EXPECTED_LISTING_COUNT = 44;
+const RESULT_LIST_SELECTOR =
+  "main riot-solr-search riot-solr-result-list, riot-solr-search riot-solr-result-list, riot-solr-result-list";
 const DETAIL_PATH_PREFIXES = ["/30a-vacation-rentals/", "/vacation-rentals/"];
 const OUTPUT_ROOT = resolve(
   process.cwd(),
@@ -246,6 +248,28 @@ function extractRcavIdentity(input: {
       itemEid: fallbackMatch[1],
       inventoryId: fallbackMatch[2],
       typeId: fallbackMatch[3],
+    };
+  }
+
+  const jsonEntityMatch = decodedSource.match(
+    /"eid"\s*:\s*"(\d+)"\s*,\s*"engine_eid"\s*:\s*"\d+"\s*,\s*"id"\s*:\s*"(\d+)"[\s\S]*?"type"\s*:\s*"(\d+)"/s,
+  );
+  if (jsonEntityMatch) {
+    return {
+      itemEid: jsonEntityMatch[1],
+      inventoryId: jsonEntityMatch[2],
+      typeId: jsonEntityMatch[3],
+    };
+  }
+
+  const rcCoreFallbackMatch = decodedSource.match(
+    /"rc_core_item_eid"\s*:\s*"(\d+)"[\s\S]*?"id"\s*:\s*"(\d+)"[\s\S]*?"type"\s*:\s*"(\d+)"/s,
+  );
+  if (rcCoreFallbackMatch) {
+    return {
+      itemEid: rcCoreFallbackMatch[1],
+      inventoryId: rcCoreFallbackMatch[2],
+      typeId: rcCoreFallbackMatch[3],
     };
   }
 
@@ -765,29 +789,37 @@ async function discoverListings(
   });
   await page.waitForTimeout(Math.max(1500, scrollPauseMs));
 
-  // Panhandle often starts above a heavy hero/nav fold; force list context first.
+  // Try list-mode toggle if present, but listings are expected on initial page render.
   await clickTab(page, "list view").catch(() => false);
   await page.waitForTimeout(Math.max(700, scrollPauseMs));
 
-  await page.evaluate(() => {
-    const root = document.querySelector("riot-solr-result-list, .result-list");
-    if (!root) {
-      return;
-    }
+  for (const frame of page.frames()) {
+    await frame
+      .evaluate(() => {
+        const root = document.querySelector(
+          "main riot-solr-search riot-solr-result-list, riot-solr-search riot-solr-result-list, riot-solr-result-list, .result-list, #properties, .props-container, .properties",
+        );
+        if (!root) {
+          return;
+        }
 
-    const top = Math.max(
-      0,
-      window.scrollY + root.getBoundingClientRect().top - 120,
-    );
-    window.scrollTo(0, top);
-  });
+        const top = Math.max(
+          0,
+          window.scrollY + root.getBoundingClientRect().top - 120,
+        );
+        window.scrollTo(0, top);
+      })
+      .catch(() => {});
+  }
   await page.waitForTimeout(Math.max(500, scrollPauseMs));
 
-  const readDiscoverySnapshot = async (): Promise<{
+  const readSnapshotInFrame = async (
+    frame: Frame,
+  ): Promise<{
     rows: Array<{ href: string; text: string }>;
     expectedCount: number | null;
   }> =>
-    page.evaluate(() => {
+    frame.evaluate(() => {
       const rows: Array<{ href: string; text: string }> = [];
       const seen = new Set<string>();
 
@@ -835,7 +867,7 @@ async function discoverListings(
 
       const resultRoots = Array.from(
         document.querySelectorAll(
-          "#properties, .props-container, .properties, .property-wrap, riot-solr-result-list, .result-list",
+          "main riot-solr-search riot-solr-result-list, riot-solr-search riot-solr-result-list, riot-solr-result-list, #properties, .props-container, .properties, .property-wrap, .result-list",
         ),
       );
 
@@ -919,11 +951,57 @@ async function discoverListings(
       };
     });
 
+  const readDiscoverySnapshot = async (): Promise<{
+    rows: Array<{ href: string; text: string }>;
+    expectedCount: number | null;
+  }> => {
+    const aggregatedRows: Array<{ href: string; text: string }> = [];
+    const seen = new Set<string>();
+    let expectedCount: number | null = null;
+
+    for (const frame of page.frames()) {
+      let snapshot: {
+        rows: Array<{ href: string; text: string }>;
+        expectedCount: number | null;
+      };
+
+      try {
+        snapshot = await readSnapshotInFrame(frame);
+      } catch {
+        continue;
+      }
+
+      if (
+        snapshot.expectedCount !== null &&
+        (expectedCount === null || snapshot.expectedCount > expectedCount)
+      ) {
+        expectedCount = snapshot.expectedCount;
+      }
+
+      for (const row of snapshot.rows) {
+        if (!row.href || seen.has(row.href)) {
+          continue;
+        }
+        seen.add(row.href);
+        aggregatedRows.push(row);
+      }
+    }
+
+    return {
+      rows: aggregatedRows,
+      expectedCount,
+    };
+  };
+
   let discovery = await readDiscoverySnapshot();
   let previousCount = discovery.rows.length;
   let stagnantSteps = 0;
-  // Panhandle relies on long-running incremental lazy load; allow deeper passes.
-  const effectiveScrollSteps = Math.max(120, maxScrollSteps);
+  const expectedTarget = discovery.expectedCount ?? EXPECTED_LISTING_COUNT;
+  let pageLooksComplete =
+    discovery.rows.length >= Math.max(1, expectedTarget - 1);
+
+  // This feed lazy-loads inventory rows; allow deeper scrolling passes.
+  const effectiveScrollSteps = Math.max(40, maxScrollSteps);
   const effectivePauseMs = Math.max(320, Math.min(scrollPauseMs, 1200));
   const wheelDelta = Math.max(
     560,
@@ -940,7 +1018,70 @@ async function discoverListings(
     );
   }
 
-  for (let step = 0; step < effectiveScrollSteps; step += 1) {
+  if (pageLooksComplete) {
+    reportProgress(
+      `discovery complete from initial render: ${discovery.rows.length}/${expectedTarget}`,
+    );
+  }
+
+  // Listings are rendered lazily into riot-solr-result-list. Give the page a short settle window before fallback scrolling.
+  if (!pageLooksComplete) {
+    for (let cycle = 0; cycle < 20; cycle += 1) {
+      for (const frame of page.frames()) {
+        await frame
+          .evaluate((selector) => {
+            const host = document.querySelector<HTMLElement>(selector);
+            if (!host) {
+              return;
+            }
+
+            const top = Math.max(
+              0,
+              window.scrollY + host.getBoundingClientRect().top - 120,
+            );
+            window.scrollTo(0, top);
+
+            const canScrollHost = host.scrollHeight > host.clientHeight;
+            if (canScrollHost) {
+              host.scrollTop += Math.max(
+                180,
+                Math.floor(host.clientHeight * 0.5),
+              );
+            }
+          }, RESULT_LIST_SELECTOR)
+          .catch(() => {});
+      }
+
+      await page.waitForTimeout(
+        Math.max(250, Math.floor(effectivePauseMs * 0.6)),
+      );
+      discovery = await readDiscoverySnapshot();
+      if (discovery.rows.length > previousCount) {
+        reportProgress(
+          `discovery grew to ${discovery.rows.length}${
+            discovery.expectedCount ? `/${discovery.expectedCount}` : ""
+          } during lazy-load settle cycle ${cycle + 1}`,
+        );
+        previousCount = discovery.rows.length;
+        stagnantSteps = 0;
+      } else {
+        stagnantSteps += 1;
+      }
+
+      pageLooksComplete =
+        discovery.rows.length >=
+        Math.max(1, (discovery.expectedCount ?? expectedTarget) - 1);
+      if (pageLooksComplete || stagnantSteps >= 6) {
+        break;
+      }
+    }
+  }
+
+  for (
+    let step = 0;
+    step < effectiveScrollSteps && !pageLooksComplete;
+    step += 1
+  ) {
     if (
       discovery.expectedCount !== null &&
       discovery.rows.length >= discovery.expectedCount
@@ -952,9 +1093,42 @@ async function discoverListings(
     }
 
     await page.mouse.wheel(0, wheelDelta);
-    await page.evaluate(() => {
-      window.scrollBy(0, Math.floor(window.innerHeight * 0.5));
-    });
+    for (const frame of page.frames()) {
+      await frame
+        .evaluate((selector) => {
+          window.scrollBy(0, Math.floor(window.innerHeight * 0.7));
+
+          const host = document.querySelector<HTMLElement>(selector);
+          if (host && host.scrollHeight > host.clientHeight) {
+            host.scrollTop += Math.max(
+              240,
+              Math.floor(host.clientHeight * 0.7),
+            );
+          }
+
+          const scrollableContainers = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              "#properties, .props-container, .properties, .property-wrap, .result-list, [data-listing-results], [data-results], .listing-results, .search-results, .results, [style*='overflow']",
+            ),
+          );
+
+          for (const container of scrollableContainers) {
+            const style = window.getComputedStyle(container);
+            const overflowY = style.overflowY.toLowerCase();
+            const canScroll =
+              (overflowY === "auto" || overflowY === "scroll") &&
+              container.scrollHeight > container.clientHeight;
+            if (!canScroll) {
+              continue;
+            }
+            container.scrollTop += Math.max(
+              280,
+              Math.floor(container.clientHeight * 0.75),
+            );
+          }
+        }, RESULT_LIST_SELECTOR)
+        .catch(() => {});
+    }
     await page.waitForTimeout(effectivePauseMs);
 
     discovery = await readDiscoverySnapshot();
@@ -966,11 +1140,14 @@ async function discoverListings(
       );
       previousCount = discovery.rows.length;
       stagnantSteps = 0;
+      pageLooksComplete =
+        discovery.rows.length >=
+        Math.max(1, (discovery.expectedCount ?? expectedTarget) - 1);
       continue;
     }
 
     stagnantSteps += 1;
-    if (stagnantSteps >= 24 && step >= 100) {
+    if (stagnantSteps >= 10) {
       break;
     }
   }
@@ -1882,20 +2059,35 @@ export function createThirtyACottagesAdapter(): ScraperAdapter<LuxuryDetailRecor
     defaultAnchorUrl: DEFAULT_ANCHOR_URL,
     detailFetchDelayMs: Math.max(
       0,
-      Number(process.env.PROMINENCE30_DETAIL_FETCH_DELAY_MS ?? "120") || 120,
+      Number(
+        process.env.THIRTYACOTTAGES_DETAIL_FETCH_DELAY_MS ??
+          process.env.PROMINENCE30_DETAIL_FETCH_DELAY_MS ??
+          "120",
+      ) || 120,
     ),
     detailFetchConcurrency: Math.max(
       1,
-      Number(process.env.PROMINENCE30_DETAIL_FETCH_CONCURRENCY ?? "4") || 4,
+      Number(
+        process.env.THIRTYACOTTAGES_DETAIL_FETCH_CONCURRENCY ??
+          process.env.PROMINENCE30_DETAIL_FETCH_CONCURRENCY ??
+          "4",
+      ) || 4,
     ),
     availabilityHorizonDays: Math.max(
       1,
-      Number(process.env.PROMINENCE30_AVAILABILITY_HORIZON_DAYS ?? "730") ||
-        730,
+      Number(
+        process.env.THIRTYACOTTAGES_AVAILABILITY_HORIZON_DAYS ??
+          process.env.PROMINENCE30_AVAILABILITY_HORIZON_DAYS ??
+          "730",
+      ) || 730,
     ),
     maxCalendarAdvanceMonths: Math.max(
       8,
-      Number(process.env.PROMINENCE30_CALENDAR_MAX_MONTHS ?? "26") || 26,
+      Number(
+        process.env.THIRTYACOTTAGES_CALENDAR_MAX_MONTHS ??
+          process.env.PROMINENCE30_CALENDAR_MAX_MONTHS ??
+          "26",
+      ) || 26,
     ),
     isValidDetailUrl(value: string): string | null {
       try {
@@ -1939,7 +2131,7 @@ export function createThirtyACottagesAdapter(): ScraperAdapter<LuxuryDetailRecor
         {
           adapterKey: "30acottages",
           executeSingleQuote: executeThirtyACottagesSingleQuote,
-          maxAttemptsEnvVar: "PROMINENCE30_QUOTE_MAX_ATTEMPTS",
+          maxAttemptsEnvVar: "THIRTYACOTTAGES_QUOTE_MAX_ATTEMPTS",
           defaultMaxListings: 10,
           defaultWeeks: 24,
           defaultNights: 7,
@@ -1969,7 +2161,8 @@ export function createThirtyACottagesAdapter(): ScraperAdapter<LuxuryDetailRecor
         options: {
           timeoutMs:
             Number(
-              process.env.PROMINENCE30_QUOTE_TIMEOUT_MS ??
+              process.env.THIRTYACOTTAGES_QUOTE_TIMEOUT_MS ??
+                process.env.PROMINENCE30_QUOTE_TIMEOUT_MS ??
                 process.env.QUOTE_CAPTURE_TIMEOUT_MS ??
                 "20000",
             ) || 20000,

@@ -490,25 +490,39 @@ async function loadDetailUrlForListing(
 }
 
 async function loadDiscoveredDetailUrls(adapterKey: string): Promise<string[]> {
-  const listingsFilePath = resolve(
-    ROOT,
-    "src",
-    "lib",
-    "data",
-    "external-sources",
-    adapterKey,
-    "working",
-    "listings.json",
+  const candidatePaths = [
+    resolve(REPORTS_DIR, `${adapterKey}-playwright-links.json`),
+  ];
+
+  for (const listingsFilePath of candidatePaths) {
+    try {
+      const raw = await readFile(listingsFilePath, "utf8");
+      const parsed = JSON.parse(raw) as
+        | DiscoveredListingRecord[]
+        | { links?: DiscoveredListingRecord[] };
+      const rows = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.links)
+          ? parsed.links
+          : [];
+
+      const discovered = rows
+        .map((row) =>
+          typeof row.link === "string" ? normalizeLink(row.link.trim()) : "",
+        )
+        .filter((url) => url.length > 0);
+
+      if (discovered.length > 0) {
+        return discovered;
+      }
+    } catch {
+      // Try next candidate path.
+    }
+  }
+
+  throw new Error(
+    `No discovered listings manifest found for adapter '${adapterKey}'. Run discovery first.`,
   );
-
-  const raw = await readFile(listingsFilePath, "utf8");
-  const parsed = JSON.parse(raw) as DiscoveredListingRecord[];
-
-  return parsed
-    .map((row) =>
-      typeof row.link === "string" ? normalizeLink(row.link.trim()) : "",
-    )
-    .filter((url) => url.length > 0);
 }
 
 async function runDiscoverNewStep(

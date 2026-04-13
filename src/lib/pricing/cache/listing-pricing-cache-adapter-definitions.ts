@@ -91,6 +91,17 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 650,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  "30acottages": {
+    adapterKey: "30acottages",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.03,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.15,
+    },
+    globalDefaultBaseNightly: 700,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
   "30aluxury": {
     adapterKey: "30aluxury",
     defaultWeeks: 24,

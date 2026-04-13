@@ -1596,17 +1596,14 @@ async function run(): Promise<void> {
     const sourceFileName = isSubsetMode
       ? "listings_subset.json"
       : "listings.json";
-    const workingDir = resolve(OUTPUT_ROOT, "working");
 
     const reportPath = resolve(reportsDir, reportFileName);
-    const sourcePath = resolve(workingDir, sourceFileName);
+    const sourcePath = resolve(OUTPUT_ROOT, sourceFileName);
     const detailManifestPath = resolve(
       OUTPUT_ROOT,
       "details",
       isSubsetMode ? "index-subset.json" : "index.json",
     );
-
-    await mkdir(workingDir, { recursive: true });
 
     await writeFile(
       reportPath,

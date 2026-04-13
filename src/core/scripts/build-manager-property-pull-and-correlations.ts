@@ -468,7 +468,6 @@ async function loadExternalCandidates(
     "data",
     "external-sources",
     "360blue",
-    "working",
     "listings.json",
   );
   try {

@@ -55,7 +55,6 @@ const STAYON30A_INDEX_PATH = resolve(
   "data",
   "external-sources",
   "stayon30a",
-  "working",
   "listings.json",
 );
 

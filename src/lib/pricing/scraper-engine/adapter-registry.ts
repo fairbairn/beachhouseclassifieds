@@ -4,6 +4,7 @@ import { runSharedListingPricingCacheCli } from "@/lib/pricing/cache/run-shared-
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
 import { runValidateAdapterQuoteSidecarsCli } from "@/lib/pricing/validation/validate-adapter-quote-sidecars";
 import { create30ABeachAdapter } from "./adapters/30abeach";
+import { createThirtyACottagesAdapter } from "./adapters/30acottages";
 import { create30AEscapesAdapter } from "./adapters/30aescapes";
 import { create30ALuxuryAdapter } from "./adapters/30aluxury";
 import { createThirtyAVacayAdapter } from "./adapters/30avacay";
@@ -43,6 +44,7 @@ type AdapterFactory = () => ScraperAdapter<DetailRecordBase>;
 
 const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   "30abeach": create30ABeachAdapter,
+  "30acottages": createThirtyACottagesAdapter,
   "30aescapes": create30AEscapesAdapter,
   "30aluxury": create30ALuxuryAdapter,
   "30avacay": createThirtyAVacayAdapter,

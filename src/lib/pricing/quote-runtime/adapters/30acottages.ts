@@ -440,7 +440,14 @@ export async function executeThirtyACottagesSingleQuote(
   input: QuoteExecutionRequest,
 ): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
-  const timeoutMs = normalizeTimeoutMs(input.options?.timeoutMs);
+  const timeoutMs = normalizeTimeoutMs(
+    input.options?.timeoutMs ??
+      Number(
+        process.env.THIRTYACOTTAGES_QUOTE_TIMEOUT_MS ??
+          process.env.PROMINENCE30_QUOTE_TIMEOUT_MS ??
+          DEFAULT_TIMEOUT_MS,
+      ),
+  );
 
   let context: ThirtyACottagesQuoteContext;
   try {
