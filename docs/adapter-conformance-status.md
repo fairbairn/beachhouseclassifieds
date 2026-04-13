@@ -70,6 +70,7 @@ Preferred (non-blocking):
 | benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |             128 |       8553 |        66.82 |        ✅ |            ✅ |    ✅ |
 | coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |              30 |       1433 |        47.77 |        ✅ |            ✅ |    ✅ |
 | dunevr30a               |    90 |   90 |      90 |           90 |           90 |         90 |        90 |     90 |              90 |       3774 |        41.93 |        ✅ |            ✅ |    ✅ |
+| elp30a                  |   129 |  129 |     129 |          129 |          129 |        129 |       129 |    129 |             129 |       9611 |        74.50 |        ✅ |            ✅ |    ✅ |
 | exclusive30a            |   104 |  104 |     104 |          104 |          104 |        104 |       104 |    104 |             104 |       5673 |        54.55 |        ✅ |            ✅ |    ✅ |
 | fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |              63 |       3273 |        51.95 |        ✅ |            ✅ |    ✅ |
 | funvacay30a             |    46 |   46 |      46 |           46 |           46 |         46 |        46 |     46 |              46 |       2496 |        54.26 |        ✅ |            ✅ |    ✅ |
@@ -89,18 +90,18 @@ Preferred (non-blocking):
 | scenicstays30a          |    45 |   45 |      45 |           45 |           44 |         45 |        45 |     45 |              45 |       2524 |        56.09 |        ✅ |            ✅ |    ❌ |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |              37 |       2267 |        61.27 |        ✅ |            ✅ |    ✅ |
 | stayon30a               |    83 |   83 |      83 |           83 |           83 |         83 |        83 |     83 |              83 |       4237 |        51.05 |        ✅ |            ✅ |    ✅ |
-| **TOTAL**               |  3184 | 3184 |    3184 |         3184 |         3183 |       3184 |      3184 |   3184 |            3184 |     165589 |        52.01 |         — |             — | 27/29 |
+| **TOTAL**               |  3313 | 3313 |    3313 |         3313 |         3312 |       3313 |      3313 |   3313 |            3313 |     175200 |        52.88 |         — |             — | 28/30 |
 
 ## Current Snapshot Summary
 
-- 29 adapters audited.
-- All 29 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 27 / 29.
+- 30 adapters audited.
+- All 30 adapters are at full required-core parity for the current captured files.
+- Combined-ready adapters (Ready = ✅): 28 / 30.
 
-- Pricing-records coverage signal: 3184 / 3184 files currently have per-listing pricing JSON records.
+- Pricing-records coverage signal: 3313 / 3313 files currently have per-listing pricing JSON records.
 
-- Quote API capability signal: 28 / 29 adapters expose pre-reservation quote APIs.
-- Geo location minimum (required): 29 / 29 adapters currently have 100% numeric lat/lng coverage.
+- Quote API capability signal: 29 / 30 adapters expose pre-reservation quote APIs.
+- Geo location minimum (required): 30 / 30 adapters currently have 100% numeric lat/lng coverage.
 - Preferred horizon (>=730d) remains non-blocking and is tracked in probe metrics, outside this matrix.
 
 ## Quote Runtime Migration Ledger (API Quote = ✅, Highest Listings First)
@@ -115,23 +116,24 @@ This queue defines migration order for adapters that already have direct quote A
 |     4 | 30aescapes              |   169 |    ✅     |      ✅       | complete |
 |     5 | royaldestinations       |   143 |    ✅     |      ✅       | complete |
 |     6 | realjoy30a              |   140 |    ✅     |      ✅       | complete |
-|     7 | benchmark30a            |   128 |    ✅     |      ✅       | complete |
-|     8 | 30avacay                |   115 |    ✅     |      ✅       | complete |
-|     9 | oceanreef30a            |   112 |    ✅     |      ✅       | complete |
-|    10 | exclusive30a            |   106 |    ✅     |      ✅       | complete |
-|    11 | sandpiper30a            |   106 |    ✅     |      ✅       | complete |
-|    12 | 30aluxury               |   105 |    ✅     |      ✅       | complete |
-|    13 | oversee30a              |   104 |    ✅     |      ✅       | complete |
-|    14 | dunevr30a               |    85 |    ✅     |      ✅       | complete |
-|    15 | stayon30a               |    82 |    ✅     |      ✅       | complete |
-|    16 | sandersbeach30a         |    74 |    ✅     |      ✅       | complete |
-|    17 | fivestar30a             |    63 |    ✅     |      ✅       | complete |
-|    18 | panhandle30a            |    51 |    ✅     |      ✅       | complete |
-|    19 | funvacay30a             |    46 |    ✅     |      ✅       | complete |
-|    20 | localvr30a              |    42 |    ✅     |      ✅       | complete |
-|    21 | grayt30a                |    35 |    ✅     |      ✅       | complete |
-|    22 | coastproperties30a      |    30 |    ✅     |      ✅       | complete |
-|    23 | 30abeach                |    17 |    ✅     |      ✅       | complete |
+|     7 | elp30a                  |   129 |    ✅     |      ✅       | complete |
+|     8 | benchmark30a            |   128 |    ✅     |      ✅       | complete |
+|     9 | 30avacay                |   115 |    ✅     |      ✅       | complete |
+|    10 | oceanreef30a            |   112 |    ✅     |      ✅       | complete |
+|    11 | exclusive30a            |   106 |    ✅     |      ✅       | complete |
+|    12 | sandpiper30a            |   106 |    ✅     |      ✅       | complete |
+|    13 | 30aluxury               |   105 |    ✅     |      ✅       | complete |
+|    14 | oversee30a              |   104 |    ✅     |      ✅       | complete |
+|    15 | dunevr30a               |    85 |    ✅     |      ✅       | complete |
+|    16 | stayon30a               |    82 |    ✅     |      ✅       | complete |
+|    17 | sandersbeach30a         |    74 |    ✅     |      ✅       | complete |
+|    18 | fivestar30a             |    63 |    ✅     |      ✅       | complete |
+|    19 | panhandle30a            |    51 |    ✅     |      ✅       | complete |
+|    20 | funvacay30a             |    46 |    ✅     |      ✅       | complete |
+|    21 | localvr30a              |    42 |    ✅     |      ✅       | complete |
+|    22 | grayt30a                |    35 |    ✅     |      ✅       | complete |
+|    23 | coastproperties30a      |    30 |    ✅     |      ✅       | complete |
+|    24 | 30abeach                |    17 |    ✅     |      ✅       | complete |
 
 API-quote migration queue status: complete.
 
