@@ -92,6 +92,7 @@ export type RefinementResult = {
 
 const PROMPT_VERSION = "v3";
 const AUDIT_MIN_ACCURACY_SCORE = 0.9;
+const SEO_BRAND_NAME = "30A Collections";
 
 const CANONICAL_AMENITY_IDS = [
   "private_pool",
@@ -536,10 +537,12 @@ function extractHelpfulNotes(sourceDescription: string): string[] {
 
   const candidates = [...sentenceCandidates, ...lineCandidates]
     .map((entry) =>
-      entry
-        .replace(/^home\s+highlights\s*:?\s*/i, "")
-        .replace(/^features\s*:?\s*/i, "")
-        .trim(),
+      normalizeHintText(
+        entry
+          .replace(/^home\s+highlights\s*:?\s*/i, "")
+          .replace(/^features\s*:?\s*/i, "")
+          .trim(),
+      ),
     )
     .filter(Boolean);
 
@@ -664,6 +667,164 @@ function normalizeSleepingRollups(value: unknown): Record<string, number> {
   }
 
   return output;
+}
+
+function normalizeSleepingArrangements(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const allowedRoles = new Set([
+    "primary",
+    "guest",
+    "bunk_room",
+    "loft",
+    "hall",
+    "living_area",
+    "other",
+  ]);
+  const allowedBedTypes = new Set([
+    "king",
+    "queen",
+    "full",
+    "twin",
+    "bunk",
+    "sofa_bed",
+    "daybed",
+    "trundle",
+    "murphy",
+    "futon",
+    "air_mattress",
+    "unknown",
+  ]);
+  const allowedBunkConfigs = new Set([
+    "twin_over_twin",
+    "twin_over_full",
+    "full_over_full",
+    "queen_over_queen",
+    "twin_over_queen",
+    "twin_over_king",
+    "other",
+  ]);
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        return null;
+      }
+
+      const row = entry as Record<string, unknown>;
+      const roomLabel = asString(row.room_label);
+      if (!roomLabel) {
+        return null;
+      }
+
+      const roleRaw = asString(row.room_role);
+      const roomRole = allowedRoles.has(roleRaw) ? roleRaw : "other";
+
+      const sleepsRaw = row.sleeps;
+      const sleeps =
+        typeof sleepsRaw === "number" && Number.isFinite(sleepsRaw)
+          ? Math.max(0, Math.round(sleepsRaw))
+          : 0;
+
+      const bedsRaw = Array.isArray(row.beds) ? row.beds : [];
+      const beds = bedsRaw
+        .map((bed) => {
+          if (!bed || typeof bed !== "object" || Array.isArray(bed)) {
+            return null;
+          }
+
+          const bedObject = bed as Record<string, unknown>;
+          const bedType = asString(bedObject.bed_type);
+          if (!allowedBedTypes.has(bedType)) {
+            return null;
+          }
+
+          const countRaw = bedObject.count;
+          const count =
+            typeof countRaw === "number" && Number.isFinite(countRaw)
+              ? Math.max(0, Math.round(countRaw))
+              : 0;
+          if (count < 1) {
+            return null;
+          }
+
+          const bunkConfigurationRaw = asString(bedObject.bunk_configuration);
+          const bunkConfiguration = allowedBunkConfigs.has(bunkConfigurationRaw)
+            ? bunkConfigurationRaw
+            : undefined;
+
+          return {
+            bed_type: bedType,
+            count,
+            bunk_configuration: bunkConfiguration,
+            notes: asString(bedObject.notes) || undefined,
+          };
+        })
+        .filter((bed): bed is NonNullable<typeof bed> => Boolean(bed));
+
+      if (beds.length === 0 && sleeps === 0) {
+        return null;
+      }
+
+      return {
+        room_label: roomLabel,
+        room_role: roomRole,
+        sleeps: sleeps > 0 ? sleeps : undefined,
+        beds,
+        notes: asString(row.notes) || undefined,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+}
+
+function deriveSleepingArrangementsFromRollups(
+  rollups: Record<string, number>,
+): unknown[] {
+  const mapping: Array<{ key: string; bedType: string }> = [
+    { key: "bed_count_king", bedType: "king" },
+    { key: "bed_count_queen", bedType: "queen" },
+    { key: "bed_count_full", bedType: "full" },
+    { key: "bed_count_twin", bedType: "twin" },
+    { key: "bed_count_bunk_total", bedType: "bunk" },
+    { key: "bed_count_sofa_bed", bedType: "sofa_bed" },
+    { key: "bed_count_daybed", bedType: "daybed" },
+    { key: "bed_count_trundle", bedType: "trundle" },
+    { key: "bed_count_murphy", bedType: "murphy" },
+    { key: "bed_count_air_mattress", bedType: "air_mattress" },
+    { key: "bed_count_futon", bedType: "futon" },
+  ];
+
+  const beds = mapping
+    .map(({ key, bedType }) => {
+      const count = Math.max(0, Math.round(rollups[key] ?? 0));
+      if (count < 1) {
+        return null;
+      }
+
+      return {
+        bed_type: bedType,
+        count,
+        bunk_configuration: undefined,
+        notes: undefined,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+  if (beds.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      room_label: "Sleeping Areas",
+      room_role: "other",
+      beds,
+      notes:
+        "Derived from sleeping rollups when room-level source details were unavailable.",
+    },
+  ];
 }
 
 function sanitizeAmenitiesEvidence(value: unknown): AmenityEvidence[] {
@@ -941,8 +1102,14 @@ function cleanManagerReferences(
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  const adapterTokenSpaced = adapterToken
+    .replace(/([0-9])([a-z])/g, "$1 $2")
+    .replace(/([a-z])([0-9])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
 
   const banned = [
+    "30a collections",
     "property management",
     "management company",
     "book direct",
@@ -954,6 +1121,9 @@ function cleanManagerReferences(
 
   if (adapterToken) {
     banned.push(adapterToken);
+  }
+  if (adapterTokenSpaced && adapterTokenSpaced !== adapterToken) {
+    banned.push(adapterTokenSpaced);
   }
 
   const sentences = text
@@ -977,6 +1147,53 @@ function cleanManagerReferences(
   });
 
   return filtered.join(" ").trim();
+}
+
+function ensureSeoTitleBranding(input: {
+  title: string;
+  canonicalName: string;
+}): string {
+  const baseTitle = input.title.trim() || input.canonicalName.trim();
+  if (!baseTitle) {
+    return SEO_BRAND_NAME;
+  }
+
+  if (/\b30a\s+collections\b/i.test(baseTitle)) {
+    return baseTitle;
+  }
+
+  return `${baseTitle} | ${SEO_BRAND_NAME}`;
+}
+
+function ensureSeoBodyBranding(input: {
+  text: string;
+  canonicalName: string;
+}): string {
+  const fallback = `Discover ${input.canonicalName.trim() || "this property"} on ${SEO_BRAND_NAME}.`;
+  const base = input.text.trim() || fallback;
+  if (/\b30a\s+collections\b/i.test(base)) {
+    return base;
+  }
+
+  const normalized = base.replace(/[\s.!?]+$/g, "");
+  return `${normalized}. Available on ${SEO_BRAND_NAME}.`;
+}
+
+function stripBrandReferencesFromList(
+  values: string[],
+  adapterKey: string | null,
+  maxItems: number,
+): string[] {
+  return Array.from(
+    new Set(
+      values
+        .map((entry) =>
+          cleanManagerReferences(normalizeHintText(entry), adapterKey),
+        )
+        .map((entry) => normalizeHintText(entry))
+        .filter(Boolean),
+    ),
+  ).slice(0, maxItems);
 }
 
 function buildSchema(): Record<string, unknown> {
@@ -1283,6 +1500,8 @@ export async function generateListingRefinement(input: {
     "Prioritize differentiators guests care about when present: garage/parking capacity, game room, hot tub or spa, patio/balcony, community pool access, beach access, location cues, and home size.",
     "Do not invent facts not supported by source context.",
     "Do not include property management company references, booking brand names, website references, or calls-to-action.",
+    "Keep description_markdown, description_short_plain, highlights, and helpful_hints property-centric and brand-agnostic.",
+    "SEO fields must include the marketplace brand name '30A Collections' in natural wording.",
     "Create short, specific highlights that surface noteworthy attributes as scannable bullets.",
     "Normalize amenities to canonical amenity ids only.",
     "Extract sleeping arrangements with room-level precision and bed-type counts.",
@@ -1323,9 +1542,16 @@ export async function generateListingRefinement(input: {
 
   let parsed = refinementResponse.parsed as unknown as RefinementOutput;
   let refinementUsage = refinementResponse.usage;
-  const validatedSleeping = sleeping_arrangements_schema.safeParse(
+  const normalizedSleeping = normalizeSleepingArrangements(
     parsed.sleeping_arrangements,
   );
+  const normalizedRollups = normalizeSleepingRollups(
+    (parsed as Record<string, unknown>).sleeping_rollups,
+  );
+  const validatedSleeping =
+    sleeping_arrangements_schema.safeParse(normalizedSleeping);
+  const fallbackSleeping =
+    deriveSleepingArrangementsFromRollups(normalizedRollups);
 
   const cleanedMarkdown = cleanManagerReferences(
     asString(parsed.description_markdown),
@@ -1344,13 +1570,21 @@ export async function generateListingRefinement(input: {
     input.snapshot.adapter_key,
   );
 
-  const highlights = sanitizeHighlights(
-    (parsed as Record<string, unknown>).highlights,
+  const highlights = stripBrandReferencesFromList(
+    sanitizeHighlights((parsed as Record<string, unknown>).highlights),
+    input.snapshot.adapter_key,
+    8,
   );
-  const helpfulHintsFromModel = sanitizeHelpfulHints(
-    (parsed as Record<string, unknown>).helpful_hints,
+  const helpfulHintsFromModel = stripBrandReferencesFromList(
+    sanitizeHelpfulHints((parsed as Record<string, unknown>).helpful_hints),
+    input.snapshot.adapter_key,
+    6,
   );
-  const helpfulHintsFromSource = extractHelpfulNotes(sourceDescription);
+  const helpfulHintsFromSource = stripBrandReferencesFromList(
+    extractHelpfulNotes(sourceDescription),
+    input.snapshot.adapter_key,
+    6,
+  );
   const helpfulHints = Array.from(
     new Set([...helpfulHintsFromModel, ...helpfulHintsFromSource]),
   ).slice(0, 6);
@@ -1381,17 +1615,25 @@ export async function generateListingRefinement(input: {
   let output: RefinementOutput = {
     description_markdown: formattedMarkdown,
     description_short_plain: cleanedShort,
-    seo_meta_title: asString(parsed.seo_meta_title),
-    seo_meta_description: cleanedSeoMetaDescription,
-    seo_hidden_summary_plain: cleanedSeoHiddenSummary,
+    seo_meta_title: ensureSeoTitleBranding({
+      title: asString(parsed.seo_meta_title),
+      canonicalName: input.snapshot.canonical_name,
+    }),
+    seo_meta_description: ensureSeoBodyBranding({
+      text: cleanedSeoMetaDescription,
+      canonicalName: input.snapshot.canonical_name,
+    }),
+    seo_hidden_summary_plain: ensureSeoBodyBranding({
+      text: cleanedSeoHiddenSummary,
+      canonicalName: input.snapshot.canonical_name,
+    }),
     highlights,
     helpful_hints: helpfulHints,
-    sleeping_arrangements: validatedSleeping.success
-      ? validatedSleeping.data
-      : [],
-    sleeping_rollups: normalizeSleepingRollups(
-      (parsed as Record<string, unknown>).sleeping_rollups,
-    ),
+    sleeping_arrangements:
+      validatedSleeping.success && validatedSleeping.data.length > 0
+        ? validatedSleeping.data
+        : fallbackSleeping,
+    sleeping_rollups: normalizedRollups,
     amenities_normalized: mergedAmenities,
     amenities_evidence: mergedAmenityEvidence,
   };
@@ -1476,9 +1718,17 @@ export async function generateListingRefinement(input: {
       refinementUsage = mergeUsage([refinementUsage, retryResponse.usage]);
       parsed = retryResponse.parsed as unknown as RefinementOutput;
 
-      const retryValidatedSleeping = sleeping_arrangements_schema.safeParse(
+      const retryNormalizedSleeping = normalizeSleepingArrangements(
         parsed.sleeping_arrangements,
       );
+      const retryRollups = normalizeSleepingRollups(
+        (parsed as Record<string, unknown>).sleeping_rollups,
+      );
+      const retryValidatedSleeping = sleeping_arrangements_schema.safeParse(
+        retryNormalizedSleeping,
+      );
+      const retryFallbackSleeping =
+        deriveSleepingArrangementsFromRollups(retryRollups);
 
       const retryMarkdownRaw = cleanManagerReferences(
         asString(parsed.description_markdown),
@@ -1497,11 +1747,15 @@ export async function generateListingRefinement(input: {
         input.snapshot.adapter_key,
       );
 
-      const retryHighlights = sanitizeHighlights(
-        (parsed as Record<string, unknown>).highlights,
+      const retryHighlights = stripBrandReferencesFromList(
+        sanitizeHighlights((parsed as Record<string, unknown>).highlights),
+        input.snapshot.adapter_key,
+        8,
       );
-      const retryHintsModel = sanitizeHelpfulHints(
-        (parsed as Record<string, unknown>).helpful_hints,
+      const retryHintsModel = stripBrandReferencesFromList(
+        sanitizeHelpfulHints((parsed as Record<string, unknown>).helpful_hints),
+        input.snapshot.adapter_key,
+        6,
       );
       const retryHints = Array.from(
         new Set([...retryHintsModel, ...helpfulHintsFromSource]),
@@ -1528,17 +1782,26 @@ export async function generateListingRefinement(input: {
           bedrooms: input.snapshot.bedrooms,
         }),
         description_short_plain: retryShort,
-        seo_meta_title: asString(parsed.seo_meta_title),
-        seo_meta_description: retrySeoDescription,
-        seo_hidden_summary_plain: retrySeoHidden,
+        seo_meta_title: ensureSeoTitleBranding({
+          title: asString(parsed.seo_meta_title),
+          canonicalName: input.snapshot.canonical_name,
+        }),
+        seo_meta_description: ensureSeoBodyBranding({
+          text: retrySeoDescription,
+          canonicalName: input.snapshot.canonical_name,
+        }),
+        seo_hidden_summary_plain: ensureSeoBodyBranding({
+          text: retrySeoHidden,
+          canonicalName: input.snapshot.canonical_name,
+        }),
         highlights: retryHighlights,
         helpful_hints: retryHints,
-        sleeping_arrangements: retryValidatedSleeping.success
-          ? retryValidatedSleeping.data
-          : [],
-        sleeping_rollups: normalizeSleepingRollups(
-          (parsed as Record<string, unknown>).sleeping_rollups,
-        ),
+        sleeping_arrangements:
+          retryValidatedSleeping.success &&
+          retryValidatedSleeping.data.length > 0
+            ? retryValidatedSleeping.data
+            : retryFallbackSleeping,
+        sleeping_rollups: retryRollups,
         amenities_normalized: retryMergedAmenities,
         amenities_evidence: retryMergedEvidence,
       };

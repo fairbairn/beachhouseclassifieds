@@ -457,6 +457,18 @@ function ListingRefinementDevPage() {
                   "(empty)"}
               </pre>
               <div className="rounded bg-slate-50 p-3 text-xs">
+                <strong>Highlights</strong>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {highlightsToRender.length > 0 ? (
+                    highlightsToRender.map((highlight, index) => (
+                      <li key={`${highlight}-${index}`}>{highlight}</li>
+                    ))
+                  ) : (
+                    <li>(none)</li>
+                  )}
+                </ul>
+              </div>
+              <div className="rounded bg-slate-50 p-3 text-xs">
                 <strong>Helpful Hints</strong>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   {Array.isArray(generatedOutput.helpful_hints) &&

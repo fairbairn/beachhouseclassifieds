@@ -200,6 +200,8 @@
     "listings:refine:single:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:refine:single:raw --",
     "listings:fill-null-rooms:raw": "tsx src/lib/scripts/run-fill-null-bedroom-bathroom.ts",
     "listings:fill-null-rooms:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:fill-null-rooms:raw --",
+    "occupancy:health:raw": "tsx src/lib/scripts/run-occupancy-health-check.ts",
+    "occupancy:health:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run occupancy:health:raw --",
     "pricing:validate:ready-conformance-matrix:raw": "tsx src/lib/scripts/run-ready-conformance-matrix-validation.ts",
     "pricing:validate:ready-conformance-matrix": "npm run pricing:validate:ready-conformance-matrix:raw --",
     "pricing:validate:ready-conformance-matrix:strict": "npm run pricing:validate:ready-conformance-matrix:raw -- --strict",
