@@ -47,6 +47,17 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 650,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  rosemary30a: {
+    adapterKey: "rosemary30a",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.18,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.3,
+    },
+    globalDefaultBaseNightly: 700,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
   keyco30a: {
     adapterKey: "keyco30a",
     defaultWeeks: 24,

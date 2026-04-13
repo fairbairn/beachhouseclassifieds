@@ -26,6 +26,7 @@ import { createOversee30AAdapter } from "./adapters/oversee30a";
 import { createPanhandle30AAdapter } from "./adapters/panhandle30a";
 import { createProminence30Adapter } from "./adapters/prominence30a";
 import { createRealJoy30AAdapter } from "./adapters/realjoy30a";
+import { createRosemary30AAdapter } from "./adapters/rosemary30a";
 import { createRoyalDestinationsAdapter } from "./adapters/royaldestinations";
 import { createSandersBeach30AAdapter } from "./adapters/sandersbeach30a";
 import { createSandpiper30AAdapter } from "./adapters/sandpiper30a";
@@ -67,6 +68,7 @@ const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   panhandle30a: createPanhandle30AAdapter,
   prominence30a: createProminence30Adapter,
   realjoy30a: createRealJoy30AAdapter,
+  rosemary30a: createRosemary30AAdapter,
   royaldestinations: createRoyalDestinationsAdapter,
   sandersbeach30a: createSandersBeach30AAdapter,
   sandpiper30a: createSandpiper30AAdapter,

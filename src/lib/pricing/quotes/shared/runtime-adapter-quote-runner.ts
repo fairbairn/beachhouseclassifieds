@@ -12,6 +12,7 @@ import type {
 } from "@/lib/pricing/quote-runtime/types";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
+import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 import { createQuoteCaptureProgressTracker } from "./quote-capture-progress";
 
 type CliOptions = {
@@ -646,7 +647,8 @@ async function loadListingSeeds(
         ? entry.external_listing_id.trim()
         : "";
     const externalListingId =
-      externalListingIdRaw || externalListingIdFromDetailUrl(detailUrl);
+      canonicalizeExternalListingId(externalListingIdRaw) ||
+      externalListingIdFromDetailUrl(detailUrl);
     if (!externalListingId) {
       continue;
     }
