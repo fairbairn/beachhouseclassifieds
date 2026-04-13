@@ -1933,14 +1933,54 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
           ...(quoteContext ? { quote_context: quoteContext } : {}),
         };
       });
+      const canonicalIndexByExternalId = new Map<
+        string,
+        (typeof canonicalIndex)[number]
+      >();
+      const duplicateExternalIds = new Set<string>();
+      for (const entry of canonicalIndex) {
+        const externalListingId = entry.external_listing_id.trim();
+        if (!externalListingId) {
+          continue;
+        }
+
+        const existing = canonicalIndexByExternalId.get(externalListingId);
+        if (!existing) {
+          canonicalIndexByExternalId.set(externalListingId, entry);
+          continue;
+        }
+
+        duplicateExternalIds.add(externalListingId);
+        // Prefer the entry that already carries quote_context when deduping.
+        const existingHasQuoteContext =
+          extractCanonicalQuoteContext(existing.quote_context) !== undefined;
+        const nextHasQuoteContext =
+          extractCanonicalQuoteContext(entry.quote_context) !== undefined;
+        if (!existingHasQuoteContext && nextHasQuoteContext) {
+          canonicalIndexByExternalId.set(externalListingId, entry);
+        }
+      }
+
+      const canonicalIndexUnique = Array.from(
+        canonicalIndexByExternalId.values(),
+      ).sort((left, right) => left.detail_url.localeCompare(right.detail_url));
+      if (duplicateExternalIds.size > 0) {
+        const sample = Array.from(duplicateExternalIds)
+          .sort((left, right) => left.localeCompare(right))
+          .slice(0, 20)
+          .join(", ");
+        progress.info(
+          `canonical index dedupe: duplicates_removed=${duplicateExternalIds.size} sample_external_listing_ids=${sample}`,
+        );
+      }
       await writeCanonicalIndexWithPruneGuard({
         canonicalIndexPath,
-        canonicalIndex,
+        canonicalIndex: canonicalIndexUnique,
         allowCanonicalPrune: options.allowCanonicalPrune,
         allowEmptyCanonicalIndexPrune: options.allowEmptyCanonicalIndexPrune,
       });
       progress.info(
-        `canonical index updated: ${toProjectRelativePath(canonicalIndexPath, root)} entries=${canonicalIndex.length}`,
+        `canonical index updated: ${toProjectRelativePath(canonicalIndexPath, root)} entries=${canonicalIndexUnique.length}`,
       );
     }
 

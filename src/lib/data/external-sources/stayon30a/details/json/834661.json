@@ -1,7 +1,7 @@
 {
   "external_listing_id": "834661",
   "detail_url": "https://www.stayon30a.com/834661",
-  "fetched_at": "2026-04-12T21:14:12.022Z",
+  "fetched_at": "2026-04-13T19:54:32.514Z",
   "quote_context": {
     "listing_id": "834661",
     "unit_id": "834661",
@@ -136,9 +136,9 @@
   "property_profile": {
     "unit_id": "834661",
     "property_code": "834661",
-    "beds": 0,
-    "baths": 0,
-    "sleeps": 0,
+    "beds": 3,
+    "baths": 2.5,
+    "sleeps": 10,
     "city": "Inlet Beach",
     "state": "Prominence",
     "zip": "32461"
@@ -159,23 +159,15 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "834661",
-    "captured_at": "2026-04-12T21:14:12.022Z",
-    "window_start": "2026-04-12",
+    "captured_at": "2026-04-13T19:54:32.514Z",
+    "window_start": "2026-04-13",
     "window_end": "2027-08-31",
     "code_legend": {
       "Y": "available",
       "N": "not_available"
     },
-    "day_codes": "YYYYYYYYYNNNNYYYYYYNNNYYNNNNNNNYYYYYYYNNNNYYYYYYNNNNNNNNNNNNNNNNYYYYYYYNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
+    "day_codes": "YYYYYYYYNNNNYYYYYYNNNYYNNNNNNNYYYYYYYNNNNNNNYYYNNNNNNNNNNNNNNNNYYYYYYYNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
     "days": [
-      {
-        "date": "2026-04-12",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
-      },
       {
         "date": "2026-04-13",
         "is_available": true,
@@ -506,27 +498,27 @@
       },
       {
         "date": "2026-05-24",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "status_code": "N",
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-05-25",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "status_code": "N",
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-05-26",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "status_code": "N",
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-05-27",
@@ -4226,18 +4218,18 @@
       }
     ],
     "counts": {
-      "available": 460,
-      "not_available": 47,
+      "available": 456,
+      "not_available": 50,
       "other": 0,
-      "booking_available": 460,
-      "booking_unavailable": 47,
+      "booking_available": 456,
+      "booking_unavailable": 50,
       "booking_unknown": 0
     }
   },
   "availability_raw": {
-    "begin_date": "04/12/2026",
+    "begin_date": "04/13/2026",
     "end_date": "08/31/2027",
-    "day_codes": "YYYYYYYYYNNNNYYYYYYNNNYYNNNNNNNYYYYYYYNNNNYYYYYYNNNNNNNNNNNNNNNNYYYYYYYNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+    "day_codes": "YYYYYYYYNNNNYYYYYYNNNYYNNNNNNNYYYYYYYNNNNNNNYYYNNNNNNNNNNNNNNNNYYYYYYYNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/834661.html"
 }

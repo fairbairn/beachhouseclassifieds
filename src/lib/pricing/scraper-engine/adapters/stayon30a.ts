@@ -153,6 +153,16 @@ function parseNumberLike(
   return numeric;
 }
 
+function parsePositiveNumberLike(
+  value: string | number | null | undefined,
+): number | null {
+  const parsed = parseNumberLike(value);
+  if (parsed === null || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
 function toAbsoluteHttpUrl(value: string, baseUrl: string): string | null {
   const raw = value.trim();
   if (!raw) {
@@ -684,6 +694,14 @@ async function fetchDetail(
       lodgingJsonLd && typeof lodgingJsonLd.geo === "object"
         ? (lodgingJsonLd.geo as Record<string, unknown>)
         : null;
+    const jsonLdContainsPlace =
+      lodgingJsonLd && typeof lodgingJsonLd.containsPlace === "object"
+        ? (lodgingJsonLd.containsPlace as Record<string, unknown>)
+        : null;
+    const containsPlaceOccupancy =
+      jsonLdContainsPlace && typeof jsonLdContainsPlace.occupancy === "object"
+        ? (jsonLdContainsPlace.occupancy as Record<string, unknown>)
+        : null;
 
     const location = {
       address: stripHtml(
@@ -707,20 +725,61 @@ async function fetchDetail(
       ),
     };
 
-    const beds = parseNumberLike(
-      (lodgingJsonLd?.numberOfBedrooms as string | number | null) ?? null,
-    );
-    const baths = parseNumberLike(
-      (lodgingJsonLd?.numberOfBathroomsTotal as string | number | null) ??
-        (lodgingJsonLd?.numberOfBathrooms as string | number | null) ??
-        null,
-    );
-    const sleeps = parseNumberLike(
-      (lodgingJsonLd?.maximumAttendeeCapacity as string | number | null) ??
-        ((lodgingJsonLd?.occupancy as Record<string, unknown> | null)
-          ?.maxValue as string | number | null) ??
-        null,
-    );
+    const capacitySourceText = stripHtml(html);
+    const beds =
+      parsePositiveNumberLike(
+        (jsonLdContainsPlace?.numberOfBedrooms as string | number | null) ??
+          (lodgingJsonLd?.numberOfBedrooms as string | number | null) ??
+          null,
+      ) ??
+      parsePositiveNumberLike(
+        extractFirst(/\b(\d+(?:\.\d+)?)\s*beds?\b/i, capacitySourceText) ||
+          extractFirst(
+            /\bbeds?\s*[:\-]?\s*(\d+(?:\.\d+)?)\b/i,
+            capacitySourceText,
+          ),
+      );
+    const baths =
+      parsePositiveNumberLike(
+        (jsonLdContainsPlace?.numberOfBathroomsTotal as
+          | string
+          | number
+          | null) ??
+          (jsonLdContainsPlace?.numberOfBathrooms as string | number | null) ??
+          (lodgingJsonLd?.numberOfBathroomsTotal as string | number | null) ??
+          (lodgingJsonLd?.numberOfBathrooms as string | number | null) ??
+          null,
+      ) ??
+      parsePositiveNumberLike(
+        extractFirst(
+          /\b(\d+(?:\.\d+)?)\s*bath(?:room)?s?\b/i,
+          capacitySourceText,
+        ) ||
+          extractFirst(
+            /\bbath(?:room)?s?\s*[:\-]?\s*(\d+(?:\.\d+)?)\b/i,
+            capacitySourceText,
+          ),
+      );
+    const sleeps =
+      parsePositiveNumberLike(
+        (containsPlaceOccupancy?.value as string | number | null) ??
+          (containsPlaceOccupancy?.maxValue as string | number | null) ??
+          (jsonLdContainsPlace?.maximumAttendeeCapacity as
+            | string
+            | number
+            | null) ??
+          (lodgingJsonLd?.maximumAttendeeCapacity as string | number | null) ??
+          ((lodgingJsonLd?.occupancy as Record<string, unknown> | null)
+            ?.value as string | number | null) ??
+          ((lodgingJsonLd?.occupancy as Record<string, unknown> | null)
+            ?.maxValue as string | number | null) ??
+          null,
+      ) ??
+      parsePositiveNumberLike(
+        extractFirst(/\b(\d+)\s*guests?\b/i, capacitySourceText) ||
+          extractFirst(/\bguests?\s*[:\-]?\s*(\d+)\b/i, capacitySourceText) ||
+          extractFirst(/\bsleeps?\s*[:\-]?\s*(\d+)\b/i, capacitySourceText),
+      );
 
     const mediaUrls = collectMediaUrls(html, detailUrl, jsonLdObjects);
 

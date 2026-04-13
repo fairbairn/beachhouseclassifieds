@@ -190,6 +190,16 @@ function parseNumberLike(
   return numeric;
 }
 
+function parsePositiveNumberLike(
+  value: string | number | null | undefined,
+): number | null {
+  const parsed = parseNumberLike(value);
+  if (parsed === null || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
 function toAbsoluteHttpUrl(value: string, baseUrl: string): string | null {
   const raw = value.trim();
   if (!raw) {
@@ -420,6 +430,52 @@ function extractWidgetDataAttr(html: string, attrName: string): string {
     ),
   );
   return (match?.[1] ?? "").trim();
+}
+
+function extractWidgetInfoLabelCount(
+  html: string,
+  labelPattern: RegExp,
+): string {
+  const blocks = html.matchAll(
+    /<div[^>]*class=["'][^"']*be-property-widget-info-label[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
+  );
+
+  for (const block of blocks) {
+    const blockHtml = block[1] ?? "";
+    const labelText = stripHtml(blockHtml).replace(/\s+/g, " ").trim();
+    if (!labelPattern.test(labelText)) {
+      continue;
+    }
+
+    const count = extractFirst(
+      /be-property-widget-info-label-count[^>]*>\s*(\d+(?:\.\d+)?)\s*</i,
+      blockHtml,
+    );
+    if (count) {
+      return count;
+    }
+  }
+
+  return "";
+}
+
+function extractWidgetCountByLabelText(
+  html: string,
+  labelPattern: RegExp,
+): string {
+  const matches = html.matchAll(
+    /be-property-widget-info-label-count[^>]*>\s*(\d+(?:\.\d+)?)\s*<\/span>[\s\S]*?be-property-widget-info-label-text[^>]*>\s*([^<]+)\s*<\/span>/gi,
+  );
+
+  for (const match of matches) {
+    const count = (match[1] ?? "").trim();
+    const label = (match[2] ?? "").trim();
+    if (count && labelPattern.test(label)) {
+      return count;
+    }
+  }
+
+  return "";
 }
 
 function parseAvailabilityDaysFromCalendarHtml(
@@ -1405,26 +1461,45 @@ async function fetchDetail(
       location.longitude = widgetLongitude;
     }
 
-    const beds = parseNumberLike(
+    const beds = parsePositiveNumberLike(
       (lodgingJsonLd?.numberOfBedrooms as string | number | null) ?? null,
     );
-    const baths = parseNumberLike(
+    const baths = parsePositiveNumberLike(
       (lodgingJsonLd?.numberOfBathroomsTotal as string | number | null) ??
         (lodgingJsonLd?.numberOfBathrooms as string | number | null) ??
         null,
     );
-    const sleeps = parseNumberLike(
+    const sleeps = parsePositiveNumberLike(
       (lodgingJsonLd?.maximumAttendeeCapacity as string | number | null) ??
         ((lodgingJsonLd?.occupancy as Record<string, unknown> | null)
           ?.maxValue as string | number | null) ??
         null,
     );
 
+    const bedsFromWidgetLabels = parsePositiveNumberLike(
+      extractWidgetCountByLabelText(parsingHtml, /\bbedrooms?\b/i) ||
+        extractWidgetInfoLabelCount(parsingHtml, /\bbedrooms?\b/i),
+    );
+    const bathsFromWidgetLabels = parsePositiveNumberLike(
+      extractWidgetCountByLabelText(parsingHtml, /\bbaths?|bathrooms?\b/i) ||
+        extractWidgetInfoLabelCount(parsingHtml, /\bbaths?|bathrooms?\b/i),
+    );
+    const sleepsFromWidgetLabels = parsePositiveNumberLike(
+      extractWidgetCountByLabelText(parsingHtml, /\bguests?|sleeps?\b/i) ||
+        extractWidgetInfoLabelCount(parsingHtml, /\bguests?|sleeps?\b/i),
+    );
+
     const bedsResolved =
-      beds ?? parseNumberLike(extractWidgetDataAttr(html, "data-dblbeds"));
+      beds ??
+      parsePositiveNumberLike(extractWidgetDataAttr(html, "data-dblbeds")) ??
+      bedsFromWidgetLabels;
+    const bathsResolved = baths ?? bathsFromWidgetLabels;
     const sleepsResolved =
       sleeps ??
-      parseNumberLike(extractWidgetDataAttr(parsingHtml, "data-intoccu"));
+      parsePositiveNumberLike(
+        extractWidgetDataAttr(parsingHtml, "data-intoccu"),
+      ) ??
+      sleepsFromWidgetLabels;
 
     const mediaUrls = collectMediaUrls(parsingHtml, detailUrl, jsonLdObjects);
 
@@ -1724,7 +1799,7 @@ async function fetchDetail(
         unit_id: numericUnitIdRaw || externalListingId,
         property_code: numericUnitIdRaw || externalListingId,
         beds: bedsResolved,
-        baths,
+        baths: bathsResolved,
         sleeps: sleepsResolved,
         city: location.city,
         state: location.state,

@@ -2,7 +2,7 @@
   "external_listing_id": "NuaYu0EAJM",
   "detail_url": "https://key.co/listings/NuaYu0EAJM",
   "quote_context": {},
-  "fetched_at": "2026-04-12T19:32:57.599Z",
+  "fetched_at": "2026-04-13T20:14:48.761Z",
   "title": "Magnolia Way | KEY.co",
   "h1": "Magnolia Way",
   "canonical_url": "https://key.co/listings/NuaYu0EAJM",
@@ -194,9 +194,9 @@
     "city": "",
     "state": "FL",
     "zip": "",
-    "beds": 0,
-    "baths": 0,
-    "sleeps": 0
+    "beds": 5,
+    "baths": 5,
+    "sleeps": 12
   },
   "normalized_matching_profile": {
     "source": "pm_keyco30a",
@@ -214,26 +214,17 @@
   "normalized_availability": {
     "source": "pm_keyco30a",
     "external_listing_id": "NuaYu0EAJM",
-    "captured_at": "2026-04-12T19:32:57.599Z",
-    "window_start": "2026-04-12",
-    "window_end": "2028-04-11",
+    "captured_at": "2026-04-13T20:14:48.761Z",
+    "window_start": "2026-04-13",
+    "window_end": "2028-04-12",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
       "M": "restricted_or_rule_constrained",
       "X": "unknown"
     },
-    "day_codes": "AAAAAAUAAAAAXUUUUUUXUUUUUUUUXUUUUUUXAAAAAUUUUUUUUUUUUUUAMMMMMMUUUUUUUAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMUXUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXUUUUUUXAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "AAAAAUAAAAAXUUUUUUXUUUUUUUUXUUUUUUXAAAAAUUUUUUUUUUUUUUAMMMMMMUUUUUUUAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMUXUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXUUUUUUXAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAMMMMMMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-12",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 3
-      },
       {
         "date": "2026-04-13",
         "status_code": "A",
@@ -6803,42 +6794,43 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-12",
+        "status_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
-      "available": 327,
+      "available": 326,
       "unavailable": 54,
       "checkin_only": 0,
       "checkout_only": 0,
-      "other": 350,
-      "booking_available": 327,
+      "other": 351,
+      "booking_available": 326,
       "booking_unavailable": 54,
-      "booking_unknown": 350
+      "booking_unknown": 351
     }
   },
   "availability_raw": {
-    "source_note": "Parsed embedded availabilityCalendar data from listing payload.",
+    "source_note": "Dynamic refresh reused existing static detail + baseline availability and refreshed weekly sampled availability/rates via pricing-context API.",
     "has_calendar_widget": false
   },
   "normalized_rates": {
     "source": "pm_keyco30a",
     "external_listing_id": "NuaYu0EAJM",
-    "captured_at": "2026-04-12T19:32:57.599Z",
+    "captured_at": "2026-04-13T20:14:48.761Z",
     "currency": "USD",
-    "window_start": "2026-04-12",
-    "window_end": "2026-09-26",
+    "window_start": "2026-04-13",
+    "window_end": "2026-09-27",
     "days": [
       {
-        "date": "2026-04-12",
-        "nightly_rate": 1895.86,
-        "min_nights": 3,
-        "is_booked": false,
-        "changeover_code": "A",
-        "season_name": "quote_weekly_backfill"
-      },
-      {
         "date": "2026-04-13",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6846,7 +6838,7 @@
       },
       {
         "date": "2026-04-14",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6854,7 +6846,7 @@
       },
       {
         "date": "2026-04-15",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6862,7 +6854,7 @@
       },
       {
         "date": "2026-04-16",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6870,7 +6862,7 @@
       },
       {
         "date": "2026-04-17",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6879,14 +6871,14 @@
       {
         "date": "2026-04-18",
         "nightly_rate": null,
-        "min_nights": 3,
-        "is_booked": false,
-        "changeover_code": "A",
-        "season_name": "quote_unavailable"
+        "min_nights": 7,
+        "is_booked": true,
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-04-19",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6894,7 +6886,7 @@
       },
       {
         "date": "2026-04-20",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6902,7 +6894,7 @@
       },
       {
         "date": "2026-04-21",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6910,7 +6902,7 @@
       },
       {
         "date": "2026-04-22",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6918,7 +6910,7 @@
       },
       {
         "date": "2026-04-23",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -6935,10 +6927,10 @@
       {
         "date": "2026-04-25",
         "nightly_rate": null,
-        "min_nights": 3,
+        "min_nights": 7,
         "is_booked": true,
         "changeover_code": "U",
-        "season_name": "quote_unavailable"
+        "season_name": "not_available"
       },
       {
         "date": "2026-04-26",
@@ -6991,10 +6983,10 @@
       {
         "date": "2026-05-02",
         "nightly_rate": null,
-        "min_nights": 3,
+        "min_nights": 7,
         "is_booked": true,
-        "changeover_code": "X",
-        "season_name": "quote_unavailable"
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-05-03",
@@ -7047,10 +7039,10 @@
       {
         "date": "2026-05-09",
         "nightly_rate": null,
-        "min_nights": 3,
+        "min_nights": 7,
         "is_booked": true,
-        "changeover_code": "X",
-        "season_name": "quote_unavailable"
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-05-10",
@@ -7103,10 +7095,10 @@
       {
         "date": "2026-05-16",
         "nightly_rate": null,
-        "min_nights": 3,
+        "min_nights": 7,
         "is_booked": true,
         "changeover_code": "U",
-        "season_name": "quote_unavailable"
+        "season_name": "not_available"
       },
       {
         "date": "2026-05-17",
@@ -7118,7 +7110,7 @@
       },
       {
         "date": "2026-05-18",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7126,7 +7118,7 @@
       },
       {
         "date": "2026-05-19",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7134,7 +7126,7 @@
       },
       {
         "date": "2026-05-20",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7142,7 +7134,7 @@
       },
       {
         "date": "2026-05-21",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7150,7 +7142,7 @@
       },
       {
         "date": "2026-05-22",
-        "nightly_rate": 1895.86,
+        "nightly_rate": 1836.14,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7159,10 +7151,10 @@
       {
         "date": "2026-05-23",
         "nightly_rate": null,
-        "min_nights": 5,
+        "min_nights": 7,
         "is_booked": true,
-        "changeover_code": "X",
-        "season_name": "quote_unavailable"
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-05-24",
@@ -7215,10 +7207,10 @@
       {
         "date": "2026-05-30",
         "nightly_rate": null,
-        "min_nights": 3,
+        "min_nights": 7,
         "is_booked": true,
         "changeover_code": "U",
-        "season_name": "quote_unavailable"
+        "season_name": "not_available"
       },
       {
         "date": "2026-05-31",
@@ -7270,10 +7262,10 @@
       },
       {
         "date": "2026-06-06",
-        "nightly_rate": 1895.86,
-        "min_nights": 3,
-        "is_booked": true,
-        "changeover_code": "X",
+        "nightly_rate": 1836.14,
+        "min_nights": 7,
+        "is_booked": false,
+        "changeover_code": "A",
         "season_name": "quote_weekly_sample"
       },
       {
@@ -7327,10 +7319,10 @@
       {
         "date": "2026-06-13",
         "nightly_rate": null,
-        "min_nights": 3,
+        "min_nights": 7,
         "is_booked": true,
-        "changeover_code": "X",
-        "season_name": "quote_unavailable"
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-06-14",
@@ -7382,10 +7374,10 @@
       },
       {
         "date": "2026-06-20",
-        "nightly_rate": 1569.86,
-        "min_nights": 3,
-        "is_booked": true,
-        "changeover_code": "X",
+        "nightly_rate": 1566.57,
+        "min_nights": 7,
+        "is_booked": false,
+        "changeover_code": "A",
         "season_name": "quote_weekly_sample"
       },
       {
@@ -7438,8 +7430,8 @@
       },
       {
         "date": "2026-06-27",
-        "nightly_rate": 1655.43,
-        "min_nights": 3,
+        "nightly_rate": 1655.57,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
@@ -7494,8 +7486,8 @@
       },
       {
         "date": "2026-07-04",
-        "nightly_rate": 1577.29,
-        "min_nights": 3,
+        "nightly_rate": 1570.57,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
@@ -7550,8 +7542,8 @@
       },
       {
         "date": "2026-07-11",
-        "nightly_rate": 1608.14,
-        "min_nights": 3,
+        "nightly_rate": 1602.14,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
@@ -7606,8 +7598,8 @@
       },
       {
         "date": "2026-07-18",
-        "nightly_rate": 1518.29,
-        "min_nights": 3,
+        "nightly_rate": 1510.71,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
@@ -7662,8 +7654,8 @@
       },
       {
         "date": "2026-07-25",
-        "nightly_rate": 1452.43,
-        "min_nights": 3,
+        "nightly_rate": 1454.43,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
@@ -7718,8 +7710,8 @@
       },
       {
         "date": "2026-08-01",
-        "nightly_rate": 1269,
-        "min_nights": 3,
+        "nightly_rate": 1263.14,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
@@ -7775,10 +7767,10 @@
       {
         "date": "2026-08-08",
         "nightly_rate": null,
-        "min_nights": 3,
-        "is_booked": false,
-        "changeover_code": "A",
-        "season_name": "quote_unavailable"
+        "min_nights": 7,
+        "is_booked": true,
+        "changeover_code": "U",
+        "season_name": "not_available"
       },
       {
         "date": "2026-08-09",
@@ -7830,15 +7822,15 @@
       },
       {
         "date": "2026-08-15",
-        "nightly_rate": 722.14,
-        "min_nights": 3,
-        "is_booked": true,
-        "changeover_code": "X",
+        "nightly_rate": 722.57,
+        "min_nights": 7,
+        "is_booked": false,
+        "changeover_code": "A",
         "season_name": "quote_weekly_sample"
       },
       {
         "date": "2026-08-16",
-        "nightly_rate": 720.2,
+        "nightly_rate": 720.75,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7846,7 +7838,7 @@
       },
       {
         "date": "2026-08-17",
-        "nightly_rate": 718.26,
+        "nightly_rate": 718.94,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7854,7 +7846,7 @@
       },
       {
         "date": "2026-08-18",
-        "nightly_rate": 716.32,
+        "nightly_rate": 717.12,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7862,7 +7854,7 @@
       },
       {
         "date": "2026-08-19",
-        "nightly_rate": 714.39,
+        "nightly_rate": 715.31,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7870,7 +7862,7 @@
       },
       {
         "date": "2026-08-20",
-        "nightly_rate": 712.45,
+        "nightly_rate": 713.49,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7878,7 +7870,7 @@
       },
       {
         "date": "2026-08-21",
-        "nightly_rate": 710.51,
+        "nightly_rate": 711.68,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7886,15 +7878,15 @@
       },
       {
         "date": "2026-08-22",
-        "nightly_rate": 708.57,
-        "min_nights": 3,
+        "nightly_rate": 709.86,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
       },
       {
         "date": "2026-08-23",
-        "nightly_rate": 713.61,
+        "nightly_rate": 714.82,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7902,7 +7894,7 @@
       },
       {
         "date": "2026-08-24",
-        "nightly_rate": 718.65,
+        "nightly_rate": 719.78,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7910,7 +7902,7 @@
       },
       {
         "date": "2026-08-25",
-        "nightly_rate": 723.69,
+        "nightly_rate": 724.74,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7918,7 +7910,7 @@
       },
       {
         "date": "2026-08-26",
-        "nightly_rate": 728.74,
+        "nightly_rate": 729.69,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7926,7 +7918,7 @@
       },
       {
         "date": "2026-08-27",
-        "nightly_rate": 733.78,
+        "nightly_rate": 734.65,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7934,7 +7926,7 @@
       },
       {
         "date": "2026-08-28",
-        "nightly_rate": 738.82,
+        "nightly_rate": 739.61,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7942,15 +7934,15 @@
       },
       {
         "date": "2026-08-29",
-        "nightly_rate": 743.86,
-        "min_nights": 3,
+        "nightly_rate": 744.57,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
       },
       {
         "date": "2026-08-30",
-        "nightly_rate": 748.9,
+        "nightly_rate": 749.39,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7958,7 +7950,7 @@
       },
       {
         "date": "2026-08-31",
-        "nightly_rate": 753.94,
+        "nightly_rate": 754.2,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7966,7 +7958,7 @@
       },
       {
         "date": "2026-09-01",
-        "nightly_rate": 758.98,
+        "nightly_rate": 759.02,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7974,7 +7966,7 @@
       },
       {
         "date": "2026-09-02",
-        "nightly_rate": 764.02,
+        "nightly_rate": 763.84,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7982,7 +7974,7 @@
       },
       {
         "date": "2026-09-03",
-        "nightly_rate": 769.06,
+        "nightly_rate": 768.66,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7990,7 +7982,7 @@
       },
       {
         "date": "2026-09-04",
-        "nightly_rate": 774.1,
+        "nightly_rate": 773.47,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -7998,15 +7990,15 @@
       },
       {
         "date": "2026-09-05",
-        "nightly_rate": 779.14,
-        "min_nights": 3,
+        "nightly_rate": 778.29,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
       },
       {
         "date": "2026-09-06",
-        "nightly_rate": 780.24,
+        "nightly_rate": 780.7,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8014,7 +8006,7 @@
       },
       {
         "date": "2026-09-07",
-        "nightly_rate": 781.35,
+        "nightly_rate": 783.1,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8022,7 +8014,7 @@
       },
       {
         "date": "2026-09-08",
-        "nightly_rate": 782.45,
+        "nightly_rate": 785.51,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8030,7 +8022,7 @@
       },
       {
         "date": "2026-09-09",
-        "nightly_rate": 783.55,
+        "nightly_rate": 787.92,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8038,7 +8030,7 @@
       },
       {
         "date": "2026-09-10",
-        "nightly_rate": 784.65,
+        "nightly_rate": 790.33,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8046,7 +8038,7 @@
       },
       {
         "date": "2026-09-11",
-        "nightly_rate": 785.76,
+        "nightly_rate": 792.73,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8054,15 +8046,15 @@
       },
       {
         "date": "2026-09-12",
-        "nightly_rate": 786.86,
-        "min_nights": 3,
+        "nightly_rate": 795.14,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
       },
       {
         "date": "2026-09-13",
-        "nightly_rate": 792.57,
+        "nightly_rate": 798.94,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8070,7 +8062,7 @@
       },
       {
         "date": "2026-09-14",
-        "nightly_rate": 798.29,
+        "nightly_rate": 802.73,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8078,7 +8070,7 @@
       },
       {
         "date": "2026-09-15",
-        "nightly_rate": 804,
+        "nightly_rate": 806.53,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8086,7 +8078,7 @@
       },
       {
         "date": "2026-09-16",
-        "nightly_rate": 809.72,
+        "nightly_rate": 810.32,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8094,7 +8086,7 @@
       },
       {
         "date": "2026-09-17",
-        "nightly_rate": 815.43,
+        "nightly_rate": 814.12,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8102,7 +8094,7 @@
       },
       {
         "date": "2026-09-18",
-        "nightly_rate": 821.15,
+        "nightly_rate": 817.91,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8110,15 +8102,15 @@
       },
       {
         "date": "2026-09-19",
-        "nightly_rate": 826.86,
-        "min_nights": 3,
+        "nightly_rate": 821.71,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
       },
       {
         "date": "2026-09-20",
-        "nightly_rate": 836.29,
+        "nightly_rate": 831.61,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8126,7 +8118,7 @@
       },
       {
         "date": "2026-09-21",
-        "nightly_rate": 845.72,
+        "nightly_rate": 841.51,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8134,7 +8126,7 @@
       },
       {
         "date": "2026-09-22",
-        "nightly_rate": 855.15,
+        "nightly_rate": 851.41,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8142,7 +8134,7 @@
       },
       {
         "date": "2026-09-23",
-        "nightly_rate": 864.57,
+        "nightly_rate": 861.3,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8150,7 +8142,7 @@
       },
       {
         "date": "2026-09-24",
-        "nightly_rate": 874,
+        "nightly_rate": 871.2,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8158,7 +8150,7 @@
       },
       {
         "date": "2026-09-25",
-        "nightly_rate": 883.43,
+        "nightly_rate": 881.1,
         "min_nights": 3,
         "is_booked": false,
         "changeover_code": "A",
@@ -8166,18 +8158,26 @@
       },
       {
         "date": "2026-09-26",
-        "nightly_rate": 892.86,
-        "min_nights": 3,
+        "nightly_rate": 891,
+        "min_nights": 7,
         "is_booked": false,
         "changeover_code": "A",
         "season_name": "quote_weekly_sample"
+      },
+      {
+        "date": "2026-09-27",
+        "nightly_rate": 891,
+        "min_nights": 3,
+        "is_booked": false,
+        "changeover_code": "A",
+        "season_name": "quote_weekly_carry_forward"
       }
     ],
     "stats": {
       "days_with_rate": 67,
-      "min_nightly_rate": 708.57,
-      "max_nightly_rate": 1895.86,
-      "avg_nightly_rate": 1138.17
+      "min_nightly_rate": 709.86,
+      "max_nightly_rate": 1836.14,
+      "avg_nightly_rate": 1108.86
     }
   },
   "rates_raw": {

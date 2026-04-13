@@ -56,6 +56,7 @@ type IndexRecord = {
 type ValidationIssueCode =
   | "invalid_json"
   | "invalid_index_json"
+  | "duplicate_index_external_id"
   | "missing_index_entry_identifier"
   | "missing_index_entry_json"
   | "missing_external_listing_id"
@@ -282,9 +283,22 @@ function isNullishNumericField(value: unknown): boolean {
     return true;
   }
 
+  if (typeof value === "number") {
+    return !Number.isFinite(value) || value <= 0;
+  }
+
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
-    return normalized === "" || normalized === "null" || normalized === "n/a";
+    if (normalized === "" || normalized === "null" || normalized === "n/a") {
+      return true;
+    }
+
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) {
+      return parsed <= 0;
+    }
+
+    return false;
   }
 
   return false;
@@ -519,6 +533,10 @@ export async function runValidateScrapeFilenameAlignmentCli(
 
   const issues: ValidationIssue[] = [];
   const warnings: ValidationWarning[] = [];
+  let occupancyErrors = 0;
+  let bedsOccupancyErrors = 0;
+  let bathsOccupancyErrors = 0;
+  let sleepsOccupancyErrors = 0;
   const enforceLowercaseFilenames =
     !LOWERCASE_FILENAME_ENFORCEMENT_EXEMPT_ADAPTERS.has(options.adapterKey);
 
@@ -580,6 +598,47 @@ export async function runValidateScrapeFilenameAlignmentCli(
       printIssues(issues);
     }
     return 1;
+  }
+
+  const indexPrimaryIdCounts = new Map<string, number>();
+  for (const indexRecord of indexRecords) {
+    const indexExternalId =
+      typeof indexRecord.external_listing_id === "string"
+        ? indexRecord.external_listing_id.trim()
+        : "";
+    const indexDetailUrl =
+      typeof indexRecord.detail_url === "string"
+        ? indexRecord.detail_url.trim()
+        : "";
+
+    const canonicalIndexExternalId = indexExternalId
+      ? canonicalizeExternalListingId(indexExternalId)
+      : "";
+    const canonicalFromDetailUrl = indexDetailUrl
+      ? externalListingIdFromDetailUrl(indexDetailUrl)
+      : "";
+    const canonicalIndexId = canonicalIndexExternalId || canonicalFromDetailUrl;
+    if (!canonicalIndexId) {
+      continue;
+    }
+
+    indexPrimaryIdCounts.set(
+      canonicalIndexId,
+      (indexPrimaryIdCounts.get(canonicalIndexId) ?? 0) + 1,
+    );
+  }
+
+  const duplicateIndexExternalIds = Array.from(indexPrimaryIdCounts.entries())
+    .filter(([, count]) => count > 1)
+    .sort((left, right) => left[0].localeCompare(right[0]));
+
+  for (const [canonicalIndexId, count] of duplicateIndexExternalIds) {
+    issues.push({
+      code: "duplicate_index_external_id",
+      message:
+        `details/index.json has duplicate canonical external_listing_id='${canonicalIndexId}' ` +
+        `count=${count} for adapter=${options.adapterKey}`,
+    });
   }
 
   const listingFilteredRecords =
@@ -745,11 +804,22 @@ export async function runValidateScrapeFilenameAlignmentCli(
     const profileBeds = profile?.beds;
     const profileBaths = profile?.baths;
     const profileSleeps = profile?.sleeps;
-    if (
-      isNullishNumericField(profileBeds) &&
-      isNullishNumericField(profileBaths) &&
-      isNullishNumericField(profileSleeps)
-    ) {
+    const hasBedsError = isNullishNumericField(profileBeds);
+    const hasBathsError = isNullishNumericField(profileBaths);
+    const hasSleepsError = isNullishNumericField(profileSleeps);
+    if (hasBedsError) {
+      bedsOccupancyErrors += 1;
+    }
+    if (hasBathsError) {
+      bathsOccupancyErrors += 1;
+    }
+    if (hasSleepsError) {
+      sleepsOccupancyErrors += 1;
+    }
+    if (hasBedsError || hasBathsError || hasSleepsError) {
+      occupancyErrors += 1;
+    }
+    if (hasBedsError && hasBathsError && hasSleepsError) {
       warnings.push({
         code: "null_property_profile_capacity",
         message:
@@ -947,11 +1017,19 @@ export async function runValidateScrapeFilenameAlignmentCli(
     }
   }
 
+  const occupancySuffix =
+    occupancyErrors > 0
+      ? chalk.magenta(
+          ` occupancy_errors=${occupancyErrors} occupancy_errors_by_field=beds:${bedsOccupancyErrors},baths:${bathsOccupancyErrors},sleeps:${sleepsOccupancyErrors}`,
+        )
+      : "";
+
   if (issues.length > 0) {
     console.error(
       chalk.red(
         `Scrape filename validator failed for adapter=${options.adapterKey} primary_checked=${selectedIndexRecords.length} issues=${issues.length} warnings=${warnings.length}`,
       ),
+      occupancySuffix,
     );
     printIssues(issues);
     if (warnings.length > 0) {
@@ -965,6 +1043,7 @@ export async function runValidateScrapeFilenameAlignmentCli(
     chalk.green(
       `Scrape filename validator passed for adapter=${options.adapterKey} primary_checked=${selectedIndexRecords.length} issues=0 warnings=${warnings.length}`,
     ),
+    occupancySuffix,
   );
   if (warnings.length > 0) {
     printWarnings(warnings);

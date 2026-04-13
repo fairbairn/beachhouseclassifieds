@@ -1,7 +1,7 @@
 {
   "external_listing_id": "935763",
   "detail_url": "https://www.stayon30a.com/935763",
-  "fetched_at": "2026-04-12T21:14:21.964Z",
+  "fetched_at": "2026-04-13T19:54:42.828Z",
   "quote_context": {
     "listing_id": "935763",
     "unit_id": "935763",
@@ -118,9 +118,9 @@
   "property_profile": {
     "unit_id": "935763",
     "property_code": "935763",
-    "beds": 0,
-    "baths": 0,
-    "sleeps": 0,
+    "beds": 4,
+    "baths": 3.5,
+    "sleeps": 8,
     "city": "Inlet Beach",
     "state": "Inlet Beach",
     "zip": "32461"
@@ -141,23 +141,15 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "935763",
-    "captured_at": "2026-04-12T21:14:21.964Z",
-    "window_start": "2026-04-12",
+    "captured_at": "2026-04-13T19:54:42.828Z",
+    "window_start": "2026-04-13",
     "window_end": "2027-08-31",
     "code_legend": {
       "Y": "available",
       "N": "not_available"
     },
-    "day_codes": "YYYYNNNYYYYYYYYYYYNNNNYYNNNNNNNYYYYYYYYYNNNNYYYYYYYYYYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
+    "day_codes": "YYYNNNYYYYYYYYYYYNNNNYYNNNNNNNYYYYYYYYYNNNNYYYYYYYYYYYNNNNNNNYYYYNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
     "days": [
-      {
-        "date": "2026-04-12",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
-      },
       {
         "date": "2026-04-13",
         "is_available": true,
@@ -680,35 +672,35 @@
       },
       {
         "date": "2026-06-17",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "status_code": "N",
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-06-18",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "status_code": "N",
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-06-19",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "status_code": "N",
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-06-20",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "Y",
-        "booking_day_state": "bookable"
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "status_code": "N",
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-06-21",
@@ -4208,18 +4200,18 @@
       }
     ],
     "counts": {
-      "available": 477,
-      "not_available": 30,
+      "available": 472,
+      "not_available": 34,
       "other": 0,
-      "booking_available": 477,
-      "booking_unavailable": 30,
+      "booking_available": 472,
+      "booking_unavailable": 34,
       "booking_unknown": 0
     }
   },
   "availability_raw": {
-    "begin_date": "04/12/2026",
+    "begin_date": "04/13/2026",
     "end_date": "08/31/2027",
-    "day_codes": "YYYYNNNYYYYYYYYYYYNNNNYYNNNNNNNYYYYYYYYYNNNNYYYYYYYYYYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+    "day_codes": "YYYNNNYYYYYYYYYYYNNNNYYNNNNNNNYYYYYYYYYNNNNYYYYYYYYYYYNNNNNNNYYYYNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/935763.html"
 }

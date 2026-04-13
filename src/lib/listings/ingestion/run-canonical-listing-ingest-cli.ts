@@ -40,7 +40,9 @@ type AdapterFailureDetails = {
 
 type AdapterCountVerification = {
   adapterKey: string;
+  rawIndexCount: number;
   indexCount: number;
+  duplicateIndexEntries: number;
   activeSourceLinkCount: number;
   pass: boolean;
   missingExternalIdsSample: string[];
@@ -233,22 +235,30 @@ async function verifyAdapterIndexToSourceLinkCount(
   indexListingIds: string[],
 ): Promise<AdapterCountVerification> {
   const activeSourceExternalIds = await loadActiveSourceExternalIds(adapterKey);
-  const indexIdSet = new Set(indexListingIds);
+  const normalizedIndexListingIds = indexListingIds
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  const indexUniqueListingIds = Array.from(new Set(normalizedIndexListingIds));
+  const indexIdSet = new Set(indexUniqueListingIds);
   const activeIdSet = new Set(activeSourceExternalIds);
 
-  const missingExternalIds = indexListingIds.filter(
+  const missingExternalIds = indexUniqueListingIds.filter(
     (externalListingId) => !activeIdSet.has(externalListingId),
   );
   const unexpectedExternalIds = activeSourceExternalIds.filter(
     (externalListingId) => !indexIdSet.has(externalListingId),
   );
 
-  const indexCount = indexListingIds.length;
+  const rawIndexCount = normalizedIndexListingIds.length;
+  const indexCount = indexUniqueListingIds.length;
+  const duplicateIndexEntries = Math.max(0, rawIndexCount - indexCount);
   const activeSourceLinkCount = activeSourceExternalIds.length;
 
   return {
     adapterKey,
+    rawIndexCount,
     indexCount,
+    duplicateIndexEntries,
     activeSourceLinkCount,
     pass: activeSourceLinkCount === indexCount,
     missingExternalIdsSample: missingExternalIds.slice(
@@ -325,7 +335,9 @@ async function runAdapter(
         indexListingIds,
       );
       const verificationLine = [
+        `index_raw_count=${countVerification.rawIndexCount}`,
         `index_count=${countVerification.indexCount}`,
+        `index_duplicates=${countVerification.duplicateIndexEntries}`,
         `active_source_links=${countVerification.activeSourceLinkCount}`,
         `missing_total=${countVerification.missingExternalIdsTotal}`,
         `unexpected_total=${countVerification.unexpectedExternalIdsTotal}`,
@@ -339,6 +351,14 @@ async function runAdapter(
               `count_verification adapter=${adapterKey} fail ${verificationLine}`,
             ),
       );
+
+      if (countVerification.duplicateIndexEntries > 0) {
+        console.log(
+          chalk.yellow(
+            `count_verification_warning adapter=${adapterKey} duplicate_index_entries=${countVerification.duplicateIndexEntries}`,
+          ),
+        );
+      }
 
       if (!countVerification.pass) {
         if (countVerification.missingExternalIdsSample.length > 0) {
@@ -484,7 +504,7 @@ export async function runCanonicalListingIngestCli(
     for (const entry of verificationFailed) {
       const verification = entry.countVerification!;
       console.log(
-        `- ${verification.adapterKey}: index_count=${verification.indexCount} active_source_links=${verification.activeSourceLinkCount} missing_total=${verification.missingExternalIdsTotal} unexpected_total=${verification.unexpectedExternalIdsTotal}`,
+        `- ${verification.adapterKey}: index_raw_count=${verification.rawIndexCount} index_count=${verification.indexCount} index_duplicates=${verification.duplicateIndexEntries} active_source_links=${verification.activeSourceLinkCount} missing_total=${verification.missingExternalIdsTotal} unexpected_total=${verification.unexpectedExternalIdsTotal}`,
       );
       if (verification.missingExternalIdsSample.length > 0) {
         console.log(

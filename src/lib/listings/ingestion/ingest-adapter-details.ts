@@ -12,7 +12,6 @@ import {
   type listing as listing_table,
 } from "@/lib/db/schema-postgres";
 import { resolvePlannedCommunity } from "@/lib/discover/community-resolution";
-import { resolveListingGeocode } from "@/lib/listings/geocoding/listing-geocode-cache";
 import {
   toAreaCodeFromLabel,
   toBeachAreaCodeFromLabel,
@@ -1064,19 +1063,9 @@ export async function ingestAdapterDetailsToCanonical(
     const detailUrl =
       candidate.detailUrl || asString(detail.detail_url) || null;
     const inferredPostalCode = inferPostalCode(detail);
-    const geocode = await resolveListingGeocode({
-      listingId,
-      canonicalName,
-      lat,
-      lng,
-      city: parsedCityState.city,
-      state: parsedCityState.state,
-      postalCode: inferredPostalCode,
-      area: sourceAreaName,
-    });
-    const city = geocode.city;
-    const state = geocode.state;
-    const postalCode = geocode.postalCode;
+    const city = parsedCityState.city;
+    const state = parsedCityState.state;
+    const postalCode = inferredPostalCode;
     const now = new Date().toISOString();
 
     const listingValues: typeof listing_table.$inferInsert = {

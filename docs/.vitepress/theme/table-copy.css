@@ -1,0 +1,26 @@
+.doc-table-copy-wrap {
+  position: relative;
+}
+
+.doc-table-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.doc-table-copy-btn:hover {
+  background: var(--vp-c-bg-elv);
+}
+
+.doc-table-copy-wrap table {
+  margin-top: 28px;
+}

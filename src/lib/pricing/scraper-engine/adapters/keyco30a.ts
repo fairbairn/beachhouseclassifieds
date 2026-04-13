@@ -346,6 +346,197 @@ function parseNumberLike(
   return numeric;
 }
 
+function parsePositiveNumberLike(
+  value: string | number | null | undefined,
+): number | null {
+  const parsed = parseNumberLike(value);
+  if (parsed === null || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
+const WORD_NUMBER_MAP: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+};
+
+function parsePositiveCountToken(
+  value: string | number | null | undefined,
+): number | null {
+  const numeric = parsePositiveNumberLike(value);
+  if (numeric !== null) {
+    return numeric;
+  }
+
+  const token = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ");
+  if (!token) {
+    return null;
+  }
+
+  const mapped = WORD_NUMBER_MAP[token];
+  if (!mapped || mapped <= 0) {
+    return null;
+  }
+  return mapped;
+}
+
+function extractPositiveCountFromText(
+  text: string,
+  patterns: RegExp[],
+): number | null {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const parsed = parsePositiveCountToken(match?.[1] ?? null);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function extractCapacityFromText(text: string): {
+  beds: number | null;
+  baths: number | null;
+  sleeps: number | null;
+} {
+  const numberToken =
+    "(\\d+(?:\\.\\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)";
+
+  const beds = extractPositiveCountFromText(text, [
+    new RegExp(`\\b${numberToken}[\\s-]*bed(?:room)?s?\\b`, "i"),
+    new RegExp(`\\bbed(?:room)?s?\\s*[:\\-]?\\s*${numberToken}\\b`, "i"),
+  ]);
+
+  const baths = extractPositiveCountFromText(text, [
+    new RegExp(`\\b${numberToken}[\\s-]*bath(?:room)?s?\\b`, "i"),
+    new RegExp(`\\bbath(?:room)?s?\\s*[:\\-]?\\s*${numberToken}\\b`, "i"),
+  ]);
+
+  const sleeps = extractPositiveCountFromText(text, [
+    new RegExp(`\\b(?:sleeps?|guests?)\\s*[:\\-]?\\s*${numberToken}\\b`, "i"),
+    new RegExp(`\\b${numberToken}\\s*(?:sleeps?|guests?)\\b`, "i"),
+  ]);
+
+  return { beds, baths, sleeps };
+}
+
+function extractCapacityFromSummaryHtml(html: string): {
+  beds: number | null;
+  baths: number | null;
+  sleeps: number | null;
+} {
+  const normalized = html.replace(/<!--\s*-->/g, "").replace(/\s+/g, " ");
+
+  const summaryDivMatch = normalized.match(
+    /<div[^>]*class="[^"]*text-brand-navy[^"]*border-b[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+  );
+  const summaryText = stripHtml(summaryDivMatch?.[1] ?? "");
+  if (!summaryText) {
+    return { beds: null, baths: null, sleeps: null };
+  }
+
+  const beds = parsePositiveCountToken(
+    summaryText.match(/\b(\d+(?:\.\d+)?)\s*bedrooms?\b/i)?.[1] ?? null,
+  );
+  const baths = parsePositiveCountToken(
+    summaryText.match(/\b(\d+(?:\.\d+)?)\s*bathrooms?\b/i)?.[1] ?? null,
+  );
+  const sleeps = parsePositiveCountToken(
+    summaryText.match(/\b(\d+(?:\.\d+)?)\s*guests?\b/i)?.[1] ?? null,
+  );
+
+  return { beds, baths, sleeps };
+}
+
+function resolveCapacity(input: {
+  html?: string;
+  text: string;
+  existing?: {
+    beds?: string | number | null;
+    baths?: string | number | null;
+    sleeps?: string | number | null;
+  };
+}): {
+  beds: number | null;
+  baths: number | null;
+  sleeps: number | null;
+} {
+  const payloadCapacity = input.html
+    ? extractCapacityFromNextPayload(input.html)
+    : { beds: null, baths: null, sleeps: null };
+  const summaryHtmlCapacity = input.html
+    ? extractCapacityFromSummaryHtml(input.html)
+    : { beds: null, baths: null, sleeps: null };
+  const textCapacity = extractCapacityFromText(input.text);
+  const existingBeds = parsePositiveNumberLike(input.existing?.beds ?? null);
+  const existingBaths = parsePositiveNumberLike(input.existing?.baths ?? null);
+  const existingSleeps = parsePositiveNumberLike(
+    input.existing?.sleeps ?? null,
+  );
+
+  return {
+    beds:
+      payloadCapacity.beds ??
+      summaryHtmlCapacity.beds ??
+      textCapacity.beds ??
+      existingBeds ??
+      null,
+    baths:
+      payloadCapacity.baths ??
+      summaryHtmlCapacity.baths ??
+      textCapacity.baths ??
+      existingBaths ??
+      null,
+    sleeps:
+      payloadCapacity.sleeps ??
+      summaryHtmlCapacity.sleeps ??
+      textCapacity.sleeps ??
+      existingSleeps ??
+      null,
+  };
+}
+
+function extractCapacityFromNextPayload(html: string): {
+  beds: number | null;
+  baths: number | null;
+  sleeps: number | null;
+} {
+  const beds = parsePositiveNumberLike(
+    extractFirst(/\\?"bedroomCount\\?"\s*:\s*(\d+(?:\.\d+)?)/i, html),
+  );
+  const baths = parsePositiveNumberLike(
+    extractFirst(/\\?"bathroomCount\\?"\s*:\s*(\d+(?:\.\d+)?)/i, html),
+  );
+  const sleeps = parsePositiveNumberLike(
+    extractFirst(/\\?"sleepCount\\?"\s*:\s*(\d+(?:\.\d+)?)/i, html) ||
+      extractFirst(/\\?"maxGuests\\?"\s*:\s*(\d+(?:\.\d+)?)/i, html),
+  );
+
+  return { beds, baths, sleeps };
+}
+
 function parseAverageBaseRateDescription(value: unknown): number | null {
   const text = String(value ?? "")
     .replace(/,/g, " ")
@@ -1451,6 +1642,33 @@ async function fetchDetail(
 
       const existingRaw = await readFile(existingDetailJsonPath, "utf8");
       const existing = JSON.parse(existingRaw) as KeycoDetailRecord;
+      const existingHtmlPath = resolve(
+        OUTPUT_DETAILS_HTML_DIR,
+        `${externalListingId}.html`,
+      );
+      const existingHtml = await readFile(existingHtmlPath, "utf8").catch(
+        () => "",
+      );
+      const dynamicCapacitySourceText = [
+        existing.title,
+        existing.h1,
+        existing.meta_description,
+        existing.description_expanded,
+        existing.normalized_matching_profile?.description,
+        ...(existing.amenities?.all ?? []),
+      ]
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean)
+        .join(" ");
+      const dynamicCapacity = resolveCapacity({
+        html: existingHtml,
+        text: dynamicCapacitySourceText,
+        existing: {
+          beds: existing.property_profile?.beds ?? null,
+          baths: existing.property_profile?.baths ?? null,
+          sleeps: existing.property_profile?.sleeps ?? null,
+        },
+      });
 
       const now = new Date();
       const todayUtc = new Date(
@@ -2000,6 +2218,12 @@ async function fetchDetail(
         ...existing,
         quote_context: {},
         fetched_at: new Date().toISOString(),
+        property_profile: {
+          ...existing.property_profile,
+          beds: dynamicCapacity.beds,
+          baths: dynamicCapacity.baths,
+          sleeps: dynamicCapacity.sleeps,
+        },
         normalized_availability: {
           ...existing.normalized_availability,
           source: "pm_keyco30a",
@@ -2346,6 +2570,12 @@ async function fetchDetail(
 
     const name = stripHtml(normalizedH1 || normalizedTitle).slice(0, 240);
     const description = descriptionExpanded || metaDescription;
+    const capacitySourceText = `${description} ${metaDescription} ${stripHtml(html)}`;
+    const resolvedCapacity = resolveCapacity({
+      html,
+      text: capacitySourceText,
+      existing: {},
+    });
 
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
@@ -2353,28 +2583,9 @@ async function fetchDetail(
     const city = parsedCityState.city;
     const state = parsedCityState.state || "FL";
 
-    const beds = parseNumberLike(
-      extractFirst(
-        /\b(\d+(?:\.\d+)?)\s*bed(?:room)?s?\b/i,
-        `${description} ${metaDescription}`,
-      ),
-    );
-    const baths = parseNumberLike(
-      extractFirst(
-        /\b(\d+(?:\.\d+)?)\s*bath(?:room)?s?\b/i,
-        `${description} ${metaDescription}`,
-      ),
-    );
-    const sleeps = parseNumberLike(
-      extractFirst(
-        /\b(?:sleeps?|guests?)\s*(\d+)\b/i,
-        `${description} ${metaDescription}`,
-      ) ||
-        extractFirst(
-          /\b(\d+)\s*guests?\b/i,
-          `${description} ${metaDescription}`,
-        ),
-    );
+    const beds = resolvedCapacity.beds;
+    const baths = resolvedCapacity.baths;
+    const sleeps = resolvedCapacity.sleeps;
 
     const now = new Date();
     const todayUtc = new Date(

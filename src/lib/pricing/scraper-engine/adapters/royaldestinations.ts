@@ -1324,7 +1324,7 @@ async function fetchDetail(
     const quoteIdsTuple = parseIdsTuple(normalizedDetailUrl, html);
 
     const bedsFromHtml = extractFirstNumber(
-      /rc-lodging-beds[^>]*>\s*(\d+)\s*Bedrooms/i,
+      /rc-lodging-beds[^>]*>\s*(\d+)\s*Bedrooms?/i,
       html,
     );
     const bathsFromHtml = extractFirstNumber(
