@@ -256,8 +256,8 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 700,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
-  prominence30: {
-    adapterKey: "prominence30",
+  prominence30a: {
+    adapterKey: "prominence30a",
     defaultWeeks: 24,
     defaultAssumptions: {
       avgFeePct: 0.03,

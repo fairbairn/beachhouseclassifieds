@@ -33,15 +33,15 @@ type RawQuote = {
   handoffUrl: string;
 };
 
-type Prominence30QuoteContext = {
+type ThirtyACottagesQuoteContext = {
   itemEid: string;
   typeId: string;
   inventoryId: string;
   detailUrl: string;
 };
 
-const ADAPTER_KEY = "prominence30" as const;
-const BASE_HOST = "https://www.prominenceon30a.com";
+const ADAPTER_KEY = "30acottages" as const;
+const BASE_HOST = "https://www.30acottagesandconcierge.com";
 const RCAPI_ENDPOINT = `${BASE_HOST}/rcapi/item/avail/search`;
 const DETAILED_QUOTE_ENDPOINT = `${BASE_HOST}/rescms/ajax/item/pricing/quote`;
 const DEFAULT_TIMEOUT_MS = 20000;
@@ -203,7 +203,7 @@ function toError(input: {
 
 function extractQuoteContext(
   input: QuoteExecutionRequest,
-): Prominence30QuoteContext {
+): ThirtyACottagesQuoteContext {
   const context =
     input.quoteContext &&
     typeof input.quoteContext === "object" &&
@@ -234,7 +234,7 @@ function extractQuoteContext(
 }
 
 async function fetchRcapiQuote(input: {
-  context: Prominence30QuoteContext;
+  context: ThirtyACottagesQuoteContext;
   checkInIso: string;
   checkOutIso: string;
   adults: number;
@@ -361,7 +361,7 @@ async function fetchRcapiQuote(input: {
 }
 
 async function fetchDetailedQuote(input: {
-  context: Prominence30QuoteContext;
+  context: ThirtyACottagesQuoteContext;
   checkInIso: string;
   checkOutIso: string;
   adults: number;
@@ -436,13 +436,13 @@ async function fetchDetailedQuote(input: {
   };
 }
 
-export async function executeProminence30SingleQuote(
+export async function executeThirtyACottagesSingleQuote(
   input: QuoteExecutionRequest,
 ): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
   const timeoutMs = normalizeTimeoutMs(input.options?.timeoutMs);
 
-  let context: Prominence30QuoteContext;
+  let context: ThirtyACottagesQuoteContext;
   try {
     context = extractQuoteContext(input);
   } catch (error: unknown) {

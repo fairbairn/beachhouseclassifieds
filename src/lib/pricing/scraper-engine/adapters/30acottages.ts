@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
-import { executeProminence30SingleQuote } from "@/lib/pricing/quote-runtime/adapters/prominence30";
+import { executeThirtyACottagesSingleQuote } from "@/lib/pricing/quote-runtime/adapters/30acottages";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
@@ -50,7 +50,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
     detail_url: string;
   };
   normalized_matching_profile: {
-    source: "pm_prominence30";
+    source: "pm_30acottages";
     external_listing_id: string;
     name: string;
     description: string;
@@ -63,7 +63,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
     };
   };
   normalized_availability: {
-    source: "pm_prominence30";
+    source: "pm_30acottages";
     external_listing_id: string;
     captured_at: string;
     has_calendar_widget: boolean;
@@ -114,7 +114,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://www.prominenceon30a.com/30a-vacation-rentals#q=*%3A*";
+  "https://www.30acottagesandconcierge.com/30a-vacation-rentals#q=*%3A*";
 const EXPECTED_LISTING_COUNT = 60;
 const DETAIL_PATH_PREFIXES = ["/30a-vacation-rentals/", "/vacation-rentals/"];
 const OUTPUT_ROOT = resolve(
@@ -123,7 +123,7 @@ const OUTPUT_ROOT = resolve(
   "lib",
   "data",
   "external-sources",
-  "prominence30",
+  "30acottages",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 
@@ -794,7 +794,7 @@ async function discoverListings(
       const toNormalized = (hrefValue: string): string => {
         try {
           const absolute = new URL(hrefValue, window.location.origin);
-          if (!absolute.hostname.endsWith("prominenceon30a.com")) {
+          if (!absolute.hostname.endsWith("30acottagesandconcierge.com")) {
             return "";
           }
 
@@ -1757,7 +1757,7 @@ async function fetchDetail(
     );
 
     const normalizedMatchingProfile = {
-      source: "pm_prominence30" as const,
+      source: "pm_30acottages" as const,
       external_listing_id: externalListingId,
       name: listingName,
       description: stripHtml(
@@ -1811,7 +1811,7 @@ async function fetchDetail(
       },
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
-        source: "pm_prominence30",
+        source: "pm_30acottages",
         external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
         has_calendar_widget: normalizedDays.length > 0,
@@ -1867,7 +1867,7 @@ async function fetchDetail(
     const message =
       error instanceof Error ? error.message : "unknown detail pull error";
     console.warn(
-      `[prominence30] detail pull failed for ${detailUrl}: ${message}`,
+      `[30acottages] detail pull failed for ${detailUrl}: ${message}`,
     );
     return null;
   } finally {
@@ -1875,10 +1875,10 @@ async function fetchDetail(
   }
 }
 
-export function createProminence30Adapter(): ScraperAdapter<LuxuryDetailRecord> {
+export function createThirtyACottagesAdapter(): ScraperAdapter<LuxuryDetailRecord> {
   return {
-    managerKey: "prominence30",
-    scriptLabel: "prominence30",
+    managerKey: "30acottages",
+    scriptLabel: "30acottages",
     defaultAnchorUrl: DEFAULT_ANCHOR_URL,
     detailFetchDelayMs: Math.max(
       0,
@@ -1901,7 +1901,7 @@ export function createProminence30Adapter(): ScraperAdapter<LuxuryDetailRecord> 
       try {
         const parsed = new URL(value.trim());
         if (
-          !parsed.hostname.endsWith("prominenceon30a.com") ||
+          !parsed.hostname.endsWith("30acottagesandconcierge.com") ||
           !isLikelyDetailPath(parsed.pathname)
         ) {
           return null;
@@ -1932,13 +1932,13 @@ export function createProminence30Adapter(): ScraperAdapter<LuxuryDetailRecord> 
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
-        "prominence30",
+        "30acottages",
         argv,
       );
       await runRuntimeAdapterQuoteCli(
         {
-          adapterKey: "prominence30",
-          executeSingleQuote: executeProminence30SingleQuote,
+          adapterKey: "30acottages",
+          executeSingleQuote: executeThirtyACottagesSingleQuote,
           maxAttemptsEnvVar: "PROMINENCE30_QUOTE_MAX_ATTEMPTS",
           defaultMaxListings: 10,
           defaultWeeks: 24,
@@ -1956,7 +1956,7 @@ export function createProminence30Adapter(): ScraperAdapter<LuxuryDetailRecord> 
       );
     },
     async runSingleQuoteObservation(input) {
-      const result = await executeProminence30SingleQuote({
+      const result = await executeThirtyACottagesSingleQuote({
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
