@@ -12,6 +12,12 @@ import {
   type listing as listing_table,
 } from "@/lib/db/schema-postgres";
 import { resolvePlannedCommunity } from "@/lib/discover/community-resolution";
+import type { ListingAiEnrichmentSourceSnapshotPayload } from "@/lib/listings/enrichment/contracts";
+import { seedListingAiEnrichmentFromIngest } from "@/lib/listings/enrichment/listing-ai-enrichment-service";
+import {
+  computeSourceContentHashFromDescription,
+  stripDescriptionUiArtifacts,
+} from "@/lib/listings/enrichment/source-content-hash";
 import {
   toAreaCodeFromLabel,
   toBeachAreaCodeFromLabel,
@@ -189,31 +195,11 @@ function hashHex(value: string, length: number): string {
 }
 
 function buildSourceContentHash(input: {
-  canonicalName: string;
   descriptionExpanded: string;
-  metaDescription: string;
-  amenities: string[];
-  area: string | null;
-  bedrooms: number | null;
-  bathrooms: string | null;
-  sleeps: number | null;
-  lat: number | null;
-  lng: number | null;
 }): string {
-  const payload = JSON.stringify({
-    canonical_name: input.canonicalName,
-    description_expanded: input.descriptionExpanded,
-    meta_description: input.metaDescription,
-    amenities: [...input.amenities].sort(),
-    area: input.area,
-    bedrooms: input.bedrooms,
-    bathrooms: input.bathrooms,
-    sleeps: input.sleeps,
-    lat: input.lat,
-    lng: input.lng,
-  });
-
-  return hashHex(payload, 20);
+  // Enrichment rerun signal is intentionally description-driven to avoid
+  // expensive recomputation for unrelated source field drift.
+  return computeSourceContentHashFromDescription(input.descriptionExpanded);
 }
 
 function slugify(value: string): string {
@@ -1034,19 +1020,12 @@ export async function ingestAdapterDetailsToCanonical(
     const bedrooms = inferBedroomCount(asNumber(profile?.beds), detail);
     const sleeps = inferSleepsCount(asNumber(profile?.sleeps), detail);
     const bathrooms = normalizePositiveDecimalString(asNumber(profile?.baths));
-    const descriptionExpanded = asString(detail.description_expanded);
+    const descriptionExpanded = stripDescriptionUiArtifacts(
+      asString(detail.description_expanded),
+    );
     const metaDescription = asString(detail.meta_description);
     const sourceContentHash = buildSourceContentHash({
-      canonicalName,
       descriptionExpanded,
-      metaDescription,
-      amenities,
-      area: sourceAreaName,
-      bedrooms,
-      bathrooms,
-      sleeps,
-      lat,
-      lng,
     });
     const slugParts = buildSlugParts({
       canonicalName,
@@ -1107,6 +1086,19 @@ export async function ingestAdapterDetailsToCanonical(
     };
 
     const sourceLinkId = `lsl_${hashHex(stableKey, 20)}`;
+    const sourceSnapshotPayload: ListingAiEnrichmentSourceSnapshotPayload = {
+      canonical_name: canonicalName,
+      description_expanded: descriptionExpanded || null,
+      meta_description: metaDescription || null,
+      property_type: listingValues.property_type ?? null,
+      amenities,
+      area: sourceAreaName,
+      bedrooms,
+      bathrooms,
+      sleeps,
+      lat,
+      lng,
+    };
 
     const existingSourceLink = await pgDb
       .select({ id: listing_source_link.id })
@@ -1177,16 +1169,7 @@ export async function ingestAdapterDetailsToCanonical(
             detail_file_base_name: detailResolution.resolvedFileBaseName,
             source_content_hash: sourceContentHash,
             source_snapshot: {
-              canonical_name: canonicalName,
-              description_expanded: descriptionExpanded || null,
-              meta_description: metaDescription || null,
-              amenities,
-              area: sourceAreaName,
-              bedrooms,
-              bathrooms,
-              sleeps,
-              lat,
-              lng,
+              ...sourceSnapshotPayload,
             },
           },
           updated_at: now,
@@ -1210,21 +1193,22 @@ export async function ingestAdapterDetailsToCanonical(
               detail_file_base_name: detailResolution.resolvedFileBaseName,
               source_content_hash: sourceContentHash,
               source_snapshot: {
-                canonical_name: canonicalName,
-                description_expanded: descriptionExpanded || null,
-                meta_description: metaDescription || null,
-                amenities,
-                area: sourceAreaName,
-                bedrooms,
-                bathrooms,
-                sleeps,
-                lat,
-                lng,
+                ...sourceSnapshotPayload,
               },
             },
             updated_at: now,
           },
         });
+
+      await seedListingAiEnrichmentFromIngest({
+        listingId,
+        sourceLinkId,
+        adapterKey: options.adapterKey,
+        sourceContentHash,
+        sourceSnapshot: {
+          ...sourceSnapshotPayload,
+        },
+      });
     }
 
     if (existingSourceLink.length > 0) {

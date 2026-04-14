@@ -8,7 +8,7 @@ import { pgDb } from "@/core/server/db";
 import { resolveProfileEnvironment } from "@/core/tooling/env/profile-env";
 import {
   listing,
-  listing_ai_refinement_cache,
+  listing_ai_enrichment,
   listing_source_link,
 } from "@/lib/db/schema-postgres";
 import { sleeping_arrangements_schema } from "@/lib/listings/canonical/contracts";
@@ -23,6 +23,19 @@ type RefinementOutput = {
   helpful_hints: string[];
   sleeping_arrangements: unknown;
   sleeping_rollups: Record<string, number>;
+  sleeping_ux_summary: {
+    count_king: number;
+    count_queen: number;
+    count_full: number;
+    count_twin_standalone: number;
+    count_bunk_units: number;
+    count_bunk_sleeps_total: number;
+    count_sleeping_surfaces_total: number;
+    sleep_capacity_from_rollups: number;
+    sleep_capacity_target: number;
+    sleep_capacity_delta: number;
+    sleep_capacity_aligned: boolean;
+  };
   amenities_normalized: string[];
   amenities_evidence: Array<{
     amenity_id: string;
@@ -35,6 +48,18 @@ type RefinementUsage = {
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
+};
+
+type ModelPricing = {
+  inputPer1M: number;
+  outputPer1M: number;
+};
+
+type ModelUsage = {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
 };
 
 type RefinementAuditIssue = {
@@ -50,6 +75,12 @@ type RefinementAudit = {
   retry_recommended: boolean;
   issues: RefinementAuditIssue[];
   retry_performed: boolean;
+};
+
+type RefinementAuditDecision = {
+  performed: boolean;
+  trigger_reasons: string[];
+  skipped_reason: string | null;
 };
 
 type AmenityEvidence = {
@@ -68,6 +99,7 @@ export type ListingRefinementSnapshot = {
   sleeps: number | null;
   adapter_key: string | null;
   source_description_original: string | null;
+  source_meta_description_original: string | null;
   source_amenities_original: string[];
   source_amenities_categories: Record<string, string[]>;
   description_markdown: string | null;
@@ -75,7 +107,10 @@ export type ListingRefinementSnapshot = {
   seo_meta_title: string | null;
   seo_meta_description: string | null;
   seo_hidden_summary_plain: string | null;
+  highlights: unknown;
+  helpful_hints: unknown;
   sleeping_arrangements: unknown;
+  sleeping_rollups: unknown;
   amenities_normalized: unknown;
   ai_refinement: Record<string, unknown> | null;
   source_link_id: string | null;
@@ -84,15 +119,32 @@ export type ListingRefinementSnapshot = {
 
 export type RefinementResult = {
   model: string;
+  audit_model: string;
   prompt_version: string;
   output: RefinementOutput;
   usage: RefinementUsage | null;
+  usage_by_model: ModelUsage[];
   audit: RefinementAudit | null;
+  audit_decision: RefinementAuditDecision;
 };
 
-const PROMPT_VERSION = "v3";
+const PROMPT_VERSION = "v5";
+export const LISTING_REFINEMENT_PROMPT_VERSION = PROMPT_VERSION;
 const AUDIT_MIN_ACCURACY_SCORE = 0.9;
 const SEO_BRAND_NAME = "30A Collections";
+const RETRY_ON_SLEEP_MISMATCH_ONLY =
+  process.env.LISTING_REFINEMENT_RETRY_ON_SLEEP_MISMATCH === "1";
+const FORCE_AUDIT = process.env.LISTING_REFINEMENT_FORCE_AUDIT === "1";
+const DEFAULT_GENERATION_MODEL =
+  process.env.LISTING_REFINEMENT_MODEL?.trim() || "gpt-5.4-nano";
+const DEFAULT_AUDIT_MODEL =
+  process.env.LISTING_REFINEMENT_AUDIT_MODEL?.trim() || "gpt-4.1-mini";
+
+const MODEL_PRICING_USD_PER_1M: Record<string, ModelPricing> = {
+  "gpt-5.4-nano": { inputPer1M: 0.2, outputPer1M: 1.25 },
+  "gpt-4.1-mini": { inputPer1M: 0.4, outputPer1M: 1.6 },
+  "gpt-4.1": { inputPer1M: 2.0, outputPer1M: 8.0 },
+};
 
 const CANONICAL_AMENITY_IDS = [
   "private_pool",
@@ -160,6 +212,88 @@ function mergeUsage(
   }
 
   return totals;
+}
+
+function getPricingForModel(model: string): ModelPricing | null {
+  const envInputRaw = process.env.OPENAI_PRICE_INPUT_PER_1M?.trim();
+  const envOutputRaw = process.env.OPENAI_PRICE_OUTPUT_PER_1M?.trim();
+
+  if (envInputRaw && envOutputRaw) {
+    const inputPer1M = Number(envInputRaw);
+    const outputPer1M = Number(envOutputRaw);
+    if (
+      Number.isFinite(inputPer1M) &&
+      inputPer1M >= 0 &&
+      Number.isFinite(outputPer1M) &&
+      outputPer1M >= 0
+    ) {
+      return { inputPer1M, outputPer1M };
+    }
+  }
+
+  return MODEL_PRICING_USD_PER_1M[model] ?? null;
+}
+
+function estimateRunCostUsd(input: {
+  usageByModel: ModelUsage[];
+  fallbackModel: string;
+  fallbackUsage: RefinementUsage | null;
+}): string | null {
+  const usageRows =
+    input.usageByModel.length > 0
+      ? input.usageByModel
+      : [
+          {
+            model: input.fallbackModel,
+            input_tokens: input.fallbackUsage?.input_tokens ?? 0,
+            output_tokens: input.fallbackUsage?.output_tokens ?? 0,
+            total_tokens: input.fallbackUsage?.total_tokens ?? 0,
+          },
+        ];
+
+  let total = 0;
+
+  for (const row of usageRows) {
+    const pricing = getPricingForModel(row.model);
+    if (!pricing) {
+      return null;
+    }
+
+    total +=
+      (Math.max(0, row.input_tokens) / 1_000_000) * pricing.inputPer1M +
+      (Math.max(0, row.output_tokens) / 1_000_000) * pricing.outputPer1M;
+  }
+
+  return total.toFixed(6);
+}
+
+function pushModelUsage(
+  usageByModel: Map<string, ModelUsage>,
+  model: string,
+  usage: RefinementUsage | null | undefined,
+): void {
+  const inputTokens = usage?.input_tokens ?? 0;
+  const outputTokens = usage?.output_tokens ?? 0;
+  const totalTokens = usage?.total_tokens ?? 0;
+
+  if (inputTokens === 0 && outputTokens === 0 && totalTokens === 0) {
+    return;
+  }
+
+  const existing = usageByModel.get(model);
+  if (existing) {
+    existing.input_tokens += inputTokens;
+    existing.output_tokens += outputTokens;
+    existing.total_tokens += totalTokens;
+    return;
+  }
+
+  usageByModel.set(model, {
+    model,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    total_tokens: totalTokens,
+  });
 }
 
 function extractSourceAmenities(value: unknown): {
@@ -609,10 +743,18 @@ function formatDescriptionMarkdown(input: {
 
   const cleanedParagraphs = paragraphCandidates
     .map((paragraph) => {
-      const sentences = splitIntoSentences(paragraph).filter(
+      const unwrappedParagraph = paragraph
+        .replace(/^\*\*([\s\S]+)\*\*$/m, "$1")
+        .replace(/^__([\s\S]+)__$/m, "$1")
+        .trim();
+      const sentences = splitIntoSentences(unwrappedParagraph).filter(
         (sentence) => !isOperationalHintText(sentence),
       );
-      return sentences.join(" ").trim();
+      const normalizedSentences =
+        sentences.length > 0
+          ? sentences
+          : splitIntoSentences(unwrappedParagraph);
+      return normalizedSentences.join(" ").trim();
     })
     .filter(Boolean);
 
@@ -639,7 +781,10 @@ function formatDescriptionMarkdown(input: {
   return cleanedParagraphs.join("\n\n");
 }
 
-function normalizeSleepingRollups(value: unknown): Record<string, number> {
+function normalizeSleepingRollups(
+  value: unknown,
+  expectedSleeps: number | null,
+): Record<string, number> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }
@@ -657,16 +802,297 @@ function normalizeSleepingRollups(value: unknown): Record<string, number> {
     "bed_count_murphy",
     "bed_count_air_mattress",
     "bed_count_futon",
+    "bed_count_king_bunk",
+    "bed_count_queen_bunk",
+    "bed_count_full_bunk",
+    "bed_count_twin_bunk",
+    "bed_count_king_standalone",
+    "bed_count_queen_standalone",
+    "bed_count_full_standalone",
+    "bed_count_twin_standalone",
+    "bunk_unit_count_total",
+    "bunk_sleep_slot_count_total",
+    "bed_type_count_distinct",
+    "sleep_capacity_from_rollups",
+    "sleep_capacity_target",
+    "sleep_capacity_delta",
   ];
 
   const output: Record<string, number> = {};
-  for (const key of keys) {
+  const getCount = (key: string): number => {
     const raw = input[key];
     const numeric = typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
-    output[key] = Math.max(0, Math.round(numeric));
+    return Math.max(0, Math.round(numeric));
+  };
+
+  const kingTotal = getCount("bed_count_king");
+  const queenTotal = getCount("bed_count_queen");
+  const fullTotal = getCount("bed_count_full");
+  const twinTotal = getCount("bed_count_twin");
+
+  const bunkUnits = Math.max(
+    getCount("bed_count_bunk_total"),
+    getCount("bunk_unit_count_total"),
+  );
+
+  const kingBunk = Math.min(kingTotal, getCount("bed_count_king_bunk"));
+  const queenBunk = Math.min(queenTotal, getCount("bed_count_queen_bunk"));
+  const fullBunk = Math.min(fullTotal, getCount("bed_count_full_bunk"));
+
+  const twinBunkRaw = getCount("bed_count_twin_bunk");
+  const twinBunkFallback =
+    bunkUnits > 0 ? Math.min(twinTotal, bunkUnits * 2) : 0;
+  const twinBunk = Math.min(twinTotal, Math.max(twinBunkRaw, twinBunkFallback));
+
+  const kingStandalone = Math.max(0, kingTotal - kingBunk);
+  const queenStandalone = Math.max(0, queenTotal - queenBunk);
+  const fullStandalone = Math.max(0, fullTotal - fullBunk);
+  const twinStandalone = Math.max(0, twinTotal - twinBunk);
+
+  const bunkSleepSlotCount = Math.max(
+    getCount("bunk_sleep_slot_count_total"),
+    twinBunk + fullBunk * 2 + queenBunk * 2 + kingBunk * 2,
+  );
+
+  const distinctBedTypeCount = [
+    kingTotal,
+    queenTotal,
+    fullTotal,
+    twinTotal,
+  ].filter((count) => count > 0).length;
+
+  const sleepCapacityFromRollups =
+    kingTotal * 2 +
+    queenTotal * 2 +
+    fullTotal * 2 +
+    twinTotal +
+    getCount("bed_count_sofa_bed") * 2 +
+    getCount("bed_count_daybed") +
+    getCount("bed_count_trundle") +
+    getCount("bed_count_murphy") * 2 +
+    getCount("bed_count_air_mattress") +
+    getCount("bed_count_futon") * 2;
+
+  const sleepCapacityTarget =
+    typeof expectedSleeps === "number" && Number.isFinite(expectedSleeps)
+      ? Math.max(0, Math.round(expectedSleeps))
+      : getCount("sleep_capacity_target");
+
+  const sleepCapacityDelta =
+    sleepCapacityTarget > 0
+      ? sleepCapacityFromRollups - sleepCapacityTarget
+      : 0;
+
+  for (const key of keys) {
+    output[key] = getCount(key);
   }
 
+  output.bed_count_bunk_total = bunkUnits;
+  output.bunk_unit_count_total = bunkUnits;
+  output.bed_count_king_bunk = kingBunk;
+  output.bed_count_queen_bunk = queenBunk;
+  output.bed_count_full_bunk = fullBunk;
+  output.bed_count_twin_bunk = twinBunk;
+  output.bed_count_king_standalone = kingStandalone;
+  output.bed_count_queen_standalone = queenStandalone;
+  output.bed_count_full_standalone = fullStandalone;
+  output.bed_count_twin_standalone = twinStandalone;
+  output.bunk_sleep_slot_count_total = bunkSleepSlotCount;
+  output.bed_type_count_distinct = distinctBedTypeCount;
+  output.sleep_capacity_from_rollups = sleepCapacityFromRollups;
+  output.sleep_capacity_target = sleepCapacityTarget;
+  output.sleep_capacity_delta = sleepCapacityDelta;
+
   return output;
+}
+
+function hasMeaningfulSleepingRollups(
+  rollups: Record<string, number>,
+): boolean {
+  return (
+    (rollups.bed_count_king ?? 0) > 0 ||
+    (rollups.bed_count_queen ?? 0) > 0 ||
+    (rollups.bed_count_full ?? 0) > 0 ||
+    (rollups.bed_count_twin ?? 0) > 0 ||
+    (rollups.bed_count_bunk_total ?? 0) > 0
+  );
+}
+
+function deriveSleepingRollupsFromArrangements(
+  arrangements: unknown[],
+  expectedSleeps: number | null,
+): Record<string, number> {
+  if (!Array.isArray(arrangements) || arrangements.length === 0) {
+    return {};
+  }
+
+  const totals = {
+    king: 0,
+    queen: 0,
+    full: 0,
+    twin: 0,
+    sofa_bed: 0,
+    daybed: 0,
+    trundle: 0,
+    murphy: 0,
+    air_mattress: 0,
+    futon: 0,
+  };
+
+  const bunkBySize = {
+    king: 0,
+    queen: 0,
+    full: 0,
+    twin: 0,
+  };
+
+  let bunkUnits = 0;
+
+  const addBunkByConfiguration = (
+    bunkConfiguration: string,
+    count: number,
+  ): void => {
+    bunkUnits += count;
+
+    if (bunkConfiguration === "twin_over_full") {
+      addSize("twin", count, true);
+      addSize("full", count, true);
+      return;
+    }
+    if (bunkConfiguration === "full_over_full") {
+      addSize("full", count * 2, true);
+      return;
+    }
+    if (bunkConfiguration === "queen_over_queen") {
+      addSize("queen", count * 2, true);
+      return;
+    }
+    if (bunkConfiguration === "twin_over_queen") {
+      addSize("twin", count, true);
+      addSize("queen", count, true);
+      return;
+    }
+    if (bunkConfiguration === "twin_over_king") {
+      addSize("twin", count, true);
+      addSize("king", count, true);
+      return;
+    }
+
+    // Default and twin_over_twin both map to two twin sleep surfaces per bunk.
+    addSize("twin", count * 2, true);
+  };
+
+  const addSize = (bedType: string, count: number, bunkAttributed: boolean) => {
+    if (bedType === "king") {
+      totals.king += count;
+      if (bunkAttributed) bunkBySize.king += count;
+      return;
+    }
+    if (bedType === "queen") {
+      totals.queen += count;
+      if (bunkAttributed) bunkBySize.queen += count;
+      return;
+    }
+    if (bedType === "full") {
+      totals.full += count;
+      if (bunkAttributed) bunkBySize.full += count;
+      return;
+    }
+    if (bedType === "twin") {
+      totals.twin += count;
+      if (bunkAttributed) bunkBySize.twin += count;
+      return;
+    }
+    if (bedType === "sofa_bed") {
+      totals.sofa_bed += count;
+      return;
+    }
+    if (bedType === "daybed") {
+      totals.daybed += count;
+      return;
+    }
+    if (bedType === "trundle") {
+      totals.trundle += count;
+      return;
+    }
+    if (bedType === "murphy") {
+      totals.murphy += count;
+      return;
+    }
+    if (bedType === "air_mattress") {
+      totals.air_mattress += count;
+      return;
+    }
+    if (bedType === "futon") {
+      totals.futon += count;
+    }
+  };
+
+  for (const room of arrangements) {
+    if (!room || typeof room !== "object" || Array.isArray(room)) {
+      continue;
+    }
+
+    const roomObject = room as Record<string, unknown>;
+    const beds = Array.isArray(roomObject.beds) ? roomObject.beds : [];
+
+    for (const bed of beds) {
+      if (!bed || typeof bed !== "object" || Array.isArray(bed)) {
+        continue;
+      }
+
+      const bedObject = bed as Record<string, unknown>;
+      const bedType = asString(bedObject.bed_type);
+      const countRaw = bedObject.count;
+      const count =
+        typeof countRaw === "number" && Number.isFinite(countRaw)
+          ? Math.max(0, Math.round(countRaw))
+          : 0;
+
+      if (count < 1) {
+        continue;
+      }
+
+      const bunkConfiguration = asString(bedObject.bunk_configuration);
+
+      if (bedType === "bunk") {
+        addBunkByConfiguration(bunkConfiguration, count);
+        continue;
+      }
+
+      if (bunkConfiguration) {
+        addBunkByConfiguration(bunkConfiguration, count);
+        continue;
+      }
+
+      addSize(bedType, count, false);
+    }
+  }
+
+  if (bunkUnits === 0 && bunkBySize.twin > 0) {
+    bunkUnits = Math.ceil(bunkBySize.twin / 2);
+  }
+
+  return normalizeSleepingRollups(
+    {
+      bed_count_king: totals.king,
+      bed_count_queen: totals.queen,
+      bed_count_full: totals.full,
+      bed_count_twin: totals.twin,
+      bed_count_bunk_total: bunkUnits,
+      bed_count_sofa_bed: totals.sofa_bed,
+      bed_count_daybed: totals.daybed,
+      bed_count_trundle: totals.trundle,
+      bed_count_murphy: totals.murphy,
+      bed_count_air_mattress: totals.air_mattress,
+      bed_count_futon: totals.futon,
+      bed_count_king_bunk: bunkBySize.king,
+      bed_count_queen_bunk: bunkBySize.queen,
+      bed_count_full_bunk: bunkBySize.full,
+      bed_count_twin_bunk: bunkBySize.twin,
+    },
+    expectedSleeps,
+  );
 }
 
 function normalizeSleepingArrangements(value: unknown): unknown[] {
@@ -975,6 +1401,202 @@ function sanitizeAuditIssues(values: unknown): RefinementAuditIssue[] {
     .slice(0, 8);
 }
 
+function estimateSleepCapacityFromRollups(
+  rollups: Record<string, number>,
+): number {
+  return (
+    (rollups.bed_count_king ?? 0) * 2 +
+    (rollups.bed_count_queen ?? 0) * 2 +
+    (rollups.bed_count_full ?? 0) * 2 +
+    (rollups.bed_count_twin ?? 0) +
+    (rollups.bed_count_sofa_bed ?? 0) * 2 +
+    (rollups.bed_count_daybed ?? 0) +
+    (rollups.bed_count_trundle ?? 0) +
+    (rollups.bed_count_murphy ?? 0) * 2 +
+    (rollups.bed_count_air_mattress ?? 0) +
+    (rollups.bed_count_futon ?? 0) * 2
+  );
+}
+
+function buildSleepingUxSummary(input: {
+  rollups: Record<string, number>;
+  expectedSleeps: number | null;
+}): RefinementOutput["sleeping_ux_summary"] {
+  const countKing = Math.max(0, Math.round(input.rollups.bed_count_king ?? 0));
+  const countQueen = Math.max(
+    0,
+    Math.round(input.rollups.bed_count_queen ?? 0),
+  );
+  const countFull = Math.max(0, Math.round(input.rollups.bed_count_full ?? 0));
+  const countTwinStandalone = Math.max(
+    0,
+    Math.round(
+      (input.rollups.bed_count_twin_standalone ??
+        (input.rollups.bed_count_twin ?? 0) -
+          (input.rollups.bed_count_twin_bunk ?? 0)) as number,
+    ),
+  );
+  const countBunkUnits = Math.max(
+    0,
+    Math.round(
+      (input.rollups.bunk_unit_count_total ??
+        input.rollups.bed_count_bunk_total ??
+        0) as number,
+    ),
+  );
+  const countBunkSleepsTotal = Math.max(
+    0,
+    Math.round(
+      (input.rollups.bunk_sleep_slot_count_total ??
+        input.rollups.bed_count_twin_bunk ??
+        0) as number,
+    ),
+  );
+  const countSleepingSurfacesTotal =
+    countKing +
+    countQueen +
+    countFull +
+    Math.max(0, Math.round(input.rollups.bed_count_twin ?? 0));
+  const derivedCapacity = estimateSleepCapacityFromRollups(input.rollups);
+  const targetCapacity =
+    typeof input.expectedSleeps === "number" &&
+    Number.isFinite(input.expectedSleeps)
+      ? Math.max(0, Math.round(input.expectedSleeps))
+      : Math.max(0, Math.round(input.rollups.sleep_capacity_target ?? 0));
+  const delta = targetCapacity > 0 ? derivedCapacity - targetCapacity : 0;
+
+  return {
+    count_king: countKing,
+    count_queen: countQueen,
+    count_full: countFull,
+    count_twin_standalone: countTwinStandalone,
+    count_bunk_units: countBunkUnits,
+    count_bunk_sleeps_total: countBunkSleepsTotal,
+    count_sleeping_surfaces_total: countSleepingSurfacesTotal,
+    sleep_capacity_from_rollups: derivedCapacity,
+    sleep_capacity_target: targetCapacity,
+    sleep_capacity_delta: delta,
+    sleep_capacity_aligned: targetCapacity > 0 ? delta === 0 : true,
+  };
+}
+
+function determinePropertyTypeCategory(
+  propertyType: string | null,
+): "home" | "condo" | "townhome" | "villa" | "other" {
+  const normalized = (propertyType ?? "").toLowerCase();
+  if (normalized.includes("condo")) {
+    return "condo";
+  }
+  if (normalized.includes("townhome") || normalized.includes("townhouse")) {
+    return "townhome";
+  }
+  if (normalized.includes("villa")) {
+    return "villa";
+  }
+  if (
+    normalized.includes("home") ||
+    normalized.includes("house") ||
+    normalized.includes("carriage")
+  ) {
+    return "home";
+  }
+  return "other";
+}
+
+function detectPropertyTypeKeywordMismatch(input: {
+  propertyType: string | null;
+  output: RefinementOutput;
+}): string | null {
+  const category = determinePropertyTypeCategory(input.propertyType);
+  if (category === "other") {
+    return null;
+  }
+
+  const text = [
+    input.output.description_markdown,
+    input.output.description_short_plain,
+    input.output.seo_meta_description,
+    ...input.output.highlights,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const hasCondo = /\bcondo\b|\bcondominium\b/.test(text);
+  const hasTownhome = /\btownhome\b|\btownhouse\b/.test(text);
+  const hasVilla = /\bvilla\b/.test(text);
+  const hasHomeType = /\bhome\b|\bhouse\b/.test(text);
+
+  if (category === "condo" && (hasTownhome || hasVilla)) {
+    return "Output references townhome/villa keywords while property_type is condo.";
+  }
+  if (category === "townhome" && (hasCondo || hasVilla)) {
+    return "Output references condo/villa keywords while property_type is townhome.";
+  }
+  if (category === "villa" && (hasCondo || hasTownhome)) {
+    return "Output references condo/townhome keywords while property_type is villa.";
+  }
+  if (category === "home" && (hasCondo || hasTownhome)) {
+    return "Output references condo/townhome keywords while property_type is home.";
+  }
+  if (category !== "home" && hasHomeType && /(this|a|an)\s+home/.test(text)) {
+    return "Output repeatedly frames the asset as a home while property_type indicates a different class.";
+  }
+
+  return null;
+}
+
+function determineAuditTriggerReasons(input: {
+  output: RefinementOutput;
+  snapshot: ListingRefinementSnapshot;
+}): string[] {
+  const reasons: string[] = [];
+
+  if (!input.output.sleeping_ux_summary.sleep_capacity_aligned) {
+    reasons.push(
+      `Sleeping capacity mismatch (${input.output.sleeping_ux_summary.sleep_capacity_from_rollups} vs listing.sleeps ${input.output.sleeping_ux_summary.sleep_capacity_target}).`,
+    );
+  }
+
+  const propertyTypeMismatch = detectPropertyTypeKeywordMismatch({
+    propertyType: input.snapshot.property_type,
+    output: input.output,
+  });
+  if (propertyTypeMismatch) {
+    reasons.push(propertyTypeMismatch);
+  }
+
+  if (!/\bvacation\s+rental\b/i.test(input.output.seo_meta_description)) {
+    reasons.push(
+      "seo_meta_description is missing the phrase 'vacation rental'.",
+    );
+  }
+
+  return reasons;
+}
+
+function buildAmenitiesContext(input: {
+  all: string[];
+  categories: Record<string, string[]>;
+}): {
+  categories: Record<string, string[]>;
+  features: string[];
+  all: string[];
+} {
+  const categories = Object.fromEntries(
+    Object.entries(input.categories)
+      .map(([key, values]) => [key, asStringArray(values)])
+      .filter(([, values]) => values.length > 0),
+  );
+
+  const features = asStringArray(categories.features ?? []);
+
+  return {
+    categories,
+    features,
+    all: asStringArray(input.all),
+  };
+}
+
 async function callStructuredOpenAi(input: {
   apiKey: string;
   model: string;
@@ -1179,6 +1801,19 @@ function ensureSeoBodyBranding(input: {
   return `${normalized}. Available on ${SEO_BRAND_NAME}.`;
 }
 
+function ensureSeoMetaDescriptionIntent(input: {
+  text: string;
+  canonicalName: string;
+}): string {
+  const branded = ensureSeoBodyBranding(input);
+  if (/\bvacation\s+rental\b/i.test(branded)) {
+    return branded;
+  }
+
+  const normalized = branded.replace(/[\s.!?]+$/g, "");
+  return `${normalized}. This vacation rental is available on ${SEO_BRAND_NAME}.`;
+}
+
 function stripBrandReferencesFromList(
   values: string[],
   adapterKey: string | null,
@@ -1296,6 +1931,20 @@ function buildSchema(): Record<string, unknown> {
           bed_count_murphy: { type: "number" },
           bed_count_air_mattress: { type: "number" },
           bed_count_futon: { type: "number" },
+          bed_count_king_bunk: { type: "number" },
+          bed_count_queen_bunk: { type: "number" },
+          bed_count_full_bunk: { type: "number" },
+          bed_count_twin_bunk: { type: "number" },
+          bed_count_king_standalone: { type: "number" },
+          bed_count_queen_standalone: { type: "number" },
+          bed_count_full_standalone: { type: "number" },
+          bed_count_twin_standalone: { type: "number" },
+          bunk_unit_count_total: { type: "number" },
+          bunk_sleep_slot_count_total: { type: "number" },
+          bed_type_count_distinct: { type: "number" },
+          sleep_capacity_from_rollups: { type: "number" },
+          sleep_capacity_target: { type: "number" },
+          sleep_capacity_delta: { type: "number" },
         },
         required: [
           "bed_count_king",
@@ -1309,6 +1958,20 @@ function buildSchema(): Record<string, unknown> {
           "bed_count_murphy",
           "bed_count_air_mattress",
           "bed_count_futon",
+          "bed_count_king_bunk",
+          "bed_count_queen_bunk",
+          "bed_count_full_bunk",
+          "bed_count_twin_bunk",
+          "bed_count_king_standalone",
+          "bed_count_queen_standalone",
+          "bed_count_full_standalone",
+          "bed_count_twin_standalone",
+          "bunk_unit_count_total",
+          "bunk_sleep_slot_count_total",
+          "bed_type_count_distinct",
+          "sleep_capacity_from_rollups",
+          "sleep_capacity_target",
+          "sleep_capacity_delta",
         ],
       },
       amenities_normalized: {
@@ -1394,7 +2057,10 @@ export async function loadListingRefinementSnapshot(input: {
       seoMetaTitle: listing.seo_meta_title,
       seoMetaDescription: listing.seo_meta_description,
       seoHiddenSummaryPlain: listing.seo_hidden_summary_plain,
+      highlights: listing.highlights,
+      helpfulHints: listing.helpful_hints,
       sleepingArrangements: listing.sleeping_arrangements,
+      sleepingRollups: listing.sleeping_rollups,
       amenitiesNormalized: listing.amenities_normalized,
       sourceLinkId: listing_source_link.id,
       adapterKey: listing_source_link.adapter_key,
@@ -1426,6 +2092,8 @@ export async function loadListingRefinementSnapshot(input: {
     asString(sourceSnapshot.description_expanded) ||
     asString(sourceSnapshot.meta_description) ||
     null;
+  const sourceMetaDescriptionOriginal =
+    asString(sourceSnapshot.meta_description) || null;
   const sourceAmenities = extractSourceAmenities(sourceSnapshot.amenities);
 
   return {
@@ -1439,6 +2107,7 @@ export async function loadListingRefinementSnapshot(input: {
     adapter_key: row.adapterKey,
     source_content_hash: asString(evidence.source_content_hash) || null,
     source_description_original: sourceDescriptionOriginal,
+    source_meta_description_original: sourceMetaDescriptionOriginal,
     source_amenities_original: sourceAmenities.all,
     source_amenities_categories: sourceAmenities.categories,
     description_markdown: row.descriptionMarkdown,
@@ -1446,7 +2115,10 @@ export async function loadListingRefinementSnapshot(input: {
     seo_meta_title: row.seoMetaTitle,
     seo_meta_description: row.seoMetaDescription,
     seo_hidden_summary_plain: row.seoHiddenSummaryPlain,
+    highlights: row.highlights,
+    helpful_hints: row.helpfulHints,
     sleeping_arrangements: row.sleepingArrangements,
+    sleeping_rollups: row.sleepingRollups,
     amenities_normalized: row.amenitiesNormalized,
     ai_refinement: Object.keys(aiRefinement).length > 0 ? aiRefinement : null,
     source_link_id: row.sourceLinkId,
@@ -1471,24 +2143,38 @@ export async function generateListingRefinement(input: {
     throw new Error("OPENAI_API_KEY is missing.");
   }
 
-  const model = (input.model?.trim() || "gpt-4.1-mini").trim();
+  const model = (input.model?.trim() || DEFAULT_GENERATION_MODEL).trim();
 
   const sourceDescription = input.snapshot.source_description_original || "";
+  const sourceMetaDescription =
+    input.snapshot.source_meta_description_original || "";
   const sourceAmenities = input.snapshot.source_amenities_original;
+  const sourceAmenitiesContext = buildAmenitiesContext({
+    all: input.snapshot.source_amenities_original,
+    categories: input.snapshot.source_amenities_categories,
+  });
 
-  if (!sourceDescription && sourceAmenities.length === 0) {
+  if (
+    !sourceDescription &&
+    !sourceMetaDescription &&
+    sourceAmenities.length === 0
+  ) {
     throw new Error(
-      "Source description and amenities are empty; cannot refine.",
+      "Source description/meta and amenities are empty; cannot refine.",
     );
   }
 
   const systemPrompt = [
     "You are refining vacation rental listing content for a premium 30A classifieds experience.",
     "Output only JSON matching the schema.",
+    "Use strong factual discipline: reason through details internally, but never reveal chain-of-thought and never emit anything except valid JSON.",
+    "Prioritize precision over flourish. Favor specific, source-grounded claims and avoid generic travel copy.",
     "Voice goals: enthusiastic, welcoming, polished, informative, and trustworthy.",
     "Write like you are selling an incredible vacation experience, not just describing real estate.",
     "Preserve the listing personality and standout character while improving clarity and correctness.",
     "Fix typos, grammar issues, and run-on sentences; keep factual meaning intact.",
+    "The authoritative source input fields are: source.h1, source.meta_description, source.description_expanded, source.amenities, and source.property_profile.",
+    "Do not infer from page titles or branding artifacts.",
     "Respect listing.property_type as authoritative asset-type context and keep wording aligned with it.",
     "Do not describe the property as a different asset type than listing.property_type.",
     "description_markdown must be readable markdown: short paragraphs (1-3 sentences each), no wall-of-text blocks.",
@@ -1505,11 +2191,22 @@ export async function generateListingRefinement(input: {
     "Create short, specific highlights that surface noteworthy attributes as scannable bullets.",
     "Normalize amenities to canonical amenity ids only.",
     "Extract sleeping arrangements with room-level precision and bed-type counts.",
+    "Sleeping math contract is strict and must reconcile to listing.sleeps.",
+    "Bed capacity rules: king=2, queen=2, full=2, twin=1, daybed=1, trundle=1, air_mattress=1, sofa_bed=2, murphy=2, futon=2.",
+    "Bunk configuration rules: twin_over_twin=2, twin_over_full=3, full_over_full=4, queen_over_queen=4, twin_over_queen=3, twin_over_king=3.",
+    "Count bunk units separately from bed-size totals. Do not duplicate counts accidentally.",
+    "If a bed entry uses bunk_configuration, treat that count as bunk-unit count for that configuration.",
+    "Ensure final sleeping_rollups and sleeping_ux_summary align to listing.sleeps with zero delta whenever source supports it.",
+    "In sleeping_rollups, keep bed_count_king/queen/full/twin as total counts by size.",
+    "Use bunk attribution fields to avoid ambiguity: bed_count_twin_bunk and bed_count_twin_standalone (plus *_bunk/*_standalone for other sizes when present).",
+    "Set bunk_unit_count_total for number of bunk structures and keep bed_count_bunk_total aligned to that same value.",
+    "Include sleep_capacity_from_rollups, sleep_capacity_target, and sleep_capacity_delta to make sleeps consistency easy to inspect.",
     "If uncertain on structured data, return conservative values (empty arrays or zero counts) rather than guessing.",
   ].join(" ");
 
   const userPayload = {
     listing: {
+      h1: input.snapshot.canonical_name,
       id: input.snapshot.listing_id,
       slug: input.snapshot.slug,
       canonical_name: input.snapshot.canonical_name,
@@ -1520,13 +2217,36 @@ export async function generateListingRefinement(input: {
       adapter_key: input.snapshot.adapter_key,
     },
     source: {
-      title: input.snapshot.canonical_name,
-      description_original: sourceDescription,
-      amenities_original: sourceAmenities,
-      amenities_categories: input.snapshot.source_amenities_categories,
-      instructional_notes_candidates: extractHelpfulNotes(sourceDescription),
-      known_sleeping_arrangements: input.snapshot.sleeping_arrangements,
-      known_amenities_normalized: input.snapshot.amenities_normalized,
+      h1: input.snapshot.canonical_name,
+      meta_description: sourceMetaDescription,
+      description_expanded: sourceDescription,
+      amenities: sourceAmenitiesContext,
+      property_profile: {
+        property_type: input.snapshot.property_type,
+        bedrooms: input.snapshot.bedrooms,
+        bathrooms: input.snapshot.bathrooms,
+        sleeps: input.snapshot.sleeps,
+      },
+      sleeping_capacity_rules: {
+        king: 2,
+        queen: 2,
+        full: 2,
+        twin: 1,
+        daybed: 1,
+        trundle: 1,
+        air_mattress: 1,
+        sofa_bed: 2,
+        murphy: 2,
+        futon: 2,
+        bunk_configurations: {
+          twin_over_twin: 2,
+          twin_over_full: 3,
+          full_over_full: 4,
+          queen_over_queen: 4,
+          twin_over_queen: 3,
+          twin_over_king: 3,
+        },
+      },
     },
     canonical_amenity_ids: [...CANONICAL_AMENITY_IDS],
   };
@@ -1542,11 +2262,14 @@ export async function generateListingRefinement(input: {
 
   let parsed = refinementResponse.parsed as unknown as RefinementOutput;
   let refinementUsage = refinementResponse.usage;
+  const usageByModel = new Map<string, ModelUsage>();
+  pushModelUsage(usageByModel, model, refinementUsage);
   const normalizedSleeping = normalizeSleepingArrangements(
     parsed.sleeping_arrangements,
   );
   const normalizedRollups = normalizeSleepingRollups(
     (parsed as Record<string, unknown>).sleeping_rollups,
+    input.snapshot.sleeps,
   );
   const validatedSleeping =
     sleeping_arrangements_schema.safeParse(normalizedSleeping);
@@ -1612,6 +2335,22 @@ export async function generateListingRefinement(input: {
     bedrooms: input.snapshot.bedrooms,
   });
 
+  const finalSleepingArrangements =
+    validatedSleeping.success && validatedSleeping.data.length > 0
+      ? validatedSleeping.data
+      : fallbackSleeping;
+  const rollupsFromArrangements = deriveSleepingRollupsFromArrangements(
+    finalSleepingArrangements,
+    input.snapshot.sleeps,
+  );
+  const finalRollups = hasMeaningfulSleepingRollups(rollupsFromArrangements)
+    ? rollupsFromArrangements
+    : normalizedRollups;
+  const finalSleepingUxSummary = buildSleepingUxSummary({
+    rollups: finalRollups,
+    expectedSleeps: input.snapshot.sleeps,
+  });
+
   let output: RefinementOutput = {
     description_markdown: formattedMarkdown,
     description_short_plain: cleanedShort,
@@ -1629,20 +2368,48 @@ export async function generateListingRefinement(input: {
     }),
     highlights,
     helpful_hints: helpfulHints,
-    sleeping_arrangements:
-      validatedSleeping.success && validatedSleeping.data.length > 0
-        ? validatedSleeping.data
-        : fallbackSleeping,
-    sleeping_rollups: normalizedRollups,
+    sleeping_arrangements: finalSleepingArrangements,
+    sleeping_rollups: finalRollups,
+    sleeping_ux_summary: finalSleepingUxSummary,
     amenities_normalized: mergedAmenities,
     amenities_evidence: mergedAmenityEvidence,
   };
+
+  output.seo_meta_description = ensureSeoMetaDescriptionIntent({
+    text: cleanedSeoMetaDescription,
+    canonicalName: input.snapshot.canonical_name,
+  });
+
+  const auditTriggerReasons = determineAuditTriggerReasons({
+    output,
+    snapshot: input.snapshot,
+  });
+  const shouldRunAuditPass = FORCE_AUDIT || auditTriggerReasons.length > 0;
+  const auditDecision: RefinementAuditDecision = shouldRunAuditPass
+    ? {
+        performed: true,
+        trigger_reasons: FORCE_AUDIT
+          ? [
+              "Audit forced via LISTING_REFINEMENT_FORCE_AUDIT=1.",
+              ...auditTriggerReasons,
+            ]
+          : auditTriggerReasons,
+        skipped_reason: null,
+      }
+    : {
+        performed: false,
+        trigger_reasons: [],
+        skipped_reason: "No deterministic audit triggers detected.",
+      };
 
   const auditPrompt = [
     "You are a factual consistency auditor for vacation rental content.",
     "Compare source facts against candidate generated output.",
     "Flag only factual mismatches, overstatements, or misleading wording.",
     "Be strict about primary asset type wording, occupancy, policy constraints, and amenity claims.",
+    "Be strict about sleeping capacity consistency: candidate_output.sleeping_rollups and candidate_output.sleeping_arrangements must align with listing.sleeps.",
+    "Capacity rules: king=2, queen=2, full=2, twin=1, daybed=1, trundle=1, air_mattress=1, sofa_bed=2, murphy=2, futon=2.",
+    "For bunk configurations: twin_over_twin=2 sleeps, twin_over_full=3 sleeps, full_over_full=4 sleeps, queen_over_queen=4 sleeps, twin_over_queen=3 sleeps, twin_over_king=3 sleeps.",
     "If output is mostly accurate, keep issue list short.",
     "Return JSON only matching schema.",
   ].join(" ");
@@ -1650,174 +2417,242 @@ export async function generateListingRefinement(input: {
   let audit: RefinementAudit | null = null;
   let auditUsage: RefinementUsage | null = null;
 
-  try {
-    const auditResponse = await callStructuredOpenAi({
-      apiKey,
-      model: "gpt-4.1-mini",
-      systemPrompt: auditPrompt,
-      userPayload: {
-        listing: {
-          id: input.snapshot.listing_id,
-          canonical_name: input.snapshot.canonical_name,
-          property_type: input.snapshot.property_type,
-          bedrooms: input.snapshot.bedrooms,
-          bathrooms: input.snapshot.bathrooms,
-          sleeps: input.snapshot.sleeps,
-        },
-        source: {
-          description_original: sourceDescription,
-          amenities_original: sourceAmenities,
-        },
-        candidate_output: output,
-      },
-      schemaName: "listing_refinement_audit",
-      schema: buildAuditSchema(),
-    });
-
-    auditUsage = auditResponse.usage;
-    const auditParsed = auditResponse.parsed;
-    const accuracyRaw = (auditParsed.accuracy_score as number) ?? 0;
-    const accuracy =
-      typeof accuracyRaw === "number" && Number.isFinite(accuracyRaw)
-        ? Math.max(0, Math.min(1, accuracyRaw))
-        : 0;
-    const retryRecommended = Boolean(auditParsed.retry_recommended);
-    const issues = sanitizeAuditIssues(auditParsed.issues);
-
-    audit = {
-      accuracy_score: accuracy,
-      retry_recommended: retryRecommended,
-      issues,
-      retry_performed: false,
-    };
-
-    const shouldRetry =
-      retryRecommended &&
-      accuracy < AUDIT_MIN_ACCURACY_SCORE &&
-      issues.length > 0;
-
-    if (shouldRetry) {
-      const correctionGuidance = issues
-        .map(
-          (issue, index) =>
-            `${index + 1}. Field=${issue.field}; Issue=${issue.issue}; Evidence=${issue.source_evidence}; Fix=${issue.correction_hint}`,
-        )
-        .join("\n");
-
-      const retrySystemPrompt = `${systemPrompt} Apply these correction constraints strictly:\n${correctionGuidance}`;
-
-      const retryResponse = await callStructuredOpenAi({
+  if (shouldRunAuditPass) {
+    try {
+      const auditResponse = await callStructuredOpenAi({
         apiKey,
-        model,
-        systemPrompt: retrySystemPrompt,
-        userPayload,
-        schemaName: "listing_refinement_retry",
-        schema: buildSchema(),
+        model: DEFAULT_AUDIT_MODEL,
+        systemPrompt: auditPrompt,
+        userPayload: {
+          listing: {
+            id: input.snapshot.listing_id,
+            canonical_name: input.snapshot.canonical_name,
+            property_type: input.snapshot.property_type,
+            bedrooms: input.snapshot.bedrooms,
+            bathrooms: input.snapshot.bathrooms,
+            sleeps: input.snapshot.sleeps,
+          },
+          source: {
+            h1: input.snapshot.canonical_name,
+            meta_description: sourceMetaDescription,
+            description_expanded: sourceDescription,
+            amenities: sourceAmenitiesContext,
+            property_profile: {
+              property_type: input.snapshot.property_type,
+              bedrooms: input.snapshot.bedrooms,
+              bathrooms: input.snapshot.bathrooms,
+              sleeps: input.snapshot.sleeps,
+            },
+          },
+          candidate_output: output,
+        },
+        schemaName: "listing_refinement_audit",
+        schema: buildAuditSchema(),
       });
 
-      refinementUsage = mergeUsage([refinementUsage, retryResponse.usage]);
-      parsed = retryResponse.parsed as unknown as RefinementOutput;
+      auditUsage = auditResponse.usage;
+      pushModelUsage(usageByModel, DEFAULT_AUDIT_MODEL, auditUsage);
+      const auditParsed = auditResponse.parsed;
+      const accuracyRaw = (auditParsed.accuracy_score as number) ?? 0;
+      let accuracy =
+        typeof accuracyRaw === "number" && Number.isFinite(accuracyRaw)
+          ? Math.max(0, Math.min(1, accuracyRaw))
+          : 0;
+      let retryRecommended = Boolean(auditParsed.retry_recommended);
+      const issues = sanitizeAuditIssues(auditParsed.issues);
 
-      const retryNormalizedSleeping = normalizeSleepingArrangements(
-        parsed.sleeping_arrangements,
-      );
-      const retryRollups = normalizeSleepingRollups(
-        (parsed as Record<string, unknown>).sleeping_rollups,
-      );
-      const retryValidatedSleeping = sleeping_arrangements_schema.safeParse(
-        retryNormalizedSleeping,
-      );
-      const retryFallbackSleeping =
-        deriveSleepingArrangementsFromRollups(retryRollups);
+      const expectedSleeps =
+        typeof input.snapshot.sleeps === "number" &&
+        Number.isFinite(input.snapshot.sleeps)
+          ? Math.max(0, Math.round(input.snapshot.sleeps))
+          : null;
+      if (expectedSleeps !== null) {
+        const derivedCapacity = estimateSleepCapacityFromRollups(
+          output.sleeping_rollups,
+        );
+        if (derivedCapacity !== expectedSleeps) {
+          issues.unshift({
+            severity: "high",
+            field: "sleeping_rollups",
+            issue: `Derived sleep capacity ${derivedCapacity} does not match listing sleeps ${expectedSleeps}.`,
+            source_evidence: `listing.sleeps=${expectedSleeps}; derived_from_rollups=${derivedCapacity}`,
+            correction_hint:
+              "Correct sleeping_arrangements and sleeping_rollups so bed counts and bunk configurations produce the exact listing.sleeps value.",
+          });
+          retryRecommended = retryRecommended || RETRY_ON_SLEEP_MISMATCH_ONLY;
+          accuracy = Math.min(accuracy, 0.5);
+        }
+      }
 
-      const retryMarkdownRaw = cleanManagerReferences(
-        asString(parsed.description_markdown),
-        input.snapshot.adapter_key,
-      );
-      const retryShort = cleanManagerReferences(
-        asString(parsed.description_short_plain),
-        input.snapshot.adapter_key,
-      );
-      const retrySeoDescription = cleanManagerReferences(
-        asString(parsed.seo_meta_description),
-        input.snapshot.adapter_key,
-      );
-      const retrySeoHidden = cleanManagerReferences(
-        asString(parsed.seo_hidden_summary_plain),
-        input.snapshot.adapter_key,
-      );
+      const hasOnlySleepIssue =
+        issues.length > 0 &&
+        issues.every((issue) => issue.field === "sleeping_rollups");
 
-      const retryHighlights = stripBrandReferencesFromList(
-        sanitizeHighlights((parsed as Record<string, unknown>).highlights),
-        input.snapshot.adapter_key,
-        8,
-      );
-      const retryHintsModel = stripBrandReferencesFromList(
-        sanitizeHelpfulHints((parsed as Record<string, unknown>).helpful_hints),
-        input.snapshot.adapter_key,
-        6,
-      );
-      const retryHints = Array.from(
-        new Set([...retryHintsModel, ...helpfulHintsFromSource]),
-      ).slice(0, 6);
-      const retryAmenitiesModel = sanitizeAmenities(
-        asStringArray(parsed.amenities_normalized),
-      );
-      const retryMergedAmenities = Array.from(
-        new Set([...retryAmenitiesModel, ...sourceAmenitySignals.ids]),
-      ).sort((a, b) => a.localeCompare(b));
-      const retryMergedEvidence = mergeAmenityEvidence(
-        sanitizeAmenitiesEvidence(
-          (parsed as Record<string, unknown>).amenities_evidence,
-        ),
-        sourceAmenitySignals.evidence,
-      );
+      audit = {
+        accuracy_score: accuracy,
+        retry_recommended: retryRecommended,
+        issues,
+        retry_performed: false,
+      };
 
-      output = {
-        description_markdown: formatDescriptionMarkdown({
-          markdown: retryMarkdownRaw,
-          sourceDescription,
-          canonicalName: input.snapshot.canonical_name,
-          propertyType: input.snapshot.property_type,
-          bedrooms: input.snapshot.bedrooms,
-        }),
-        description_short_plain: retryShort,
-        seo_meta_title: ensureSeoTitleBranding({
-          title: asString(parsed.seo_meta_title),
-          canonicalName: input.snapshot.canonical_name,
-        }),
-        seo_meta_description: ensureSeoBodyBranding({
-          text: retrySeoDescription,
-          canonicalName: input.snapshot.canonical_name,
-        }),
-        seo_hidden_summary_plain: ensureSeoBodyBranding({
-          text: retrySeoHidden,
-          canonicalName: input.snapshot.canonical_name,
-        }),
-        highlights: retryHighlights,
-        helpful_hints: retryHints,
-        sleeping_arrangements:
+      const shouldRetry =
+        retryRecommended &&
+        accuracy < AUDIT_MIN_ACCURACY_SCORE &&
+        issues.length > 0 &&
+        (!hasOnlySleepIssue || RETRY_ON_SLEEP_MISMATCH_ONLY);
+
+      if (shouldRetry) {
+        const correctionGuidance = issues
+          .map(
+            (issue, index) =>
+              `${index + 1}. Field=${issue.field}; Issue=${issue.issue}; Evidence=${issue.source_evidence}; Fix=${issue.correction_hint}`,
+          )
+          .join("\n");
+
+        const retrySystemPrompt = `${systemPrompt} Apply these correction constraints strictly:\n${correctionGuidance}`;
+
+        const retryResponse = await callStructuredOpenAi({
+          apiKey,
+          model,
+          systemPrompt: retrySystemPrompt,
+          userPayload,
+          schemaName: "listing_refinement_retry",
+          schema: buildSchema(),
+        });
+
+        refinementUsage = mergeUsage([refinementUsage, retryResponse.usage]);
+        pushModelUsage(usageByModel, model, retryResponse.usage);
+        parsed = retryResponse.parsed as unknown as RefinementOutput;
+
+        const retryNormalizedSleeping = normalizeSleepingArrangements(
+          parsed.sleeping_arrangements,
+        );
+        const retryRollups = normalizeSleepingRollups(
+          (parsed as Record<string, unknown>).sleeping_rollups,
+          input.snapshot.sleeps,
+        );
+        const retryValidatedSleeping = sleeping_arrangements_schema.safeParse(
+          retryNormalizedSleeping,
+        );
+        const retryFallbackSleeping =
+          deriveSleepingArrangementsFromRollups(retryRollups);
+
+        const retryMarkdownRaw = cleanManagerReferences(
+          asString(parsed.description_markdown),
+          input.snapshot.adapter_key,
+        );
+        const retryShort = cleanManagerReferences(
+          asString(parsed.description_short_plain),
+          input.snapshot.adapter_key,
+        );
+        const retrySeoDescription = cleanManagerReferences(
+          asString(parsed.seo_meta_description),
+          input.snapshot.adapter_key,
+        );
+        const retrySeoHidden = cleanManagerReferences(
+          asString(parsed.seo_hidden_summary_plain),
+          input.snapshot.adapter_key,
+        );
+
+        const retryHighlights = stripBrandReferencesFromList(
+          sanitizeHighlights((parsed as Record<string, unknown>).highlights),
+          input.snapshot.adapter_key,
+          8,
+        );
+        const retryHintsModel = stripBrandReferencesFromList(
+          sanitizeHelpfulHints(
+            (parsed as Record<string, unknown>).helpful_hints,
+          ),
+          input.snapshot.adapter_key,
+          6,
+        );
+        const retryHints = Array.from(
+          new Set([...retryHintsModel, ...helpfulHintsFromSource]),
+        ).slice(0, 6);
+        const retryAmenitiesModel = sanitizeAmenities(
+          asStringArray(parsed.amenities_normalized),
+        );
+        const retryMergedAmenities = Array.from(
+          new Set([...retryAmenitiesModel, ...sourceAmenitySignals.ids]),
+        ).sort((a, b) => a.localeCompare(b));
+        const retryMergedEvidence = mergeAmenityEvidence(
+          sanitizeAmenitiesEvidence(
+            (parsed as Record<string, unknown>).amenities_evidence,
+          ),
+          sourceAmenitySignals.evidence,
+        );
+
+        const retryFinalSleepingArrangements =
           retryValidatedSleeping.success &&
           retryValidatedSleeping.data.length > 0
             ? retryValidatedSleeping.data
-            : retryFallbackSleeping,
-        sleeping_rollups: retryRollups,
-        amenities_normalized: retryMergedAmenities,
-        amenities_evidence: retryMergedEvidence,
-      };
+            : retryFallbackSleeping;
+        const retryRollupsFromArrangements =
+          deriveSleepingRollupsFromArrangements(
+            retryFinalSleepingArrangements,
+            input.snapshot.sleeps,
+          );
+        const retryFinalRollups = hasMeaningfulSleepingRollups(
+          retryRollupsFromArrangements,
+        )
+          ? retryRollupsFromArrangements
+          : retryRollups;
+        const retrySleepingUxSummary = buildSleepingUxSummary({
+          rollups: retryFinalRollups,
+          expectedSleeps: input.snapshot.sleeps,
+        });
 
-      audit.retry_performed = true;
+        output = {
+          description_markdown: formatDescriptionMarkdown({
+            markdown: retryMarkdownRaw,
+            sourceDescription,
+            canonicalName: input.snapshot.canonical_name,
+            propertyType: input.snapshot.property_type,
+            bedrooms: input.snapshot.bedrooms,
+          }),
+          description_short_plain: retryShort,
+          seo_meta_title: ensureSeoTitleBranding({
+            title: asString(parsed.seo_meta_title),
+            canonicalName: input.snapshot.canonical_name,
+          }),
+          seo_meta_description: ensureSeoBodyBranding({
+            text: retrySeoDescription,
+            canonicalName: input.snapshot.canonical_name,
+          }),
+          seo_hidden_summary_plain: ensureSeoBodyBranding({
+            text: retrySeoHidden,
+            canonicalName: input.snapshot.canonical_name,
+          }),
+          highlights: retryHighlights,
+          helpful_hints: retryHints,
+          sleeping_arrangements: retryFinalSleepingArrangements,
+          sleeping_rollups: retryFinalRollups,
+          sleeping_ux_summary: retrySleepingUxSummary,
+          amenities_normalized: retryMergedAmenities,
+          amenities_evidence: retryMergedEvidence,
+        };
+
+        output.seo_meta_description = ensureSeoMetaDescriptionIntent({
+          text: retrySeoDescription,
+          canonicalName: input.snapshot.canonical_name,
+        });
+
+        audit.retry_performed = true;
+      }
+    } catch {
+      audit = null;
     }
-  } catch {
-    audit = null;
   }
 
   return {
     model,
+    audit_model: DEFAULT_AUDIT_MODEL,
     prompt_version: PROMPT_VERSION,
     output,
     usage: mergeUsage([refinementUsage, auditUsage]),
+    usage_by_model: Array.from(usageByModel.values()),
     audit,
+    audit_decision: auditDecision,
   };
 }
 
@@ -1831,7 +2666,32 @@ export async function persistListingRefinement(input: {
 
   const now = new Date().toISOString();
   const outputPayload = input.result.output as Record<string, unknown>;
-  const usagePayload = (input.result.usage ?? {}) as Record<string, unknown>;
+  const usagePayload = {
+    ...(input.result.usage ?? {}),
+    usage_by_model: input.result.usage_by_model,
+  } as Record<string, unknown>;
+  const auditInvoked = Boolean(input.result.audit_decision.performed);
+  const auditInvokedModel = auditInvoked ? input.result.audit_model : null;
+  const auditCallStatus = !auditInvoked
+    ? "skipped"
+    : input.result.audit
+      ? "succeeded"
+      : "failed_or_unparsed";
+  const auditPayload = {
+    audit: input.result.audit,
+    audit_decision: input.result.audit_decision,
+    audit_invoked: auditInvoked,
+    audit_invoked_model: auditInvokedModel,
+    audit_call_status: auditCallStatus,
+  } as Record<string, unknown>;
+  const costUsd = estimateRunCostUsd({
+    usageByModel: input.result.usage_by_model,
+    fallbackModel: input.result.model,
+    fallbackUsage: input.result.usage,
+  });
+  const sourceSnapshotPayload = asObject(
+    input.snapshot.match_evidence,
+  ).source_snapshot;
   const sourceHash =
     (input.snapshot.source_content_hash ?? "no_source_hash").trim() ||
     "no_source_hash";
@@ -1840,37 +2700,51 @@ export async function persistListingRefinement(input: {
     .digest("hex");
 
   await pgDb
-    .insert(listing_ai_refinement_cache)
+    .insert(listing_ai_enrichment)
     .values({
-      id: `lrc_${randomUUID().replace(/-/g, "")}`,
+      id: `lae_${randomUUID().replace(/-/g, "")}`,
       listing_id: input.snapshot.listing_id,
       source_link_id: input.snapshot.source_link_id,
       adapter_key: input.snapshot.adapter_key,
       source_content_hash: sourceHash,
-      status: "staged",
+      status: "completed",
       model: input.result.model,
+      audit_model: input.result.audit_model,
       prompt_version: input.result.prompt_version,
       output_hash: outputHash,
+      source_snapshot_payload:
+        sourceSnapshotPayload && typeof sourceSnapshotPayload === "object"
+          ? sourceSnapshotPayload
+          : {},
       output_payload: outputPayload,
       usage_payload: usagePayload,
+      cost_usd: costUsd,
+      audit_payload: auditPayload,
       generated_at: now,
       applied_at: null,
       updated_at: now,
     })
     .onConflictDoUpdate({
       target: [
-        listing_ai_refinement_cache.listing_id,
-        listing_ai_refinement_cache.source_content_hash,
-        listing_ai_refinement_cache.prompt_version,
+        listing_ai_enrichment.listing_id,
+        listing_ai_enrichment.source_content_hash,
+        listing_ai_enrichment.prompt_version,
       ],
       set: {
         source_link_id: input.snapshot.source_link_id,
         adapter_key: input.snapshot.adapter_key,
-        status: "staged",
+        status: "completed",
         model: input.result.model,
+        audit_model: input.result.audit_model,
         output_hash: outputHash,
+        source_snapshot_payload:
+          sourceSnapshotPayload && typeof sourceSnapshotPayload === "object"
+            ? sourceSnapshotPayload
+            : {},
         output_payload: outputPayload,
         usage_payload: usagePayload,
+        cost_usd: costUsd,
+        audit_payload: auditPayload,
         generated_at: now,
         applied_at: null,
         updated_at: now,

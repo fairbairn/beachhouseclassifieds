@@ -1,10 +1,7 @@
 import "@/core/tooling/env/load-env-profile";
 
-import {
-  generateListingRefinement,
-  loadListingRefinementSnapshot,
-  persistListingRefinement,
-} from "@/lib/listings/refinement/listing-refinement-service";
+import { executeListingAiEnrichment } from "@/lib/listings/enrichment/listing-ai-enrichment-service";
+import { loadListingRefinementSnapshot } from "@/lib/listings/refinement/listing-refinement-service";
 
 type Options = {
   listingId: string | null;
@@ -12,6 +9,52 @@ type Options = {
   model: string | null;
   dryRun: boolean;
 };
+
+type ModelPricing = {
+  inputPer1M: number;
+  outputPer1M: number;
+};
+
+const MODEL_PRICING_USD_PER_1M: Record<string, ModelPricing> = {
+  "gpt-4.1-mini": { inputPer1M: 0.4, outputPer1M: 1.6 },
+  "gpt-4.1": { inputPer1M: 2.0, outputPer1M: 8.0 },
+};
+
+function getPricingForModel(model: string): ModelPricing | null {
+  const envInputRaw = process.env.OPENAI_PRICE_INPUT_PER_1M?.trim();
+  const envOutputRaw = process.env.OPENAI_PRICE_OUTPUT_PER_1M?.trim();
+
+  if (envInputRaw && envOutputRaw) {
+    const inputPer1M = Number(envInputRaw);
+    const outputPer1M = Number(envOutputRaw);
+    if (
+      Number.isFinite(inputPer1M) &&
+      inputPer1M >= 0 &&
+      Number.isFinite(outputPer1M) &&
+      outputPer1M >= 0
+    ) {
+      return { inputPer1M, outputPer1M };
+    }
+  }
+
+  return MODEL_PRICING_USD_PER_1M[model] ?? null;
+}
+
+function estimateCostUsd(input: {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+}): number | null {
+  const pricing = getPricingForModel(input.model);
+  if (!pricing) {
+    return null;
+  }
+
+  return (
+    (input.inputTokens / 1_000_000) * pricing.inputPer1M +
+    (input.outputTokens / 1_000_000) * pricing.outputPer1M
+  );
+}
 
 function printUsage(): void {
   console.log("Refine Single Listing Content");
@@ -26,7 +69,7 @@ function printUsage(): void {
   console.log("Options:");
   console.log("  --listing-id <id>   Canonical listing id");
   console.log("  --slug <slug>       Canonical listing slug");
-  console.log("  --model <name>      OpenAI model (default gpt-4.1-mini)");
+  console.log("  --model <name>      OpenAI model (default gpt-5.4-nano)");
   console.log("  --dry-run           Generate output without persisting");
   console.log("  --help              Show help");
 }
@@ -94,6 +137,7 @@ function parseArgs(argv: string[]): Options {
 }
 
 async function run(): Promise<number> {
+  const startedAt = Date.now();
   const options = parseArgs(process.argv.slice(2));
 
   const snapshot = await loadListingRefinementSnapshot({
@@ -105,20 +149,31 @@ async function run(): Promise<number> {
     throw new Error("Listing not found.");
   }
 
-  const result = await generateListingRefinement({
+  const result = await executeListingAiEnrichment({
     snapshot,
     model: options.model ?? undefined,
+    persist: !options.dryRun,
   });
 
-  if (!options.dryRun) {
-    await persistListingRefinement({ snapshot, result });
-  }
+  const completedAt = Date.now();
+  const elapsedMs = Math.max(0, completedAt - startedAt);
+  const inputTokens = result.usage?.input_tokens ?? 0;
+  const outputTokens = result.usage?.output_tokens ?? 0;
+  const totalTokens = result.usage?.total_tokens ?? 0;
+  const estimatedCostUsd = estimateCostUsd({
+    model: result.model,
+    inputTokens,
+    outputTokens,
+  });
 
   console.log(
-    `listing_refinement_complete listing_id=${snapshot.listing_id} slug=${snapshot.slug} dry_run=${options.dryRun} save_target=${options.dryRun ? "none" : "listing_ai_refinement_cache"} model=${result.model}`,
+    `listing_refinement_complete listing_id=${snapshot.listing_id} slug=${snapshot.slug} dry_run=${options.dryRun} save_target=${options.dryRun ? "none" : "listing_ai_enrichment"} model=${result.model}`,
   );
   console.log(
-    `listing_refinement_usage input_tokens=${result.usage?.input_tokens ?? 0} output_tokens=${result.usage?.output_tokens ?? 0} total_tokens=${result.usage?.total_tokens ?? 0}`,
+    `listing_refinement_usage input_tokens=${inputTokens} output_tokens=${outputTokens} total_tokens=${totalTokens}`,
+  );
+  console.log(
+    `listing_refinement_runtime duration_ms=${elapsedMs} estimated_cost_usd=${estimatedCostUsd === null ? "n/a" : estimatedCostUsd.toFixed(6)}`,
   );
 
   return 0;

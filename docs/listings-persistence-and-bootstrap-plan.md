@@ -192,6 +192,75 @@ MVP ingestion behavior:
 6. content generation versioning beyond minimal lineage
 7. large-batch enrichment workflows
 
+## AI Enrichment Versioning (Simplified Initial Plan)
+
+Goal: keep first implementation minimal while still supporting source-to-enrichment alignment and quick revert.
+
+### MVP Scope (Phase E1)
+
+Use one version table and one optional pointer field on listing.
+
+1. New table: `listing_ai_enrichment_version`
+   - `id` (text, pk)
+   - `listing_id` (fk -> listing.id)
+   - `source_link_id` (fk -> listing_source_link.id, nullable)
+   - `source_content_hash` (text, required)
+   - `version_number` (int, required, per-listing sequence)
+   - `prompt_version` (text, required)
+   - `model` (text, required)
+   - `output_payload` (jsonb, required)
+   - `output_hash` (text, required)
+   - `status` (text, default `generated`) // generated | applied | superseded | failed
+   - `generated_at` (timestamptz, required)
+   - `applied_at` (timestamptz, nullable)
+   - `created_at` (timestamptz, required)
+   - `updated_at` (timestamptz, required)
+
+2. Optional pointer on `listing`
+   - `active_enrichment_version_id` (nullable fk -> listing_ai_enrichment_version.id)
+
+3. Required indexes/constraints
+   - index on (`listing_id`, `generated_at desc`)
+   - index on (`listing_id`, `source_content_hash`)
+   - unique on (`listing_id`, `version_number`)
+
+### MVP Lifecycle
+
+1. During ingest:
+   - continue normal canonical listing ingest
+   - update/derive latest source context hash from source snapshot (`description_expanded` driven)
+2. During enrichment:
+   - generate a new version row tied to current `source_content_hash`
+3. During apply:
+   - copy selected output fields into `listing`
+   - set `listing.active_enrichment_version_id`
+   - mark selected version `applied`
+4. Drift detection query:
+   - compare current source hash vs. source hash of active enrichment version
+   - mismatches become rerun candidates
+5. Revert:
+   - select a previous enrichment version for that listing
+   - copy its payload fields back into `listing`
+   - repoint `active_enrichment_version_id`
+
+### Why This Is Enough For Now
+
+1. Keeps schema and orchestration simple.
+2. Supports explicit source hash alignment.
+3. Supports rollback by reapplying prior version payload.
+4. Gives immediate churn telemetry from `version_number` growth.
+
+### Deferred Robust Model (Future)
+
+If needed later, evolve into separated context/output/assignment/state tables for higher auditability and queue control:
+
+1. `listing_enrichment_context_version`
+2. `listing_enrichment_output_version`
+3. `listing_enrichment_assignment_event`
+4. `listing_enrichment_state`
+
+Trigger for upgrade: when operational complexity (parallel runs, manual approvals, replay tooling, or frequent churn triage) exceeds what a single version table can manage cleanly.
+
 ### Exit Criteria for Step 1
 
 1. New MVP schema migrated successfully.

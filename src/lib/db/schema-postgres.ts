@@ -68,9 +68,18 @@ export const listing = pgTable(
     seo_meta_description: text("seo_meta_description"),
     seo_meta_title: text("seo_meta_title"),
     seo_hidden_summary_plain: text("seo_hidden_summary_plain"),
+    highlights: jsonb("highlights")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    helpful_hints: jsonb("helpful_hints")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     sleeping_arrangements: jsonb("sleeping_arrangements")
       .notNull()
       .default(sql`'[]'::jsonb`),
+    sleeping_rollups: jsonb("sleeping_rollups")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     content_version: integer("content_version").notNull().default(1),
     content_generated_at: timestamp("content_generated_at", {
       mode: "string",
@@ -239,8 +248,8 @@ export const listing_geocode_cache = pgTable(
   }),
 );
 
-export const listing_ai_refinement_cache = pgTable(
-  "listing_ai_refinement_cache",
+export const listing_ai_enrichment = pgTable(
+  "listing_ai_enrichment",
   {
     id: text("id").primaryKey(),
     listing_id: text("listing_id")
@@ -254,14 +263,22 @@ export const listing_ai_refinement_cache = pgTable(
     ),
     adapter_key: text("adapter_key"),
     source_content_hash: text("source_content_hash").notNull(),
-    status: text("status").notNull().default("staged"),
-    model: text("model").notNull(),
+    status: text("status").notNull().default("pending"),
+    model: text("model"),
+    audit_model: text("audit_model"),
     prompt_version: text("prompt_version").notNull(),
-    output_hash: text("output_hash").notNull(),
+    output_hash: text("output_hash"),
+    source_snapshot_payload: jsonb("source_snapshot_payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     output_payload: jsonb("output_payload")
       .notNull()
       .default(sql`'{}'::jsonb`),
     usage_payload: jsonb("usage_payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    cost_usd: numeric("cost_usd", { precision: 12, scale: 6 }),
+    audit_payload: jsonb("audit_payload")
       .notNull()
       .default(sql`'{}'::jsonb`),
     generated_at: timestamp("generated_at", {
@@ -279,17 +296,21 @@ export const listing_ai_refinement_cache = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    listing_id_idx: index("listing_ai_refinement_cache_listing_id_idx").on(
+    listing_id_idx: index("listing_ai_enrichment_listing_id_idx").on(
       table.listing_id,
     ),
-    status_idx: index("listing_ai_refinement_cache_status_idx").on(
-      table.status,
+    status_idx: index("listing_ai_enrichment_status_idx").on(table.status),
+    generated_at_idx: index("listing_ai_enrichment_generated_at_idx").on(
+      table.generated_at,
     ),
     listing_hash_prompt_unique_idx: uniqueIndex(
-      "listing_ai_refinement_cache_listing_hash_prompt_unique_idx",
+      "listing_ai_enrichment_listing_hash_prompt_unique_idx",
     ).on(table.listing_id, table.source_content_hash, table.prompt_version),
   }),
 );
+
+// Compatibility alias for existing call sites while migration work completes.
+export const listing_ai_refinement_cache = listing_ai_enrichment;
 
 export const users = pgTable(
   "user",

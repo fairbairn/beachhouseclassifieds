@@ -1,0 +1,21 @@
+
+> beachhouseclassifieds@0.1.0 db:query:postgres:local
+> tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run db:query:postgres:raw -- --file .tmp/scripts/check_output_payload_vs_listing.sql --format table run db:query:postgres:local -- --file .tmp/scripts/check_output_payload_vs_listing.sql --form.out
+
+
+RUN CONTEXT
++---------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Mode          | db:query:postgres:raw                                                                                                                                                                                     |
+| Script        | npm run db:query:postgres:raw -- --file .tmp/scripts/check_output_payload_vs_listing.sql --format table run db:query:postgres:local -- --file .tmp/scripts/check_output_payload_vs_listing.sql --form.out |
+| Target        | Postgres Local (postgres:local)                                                                                                                                                                           |
+| Provider      | postgres                                                                                                                                                                                                  |
+| Env Profile   | local                                                                                                                                                                                                     |
+| DATABASE_URL  | postgresql://postgres:***@localhost:5432/beachclassifieds_local                                                                                                                                           |
+| Auth Base URL | http://localhost:3000                                                                                                                                                                                     |
+| Auth Secret   | missing                                                                                                                                                                                                   |
++---------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+
+> beachhouseclassifieds@0.1.0 db:query:postgres:raw
+> tsx src/core/tooling/db/ops/run-postgres-sql-file.ts --file .tmp/scripts/check_output_payload_vs_listing.sql --format table run db:query:postgres:local -- --file .tmp/scripts/check_output_payload_vs_listing.sql --form.out
+

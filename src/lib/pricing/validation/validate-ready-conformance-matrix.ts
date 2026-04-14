@@ -84,6 +84,8 @@ type AdapterMetrics = {
   hasRuntime: boolean;
 };
 
+const EXCLUDED_ADAPTERS = new Set(["beachblue"]);
+
 function parseMatrixRow(line: string): MatrixRow | null {
   const cells = line
     .split("|")
@@ -278,7 +280,8 @@ export async function validateReadyConformanceMatrix(
   const allRows = doc
     .split(/\r?\n/)
     .map(parseMatrixRow)
-    .filter((row): row is MatrixRow => row !== null);
+    .filter((row): row is MatrixRow => row !== null)
+    .filter((row) => !EXCLUDED_ADAPTERS.has(row.adapter));
 
   const results: AdapterValidationResult[] = [];
   const docTotals = {

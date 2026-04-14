@@ -16,16 +16,25 @@ type Snapshot = {
   listing_id: string;
   slug: string;
   canonical_name: string;
+  property_type: string | null;
+  bedrooms: number | null;
+  bathrooms: string | null;
+  sleeps: number | null;
   adapter_key: string | null;
   source_content_hash: string | null;
   source_description_original: string | null;
+  source_meta_description_original: string | null;
   source_amenities_original: string[];
+  source_amenities_categories: Record<string, string[]>;
   description_markdown: string | null;
   description_short_plain: string | null;
   seo_meta_title: string | null;
   seo_meta_description: string | null;
   seo_hidden_summary_plain: string | null;
+  highlights: unknown;
+  helpful_hints: unknown;
   sleeping_arrangements: unknown;
+  sleeping_rollups: unknown;
   amenities_normalized: unknown;
   ai_refinement: Record<string, unknown> | null;
 };
@@ -35,6 +44,22 @@ type ApiResponse = {
   dryRun?: boolean;
   result?: unknown;
   saveTarget?: string;
+  run_metrics?: {
+    model?: string;
+    audit_model?: string;
+    usage_by_model?: Array<{
+      model?: string;
+      input_tokens?: number;
+      output_tokens?: number;
+      total_tokens?: number;
+    }>;
+    duration_ms?: number;
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    estimated_cost_usd?: number | null;
+    estimated_cost_note?: string | null;
+  };
 };
 
 type RefinementOutputView = {
@@ -46,6 +71,7 @@ type RefinementOutputView = {
   amenities_evidence?: unknown;
   sleeping_arrangements?: unknown;
   sleeping_rollups?: unknown;
+  sleeping_ux_summary?: unknown;
   seo_meta_title?: unknown;
   seo_meta_description?: unknown;
   seo_hidden_summary_plain?: unknown;
@@ -56,6 +82,12 @@ type RefinementAuditView = {
   retry_recommended?: unknown;
   retry_performed?: unknown;
   issues?: unknown;
+};
+
+type RefinementAuditDecisionView = {
+  performed?: unknown;
+  trigger_reasons?: unknown;
+  skipped_reason?: unknown;
 };
 
 function asRefinementOutput(value: unknown): RefinementOutputView {
@@ -86,6 +118,22 @@ function asRefinementAudit(value: unknown): RefinementAuditView | null {
   return audit as RefinementAuditView;
 }
 
+function asRefinementAuditDecision(
+  value: unknown,
+): RefinementAuditDecisionView | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const root = value as Record<string, unknown>;
+  const decision = root.audit_decision;
+  if (!decision || typeof decision !== "object" || Array.isArray(decision)) {
+    return null;
+  }
+
+  return decision as RefinementAuditDecisionView;
+}
+
 function asOptionalString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -98,6 +146,22 @@ function asStringArray(value: unknown): string[] {
   return value
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter((entry) => entry.length > 0);
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function asNonNegativeNumber(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.round(value));
 }
 
 async function parseApiResponse<T>(response: Response): Promise<T> {
@@ -165,12 +229,23 @@ function ListingRefinementDevPage() {
   const [result, setResult] = useState<unknown>(null);
   const [lastDryRun, setLastDryRun] = useState<boolean | null>(null);
   const [saveTarget, setSaveTarget] = useState<string | null>(null);
+  const [runMetrics, setRunMetrics] = useState<
+    ApiResponse["run_metrics"] | null
+  >(null);
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generatedOutput = asRefinementOutput(result);
   const auditView = asRefinementAudit(result);
+  const auditDecisionView = asRefinementAuditDecision(result);
+  const auditTriggeredReasons = asStringArray(
+    auditDecisionView?.trigger_reasons,
+  );
+  const auditSkippedReason = asOptionalString(
+    auditDecisionView?.skipped_reason,
+  );
+  const auditPerformed = Boolean(auditDecisionView?.performed);
   const auditAccuracyScore =
     typeof auditView?.accuracy_score === "number"
       ? Math.max(0, Math.min(1, auditView.accuracy_score))
@@ -181,8 +256,14 @@ function ListingRefinementDevPage() {
     asOptionalString(generatedOutput.description_markdown) ??
     snapshot?.description_markdown ??
     "(empty)";
-  const highlightsToRender = asStringArray(generatedOutput.highlights);
-  const hintsToRender = asStringArray(generatedOutput.helpful_hints);
+  const generatedHighlights = asStringArray(generatedOutput.highlights);
+  const snapshotHighlights = asStringArray(snapshot?.highlights);
+  const highlightsToRender =
+    generatedHighlights.length > 0 ? generatedHighlights : snapshotHighlights;
+  const generatedHints = asStringArray(generatedOutput.helpful_hints);
+  const snapshotHints = asStringArray(snapshot?.helpful_hints);
+  const hintsToRender =
+    generatedHints.length > 0 ? generatedHints : snapshotHints;
   const composedMarkdownPreview = [
     markdownToRender,
     highlightsToRender.length > 0
@@ -198,6 +279,71 @@ function ListingRefinementDevPage() {
   ]
     .filter(Boolean)
     .join("\n\n");
+  const sleepingUxSummary = asObject(generatedOutput.sleeping_ux_summary);
+  const sleepingUxCards = [
+    {
+      label: "King Beds",
+      value: asNonNegativeNumber(sleepingUxSummary.count_king),
+    },
+    {
+      label: "Queen Beds",
+      value: asNonNegativeNumber(sleepingUxSummary.count_queen),
+    },
+    {
+      label: "Full Beds",
+      value: asNonNegativeNumber(sleepingUxSummary.count_full),
+    },
+    {
+      label: "Twin Beds",
+      value: asNonNegativeNumber(sleepingUxSummary.count_twin_standalone),
+    },
+    {
+      label: "Bunk Units",
+      value: asNonNegativeNumber(sleepingUxSummary.count_bunk_units),
+    },
+    {
+      label: "Bunk Sleeps",
+      value: asNonNegativeNumber(sleepingUxSummary.count_bunk_sleeps_total),
+    },
+  ];
+  const capacityFromRollups = asNonNegativeNumber(
+    sleepingUxSummary.sleep_capacity_from_rollups,
+  );
+  const capacityTarget = asNonNegativeNumber(
+    sleepingUxSummary.sleep_capacity_target,
+  );
+  const capacityAligned = Boolean(sleepingUxSummary.sleep_capacity_aligned);
+
+  const modelInputPreview = snapshot
+    ? {
+        listing: {
+          h1: snapshot.canonical_name,
+          id: snapshot.listing_id,
+          slug: snapshot.slug,
+          canonical_name: snapshot.canonical_name,
+          property_type: snapshot.property_type,
+          bedrooms: snapshot.bedrooms,
+          bathrooms: snapshot.bathrooms,
+          sleeps: snapshot.sleeps,
+          adapter_key: snapshot.adapter_key,
+        },
+        source: {
+          h1: snapshot.canonical_name,
+          meta_description: snapshot.source_meta_description_original,
+          description_expanded: snapshot.source_description_original,
+          amenities: {
+            all: snapshot.source_amenities_original,
+            categories: snapshot.source_amenities_categories,
+          },
+          property_profile: {
+            property_type: snapshot.property_type,
+            bedrooms: snapshot.bedrooms,
+            bathrooms: snapshot.bathrooms,
+            sleeps: snapshot.sleeps,
+          },
+        },
+      }
+    : null;
 
   const loadSnapshot = async () => {
     setLoading(true);
@@ -206,6 +352,7 @@ function ListingRefinementDevPage() {
     setResult(null);
     setLastDryRun(null);
     setSaveTarget(null);
+    setRunMetrics(null);
 
     try {
       const params = new URLSearchParams();
@@ -276,6 +423,7 @@ function ListingRefinementDevPage() {
       setResult(payload.result ?? null);
       setLastDryRun(Boolean(payload.dryRun));
       setSaveTarget(payload.saveTarget ?? null);
+      setRunMetrics(payload.run_metrics ?? null);
     } catch (runError) {
       const message =
         runError instanceof Error ? runError.message : String(runError);
@@ -332,16 +480,63 @@ function ListingRefinementDevPage() {
         </div>
 
         {result ? (
-          <p className="text-sm opacity-80">
-            Latest run mode:{" "}
-            <strong>{lastDryRun ? "Dry Run" : "Run + Save"}</strong>
-            {saveTarget ? (
-              <>
-                {" "}
-                | Save target: <strong>{saveTarget}</strong>
-              </>
+          <div className="space-y-1 text-sm opacity-80">
+            <p>
+              Latest run mode:{" "}
+              <strong>{lastDryRun ? "Dry Run" : "Run + Save"}</strong>
+              {saveTarget ? (
+                <>
+                  {" "}
+                  | Save target: <strong>{saveTarget}</strong>
+                </>
+              ) : null}
+            </p>
+            {runMetrics ? (
+              <p>
+                Models: <strong>{runMetrics.model ?? "n/a"}</strong>
+                {runMetrics.audit_model ? (
+                  <>
+                    {" "}
+                    (audit: <strong>{runMetrics.audit_model}</strong>)
+                  </>
+                ) : null}{" "}
+                | Runtime: <strong>{runMetrics.duration_ms ?? 0} ms</strong> |
+                Tokens: in <strong>{runMetrics.input_tokens ?? 0}</strong>, out{" "}
+                <strong>{runMetrics.output_tokens ?? 0}</strong>, total{" "}
+                <strong>{runMetrics.total_tokens ?? 0}</strong> | Estimated
+                Cost:{" "}
+                <strong>
+                  {typeof runMetrics.estimated_cost_usd === "number"
+                    ? `$${runMetrics.estimated_cost_usd.toFixed(6)}`
+                    : "n/a"}
+                </strong>
+              </p>
             ) : null}
-          </p>
+            {runMetrics?.estimated_cost_note ? (
+              <p>
+                Cost note: <strong>{runMetrics.estimated_cost_note}</strong>
+              </p>
+            ) : null}
+            {auditDecisionView ? (
+              <p>
+                Audit call:{" "}
+                <strong>{auditPerformed ? "performed" : "skipped"}</strong>
+                {auditSkippedReason ? (
+                  <>
+                    {" "}
+                    | Reason: <strong>{auditSkippedReason}</strong>
+                  </>
+                ) : null}
+                {auditTriggeredReasons.length > 0 ? (
+                  <>
+                    {" "}
+                    | Triggers:{" "}
+                    <strong>{auditTriggeredReasons.join(" | ")}</strong>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         {loading && activeAction ? (
@@ -385,9 +580,22 @@ function ListingRefinementDevPage() {
                 <strong>Adapter:</strong> {snapshot.adapter_key ?? "n/a"}
               </p>
               <p className="text-sm">
+                <strong>Property Type:</strong>{" "}
+                {snapshot.property_type ?? "n/a"}
+              </p>
+              <p className="text-sm">
+                <strong>Property Profile:</strong> beds{" "}
+                {snapshot.bedrooms ?? "n/a"} | baths{" "}
+                {snapshot.bathrooms ?? "n/a"} | sleeps{" "}
+                {snapshot.sleeps ?? "n/a"}
+              </p>
+              <p className="text-sm">
                 <strong>Source Hash:</strong>{" "}
                 {snapshot.source_content_hash ?? "n/a"}
               </p>
+              <pre className="h-56 overflow-auto rounded bg-slate-50 p-3 text-xs whitespace-pre-wrap">
+                {JSON.stringify(modelInputPreview, null, 2)}
+              </pre>
               <pre className="h-96 overflow-auto rounded bg-slate-50 p-3 text-xs whitespace-pre-wrap">
                 {snapshot.source_description_original ?? "(empty)"}
               </pre>
@@ -471,10 +679,9 @@ function ListingRefinementDevPage() {
               <div className="rounded bg-slate-50 p-3 text-xs">
                 <strong>Helpful Hints</strong>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {Array.isArray(generatedOutput.helpful_hints) &&
-                  generatedOutput.helpful_hints.length > 0 ? (
-                    generatedOutput.helpful_hints.map((hint, index) => (
-                      <li key={`${String(hint)}-${index}`}>{String(hint)}</li>
+                  {hintsToRender.length > 0 ? (
+                    hintsToRender.map((hint, index) => (
+                      <li key={`${hint}-${index}`}>{hint}</li>
                     ))
                   ) : (
                     <li>(none)</li>
@@ -505,6 +712,16 @@ function ListingRefinementDevPage() {
                   2,
                 )}
               </pre>
+              <div className="rounded bg-slate-50 p-3 text-xs">
+                <strong>Sleeping UX Summary</strong>
+                <pre className="mt-2 max-h-40 overflow-auto rounded bg-white p-3 whitespace-pre-wrap">
+                  {JSON.stringify(
+                    asObject(generatedOutput.sleeping_ux_summary),
+                    null,
+                    2,
+                  )}
+                </pre>
+              </div>
               <pre className="max-h-40 overflow-auto rounded bg-slate-50 p-3 text-xs whitespace-pre-wrap">
                 {JSON.stringify(
                   generatedOutput.amenities_normalized ??
@@ -583,6 +800,8 @@ function ListingRefinementDevPage() {
                       sleeping_arrangements:
                         generatedOutput.sleeping_arrangements ?? [],
                       sleeping_rollups: generatedOutput.sleeping_rollups ?? {},
+                      sleeping_ux_summary:
+                        generatedOutput.sleeping_ux_summary ?? {},
                     },
                     null,
                     2,
@@ -640,6 +859,32 @@ function ListingRefinementDevPage() {
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
+                <section className="mb-5 rounded border bg-slate-50 p-4">
+                  <h3 className="mb-3 text-base font-semibold">
+                    Sleeping Overview (UX Preview)
+                  </h3>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {sleepingUxCards.map((card) => (
+                      <div
+                        key={card.label}
+                        className="rounded border bg-white px-3 py-2"
+                      >
+                        <p className="text-[11px] tracking-wide text-slate-500 uppercase">
+                          {card.label}
+                        </p>
+                        <p className="text-lg font-semibold">{card.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-slate-700">
+                    Capacity Check: <strong>{capacityFromRollups}</strong>{" "}
+                    derived from beds vs <strong>{capacityTarget}</strong>{" "}
+                    advertised sleeps{" "}
+                    <strong>
+                      ({capacityAligned ? "aligned" : "not aligned"})
+                    </strong>
+                  </p>
+                </section>
                 <article
                   className="prose prose-slate max-w-none text-sm leading-7"
                   style={{ fontFamily: BRAND_FONT_BODY }}
