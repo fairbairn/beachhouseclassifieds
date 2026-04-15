@@ -70,8 +70,7 @@ type RefinementOutputView = {
   amenities_normalized?: unknown;
   amenities_evidence?: unknown;
   sleeping_arrangements?: unknown;
-  sleeping_rollups?: unknown;
-  sleeping_ux_summary?: unknown;
+  sleeping_summary?: unknown;
   seo_meta_title?: unknown;
   seo_meta_description?: unknown;
   seo_hidden_summary_plain?: unknown;
@@ -237,6 +236,8 @@ function ListingRefinementDevPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generatedOutput = asRefinementOutput(result);
+  const rawResult = asObject(result);
+  const rawOutput = asObject(rawResult.output);
   const auditView = asRefinementAudit(result);
   const auditDecisionView = asRefinementAuditDecision(result);
   const auditTriggeredReasons = asStringArray(
@@ -279,40 +280,42 @@ function ListingRefinementDevPage() {
   ]
     .filter(Boolean)
     .join("\n\n");
-  const sleepingUxSummary = asObject(generatedOutput.sleeping_ux_summary);
+  const sleepingSummary = asObject(rawOutput.sleeping_summary);
+  const sleepingSummaryBedCounts = asObject(sleepingSummary.bed_counts);
+  const sleepingSummaryCapacity = asObject(sleepingSummary.sleep_capacity);
   const sleepingUxCards = [
     {
       label: "King Beds",
-      value: asNonNegativeNumber(sleepingUxSummary.count_king),
+      value: asNonNegativeNumber(sleepingSummaryBedCounts.king),
     },
     {
       label: "Queen Beds",
-      value: asNonNegativeNumber(sleepingUxSummary.count_queen),
+      value: asNonNegativeNumber(sleepingSummaryBedCounts.queen),
     },
     {
       label: "Full Beds",
-      value: asNonNegativeNumber(sleepingUxSummary.count_full),
+      value: asNonNegativeNumber(sleepingSummaryBedCounts.full),
     },
     {
       label: "Twin Beds",
-      value: asNonNegativeNumber(sleepingUxSummary.count_twin_standalone),
+      value: asNonNegativeNumber(sleepingSummaryBedCounts.twin_standalone),
     },
     {
-      label: "Bunk Units",
-      value: asNonNegativeNumber(sleepingUxSummary.count_bunk_units),
+      label: "Bunk Beds",
+      value: asNonNegativeNumber(sleepingSummaryBedCounts.bunk_beds),
     },
     {
-      label: "Bunk Sleeps",
-      value: asNonNegativeNumber(sleepingUxSummary.count_bunk_sleeps_total),
+      label: "Other Beds",
+      value: asNonNegativeNumber(sleepingSummaryBedCounts.other),
     },
   ];
   const capacityFromRollups = asNonNegativeNumber(
-    sleepingUxSummary.sleep_capacity_from_rollups,
+    sleepingSummaryCapacity.derived_total,
   );
   const capacityTarget = asNonNegativeNumber(
-    sleepingUxSummary.sleep_capacity_target,
+    sleepingSummaryCapacity.target_sleeps,
   );
-  const capacityAligned = Boolean(sleepingUxSummary.sleep_capacity_aligned);
+  const capacityAligned = Boolean(sleepingSummaryCapacity.aligned);
 
   const modelInputPreview = snapshot
     ? {
@@ -706,17 +709,16 @@ function ListingRefinementDevPage() {
               </pre>
               <pre className="max-h-40 overflow-auto rounded bg-slate-50 p-3 text-xs whitespace-pre-wrap">
                 {JSON.stringify(
-                  generatedOutput.sleeping_arrangements ??
-                    snapshot.sleeping_arrangements,
+                  rawOutput.sleeping_arrangements ?? null,
                   null,
                   2,
                 )}
               </pre>
               <div className="rounded bg-slate-50 p-3 text-xs">
-                <strong>Sleeping UX Summary</strong>
+                <strong>Sleeping Summary</strong>
                 <pre className="mt-2 max-h-40 overflow-auto rounded bg-white p-3 whitespace-pre-wrap">
                   {JSON.stringify(
-                    asObject(generatedOutput.sleeping_ux_summary),
+                    asObject(rawOutput.sleeping_summary),
                     null,
                     2,
                   )}
@@ -798,10 +800,8 @@ function ListingRefinementDevPage() {
                   {JSON.stringify(
                     {
                       sleeping_arrangements:
-                        generatedOutput.sleeping_arrangements ?? [],
-                      sleeping_rollups: generatedOutput.sleeping_rollups ?? {},
-                      sleeping_ux_summary:
-                        generatedOutput.sleeping_ux_summary ?? {},
+                        rawOutput.sleeping_arrangements ?? null,
+                      sleeping_summary: rawOutput.sleeping_summary ?? null,
                     },
                     null,
                     2,

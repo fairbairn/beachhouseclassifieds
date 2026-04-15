@@ -164,6 +164,31 @@ function isNumberOrNull(value: unknown): boolean {
   );
 }
 
+function estimateSleepCapacityFromRollups(
+  rollups: Record<string, unknown>,
+): number {
+  const getCount = (key: string): number => {
+    const raw = rollups[key];
+    if (typeof raw !== "number" || !Number.isFinite(raw)) {
+      return 0;
+    }
+    return Math.max(0, Math.round(raw));
+  };
+
+  return (
+    getCount("bed_count_king") * 2 +
+    getCount("bed_count_queen") * 2 +
+    getCount("bed_count_full") * 2 +
+    getCount("bed_count_twin") +
+    getCount("bed_count_sofa_bed") * 2 +
+    getCount("bed_count_daybed") +
+    getCount("bed_count_trundle") +
+    getCount("bed_count_murphy") * 2 +
+    getCount("bed_count_air_mattress") +
+    getCount("bed_count_futon") * 2
+  );
+}
+
 function addIssue(
   issues: ValidationIssue[],
   input: Omit<ValidationIssue, "severity"> & { severity?: Severity },
@@ -395,6 +420,27 @@ function validateOutputPayload(
       listingId: row.listing_id,
       message: "output_payload.sleeping_rollups must be an object.",
     });
+    return;
+  }
+
+  const snapshot = asObject(row.source_snapshot_payload);
+  const expectedSleepsRaw = snapshot.sleeps;
+  if (
+    typeof expectedSleepsRaw === "number" &&
+    Number.isFinite(expectedSleepsRaw)
+  ) {
+    const expectedSleeps = Math.max(0, Math.round(expectedSleepsRaw));
+    const derivedSleeps = estimateSleepCapacityFromRollups(
+      sleepingRollups as Record<string, unknown>,
+    );
+    if (derivedSleeps !== expectedSleeps) {
+      addIssue(issues, {
+        code: "output_payload_sleep_capacity_mismatch",
+        rowId: row.id,
+        listingId: row.listing_id,
+        message: `output_payload.sleeping_rollups derives ${derivedSleeps} sleeps but source_snapshot_payload.sleeps is ${expectedSleeps}.`,
+      });
+    }
   }
 }
 

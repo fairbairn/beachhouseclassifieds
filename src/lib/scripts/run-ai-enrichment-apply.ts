@@ -1,9 +1,10 @@
 import "@/core/tooling/env/load-env-profile";
 
+import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
 import { applyListingAiEnrichmentToListings } from "@/lib/listings/enrichment/listing-ai-enrichment-service";
 
 type Options = {
-  limit: number;
+  limit: number | null;
   adapterKey: string | null;
   listingId: string | null;
   dryRun: boolean;
@@ -13,12 +14,12 @@ function printUsage(): void {
   console.log("Apply AI Enrichment To Listing Fields");
   console.log("Usage:");
   console.log(
-    "  tsx src/lib/scripts/run-ai-enrichment-apply.ts [--limit 10] [--adapter-key <key>] [--listing-id <id>] [--dry-run]",
+    "  tsx src/lib/scripts/run-ai-enrichment-apply.ts [--limit <n>] [--adapter-key <key>] [--listing-id <id>] [--dry-run]",
   );
   console.log("");
   console.log("Options:");
   console.log(
-    "  --limit <n>          Max listings to compare/apply (default 10)",
+    "  --limit <n>          Max listings to compare/apply (default all)",
   );
   console.log("  --adapter-key <key>  Restrict to one adapter");
   console.log("  --listing-id <id>    Restrict to one listing id");
@@ -29,7 +30,7 @@ function printUsage(): void {
 }
 
 function parseArgs(argv: string[]): Options {
-  let limit = 10;
+  let limit: number | null = null;
   let adapterKey: string | null = null;
   let listingId: string | null = null;
   let dryRun = false;
@@ -52,6 +53,8 @@ function parseArgs(argv: string[]): Options {
       const parsed = Number(next);
       if (Number.isFinite(parsed) && parsed > 0) {
         limit = Math.floor(parsed);
+      } else {
+        throw new Error("--limit must be a positive integer");
       }
       i += 1;
       continue;
@@ -77,13 +80,23 @@ function parseArgs(argv: string[]): Options {
 
 async function run(): Promise<number> {
   const options = parseArgs(process.argv.slice(2));
+  const progress = createScrapeProgress({ script: "ai-enrichment-apply" });
+
+  progress.phase("starting enrichment apply");
+  progress.info(
+    `params limit=${options.limit ?? "all"} adapter_key=${options.adapterKey ?? "all"} listing_id=${options.listingId ?? "all"} dry_run=${options.dryRun}`,
+  );
 
   const summary = await applyListingAiEnrichmentToListings({
-    limit: options.limit,
+    limit: options.limit ?? undefined,
     adapterKey: options.adapterKey ?? undefined,
     listingId: options.listingId ?? undefined,
     dryRun: options.dryRun,
   });
+
+  progress.success(
+    `apply complete selected=${summary.selected} compared=${summary.compared} updated=${summary.updated} unchanged=${summary.unchanged} dry_run=${summary.dry_run}`,
+  );
 
   console.log("listing_ai_enrichment_apply_complete");
   console.log(`- selected: ${summary.selected}`);

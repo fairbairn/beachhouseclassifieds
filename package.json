@@ -204,6 +204,8 @@
     "listings:enrichment:pending:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:enrichment:pending:raw --",
     "listings:enrichment:apply:raw": "tsx src/lib/scripts/run-ai-enrichment-apply.ts",
     "listings:enrichment:apply:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:enrichment:apply:raw --",
+    "listings:enrichment:apply:evaluate:raw": "tsx src/lib/scripts/run-ai-enrichment-apply-evaluate.ts",
+    "listings:enrichment:apply:evaluate:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:enrichment:apply:evaluate:raw --",
     "listings:enrichment:validate:raw": "tsx src/lib/scripts/run-ai-enrichment-validation.ts",
     "listings:enrichment:validate:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:enrichment:validate:raw --",
     "listings:fill-null-rooms:raw": "tsx src/lib/scripts/run-fill-null-bedroom-bathroom.ts",
