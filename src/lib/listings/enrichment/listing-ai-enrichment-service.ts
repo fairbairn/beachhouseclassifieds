@@ -71,6 +71,21 @@ export type EnrichmentApplyResult = {
   dry_run: boolean;
 };
 
+export type EnrichmentApplyProgressOutcome = "start" | "progress" | "end";
+
+export type EnrichmentApplyProgressEvent = {
+  outcome: EnrichmentApplyProgressOutcome;
+  selected: number;
+  compared: number;
+  updated: number;
+  unchanged: number;
+  dry_run: boolean;
+  started_at_ms: number;
+  elapsed_ms: number;
+  listing_id?: string;
+  message?: string;
+};
+
 const LISTING_ENRICHMENT_TARGET_FIELDS = [
   "description_markdown",
   "description_short_plain",
@@ -561,6 +576,8 @@ export async function applyListingAiEnrichmentToListings(input: {
   adapterKey?: string;
   listingId?: string;
   dryRun: boolean;
+  progressEvery?: number;
+  onProgress?: (event: EnrichmentApplyProgressEvent) => void | Promise<void>;
 }): Promise<EnrichmentApplyResult> {
   if (!pgDb) {
     throw new Error("Postgres database is not configured.");
@@ -699,6 +716,41 @@ export async function applyListingAiEnrichmentToListings(input: {
     unchanged: 0,
     dry_run: input.dryRun,
   };
+  const startedAtMs = Date.now();
+  const progressEvery = Math.max(1, Math.floor(input.progressEvery ?? 25));
+
+  const emitProgress = async (
+    event: Omit<
+      EnrichmentApplyProgressEvent,
+      | "selected"
+      | "compared"
+      | "updated"
+      | "unchanged"
+      | "dry_run"
+      | "started_at_ms"
+      | "elapsed_ms"
+    >,
+  ): Promise<void> => {
+    if (!input.onProgress) {
+      return;
+    }
+
+    await input.onProgress({
+      ...event,
+      selected: summary.selected,
+      compared: summary.compared,
+      updated: summary.updated,
+      unchanged: summary.unchanged,
+      dry_run: summary.dry_run,
+      started_at_ms: startedAtMs,
+      elapsed_ms: Math.max(0, Date.now() - startedAtMs),
+    });
+  };
+
+  await emitProgress({
+    outcome: "start",
+    message: "apply_started",
+  });
 
   for (const row of selected) {
     summary.compared += 1;
@@ -752,7 +804,22 @@ export async function applyListingAiEnrichmentToListings(input: {
         })
         .where(eq(listing_ai_enrichment.id, row.id));
     }
+
+    if (
+      summary.compared % progressEvery === 0 ||
+      summary.compared === summary.selected
+    ) {
+      await emitProgress({
+        outcome: "progress",
+        listing_id: row.listing_id,
+      });
+    }
   }
+
+  await emitProgress({
+    outcome: "end",
+    message: "apply_complete",
+  });
 
   return summary;
 }
