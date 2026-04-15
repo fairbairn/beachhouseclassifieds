@@ -145,6 +145,7 @@ export const listing_source_link = pgTable(
       .notNull()
       .default("active"),
     confidence_score: numeric("confidence_score", { precision: 5, scale: 4 }),
+    excluded_by_match: boolean("excluded_by_match").notNull().default(false),
     first_seen_at: timestamp("first_seen_at", {
       mode: "string",
       withTimezone: true,

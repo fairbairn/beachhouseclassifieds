@@ -208,6 +208,8 @@
     "listings:enrichment:apply:evaluate:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:enrichment:apply:evaluate:raw --",
     "listings:enrichment:validate:raw": "tsx src/lib/scripts/run-ai-enrichment-validation.ts",
     "listings:enrichment:validate:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:enrichment:validate:raw --",
+    "listings:duplicates:analyze:raw": "tsx src/lib/scripts/run-listing-duplicate-analysis.ts",
+    "listings:duplicates:analyze:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:duplicates:analyze:raw --",
     "listings:fill-null-rooms:raw": "tsx src/lib/scripts/run-fill-null-bedroom-bathroom.ts",
     "listings:fill-null-rooms:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:fill-null-rooms:raw --",
     "occupancy:health:raw": "tsx src/lib/scripts/run-occupancy-health-check.ts",
