@@ -10,11 +10,11 @@ This document defines the baseline contract for all new scraper-engine adapters.
 
 ## Scope
 
-Applies to new adapters under `src/lib/scripts/scraper-engine/adapters/*` and engine entrypoints under `src/lib/scripts/scrape-*-engine.ts`.
+Applies to new adapters under `src/lib/pricing/scraper-engine/adapters/*` and the shared engine entrypoint `src/lib/scripts/run-scrape-engine.ts`.
 
 ## Shared CLI Contract (Already Standard)
 
-All adapter runs use the shared runner flags in `src/lib/scripts/scraper-engine/runner.ts`:
+All adapter runs use the shared runner flags in `src/lib/pricing/scraper-engine/runner.ts`:
 
 - `--max-listings`
 - `--start-index`
@@ -80,7 +80,7 @@ This is a minimum consistency target, not a hard cap: adapters may add richer di
 
 ## Foundation Helper
 
-Use `src/lib/scripts/scraper-engine/adapter-foundation.ts` in new adapters.
+Use `src/lib/pricing/scraper-engine/adapter-foundation.ts` in new adapters.
 
 Exports:
 

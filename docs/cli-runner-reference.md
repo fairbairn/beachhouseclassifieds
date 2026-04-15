@@ -4,6 +4,8 @@ This is the central operator reference for the main runtime and validation CLIs.
 
 Use this doc to avoid re-reading source every time you need a command or flag.
 
+For full inventory coverage of top-level scripts and package alias mapping, see `docs/scripts-catalog.md`.
+
 ## Conventions
 
 - Exit codes:
@@ -15,6 +17,8 @@ Use this doc to avoid re-reading source every time you need a command or flag.
   - Some also support positional `<adapter>`.
 - Data roots:
   - Canonical artifacts live under `src/lib/data/external-sources/<adapter>/details`.
+
+For listing-domain policy semantics (enrichment behavior, sleeping arrangement processing, duplicate analysis policy, and exclusion remap rules), use `docs/listings-operations-and-exclusion-spec.md` as the canonical operations spec.
 
 ## 1) Unified Adapter Operations
 
@@ -257,6 +261,35 @@ Quote refresh candidate pass with freshness skip:
 ```bash
 npm run pricing:quote:adapter -- --adapter-key funvacay30a --all-listings --skip-fresh-quotes --fresh-hours 24
 ```
+
+## 9) Listings Domain Operations
+
+Use when operating canonical listings, AI enrichment workflows, and duplicate suppression policy.
+
+Commands:
+
+- Duplicate analysis and reporting:
+  - `npm run listings:duplicates:analyze:postgres:local -- [flags]`
+- Pending enrichment processing:
+  - `npm run listings:enrichment:pending:postgres:local -- [flags]`
+- Enrichment apply:
+  - `npm run listings:enrichment:apply:postgres:local -- [flags]`
+- Enrichment source coverage:
+  - `npm run listings:enrichment:coverage:postgres:local -- [flags]`
+
+Exclusion remap flags on duplicate analysis runner:
+
+- `--sync-exclusions`
+- `--apply-exclusions`
+- `--sync-adapter-key <key>`
+- `--exclude-confidence-threshold <0..1>`
+- `--no-require-houselike`
+
+Important:
+
+- Exclusion sync touches only `listing_source_link` rows in scoped adapter set.
+- In sync mode, flags are reconciled both ways (`true` and `false`) to prevent stale state leakage.
+- Run dry-run first (omit `--apply-exclusions`) before applying writes.
 
 Quote validation + cache build:
 

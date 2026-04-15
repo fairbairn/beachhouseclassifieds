@@ -18,12 +18,12 @@ The scraper engine has three layers:
 
 Pattern:
 
-- `src/lib/scripts/scrape-<manager>-engine.ts`
+- `src/lib/scripts/run-scrape-engine.ts` with `--adapter-key <manager>`
 
 Responsibilities:
 
-- Import `create<Manager>Adapter()` from `src/lib/scripts/scraper-engine/adapters/*`
-- Call `runScraperEngine(adapter)`
+- Resolve adapter via registry from `src/lib/pricing/scraper-engine/adapters/*`
+- Call shared runner in `src/lib/pricing/scraper-engine/runner.ts`
 - Catch and print concise failure message
 - Exit non-zero on failure
 
@@ -31,12 +31,12 @@ Responsibilities:
 
 Pattern:
 
-- `src/lib/scripts/scraper-engine/adapters/<manager>.ts`
+- `src/lib/pricing/scraper-engine/adapters/<manager>.ts`
 
 Responsibilities:
 
 - Define manager-specific types and extraction logic
-- Implement `ScraperAdapter<TDetail>` contract from `src/lib/scripts/scraper-engine/types.ts`
+- Implement `ScraperAdapter<TDetail>` contract from `src/lib/pricing/scraper-engine/types.ts`
 - Normalize detail URLs (`isValidDetailUrl`)
 - Discover listing links (`discoverListings`)
 - Extract full detail record (`fetchDetail`)
@@ -45,7 +45,7 @@ Responsibilities:
 
 File:
 
-- `src/lib/scripts/scraper-engine/runner.ts`
+- `src/lib/pricing/scraper-engine/runner.ts`
 
 Responsibilities:
 
