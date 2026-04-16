@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { selectCanonicalArtifactFiles } from "@/lib/pricing/shared/canonical-index-listings";
+import { selectCanonicalListings } from "@/lib/pricing/shared/canonical-index-listings";
 
 type CliOptions = {
   adapterKey: string;
@@ -22,6 +22,11 @@ type ListingValidationFailure = {
   listingId: string;
   fileName: string;
   issues: string[];
+};
+
+type LoadedDetail = {
+  fileName: string;
+  parsed: DetailRecord;
 };
 
 const chalk = new Chalk({ level: 1 });
@@ -187,23 +192,22 @@ export async function runValidateRoomsGuidanceCoverageCli(
     "json",
   );
 
-  const files = await selectCanonicalArtifactFiles({
+  const listings = await selectCanonicalListings({
     adapterKey: options.adapterKey,
     listingId: options.listingId,
     maxListings: options.maxListings,
-    artifactDir: detailsJsonDir,
   });
 
-  if (files.listingIds.length === 0) {
+  if (listings.length === 0) {
     console.error(
       `No active listings selected from canonical index for adapter=${options.adapterKey}.`,
     );
     return 1;
   }
 
-  const validated = files.listingIds.length;
+  const validated = listings.length;
   let processedItems = 0;
-  const totalItems = files.fileNames.length + files.missingListingIds.length;
+  const totalItems = listings.length;
 
   let failed = 0;
   let passed = 0;
@@ -212,6 +216,7 @@ export async function runValidateRoomsGuidanceCoverageCli(
   let emptyArray = 0;
   let emptyAfterNormalization = 0;
   let strictLowSignal = 0;
+  let waivedFalse = 0;
   let totalGuidanceEntries = 0;
 
   const failures: ListingValidationFailure[] = [];
@@ -219,53 +224,81 @@ export async function runValidateRoomsGuidanceCoverageCli(
   if (!options.summaryOnly) {
     console.log(
       chalk.cyan(
-        `Rooms guidance validation adapter=${options.adapterKey} selected=${validated} files=${files.fileNames.length} missing_files=${files.missingListingIds.length} strict=${options.strict}`,
+        `Rooms guidance validation adapter=${options.adapterKey} selected=${validated} strict=${options.strict}`,
       ),
     );
   }
 
-  for (const missingListingId of files.missingListingIds) {
-    const missingFailure: ListingValidationFailure = {
-      listingId: missingListingId,
-      fileName: `${missingListingId}.json`,
-      issues: ["detail json file missing for active canonical listing"],
-    };
-
-    failures.push(missingFailure);
-    missingFile += 1;
-    failed += 1;
-    processedItems += 1;
-
-    if (!options.summaryOnly) {
-      printListingStatus({
-        index: processedItems,
-        total: totalItems,
-        listingId: missingFailure.listingId,
-        fileName: missingFailure.fileName,
-        status: "MISSING",
-        details: missingFailure.issues[0],
-      });
+  const loadDetailFromIndexCandidates = async (input: {
+    fileBaseNameCandidates: string[];
+  }): Promise<LoadedDetail | null> => {
+    for (const baseName of input.fileBaseNameCandidates) {
+      const fileName = `${baseName}.json`;
+      const filePath = resolve(detailsJsonDir, fileName);
+      try {
+        const raw = await readFile(filePath, "utf8");
+        return {
+          fileName,
+          parsed: JSON.parse(raw) as DetailRecord,
+        };
+      } catch {
+        // Continue trying next candidate derived from canonical index.
+      }
     }
-  }
 
-  for (const fileName of files.fileNames) {
-    const filePath = resolve(detailsJsonDir, fileName);
-    const fallbackListingId = fileName.replace(/\.json$/i, "");
+    return null;
+  };
 
-    let parsed: DetailRecord;
-    try {
-      const raw = await readFile(filePath, "utf8");
-      parsed = JSON.parse(raw) as DetailRecord;
-    } catch (error: unknown) {
+  for (const listing of listings) {
+    const fallbackListingId = listing.externalListingId;
+    const candidateBases = Array.from(
+      new Set([
+        listing.fileId,
+        listing.externalListingId,
+        listing.detailFileBaseName,
+      ]),
+    ).filter(Boolean);
+
+    const loaded = await loadDetailFromIndexCandidates({
+      fileBaseNameCandidates: candidateBases,
+    });
+
+    if (!loaded) {
+      const missingFailure: ListingValidationFailure = {
+        listingId: fallbackListingId,
+        fileName: `${candidateBases[0] ?? fallbackListingId}.json`,
+        issues: ["detail json file missing for active canonical listing"],
+      };
+
+      failures.push(missingFailure);
+      missingFile += 1;
+      failed += 1;
+      processedItems += 1;
+
+      if (!options.summaryOnly) {
+        printListingStatus({
+          index: processedItems,
+          total: totalItems,
+          listingId: missingFailure.listingId,
+          fileName: missingFailure.fileName,
+          status: "MISSING",
+          details: missingFailure.issues[0],
+        });
+      }
+      continue;
+    }
+
+    const fileName = loaded.fileName;
+    const parsed = loaded.parsed;
+
+    if (!parsed || typeof parsed !== "object") {
       failed += 1;
       processedItems += 1;
 
       const invalidFailure: ListingValidationFailure = {
         listingId: fallbackListingId,
         fileName,
-        issues: [
-          `invalid_json: ${error instanceof Error ? error.message : String(error)}`,
-        ],
+        issues: ["invalid_json: parsed payload is not an object"],
       };
       failures.push(invalidFailure);
 
@@ -291,6 +324,11 @@ export async function runValidateRoomsGuidanceCoverageCli(
     const issues: string[] = [];
     if (!("rooms_guidance" in parsed)) {
       issues.push("missing rooms_guidance field");
+      missingField += 1;
+    } else if (parsed.rooms_guidance === false) {
+      waivedFalse += 1;
+    } else if (parsed.rooms_guidance === null) {
+      issues.push("rooms_guidance is null");
       missingField += 1;
     } else if (!Array.isArray(parsed.rooms_guidance)) {
       issues.push("rooms_guidance is not an array");
@@ -358,6 +396,7 @@ export async function runValidateRoomsGuidanceCoverageCli(
   console.log(`- empty_array: ${emptyArray}`);
   console.log(`- empty_after_normalization: ${emptyAfterNormalization}`);
   console.log(`- strict_low_signal: ${strictLowSignal}`);
+  console.log(`- waived_false: ${waivedFalse}`);
 
   if (failed > 0) {
     console.error(

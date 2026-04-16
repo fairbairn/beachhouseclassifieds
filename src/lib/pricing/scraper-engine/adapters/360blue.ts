@@ -68,6 +68,7 @@ type DetailRecord360Blue = DetailRecordBase & {
   json_ld_name: string;
   json_ld_description: string;
   description_expanded: string;
+  rooms_guidance: false | string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -2132,6 +2133,7 @@ async function fetchDetail(
       json_ld_name: jsonLd.name,
       json_ld_description: jsonLd.description,
       description_expanded: descriptionExpanded,
+      rooms_guidance: false,
       amenities,
       location,
       media_gallery: mediaGallery,

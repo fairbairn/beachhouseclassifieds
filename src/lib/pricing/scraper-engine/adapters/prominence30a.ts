@@ -16,6 +16,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -284,6 +285,165 @@ function dedupePreserveOrder(values: string[]): string[] {
     out.push(normalized);
   }
   return out;
+}
+
+function extractRoomDetailsGuidanceFromHtml(html: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const hasSleepSignal = (value: string): boolean =>
+    /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|sleeper|daybed|futon|sleeps?/i.test(
+      value,
+    );
+
+  const sectionMatch = html.match(
+    /<section[^>]*id=["']room-details["'][^>]*>([\s\S]*?)<\/section>/i,
+  );
+  const sectionHtml = sectionMatch?.[1] ?? html;
+
+  const tables = Array.from(
+    sectionHtml.matchAll(/<table[^>]*>([\s\S]*?)<\/table>/gi),
+  );
+  for (const tableMatch of tables) {
+    const tableHtml = tableMatch[1] ?? "";
+    const headerText = stripHtml(tableHtml).toLowerCase();
+    if (!headerText.includes("room") || !headerText.includes("beds")) {
+      continue;
+    }
+
+    const rows = Array.from(tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
+    for (const rowMatch of rows) {
+      const rowHtml = rowMatch[1] ?? "";
+      const cells = Array.from(rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi));
+      if (cells.length < 2) {
+        continue;
+      }
+
+      const room = stripHtml(cells[0]?.[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const beds = stripHtml(cells[1]?.[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const comments = stripHtml(cells[4]?.[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!room) {
+        continue;
+      }
+
+      const signal = `${room} ${beds} ${comments}`;
+      if (!hasSleepSignal(signal)) {
+        continue;
+      }
+
+      const lineCore = beds ? `${room}: ${beds}` : room;
+      const line = comments ? `${lineCore} - ${comments}` : lineCore;
+      if (!line || seen.has(line)) {
+        continue;
+      }
+
+      seen.add(line);
+      out.push(line);
+    }
+  }
+
+  return out.slice(0, 80);
+}
+
+function extractRoomDetailsGuidanceFromDescription(text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const hasSleepSignal = (value: string): boolean =>
+    /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|sleeper|daybed|futon/i.test(
+      value,
+    );
+
+  const hasLayoutSignal = (value: string): boolean =>
+    /bedroom|guest\s*room|guestroom|master|bunk\s*room|bunk\s*area|loft|sleeper\s*sofa|additional\s*bedding|sleeping\s*arrangements/i.test(
+      value,
+    );
+
+  const normalized = stripHtml(text).replace(/\s+/g, " ").trim();
+
+  const pushIfValid = (value: string): void => {
+    const chunk = value.replace(/\s+/g, " ").trim();
+    if (chunk.length < 12 || chunk.length > 220) {
+      return;
+    }
+    if (!hasSleepSignal(chunk) || !hasLayoutSignal(chunk)) {
+      return;
+    }
+    if (seen.has(chunk)) {
+      return;
+    }
+
+    seen.add(chunk);
+    out.push(chunk);
+  };
+
+  // First pass: extract compact room-detail snippets from natural prose.
+  const matches = Array.from(
+    normalized.matchAll(
+      /(?:\b(?:first|second|third|1st|2nd|3rd)\b\s*)?(?:\b(?:bedroom|guest\s*room|guestroom|master|bunk\s*room|bunk\s*area|loft|additional\s*bedding|sleeping\s*arrangements)\b)[^*\n\.]{0,220}/gi,
+    ),
+  ).map((match) => (match[0] ?? "").replace(/\s+/g, " ").trim());
+
+  for (const chunk of matches) {
+    pushIfValid(chunk);
+  }
+
+  // Second pass: capture bullet/feature lines like "Bedroom 1: King bed ...".
+  const bulletCandidates = normalized
+    .split(/\s*(?:\u2022|\|)\s*/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 12 && part.length <= 280);
+  for (const candidate of bulletCandidates) {
+    const trimmed = candidate.replace(/^[\-:;,\s]+/, "").trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    // Keep only the leading room phrase to avoid pulling full marketing paragraphs.
+    const roomPhrase = trimmed
+      .split(
+        /(?=\b(?:bedroom\s*\d+|bathroom\s*\d+|sleeps?\b|about\b|features\b))|(?=\s{2,})/i,
+      )[0]
+      ?.trim();
+    if (!roomPhrase) {
+      continue;
+    }
+
+    pushIfValid(roomPhrase);
+  }
+
+  // Third pass: handle inline bedroom sequences in one long sentence.
+  const roomLabelPattern =
+    /\b(?:\d+(?:st|nd|rd|th)\s+bedroom|bedroom\s*\d+|bedroom|guest\s*room|master\s*bedroom|bunk\s*room|sleeping\s*arrangements)\b/gi;
+  const labelMatches = Array.from(normalized.matchAll(roomLabelPattern));
+  for (let index = 0; index < labelMatches.length; index += 1) {
+    const start = labelMatches[index]?.index;
+    if (typeof start !== "number") {
+      continue;
+    }
+
+    const nextStart = labelMatches[index + 1]?.index;
+    const rawSlice = normalized.slice(start, nextStart ?? start + 220);
+    const bounded = rawSlice
+      .split(
+        /\b(?:half\s+bathroom|bathroom\s*\d+|full-size\s+washer|complimentary|sleeps?\b|about\s+prominence|community|bonus\s+perks)\b/i,
+      )[0]
+      ?.trim();
+    if (!bounded) {
+      continue;
+    }
+
+    pushIfValid(bounded);
+  }
+
+  return out.slice(0, 80);
 }
 
 function parseFirstNumber(value: string): number | null {
@@ -1163,6 +1323,75 @@ async function extractDescriptionText(page: Page): Promise<string> {
   });
 }
 
+async function extractRoomDetailsGuidanceFromDom(
+  page: Page,
+): Promise<string[]> {
+  await clickTab(page, "Room Details");
+
+  return page.evaluate(() => {
+    const normalizeText = (value: string): string =>
+      value.replace(/\s+/g, " ").trim();
+
+    const hasSleepSignal = (value: string): boolean =>
+      /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|sleeper|daybed|futon|sleeps?/i.test(
+        value,
+      );
+
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    const tables = Array.from(
+      document.querySelectorAll(
+        '#room-details table, .streamline-rooms-details table, table[ng-if*="room_details"], table.table-bordered',
+      ),
+    );
+
+    for (const table of tables) {
+      const headerTexts = Array.from(table.querySelectorAll("thead th"))
+        .map((header) => normalizeText(header.textContent ?? "").toLowerCase())
+        .filter(Boolean);
+
+      if (
+        !headerTexts.includes("room details") ||
+        !headerTexts.includes("beds")
+      ) {
+        continue;
+      }
+
+      const rows = Array.from(table.querySelectorAll("tbody tr"));
+      for (const row of rows) {
+        const cells = Array.from(row.querySelectorAll("td"));
+        if (cells.length < 2) {
+          continue;
+        }
+
+        const room = normalizeText(cells[0]?.textContent ?? "");
+        const beds = normalizeText(cells[1]?.textContent ?? "");
+        const comments = normalizeText(cells[4]?.textContent ?? "");
+        if (!room) {
+          continue;
+        }
+
+        const signal = `${room} ${beds} ${comments}`;
+        if (!hasSleepSignal(signal)) {
+          continue;
+        }
+
+        const lineCore = beds ? `${room}: ${beds}` : room;
+        const line = comments ? `${lineCore} - ${comments}` : lineCore;
+        if (!line || seen.has(line)) {
+          continue;
+        }
+
+        seen.add(line);
+        out.push(line);
+      }
+    }
+
+    return out.slice(0, 80);
+  });
+}
+
 async function fetchDetail(
   browser: Browser,
   detailUrl: string,
@@ -1637,11 +1866,22 @@ async function fetchDetail(
       stripHtml(descriptionText).slice(0, 30000) ||
       extractListingAboutFromHtml(html)
     ).slice(0, 30000);
+    const domRoomDetailsGuidance =
+      await extractRoomDetailsGuidanceFromDom(page);
     const rcavIdentity = extractRcavIdentity({
       listingId: externalListingId,
       descriptionExpanded,
       detailHtml: html,
     });
+    const htmlRoomDetailsGuidance = extractRoomDetailsGuidanceFromHtml(html);
+    const descriptionRoomDetailsGuidance =
+      extractRoomDetailsGuidanceFromDescription(descriptionExpanded);
+    const roomDetailsGuidance =
+      domRoomDetailsGuidance.length > 0
+        ? domRoomDetailsGuidance
+        : htmlRoomDetailsGuidance.length > 0
+          ? htmlRoomDetailsGuidance
+          : descriptionRoomDetailsGuidance;
 
     const locationPayload = extractFieldLocationFromHtml(html);
 
@@ -1798,6 +2038,7 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomDetailsGuidance,
       amenities,
       location,
       media_gallery: mediaGallery,
