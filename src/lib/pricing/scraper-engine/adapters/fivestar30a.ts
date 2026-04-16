@@ -3,6 +3,7 @@ import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-a
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { Browser } from "playwright";
 
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
@@ -49,6 +50,7 @@ type FiveStarDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -394,6 +396,37 @@ function extractExternalListingId(detailUrl: string, html: string): string {
   }
 
   return detailUrl;
+}
+
+function extractRoomsGuidanceFromHtmlRoomCards(html: string): string[] {
+  const sectionMatch = html.match(
+    /<section[^>]+id=["']roomcards["'][^>]*>([\s\S]*?)<\/section>/i,
+  );
+  if (!sectionMatch?.[1]) {
+    return [];
+  }
+
+  const out: string[] = [];
+  const roomCardRegex =
+    /<div[^>]*class=["'][^"']*roomcard[^"']*["'][^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>([\s\S]*?)<\/div>\s*<\/div>/gi;
+
+  for (const match of sectionMatch[1].matchAll(roomCardRegex)) {
+    const roomName = stripHtml(match[1] ?? "").trim();
+    const body = match[2] ?? "";
+    const features = Array.from(body.matchAll(/<div[^>]*>([\s\S]*?)<\/div>/gi))
+      .map((part) => stripHtml(part[1] ?? "").trim())
+      .filter(Boolean);
+
+    if (!roomName && features.length === 0) {
+      continue;
+    }
+
+    out.push(
+      features.length > 0 ? `${roomName} | ${features.join(", ")}` : roomName,
+    );
+  }
+
+  return dedupePreserveOrder(out);
 }
 
 function parseSlashDate(value: string): Date | null {
@@ -871,6 +904,7 @@ async function discoverListings(
 }
 
 async function fetchDetail(
+  browser: Browser,
   detailUrl: string,
   availabilityHorizonDays: number,
 ): Promise<FiveStarDetailRecord | null> {
@@ -879,28 +913,27 @@ async function fetchDetail(
     return null;
   }
 
-  const headers = {
-    "user-agent":
+  const page = await browser.newPage({
+    userAgent:
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    referer: DEFAULT_ANCHOR_URL,
-  };
+  });
 
   try {
-    const response = await fetch(normalizedDetailUrl, {
-      method: "GET",
-      redirect: "follow",
-      headers,
+    const response = await page.goto(normalizedDetailUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 120000,
     });
 
-    const contentType = (
-      response.headers.get("content-type") || ""
-    ).toLowerCase();
-    if (response.status !== 200 || !contentType.includes("text/html")) {
+    const statusCode = response?.status() ?? 0;
+    if (statusCode >= 400) {
       return null;
     }
 
-    const html = await response.text();
+    await page.waitForTimeout(1200);
+    const html = await page.content();
+    if (!html || html.length < 500) {
+      return null;
+    }
     const externalListingId = extractExternalListingId(
       normalizedDetailUrl,
       html,
@@ -1222,6 +1255,52 @@ async function fetchDetail(
 
     const descriptionExpanded = description;
 
+    const roomsGuidanceFromCards: string[] = [];
+    for (const room of roomCards) {
+      if (!room || typeof room !== "object") {
+        continue;
+      }
+
+      const roomNameRaw = (room as { room_name?: unknown }).room_name;
+      const roomName =
+        typeof roomNameRaw === "string" ? stripHtml(roomNameRaw).trim() : "";
+      const features: string[] = [];
+
+      const roomAmenitiesRaw = (room as { room_group_amens?: unknown })
+        .room_group_amens;
+      if (typeof roomAmenitiesRaw === "string" && roomAmenitiesRaw.trim()) {
+        try {
+          const parsedRoomAmenities = JSON.parse(roomAmenitiesRaw) as unknown;
+          if (Array.isArray(parsedRoomAmenities)) {
+            for (const entry of parsedRoomAmenities) {
+              if (typeof entry !== "string") {
+                continue;
+              }
+              const clean = stripHtml(entry).trim();
+              if (clean) {
+                features.push(clean);
+              }
+            }
+          }
+        } catch {
+          // Ignore malformed room amenity payloads.
+        }
+      }
+
+      if (!roomName && features.length === 0) {
+        continue;
+      }
+
+      roomsGuidanceFromCards.push(
+        features.length > 0 ? `${roomName} | ${features.join(", ")}` : roomName,
+      );
+    }
+
+    const roomsGuidance =
+      dedupePreserveOrder(roomsGuidanceFromCards).length > 0
+        ? dedupePreserveOrder(roomsGuidanceFromCards)
+        : extractRoomsGuidanceFromHtmlRoomCards(html);
+
     const amenitiesCategories: Record<string, string[]> = {};
     const amenitiesAll: string[] = [];
     const seenAmenity = new Set<string>();
@@ -1400,6 +1479,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomsGuidance,
       amenities: {
         categories: amenitiesCategories,
         all: amenitiesAll,
@@ -1506,8 +1586,14 @@ async function fetchDetail(
         detail_url: normalizedDetailUrl,
       },
     };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `[fivestar30a] detail pull failed for ${normalizedDetailUrl}: ${message}`,
+    );
     return null;
+  } finally {
+    await page.close();
   }
 }
 
@@ -1542,7 +1628,11 @@ export function createFiveStar30AAdapter(): ScraperAdapter<FiveStarDetailRecord>
       );
     },
     async fetchDetail(context) {
-      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+      return fetchDetail(
+        context.browser,
+        context.detailUrl,
+        context.availabilityHorizonDays,
+      );
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
