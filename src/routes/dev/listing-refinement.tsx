@@ -34,7 +34,6 @@ type Snapshot = {
   highlights: unknown;
   helpful_hints: unknown;
   sleeping_arrangements: unknown;
-  sleeping_rollups: unknown;
   amenities_normalized: unknown;
   ai_refinement: Record<string, unknown> | null;
 };

@@ -153,6 +153,26 @@ function parseNumberLike(
   return numeric;
 }
 
+function parseCoordinateLike(
+  value: string | number | null | undefined,
+  axis: "lat" | "lng",
+): number | null {
+  const parsed = parseNumberLike(value);
+  if (parsed === null) {
+    return null;
+  }
+
+  if (Math.abs(parsed) < 1e-9) {
+    return null;
+  }
+
+  if (axis === "lat") {
+    return parsed >= -90 && parsed <= 90 ? parsed : null;
+  }
+
+  return parsed >= -180 && parsed <= 180 ? parsed : null;
+}
+
 function parsePositiveNumberLike(
   value: string | number | null | undefined,
 ): number | null {
@@ -250,6 +270,15 @@ function extractJsonLdObjects(html: string): Array<Record<string, unknown>> {
         }
       } else if (parsed && typeof parsed === "object") {
         objects.push(parsed as Record<string, unknown>);
+
+        const graph = (parsed as Record<string, unknown>)["@graph"];
+        if (Array.isArray(graph)) {
+          for (const item of graph) {
+            if (item && typeof item === "object") {
+              objects.push(item as Record<string, unknown>);
+            }
+          }
+        }
       }
     } catch {
       // Ignore malformed JSON-LD blocks.
@@ -257,6 +286,65 @@ function extractJsonLdObjects(html: string): Array<Record<string, unknown>> {
   }
 
   return objects;
+}
+
+function extractGeoFromJsonLdObjects(
+  jsonLdObjects: Array<Record<string, unknown>>,
+): { latitude: number; longitude: number } | null {
+  for (const object of jsonLdObjects) {
+    const latDirect = parseCoordinateLike(
+      object.latitude as string | number | null,
+      "lat",
+    );
+    const lngDirect = parseCoordinateLike(
+      object.longitude as string | number | null,
+      "lng",
+    );
+    if (latDirect !== null && lngDirect !== null) {
+      return { latitude: latDirect, longitude: lngDirect };
+    }
+
+    const geo =
+      object && typeof object.geo === "object"
+        ? (object.geo as Record<string, unknown>)
+        : null;
+    if (!geo) {
+      continue;
+    }
+
+    const latGeo = parseCoordinateLike(
+      geo.latitude as string | number | null,
+      "lat",
+    );
+    const lngGeo = parseCoordinateLike(
+      geo.longitude as string | number | null,
+      "lng",
+    );
+    if (latGeo !== null && lngGeo !== null) {
+      return { latitude: latGeo, longitude: lngGeo };
+    }
+  }
+
+  return null;
+}
+
+function extractGoogleMapsHrefGeo(
+  html: string,
+): { latitude: number; longitude: number } | null {
+  const match = html.match(
+    /https?:\/\/www\.google\.com\/maps\/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),/i,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const latitude = parseCoordinateLike(match[1], "lat");
+  const longitude = parseCoordinateLike(match[2], "lng");
+  if (latitude === null || longitude === null) {
+    return null;
+  }
+
+  return { latitude, longitude };
 }
 
 function collectMediaUrls(
@@ -702,6 +790,8 @@ async function fetchDetail(
       jsonLdContainsPlace && typeof jsonLdContainsPlace.occupancy === "object"
         ? (jsonLdContainsPlace.occupancy as Record<string, unknown>)
         : null;
+    const jsonLdAnyGeo = extractGeoFromJsonLdObjects(jsonLdObjects);
+    const googleMapsHrefGeo = extractGoogleMapsHrefGeo(html);
 
     const location = {
       address: stripHtml(
@@ -719,10 +809,22 @@ async function fetchDetail(
       state: String(jsonLdAddress?.addressRegion ?? "").trim(),
       postal_code: String(jsonLdAddress?.postalCode ?? "").trim(),
       country: String(jsonLdAddress?.addressCountry ?? "").trim(),
-      latitude: parseNumberLike(jsonLdGeo?.latitude as string | number | null),
-      longitude: parseNumberLike(
-        jsonLdGeo?.longitude as string | number | null,
-      ),
+      latitude:
+        parseCoordinateLike(
+          jsonLdGeo?.latitude as string | number | null,
+          "lat",
+        ) ??
+        jsonLdAnyGeo?.latitude ??
+        googleMapsHrefGeo?.latitude ??
+        null,
+      longitude:
+        parseCoordinateLike(
+          jsonLdGeo?.longitude as string | number | null,
+          "lng",
+        ) ??
+        jsonLdAnyGeo?.longitude ??
+        googleMapsHrefGeo?.longitude ??
+        null,
     };
 
     const capacitySourceText = stripHtml(html);

@@ -7,6 +7,7 @@ type Options = {
   listingId: string | null;
   slug: string | null;
   model: string | null;
+  rebuildHelpfulHints: boolean;
   dryRun: boolean;
 };
 
@@ -70,6 +71,9 @@ function printUsage(): void {
   console.log("  --listing-id <id>   Canonical listing id");
   console.log("  --slug <slug>       Canonical listing slug");
   console.log("  --model <name>      OpenAI model (default gpt-5.4-nano)");
+  console.log(
+    "  --rebuild-helpful-hints  Rebuild helpful_hints with stricter sentence-quality rules",
+  );
   console.log("  --dry-run           Generate output without persisting");
   console.log("  --help              Show help");
 }
@@ -78,6 +82,7 @@ function parseArgs(argv: string[]): Options {
   let listingId: string | null = null;
   let slug: string | null = null;
   let model: string | null = null;
+  let rebuildHelpfulHints = false;
   let dryRun = false;
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -121,6 +126,11 @@ function parseArgs(argv: string[]): Options {
       continue;
     }
 
+    if (arg === "--rebuild-helpful-hints") {
+      rebuildHelpfulHints = true;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -132,6 +142,7 @@ function parseArgs(argv: string[]): Options {
     listingId,
     slug,
     model,
+    rebuildHelpfulHints,
     dryRun,
   };
 }
@@ -152,6 +163,7 @@ async function run(): Promise<number> {
   const result = await executeListingAiEnrichment({
     snapshot,
     model: options.model ?? undefined,
+    rebuildHelpfulHints: options.rebuildHelpfulHints,
     persist: !options.dryRun,
   });
 
@@ -167,7 +179,7 @@ async function run(): Promise<number> {
   });
 
   console.log(
-    `listing_refinement_complete listing_id=${snapshot.listing_id} slug=${snapshot.slug} dry_run=${options.dryRun} save_target=${options.dryRun ? "none" : "listing_ai_enrichment"} model=${result.model}`,
+    `listing_refinement_complete listing_id=${snapshot.listing_id} slug=${snapshot.slug} dry_run=${options.dryRun} rebuild_helpful_hints=${options.rebuildHelpfulHints} save_target=${options.dryRun ? "none" : "listing_ai_enrichment"} model=${result.model}`,
   );
   console.log(
     `listing_refinement_usage input_tokens=${inputTokens} output_tokens=${outputTokens} total_tokens=${totalTokens}`,

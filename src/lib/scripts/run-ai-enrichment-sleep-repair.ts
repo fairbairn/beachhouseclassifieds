@@ -46,7 +46,6 @@ type SleepMatch = {
 
 type SleepRepairAttemptResult = {
   sleeping_arrangements: unknown[];
-  sleeping_rollups: Record<string, number>;
   modelUsed: string | null;
   resolvedBy: "primary" | "secondary" | "deterministic" | "none";
   attempts: string[];
@@ -479,50 +478,6 @@ function isSleepTolerancePass(
   return match.delta === -1 && hasMeaningfulSleepEnvironment(rollups);
 }
 
-function buildSleepingUxSummary(
-  rollups: Record<string, number>,
-  expectedSleeps: number | null,
-): Record<string, number | boolean> {
-  const match = evaluateSleepCapacityMatch({ rollups, expectedSleeps });
-  const countKing = normalizeCount(rollups.bed_count_king);
-  const countQueen = normalizeCount(rollups.bed_count_queen);
-  const countFull = normalizeCount(rollups.bed_count_full);
-  const countTwinStandalone = normalizeCount(
-    rollups.bed_count_twin_standalone ?? rollups.bed_count_twin,
-  );
-  const countBunkUnits = normalizeCount(
-    rollups.bunk_unit_count_total ?? rollups.bed_count_bunk_total,
-  );
-  const countBunkSleepsTotal = normalizeCount(
-    rollups.bunk_sleep_slot_count_total,
-  );
-  const countSleepingSurfacesTotal =
-    countKing +
-    countQueen +
-    countFull +
-    countTwinStandalone +
-    normalizeCount(rollups.bed_count_sofa_bed) +
-    normalizeCount(rollups.bed_count_daybed) +
-    normalizeCount(rollups.bed_count_trundle) +
-    normalizeCount(rollups.bed_count_murphy) +
-    normalizeCount(rollups.bed_count_air_mattress) +
-    normalizeCount(rollups.bed_count_futon);
-
-  return {
-    count_king: countKing,
-    count_queen: countQueen,
-    count_full: countFull,
-    count_twin_standalone: countTwinStandalone,
-    count_bunk_units: countBunkUnits,
-    count_bunk_sleeps_total: countBunkSleepsTotal,
-    count_sleeping_surfaces_total: countSleepingSurfacesTotal,
-    sleep_capacity_from_rollups: match.derived,
-    sleep_capacity_target: match.target ?? 0,
-    sleep_capacity_delta: match.delta,
-    sleep_capacity_aligned: match.matches,
-  };
-}
-
 function reduceCapacity(
   rollups: Record<string, number>,
   requiredReduction: number,
@@ -651,9 +606,46 @@ function deriveArrangementsFromRollups(
       room_role: "other",
       sleeps: match.target ?? match.derived,
       beds,
-      notes: "Sleep-only repair derivation from sleeping_rollups.",
+      notes: "Sleep-only repair derivation from sleeping_summary.",
     },
   ];
+}
+
+function buildSleepingSummaryFromRollups(
+  rollups: Record<string, number>,
+  expectedSleeps: number | null,
+): Record<string, unknown> {
+  const derivedTotal = estimateSleepCapacityFromRollups(rollups);
+  const targetSleeps =
+    expectedSleeps === null ? 0 : Math.max(0, Math.round(expectedSleeps));
+
+  return {
+    bed_counts: {
+      king: normalizeCount(rollups.bed_count_king),
+      queen: normalizeCount(rollups.bed_count_queen),
+      full: normalizeCount(rollups.bed_count_full),
+      twin_standalone: normalizeCount(rollups.bed_count_twin),
+      bunk_beds: normalizeCount(rollups.bed_count_bunk_total),
+      other: 0,
+    },
+    bunk_configurations: {
+      default_twin_over_twin: normalizeCount(
+        rollups.bed_count_twin_over_twin_bunk,
+      ),
+      twin_over_full: normalizeCount(rollups.bed_count_twin_over_full_bunk),
+      full_over_full: normalizeCount(rollups.bed_count_full_over_full_bunk),
+      queen_over_queen: normalizeCount(rollups.bed_count_queen_over_queen_bunk),
+      twin_over_queen: normalizeCount(rollups.bed_count_twin_over_queen_bunk),
+      twin_over_king: normalizeCount(rollups.bed_count_twin_over_king_bunk),
+      other: 0,
+    },
+    sleep_capacity: {
+      derived_total: derivedTotal,
+      target_sleeps: targetSleeps,
+      delta: derivedTotal - targetSleeps,
+      aligned: derivedTotal === targetSleeps,
+    },
+  };
 }
 
 function deterministicSleepRepair(input: {
@@ -879,11 +871,14 @@ async function repairSleepForRow(input: {
   let currentArrangements = normalizeSleepingArrangements(
     outputPayload.sleeping_arrangements,
   );
-  let currentRollups = normalizeSleepingRollups(
-    outputPayload.sleeping_rollups,
-    expectedSleeps,
-  );
   let currentSummary = asObject(outputPayload.sleeping_summary);
+  let currentRollups =
+    currentArrangements.length > 0
+      ? deriveRollupsFromArrangements(currentArrangements, expectedSleeps)
+      : deriveRollupsFromSleepingSummary({
+          summary: currentSummary,
+          expectedSleeps,
+        });
 
   const attempts: string[] = [];
   const attemptErrors: string[] = [];
@@ -977,9 +972,10 @@ async function repairSleepForRow(input: {
   const nextOutputPayload = {
     ...outputPayload,
     sleeping_arrangements: currentArrangements,
-    sleeping_summary: currentSummary,
-    sleeping_rollups: currentRollups,
-    sleeping_ux_summary: buildSleepingUxSummary(currentRollups, expectedSleeps),
+    sleeping_summary:
+      Object.keys(currentSummary).length > 0
+        ? currentSummary
+        : buildSleepingSummaryFromRollups(currentRollups, expectedSleeps),
   } as Record<string, unknown>;
 
   const nextAuditPayload = {

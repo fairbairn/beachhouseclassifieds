@@ -146,7 +146,7 @@ export function DiscoverSortLayoutControls({
               aria-hidden="true"
               className="inline-flex h-7 items-center justify-center rounded-md px-2.5 text-xs font-semibold whitespace-nowrap text-transparent"
             >
-              {count} cards
+              {count}
             </span>
           ))}
           <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center text-xs font-semibold whitespace-nowrap text-slate-500">
@@ -170,7 +170,7 @@ export function DiscoverSortLayoutControls({
                 aria-label={`${count} cards per row`}
                 title={`${count} cards per row`}
               >
-                {count} cards
+                {count}
               </button>
             );
           })}

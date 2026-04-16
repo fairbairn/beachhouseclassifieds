@@ -27,6 +27,30 @@ export type DiscoverListing = {
   typicalPricingMonth: string;
   typicalBaseNightly: number;
   typicalAllInNightly: number;
+  descriptionHeadline?: string;
+  descriptionMarkdown?: string;
+  description?: string;
+  highlightsList?: string[];
+  helpfulHints?: string[];
+  sleepingArrangements?: string[];
+  amenitiesList?: string[];
+  nearbyPoints?: string[];
+  checkInTime?: string;
+  checkOutTime?: string;
+  imageGallery?: Array<{
+    name: string;
+    url: string;
+  }>;
+  availabilityCalendar?: Record<string, number>;
+  sleepingSummary?: {
+    bed_counts?: {
+      king?: number;
+      queen?: number;
+      full?: number;
+      twin_standalone?: number;
+      bunk_beds?: number;
+    };
+  };
 };
 
 export const googleMapsApiKey =

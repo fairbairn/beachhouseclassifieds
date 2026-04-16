@@ -42,7 +42,7 @@ Primary CLIs:
 
 Current behavior:
 
-1. Enrichment output contract requires `sleeping_arrangements` and `sleeping_rollups`.
+1. Enrichment output contract requires `sleeping_arrangements` and `sleeping_summary`.
 2. Search projection derives canonical bed-type rollups from `sleeping_arrangements`.
 3. Invalid or absent structures degrade safely to zeroed rollups (no runtime crash path).
 

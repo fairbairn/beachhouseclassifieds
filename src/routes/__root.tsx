@@ -92,6 +92,7 @@ function RootDocument({ children }: { children: ReactNode }) {
     pathname === "/" ||
     pathname === "/home" ||
     pathname === "/discover" ||
+    pathname.startsWith("/discover/") ||
     pathname === "/plan" ||
     pathname === "/logo-capture";
   const header = isLoginPage ? (

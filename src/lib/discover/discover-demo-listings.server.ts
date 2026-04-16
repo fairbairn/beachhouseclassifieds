@@ -9,11 +9,16 @@ const TARGET_LISTING_COUNT = 96;
 type RawListing = {
   id?: unknown;
   name?: unknown;
+  amenities?: {
+    items?: unknown;
+  };
   address?: {
     city?: unknown;
     display?: unknown;
   };
   location?: {
+    description?: unknown;
+    nearbyPOIs?: unknown;
     title?: unknown;
   };
   coordinate?: {
@@ -21,6 +26,9 @@ type RawListing = {
     longitude?: unknown;
   };
   gallery?: unknown;
+  faqs?: {
+    general?: unknown;
+  };
   highlights?: unknown;
   spaces?: unknown;
   policies?: {
@@ -92,6 +100,39 @@ function normalizeTextList(value: unknown): string[] {
   return output;
 }
 
+function sanitizeText(value: string): string {
+  return value
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/[\t\r]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function normalizeSanitizedTextList(value: unknown): string[] {
+  return normalizeTextList(value)
+    .map((item) => sanitizeText(item))
+    .filter((item) => item.length > 0);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const value of values) {
+    const normalized = value.toLowerCase();
+    if (seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    output.push(value);
+  }
+
+  return output;
+}
+
 function parseFirstMatchNumber(text: string, pattern: RegExp): number | null {
   const matched = text.match(pattern);
   if (!matched?.[1]) {
@@ -117,6 +158,35 @@ function extractGalleryUrls(gallery: unknown): string[] {
   }
 
   return Array.from(urls).slice(0, 4);
+}
+
+function extractGallery(
+  gallery: unknown,
+): Array<{ name: string; url: string }> {
+  if (!Array.isArray(gallery)) {
+    return [];
+  }
+
+  const output: Array<{ name: string; url: string }> = [];
+  const seenUrls = new Set<string>();
+
+  for (const item of gallery) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const url = asString(Reflect.get(item, "url"));
+    if (!url || seenUrls.has(url)) {
+      continue;
+    }
+
+    seenUrls.add(url);
+    output.push({
+      name: asString(Reflect.get(item, "name")) ?? "Property image",
+      url,
+    });
+  }
+
+  return output;
 }
 
 function inferBedsFromHighlights(lines: string[]): {
@@ -194,6 +264,115 @@ function extractPolicyText(items: unknown): string[] {
   return out;
 }
 
+function extractAmenities(items: unknown): string[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const values: string[] = [];
+
+  for (const section of items) {
+    if (!section || typeof section !== "object") {
+      continue;
+    }
+    const sectionItems = Reflect.get(section, "items");
+    if (!Array.isArray(sectionItems)) {
+      continue;
+    }
+    for (const item of sectionItems) {
+      if (typeof item === "string") {
+        values.push(sanitizeText(item));
+      }
+    }
+  }
+
+  return uniqueStrings(values.filter((value) => value.length > 0));
+}
+
+function extractNearbyPoints(nearbyPOIs: unknown): string[] {
+  if (!Array.isArray(nearbyPOIs)) {
+    return [];
+  }
+
+  const values: string[] = [];
+  for (const group of nearbyPOIs) {
+    if (!group || typeof group !== "object") {
+      continue;
+    }
+    const items = Reflect.get(group, "items");
+    if (!Array.isArray(items)) {
+      continue;
+    }
+    for (const item of items) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const text = asString(Reflect.get(item, "text"));
+      const more = asString(Reflect.get(item, "more"));
+      if (!text) {
+        continue;
+      }
+      values.push(more ? `${text} (${more})` : text);
+    }
+  }
+
+  return uniqueStrings(values);
+}
+
+function extractFaqHints(generalFaqs: unknown): string[] {
+  if (!Array.isArray(generalFaqs)) {
+    return [];
+  }
+
+  const values: string[] = [];
+  for (const item of generalFaqs) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const answer = asString(Reflect.get(item, "answer"));
+    if (answer) {
+      values.push(sanitizeText(answer));
+    }
+  }
+
+  return uniqueStrings(values);
+}
+
+function extractCheckTimes(policyItems: unknown): {
+  checkInTime?: string;
+  checkOutTime?: string;
+} {
+  const policyText = extractPolicyText(policyItems).map((text) =>
+    sanitizeText(text),
+  );
+
+  let checkInTime: string | undefined;
+  let checkOutTime: string | undefined;
+
+  for (const line of policyText) {
+    if (!checkInTime) {
+      const matched = line.match(/check\s*in\s*(?:after)?\s*([\d:\sAPMapm]+)/i);
+      if (matched?.[1]) {
+        checkInTime = matched[1].trim();
+      }
+    }
+
+    if (!checkOutTime) {
+      const matched = line.match(
+        /check\s*out\s*(?:before)?\s*([\d:\sAPMapm]+)/i,
+      );
+      if (matched?.[1]) {
+        checkOutTime = matched[1].trim();
+      }
+    }
+  }
+
+  return {
+    checkInTime,
+    checkOutTime,
+  };
+}
+
 function inferTypicalPriceLabel(raw: RawListing): string {
   const rates = raw.calendarRates;
   const values: number[] = [];
@@ -219,6 +398,27 @@ function inferTypicalPriceLabel(raw: RawListing): string {
   }
 
   return "$5.0k - $8.0k";
+}
+
+function extractAvailabilityCalendar(raw: RawListing): Record<string, number> {
+  const rates = raw.calendarRates;
+  if (!rates || typeof rates !== "object") {
+    return {};
+  }
+
+  const out: Record<string, number> = {};
+  for (const [dateIso, value] of Object.entries(rates)) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    const parsed = Number(value.replace(/[^\d.]/g, ""));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      continue;
+    }
+    out[dateIso] = Math.round(parsed);
+  }
+
+  return out;
 }
 
 function inferTypicalNightly(raw: RawListing): {
@@ -280,9 +480,11 @@ function mapListing(raw: RawListing): DiscoverListing | null {
     return null;
   }
 
-  const highlights = normalizeTextList(raw.highlights);
-  const spaces = normalizeTextList(raw.spaces);
-  const descriptionLines = normalizeTextList(raw.description?.about?.items);
+  const highlights = normalizeSanitizedTextList(raw.highlights);
+  const spaces = normalizeSanitizedTextList(raw.spaces);
+  const descriptionLines = normalizeSanitizedTextList(
+    raw.description?.about?.items,
+  );
   const allSignals = [...highlights, ...spaces, ...descriptionLines];
 
   const inferred = inferBedsFromHighlights(allSignals);
@@ -309,12 +511,38 @@ function mapListing(raw: RawListing): DiscoverListing | null {
     asString(raw.address?.display) ??
     "30A";
 
+  const gallery = extractGallery(raw.gallery);
   const imageUrls = extractGalleryUrls(raw.gallery);
+  const amenities = extractAmenities(raw.amenities?.items);
+  const nearbyPoints = extractNearbyPoints(raw.location?.nearbyPOIs);
+  const faqHints = extractFaqHints(raw.faqs?.general);
+  const checkTimes = extractCheckTimes(raw.policies?.items);
+
+  const description =
+    descriptionLines.find((line) => line.length > 60) ??
+    descriptionLines[0] ??
+    highlights.join(" • ");
+  const trimmedDescription =
+    description.length > 800
+      ? `${description.slice(0, 797).trimEnd()}...`
+      : description;
+
+  const helpfulHints = uniqueStrings([
+    ...extractPolicyText(raw.policies?.items).map((item) => sanitizeText(item)),
+    ...faqHints,
+  ]).slice(0, 8);
+
+  const sleepingArrangements = uniqueStrings(
+    spaces.filter((line) =>
+      /bed|bedroom|bathroom|sleeps?|sofa|bunk|trundle/i.test(line),
+    ),
+  ).slice(0, 10);
   const hasPetsAllowed = /pets?\s+allowed|pet[-\s]?friendly/i.test(policyText);
   const hasNoPets = /no\s+pets?\s+allowed|pets?\s+not\s+allowed/i.test(
     policyText,
   );
   const nightlyPricing = inferTypicalNightly(raw);
+  const availabilityCalendar = extractAvailabilityCalendar(raw);
 
   return {
     id,
@@ -340,6 +568,16 @@ function mapListing(raw: RawListing): DiscoverListing | null {
     typicalPricingMonth: nightlyPricing.typicalPricingMonth,
     typicalBaseNightly: nightlyPricing.typicalBaseNightly,
     typicalAllInNightly: nightlyPricing.typicalAllInNightly,
+    description: trimmedDescription,
+    highlightsList: uniqueStrings(highlights).slice(0, 10),
+    helpfulHints,
+    sleepingArrangements,
+    amenitiesList: amenities.slice(0, 24),
+    nearbyPoints: nearbyPoints.slice(0, 10),
+    checkInTime: checkTimes.checkInTime,
+    checkOutTime: checkTimes.checkOutTime,
+    imageGallery: gallery.slice(0, 24),
+    availabilityCalendar,
     lat,
     lng,
   };

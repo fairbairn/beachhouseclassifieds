@@ -88,6 +88,7 @@ export type EnrichmentApplyProgressEvent = {
 
 const LISTING_ENRICHMENT_TARGET_FIELDS = [
   "description_markdown",
+  "description_headline_plain",
   "description_short_plain",
   "seo_meta_title",
   "seo_meta_description",
@@ -95,7 +96,7 @@ const LISTING_ENRICHMENT_TARGET_FIELDS = [
   "highlights",
   "helpful_hints",
   "sleeping_arrangements",
-  "sleeping_rollups",
+  "sleeping_summary",
   "amenities_normalized",
 ] as const;
 
@@ -151,10 +152,12 @@ export async function executeListingAiEnrichment(input: {
   snapshot: ListingRefinementSnapshot;
   model?: string;
   persist: boolean;
+  rebuildHelpfulHints?: boolean;
 }): Promise<RefinementResult> {
   const result = await generateListingRefinement({
     snapshot: input.snapshot,
     model: input.model,
+    rebuildHelpfulHints: input.rebuildHelpfulHints,
   });
 
   if (input.persist) {
@@ -181,6 +184,8 @@ function buildListingProjectionFromEnrichment(
 ): Record<string, unknown> {
   return {
     description_markdown: outputPayload.description_markdown ?? null,
+    description_headline_plain:
+      outputPayload.description_headline_plain ?? null,
     description_short_plain: outputPayload.description_short_plain ?? null,
     seo_meta_title: outputPayload.seo_meta_title ?? null,
     seo_meta_description: outputPayload.seo_meta_description ?? null,
@@ -188,13 +193,14 @@ function buildListingProjectionFromEnrichment(
     highlights: outputPayload.highlights ?? [],
     helpful_hints: outputPayload.helpful_hints ?? [],
     sleeping_arrangements: outputPayload.sleeping_arrangements ?? [],
-    sleeping_rollups: outputPayload.sleeping_rollups ?? {},
+    sleeping_summary: outputPayload.sleeping_summary ?? {},
     amenities_normalized: outputPayload.amenities_normalized ?? [],
   };
 }
 
 function buildListingProjectionFromListingRow(row: {
   description_markdown: string | null;
+  description_headline_plain: string | null;
   description_short_plain: string | null;
   seo_meta_title: string | null;
   seo_meta_description: string | null;
@@ -202,11 +208,12 @@ function buildListingProjectionFromListingRow(row: {
   highlights: unknown;
   helpful_hints: unknown;
   sleeping_arrangements: unknown;
-  sleeping_rollups: unknown;
+  sleeping_summary: unknown;
   amenities_normalized: unknown;
 }): Record<string, unknown> {
   return {
     description_markdown: row.description_markdown ?? null,
+    description_headline_plain: row.description_headline_plain ?? null,
     description_short_plain: row.description_short_plain ?? null,
     seo_meta_title: row.seo_meta_title ?? null,
     seo_meta_description: row.seo_meta_description ?? null,
@@ -214,7 +221,7 @@ function buildListingProjectionFromListingRow(row: {
     highlights: row.highlights ?? [],
     helpful_hints: row.helpful_hints ?? [],
     sleeping_arrangements: row.sleeping_arrangements ?? [],
-    sleeping_rollups: row.sleeping_rollups ?? {},
+    sleeping_summary: row.sleeping_summary ?? {},
     amenities_normalized: row.amenities_normalized ?? [],
   };
 }
@@ -394,6 +401,7 @@ export async function processPendingListingAiEnrichment(input: {
   adapterKey?: string;
   listingId?: string;
   dryRun: boolean;
+  rebuildHelpfulHints?: boolean;
   progressEvery?: number;
   heartbeatIntervalMs?: number;
   onProgress?: (event: PendingEnrichmentProgressEvent) => void | Promise<void>;
@@ -514,6 +522,7 @@ export async function processPendingListingAiEnrichment(input: {
           const result = await generateListingRefinement({
             snapshot,
             model: input.model,
+            rebuildHelpfulHints: input.rebuildHelpfulHints,
           });
 
           if (!input.dryRun) {
@@ -662,6 +671,7 @@ export async function applyListingAiEnrichmentToListings(input: {
     .select({
       id: listing.id,
       description_markdown: listing.description_markdown,
+      description_headline_plain: listing.description_headline_plain,
       description_short_plain: listing.description_short_plain,
       seo_meta_title: listing.seo_meta_title,
       seo_meta_description: listing.seo_meta_description,
@@ -669,7 +679,7 @@ export async function applyListingAiEnrichmentToListings(input: {
       highlights: listing.highlights,
       helpful_hints: listing.helpful_hints,
       sleeping_arrangements: listing.sleeping_arrangements,
-      sleeping_rollups: listing.sleeping_rollups,
+      sleeping_summary: listing.sleeping_summary,
       amenities_normalized: listing.amenities_normalized,
     })
     .from(listing)
@@ -773,6 +783,10 @@ export async function applyListingAiEnrichmentToListings(input: {
           description_markdown:
             (enrichmentProjection.description_markdown as string | null) ??
             null,
+          description_headline_plain:
+            (enrichmentProjection.description_headline_plain as
+              | string
+              | null) ?? null,
           description_short_plain:
             (enrichmentProjection.description_short_plain as string | null) ??
             null,
@@ -787,7 +801,7 @@ export async function applyListingAiEnrichmentToListings(input: {
           highlights: enrichmentProjection.highlights,
           helpful_hints: enrichmentProjection.helpful_hints,
           sleeping_arrangements: enrichmentProjection.sleeping_arrangements,
-          sleeping_rollups: enrichmentProjection.sleeping_rollups,
+          sleeping_summary: enrichmentProjection.sleeping_summary,
           amenities_normalized: enrichmentProjection.amenities_normalized,
           content_generated_at: now,
           content_version: sql`${listing.content_version} + 1`,
@@ -913,6 +927,7 @@ export async function evaluateListingAiEnrichmentApplyCandidates(input: {
     .select({
       id: listing.id,
       description_markdown: listing.description_markdown,
+      description_headline_plain: listing.description_headline_plain,
       description_short_plain: listing.description_short_plain,
       seo_meta_title: listing.seo_meta_title,
       seo_meta_description: listing.seo_meta_description,
@@ -920,7 +935,7 @@ export async function evaluateListingAiEnrichmentApplyCandidates(input: {
       highlights: listing.highlights,
       helpful_hints: listing.helpful_hints,
       sleeping_arrangements: listing.sleeping_arrangements,
-      sleeping_rollups: listing.sleeping_rollups,
+      sleeping_summary: listing.sleeping_summary,
       amenities_normalized: listing.amenities_normalized,
     })
     .from(listing)

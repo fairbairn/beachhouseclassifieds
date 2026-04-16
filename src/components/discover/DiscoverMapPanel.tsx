@@ -60,9 +60,7 @@ type GoogleAdvancedMarkerInstance = {
     handler: () => void,
   ) => GoogleMapsEventListener;
 };
-type GooglePinElementInstance = {
-  element: HTMLElement;
-};
+type GooglePinElementInstance = HTMLElement;
 type GoogleMapsMarkerNamespace = {
   AdvancedMarkerElement: new (options: {
     map?: GoogleMapInstance | null;
@@ -75,7 +73,6 @@ type GoogleMapsMarkerNamespace = {
     background?: string;
     borderColor?: string;
     glyphColor?: string;
-    glyph?: string;
     scale?: number;
   }) => GooglePinElementInstance;
 };
@@ -127,7 +124,6 @@ function getSecondaryMarkerPinOptions(zoom: number | undefined) {
       background: "#a855f7",
       borderColor: "#ffffff",
       glyphColor: "#ffffff",
-      glyph: "\u2302",
       scale: 1,
     };
   }
@@ -199,7 +195,7 @@ function createSecondaryMarkerContent(
     const pin = new markerLibrary.PinElement(
       getSecondaryMarkerPinOptions(zoom),
     );
-    return createTooltipShell(pin.element);
+    return createTooltipShell(pin);
   }
 
   const dot = document.createElement("div");
@@ -224,7 +220,7 @@ function createPrimaryMarkerContent(
   });
 
   if (!hoverPriceAmount) {
-    return pin.element;
+    return pin;
   }
 
   const tooltip = document.createElement("div");
@@ -265,7 +261,7 @@ function createPrimaryMarkerContent(
   });
 
   shell.appendChild(tooltip);
-  shell.appendChild(pin.element);
+  shell.appendChild(pin);
   return shell;
 }
 
@@ -279,6 +275,13 @@ export function DiscoverMapPanel({
   isSyncSelectedListingCardAvailable,
   isExpanded,
   onToggleExpanded,
+  showExpandControl = true,
+  showSyncControl = true,
+  showClearPinControl = true,
+  resetToInitialTargetView = false,
+  stickyOnDesktop = true,
+  panelClassName,
+  mapViewportClassName,
 }: {
   mapTarget: {
     id?: string;
@@ -307,6 +310,13 @@ export function DiscoverMapPanel({
   isSyncSelectedListingCardAvailable: boolean;
   isExpanded: boolean;
   onToggleExpanded: () => void;
+  showExpandControl?: boolean;
+  showSyncControl?: boolean;
+  showClearPinControl?: boolean;
+  resetToInitialTargetView?: boolean;
+  stickyOnDesktop?: boolean;
+  panelClassName?: string;
+  mapViewportClassName?: string;
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const googleMapRef = useRef<GoogleMapInstance | null>(null);
@@ -330,6 +340,7 @@ export function DiscoverMapPanel({
   const pendingPanTimeoutRef = useRef<number | null>(null);
   const mapEventCleanupRef = useRef<Array<() => void>>([]);
   const previousPinnedListingIdRef = useRef<string | undefined>(undefined);
+  const initialMapTargetRef = useRef(mapTarget);
   const activeMapTargetIdRef = useRef<string | undefined>(mapTarget.id);
   const syncSelectedListingCardRef = useRef(onSyncSelectedListingCard);
   const [isMapInResetState, setIsMapInResetState] = useState(true);
@@ -479,36 +490,67 @@ export function DiscoverMapPanel({
     };
   };
 
-  const updateResetState = useCallback((map: GoogleMapInstance | null) => {
-    if (!map) {
-      setIsMapInResetState(true);
-      return;
-    }
+  const updateResetState = useCallback(
+    (map: GoogleMapInstance | null) => {
+      if (!map) {
+        setIsMapInResetState(true);
+        return;
+      }
 
-    if (activeMapTargetIdRef.current) {
-      setIsMapInResetState(false);
-      return;
-    }
+      if (activeMapTargetIdRef.current) {
+        if (resetToInitialTargetView) {
+          const zoom = map.getZoom() ?? 19;
+          const center = map.getCenter();
+          const lat =
+            center && typeof center.lat === "function"
+              ? center.lat()
+              : center?.lat;
+          const lng =
+            center && typeof center.lng === "function"
+              ? center.lng()
+              : center?.lng;
 
-    const zoom = map.getZoom() ?? CONTEXT_ZOOM;
-    const center = map.getCenter();
-    const lat =
-      center && typeof center.lat === "function" ? center.lat() : center?.lat;
-    const lng =
-      center && typeof center.lng === "function" ? center.lng() : center?.lng;
+          if (typeof lat !== "number" || typeof lng !== "number") {
+            setIsMapInResetState(false);
+            return;
+          }
 
-    if (typeof lat !== "number" || typeof lng !== "number") {
-      setIsMapInResetState(false);
-      return;
-    }
+          const targetZoom =
+            typeof mapTarget.zoom === "number" ? mapTarget.zoom : 19;
+          const isAtTargetCenter =
+            Math.abs(lat - mapTarget.lat) <= RESET_CENTER_TOLERANCE &&
+            Math.abs(lng - mapTarget.lng) <= RESET_CENTER_TOLERANCE;
+          const isAtTargetZoom = Math.abs(zoom - targetZoom) < 0.01;
 
-    const isAtDefaultCenter =
-      Math.abs(lat - defaultMapTarget.lat) <= RESET_CENTER_TOLERANCE &&
-      Math.abs(lng - defaultMapTarget.lng) <= RESET_CENTER_TOLERANCE;
-    const isAtDefaultZoom = Math.abs(zoom - CONTEXT_ZOOM) < 0.01;
+          setIsMapInResetState(isAtTargetCenter && isAtTargetZoom);
+          return;
+        }
 
-    setIsMapInResetState(isAtDefaultCenter && isAtDefaultZoom);
-  }, []);
+        setIsMapInResetState(false);
+        return;
+      }
+
+      const zoom = map.getZoom() ?? CONTEXT_ZOOM;
+      const center = map.getCenter();
+      const lat =
+        center && typeof center.lat === "function" ? center.lat() : center?.lat;
+      const lng =
+        center && typeof center.lng === "function" ? center.lng() : center?.lng;
+
+      if (typeof lat !== "number" || typeof lng !== "number") {
+        setIsMapInResetState(false);
+        return;
+      }
+
+      const isAtDefaultCenter =
+        Math.abs(lat - defaultMapTarget.lat) <= RESET_CENTER_TOLERANCE &&
+        Math.abs(lng - defaultMapTarget.lng) <= RESET_CENTER_TOLERANCE;
+      const isAtDefaultZoom = Math.abs(zoom - CONTEXT_ZOOM) < 0.01;
+
+      setIsMapInResetState(isAtDefaultCenter && isAtDefaultZoom);
+    },
+    [mapTarget.lat, mapTarget.lng, mapTarget.zoom, resetToInitialTargetView],
+  );
 
   useEffect(() => {
     activeMapTargetIdRef.current = mapTarget.id;
@@ -518,6 +560,51 @@ export function DiscoverMapPanel({
   useEffect(() => {
     syncSelectedListingCardRef.current = onSyncSelectedListingCard;
   }, [onSyncSelectedListingCard]);
+
+  const handleResetMapView = useCallback(() => {
+    if (!resetToInitialTargetView) {
+      onResetMapView();
+      return;
+    }
+
+    const map = googleMapRef.current;
+    if (!map) {
+      return;
+    }
+
+    clearFocusAnimation();
+
+    const center = {
+      lat: mapTarget.lat,
+      lng: mapTarget.lng,
+    };
+    const targetZoom =
+      typeof mapTarget.zoom === "number"
+        ? mapTarget.zoom
+        : mapTarget.id
+          ? 19
+          : CONTEXT_ZOOM;
+
+    map.panTo(center);
+    map.setZoom(targetZoom);
+    map.setMapTypeId(getMapTypeForZoom(targetZoom));
+
+    if (mapTarget.id && googleMapMarkerRef.current) {
+      googleMapMarkerRef.current.map = map;
+      googleMapMarkerRef.current.position = center;
+    }
+
+    updateResetState(map);
+  }, [
+    clearFocusAnimation,
+    mapTarget.id,
+    mapTarget.lat,
+    mapTarget.lng,
+    mapTarget.zoom,
+    onResetMapView,
+    resetToInitialTargetView,
+    updateResetState,
+  ]);
 
   const applySecondaryMarkerIcons = (zoom: number | undefined) => {
     const markerLibrary = googleMapsMarkerNamespaceRef.current;
@@ -600,16 +687,30 @@ export function DiscoverMapPanel({
         return;
       }
 
-      const center = {
-        lat: defaultMapTarget.lat,
-        lng: defaultMapTarget.lng,
-      };
+      const initialTarget = initialMapTargetRef.current;
+      const center = initialTarget.id
+        ? {
+            lat: initialTarget.lat,
+            lng: initialTarget.lng,
+          }
+        : {
+            lat: defaultMapTarget.lat,
+            lng: defaultMapTarget.lng,
+          };
+      const initialZoom =
+        initialTarget.id && typeof initialTarget.zoom === "number"
+          ? initialTarget.zoom
+          : initialTarget.id
+            ? 19
+            : CONTEXT_ZOOM;
       const map = new googleMaps.Map(mapContainerRef.current, {
         center,
-        zoom: 13,
-        mapTypeId: "roadmap",
+        zoom: initialZoom,
+        mapTypeId: getMapTypeForZoom(initialZoom),
         mapId: "DEMO_MAP_ID",
         disableDefaultUI: false,
+        cameraControl: false,
+        rotateControl: false,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
@@ -858,75 +959,97 @@ export function DiscoverMapPanel({
     }
   }, [animateZoom, clearFocusAnimation, listings, mapTarget, mapReadyRevision]);
 
+  const basePanelClassName =
+    "flex flex-col self-start rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)]";
+  const stickyClassName = stickyOnDesktop ? " xl:sticky xl:top-28" : "";
+  const resolvedPanelClassName = panelClassName
+    ? `${basePanelClassName}${stickyClassName} ${panelClassName}`
+    : `${basePanelClassName}${stickyClassName}`;
+  const resolvedMapViewportClassName =
+    mapViewportClassName ??
+    "relative mt-3 h-88 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-104 xl:h-[calc(100dvh-8.5rem)] xl:max-h-232 xl:min-h-136";
+
   return (
-    <aside className="flex flex-col self-start rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] xl:sticky xl:top-28">
+    <aside className={resolvedPanelClassName}>
       <div className="flex items-center justify-between gap-2">
         <div className="inline-flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onToggleExpanded}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-cyan-200 bg-cyan-50 text-cyan-800 transition-colors hover:bg-cyan-100"
-            aria-pressed={isExpanded}
-            aria-label={isExpanded ? "Collapse map view" : "Expand map view"}
-            title={isExpanded ? "Collapse map view" : "Expand map view"}
-          >
-            {isExpanded ? (
-              <ChevronRight className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronLeft className="h-3.5 w-3.5" />
-            )}
-          </button>
-          {isExpanded ? (
-            <p className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
-              Map Expanded
-            </p>
+          {showExpandControl ? (
+            <>
+              <button
+                type="button"
+                onClick={onToggleExpanded}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-cyan-200 bg-cyan-50 text-cyan-800 transition-colors hover:bg-cyan-100"
+                aria-pressed={isExpanded}
+                aria-label={
+                  isExpanded ? "Collapse map view" : "Expand map view"
+                }
+                title={isExpanded ? "Collapse map view" : "Expand map view"}
+              >
+                {isExpanded ? (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                )}
+              </button>
+              {isExpanded ? (
+                <p className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
+                  Map Expanded
+                </p>
+              ) : null}
+            </>
           ) : null}
         </div>
 
         <div className="inline-flex items-center gap-1.5">
+          {showSyncControl ? (
+            <button
+              type="button"
+              onClick={onSyncSelectedListingCard}
+              disabled={!isSyncSelectedListingCardAvailable}
+              className={`relative inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-colors ${
+                isSyncSelectedListingCardAvailable
+                  ? "border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100"
+                  : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+              }`}
+              aria-label="Scroll selected listing card into view"
+              title={
+                isSyncSelectedListingCardAvailable
+                  ? "Scroll selected listing card into view"
+                  : "Pinned card already visible or no pin selected"
+              }
+            >
+              {isSyncSelectedListingCardAvailable ? (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -inset-0.5 animate-ping rounded-md border border-cyan-300/80"
+                />
+              ) : null}
+              <RefreshCw className="h-3 w-3" />
+              Sync
+            </button>
+          ) : null}
+          {showClearPinControl ? (
+            <button
+              type="button"
+              onClick={onClearPin}
+              disabled={!mapTarget.id}
+              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-colors ${
+                mapTarget.id
+                  ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
+                  : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+              }`}
+              aria-label="Clear selected map pin"
+              title={
+                mapTarget.id ? "Clear selected map pin" : "No pin selected"
+              }
+            >
+              <X className="h-3 w-3" />
+              Clear Pin
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={onSyncSelectedListingCard}
-            disabled={!isSyncSelectedListingCardAvailable}
-            className={`relative inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-colors ${
-              isSyncSelectedListingCardAvailable
-                ? "border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100"
-                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-            }`}
-            aria-label="Scroll selected listing card into view"
-            title={
-              isSyncSelectedListingCardAvailable
-                ? "Scroll selected listing card into view"
-                : "Pinned card already visible or no pin selected"
-            }
-          >
-            {isSyncSelectedListingCardAvailable ? (
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute -inset-0.5 animate-ping rounded-md border border-cyan-300/80"
-              />
-            ) : null}
-            <RefreshCw className="h-3 w-3" />
-            Sync
-          </button>
-          <button
-            type="button"
-            onClick={onClearPin}
-            disabled={!mapTarget.id}
-            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-colors ${
-              mapTarget.id
-                ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
-                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-            }`}
-            aria-label="Clear selected map pin"
-            title={mapTarget.id ? "Clear selected map pin" : "No pin selected"}
-          >
-            <X className="h-3 w-3" />
-            Clear Pin
-          </button>
-          <button
-            type="button"
-            onClick={onResetMapView}
+            onClick={handleResetMapView}
             disabled={isMapInResetState}
             className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-colors ${
               isMapInResetState
@@ -952,7 +1075,7 @@ export function DiscoverMapPanel({
         </div>
       </div>
 
-      <div className="relative mt-3 h-88 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-104 xl:h-[calc(100dvh-8.5rem)] xl:max-h-232 xl:min-h-136">
+      <div className={resolvedMapViewportClassName}>
         {googleMapsApiKey ? (
           <div
             ref={mapContainerRef}

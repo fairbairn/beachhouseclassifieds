@@ -16,6 +16,7 @@ type Options = {
   adapterKey: string | null;
   listingId: string | null;
   model: string | null;
+  rebuildHelpfulHints: boolean;
   dryRun: boolean;
 };
 
@@ -39,6 +40,9 @@ function printUsage(): void {
   console.log("  --adapter-key <key>  Restrict to one adapter");
   console.log("  --listing-id <id>    Restrict to one listing id");
   console.log("  --model <name>       Override generation model");
+  console.log(
+    "  --rebuild-helpful-hints  Rebuild helpful_hints with stricter sentence-quality rules",
+  );
   console.log("  --dry-run            Do not persist enrichment output");
   console.log("  --help               Show help");
 }
@@ -50,6 +54,7 @@ function parseArgs(argv: string[]): Options {
   let adapterKey: string | null = null;
   let listingId: string | null = null;
   let model: string | null = null;
+  let rebuildHelpfulHints = false;
   let dryRun = false;
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -63,6 +68,11 @@ function parseArgs(argv: string[]): Options {
 
     if (arg === "--dry-run") {
       dryRun = true;
+      continue;
+    }
+
+    if (arg === "--rebuild-helpful-hints") {
+      rebuildHelpfulHints = true;
       continue;
     }
 
@@ -121,6 +131,7 @@ function parseArgs(argv: string[]): Options {
     adapterKey,
     listingId,
     model,
+    rebuildHelpfulHints,
     dryRun,
   };
 }
@@ -153,7 +164,7 @@ async function run(): Promise<number> {
   const startedAtMs = Date.now();
 
   progress.phase(
-    `starting pending enrichment limit=${options.limit} concurrency=${options.concurrency} progress_every=${options.progressEvery} dry_run=${options.dryRun} adapter_key=${options.adapterKey ?? "all"} listing_id=${options.listingId ?? "all"} model=${options.model ?? "default"}`,
+    `starting pending enrichment limit=${options.limit} concurrency=${options.concurrency} progress_every=${options.progressEvery} dry_run=${options.dryRun} adapter_key=${options.adapterKey ?? "all"} listing_id=${options.listingId ?? "all"} model=${options.model ?? "default"} rebuild_helpful_hints=${options.rebuildHelpfulHints}`,
   );
 
   const summary = await processPendingListingAiEnrichment({
@@ -163,6 +174,7 @@ async function run(): Promise<number> {
     adapterKey: options.adapterKey ?? undefined,
     listingId: options.listingId ?? undefined,
     dryRun: options.dryRun,
+    rebuildHelpfulHints: options.rebuildHelpfulHints,
     progressEvery: options.progressEvery,
     onProgress: (event) => {
       if (event.outcome === "start") {

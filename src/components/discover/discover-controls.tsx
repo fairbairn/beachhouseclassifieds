@@ -102,11 +102,15 @@ export function DateRangeField({
   endDate,
   onChange,
   openRequestToken,
+  selectedNights,
+  emptyLabel,
 }: {
   startDate: string;
   endDate: string;
   onChange: (next: { startDate: string; endDate: string }) => void;
   openRequestToken?: number;
+  selectedNights?: number;
+  emptyLabel?: string;
 }) {
   const numberOfMonths = 3;
   const calendarStartMonth = useMemo(() => startOfMonth(new Date()), []);
@@ -137,18 +141,34 @@ export function DateRangeField({
   const [pickerResetToken, setPickerResetToken] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastClickedDateRef = useRef<Date | undefined>(undefined);
+  const todayStart = useMemo(() => startOfDay(new Date()), []);
 
   const selectedRange = useMemo<DateRange | undefined>(() => {
-    const from = parseIsoDate(startDate);
-    const to = parseIsoDate(endDate);
-    if (!from && !to) {
+    const rawFrom = parseIsoDate(startDate);
+    const rawTo = parseIsoDate(endDate);
+    if (!rawFrom && !rawTo) {
       return undefined;
     }
+
+    const from = rawFrom
+      ? isBefore(startOfDay(rawFrom), todayStart)
+        ? todayStart
+        : startOfDay(rawFrom)
+      : undefined;
+
+    const to = rawTo ? startOfDay(rawTo) : undefined;
+    const safeTo =
+      from && to && isBefore(to, from)
+        ? undefined
+        : to && isBefore(to, todayStart)
+          ? todayStart
+          : to;
+
     return {
       from,
-      to,
+      to: safeTo,
     };
-  }, [startDate, endDate]);
+  }, [startDate, endDate, todayStart]);
 
   const selectedStartDate = useMemo(() => parseIsoDate(startDate), [startDate]);
   const maxRangeBandStart = useMemo(
@@ -167,11 +187,15 @@ export function DateRangeField({
   );
 
   const isSpanDisabled = (day: Date) => {
+    const normalizedDay = startOfDay(day);
+    if (isBefore(normalizedDay, todayStart)) {
+      return true;
+    }
+
     if (!maxRangeBandStart || !maxRangeBandEnd) {
       return false;
     }
 
-    const normalizedDay = startOfDay(day);
     return (
       isBefore(normalizedDay, maxRangeBandStart) ||
       isAfter(normalizedDay, maxRangeBandEnd)
@@ -202,8 +226,13 @@ export function DateRangeField({
   useEffect(() => {
     const from = parseIsoDate(startDate);
     const to = parseIsoDate(endDate);
-    lastClickedDateRef.current = to ?? from;
-  }, [startDate, endDate]);
+    const safeFrom = from
+      ? isBefore(startOfDay(from), todayStart)
+        ? todayStart
+        : startOfDay(from)
+      : undefined;
+    lastClickedDateRef.current = to ?? safeFrom;
+  }, [startDate, endDate, todayStart]);
 
   const toggleCalendarOpen = () => {
     setIsOpen((current) => {
@@ -236,25 +265,31 @@ export function DateRangeField({
 
   const handleDayClick = (day: Date) => {
     const clicked = startOfDay(day);
+    const safeClicked = isBefore(clicked, todayStart) ? todayStart : clicked;
     const previous = lastClickedDateRef.current
       ? startOfDay(lastClickedDateRef.current)
       : undefined;
+    const safePrevious = previous
+      ? isBefore(previous, todayStart)
+        ? todayStart
+        : previous
+      : undefined;
 
-    if (!previous || previous.getTime() === clicked.getTime()) {
-      lastClickedDateRef.current = clicked;
+    if (!safePrevious || safePrevious.getTime() === safeClicked.getTime()) {
+      lastClickedDateRef.current = safeClicked;
       onChange({
-        startDate: toIsoDate(clicked),
+        startDate: toIsoDate(safeClicked),
         endDate: "",
       });
       return;
     }
 
     const [from, to] =
-      previous.getTime() < clicked.getTime()
-        ? [previous, clicked]
-        : [clicked, previous];
+      safePrevious.getTime() < safeClicked.getTime()
+        ? [safePrevious, safeClicked]
+        : [safeClicked, safePrevious];
 
-    lastClickedDateRef.current = clicked;
+    lastClickedDateRef.current = safeClicked;
     onChange({
       startDate: toIsoDate(from),
       endDate: toIsoDate(to),
@@ -292,9 +327,10 @@ export function DateRangeField({
       ? `${format(parseISO(startDate), "MMM d, yyyy")} to ${format(parseISO(endDate), "MMM d, yyyy")}`
       : startDate
         ? `${format(parseISO(startDate), "MMM d, yyyy")} to Latest?`
-        : "Find availability within a date window.";
+        : (emptyLabel ?? "Find availability within a date window.");
 
   const hasSelectedDates = Boolean(startDate || endDate);
+  const hasCompleteSelectedRange = Boolean(startDate && endDate);
   const temporarySingleEndDateLabel =
     startDate && !endDate
       ? format(addDays(parseISO(startDate), 30), "MMM d, yyyy")
@@ -310,23 +346,23 @@ export function DateRangeField({
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative w-full min-w-0">
       <button
         type="button"
         onClick={toggleCalendarOpen}
-        className="flex h-16 w-full items-center rounded-lg border border-slate-300 bg-white pr-18 pl-3 text-left"
+        className="flex h-16 w-full min-w-0 items-center overflow-hidden rounded-lg border border-slate-300 bg-white pr-18 pl-3 text-left"
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         aria-label="Choose date range"
       >
         {hasSelectedDates ? (
-          <span className="inline-flex h-8 max-w-full items-center rounded-full border border-teal-300 bg-teal-50 px-3 text-xs font-bold whitespace-nowrap text-teal-800 sm:text-sm">
+          <span className="inline-flex h-8 max-w-full min-w-0 items-center overflow-hidden rounded-full border border-teal-300 bg-teal-50 px-3 text-xs font-bold whitespace-nowrap text-teal-800 sm:text-sm">
             {startDate && !endDate ? (
               <>
-                <span className="font-semibold">
+                <span className="truncate font-semibold">
                   {format(parseISO(startDate), "MMM d, yyyy")}
                 </span>
-                <span className="ml-1 font-normal text-teal-700">
+                <span className="ml-1 truncate font-normal text-teal-700">
                   to {temporarySingleEndDateLabel}
                 </span>
               </>
@@ -363,10 +399,11 @@ export function DateRangeField({
           <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
             <div>
               <p className="text-[11px] font-bold tracking-[0.14em] text-emerald-800 uppercase">
-                Date Window
+                Date Search Window
               </p>
               <p className="text-sm font-semibold text-slate-700">
-                Pick your earliest and latest acceptable dates.
+                Pick your earliest and latest acceptable dates for us to find{" "}
+                {selectedNights ?? 0} nights.
               </p>
             </div>
             <div className="flex items-center gap-1.5">
@@ -379,26 +416,8 @@ export function DateRangeField({
               </button>
               <button
                 type="button"
-                onClick={() => navigateMonth(-1)}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${canGoPreviousMonth ? "border-slate-300 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-                aria-label="Show previous month"
-                disabled={!canGoPreviousMonth}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => navigateMonth(1)}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${canGoNextMonth ? "border-slate-300 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-                aria-label="Show next month"
-                disabled={!canGoNextMonth}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
                 onClick={() => setIsOpen(false)}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-md border bg-white px-2.5 text-[11px] font-bold tracking-[0.04em] uppercase transition ${hasSelectedDates ? "border-emerald-300 text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-900" : "border-slate-300 text-slate-700 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"}`}
+                className={`relative inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-bold tracking-[0.04em] uppercase transition ${hasCompleteSelectedRange ? "border-emerald-400 bg-emerald-200 text-emerald-950 hover:border-emerald-500 hover:bg-emerald-300" : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"}`}
                 aria-label={
                   hasSelectedDates
                     ? "Apply date selection and close picker"
@@ -410,9 +429,17 @@ export function DateRangeField({
                     : "Close date range picker"
                 }
               >
+                {hasCompleteSelectedRange ? (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -inset-0.5 animate-ping rounded-md border border-emerald-400/80"
+                  />
+                ) : null}
                 <span>{hasSelectedDates ? "Apply" : "Close"}</span>
                 {hasSelectedDates ? (
-                  <Check className="h-4 w-4" />
+                  <Check
+                    className={`h-4 w-4 ${hasCompleteSelectedRange ? "text-emerald-900" : "text-slate-700"}`}
+                  />
                 ) : (
                   <X className="h-4 w-4" />
                 )}
@@ -420,56 +447,78 @@ export function DateRangeField({
             </div>
           </div>
 
-          <DayPicker
-            key={pickerResetToken}
-            mode="range"
-            month={visibleMonth}
-            onMonthChange={handleMonthChange}
-            selected={selectedRange}
-            onDayClick={handleDayClick}
-            disabled={isSpanDisabled}
-            numberOfMonths={numberOfMonths}
-            startMonth={calendarStartMonth}
-            endMonth={calendarEndMonth}
-            animate={false}
-            showOutsideDays={false}
-            fixedWeeks={true}
-            className="discover-date-picker rounded-xl border border-slate-200 bg-slate-100 p-2"
-            formatters={{
-              formatWeekdayName: (date) => format(date, "EEEEE"),
-            }}
-            classNames={{
-              months:
-                "grid w-fit grid-flow-col auto-cols-max justify-center gap-2 mx-auto",
-              month:
-                "min-w-0 w-fit rounded-xl border border-slate-200 bg-white p-2",
-              nav: "hidden",
-              caption: "mb-4 flex items-center justify-center text-center",
-              month_caption:
-                "mb-4 flex items-center justify-center text-center",
-              caption_label:
-                "block text-center text-lg font-semibold text-emerald-800 font-['Playfair_Display']",
-              weekdays: "mb-1 grid grid-cols-7 gap-1",
-              weekday:
-                "text-center text-[11px] font-bold tracking-[0.08em] text-emerald-800 uppercase",
-              week: "grid grid-cols-7 gap-1",
-              day: "h-9 w-9 p-0.5 mx-auto text-slate-500",
-              day_button:
-                "discover-day-button h-8 w-8 rounded-full border border-transparent text-sm font-normal text-inherit transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800",
-              today:
-                "discover-today text-amber-800 [&>button]:border [&>button]:border-amber-300 [&>button]:bg-amber-50/70 [&>button]:text-amber-900",
-              selected:
-                "discover-range-selected [&>button]:border [&>button]:border-teal-600 [&>button]:bg-teal-600",
-              range_start:
-                "discover-range-endpoint [&>button]:border [&>button]:border-teal-600 [&>button]:bg-teal-600 [&>button]:!text-white [&>button]:hover:!border-teal-700 [&>button]:hover:!bg-teal-700 [&>button]:hover:!text-white",
-              range_end:
-                "discover-range-endpoint [&>button]:border [&>button]:border-teal-600 [&>button]:bg-teal-600 [&>button]:!text-white [&>button]:hover:!border-teal-700 [&>button]:hover:!bg-teal-700 [&>button]:hover:!text-white",
-              range_middle:
-                "discover-range-middle !text-slate-900 [&>button]:mx-auto [&>button]:h-8 [&>button]:w-8 [&>button]:rounded-full [&>button]:!border-emerald-300 [&>button]:!bg-emerald-50 [&>button]:!font-normal",
-              outside: "text-slate-400",
-              disabled: "text-slate-300",
-            }}
-          />
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => navigateMonth(-1)}
+              className={`absolute top-4 left-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${canGoPreviousMonth ? "border-slate-300 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+              aria-label="Show previous month"
+              disabled={!canGoPreviousMonth}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigateMonth(1)}
+              className={`absolute top-4 right-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${canGoNextMonth ? "border-slate-300 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+              aria-label="Show next month"
+              disabled={!canGoNextMonth}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+
+            <DayPicker
+              key={pickerResetToken}
+              mode="range"
+              month={visibleMonth}
+              onMonthChange={handleMonthChange}
+              selected={selectedRange}
+              onDayClick={handleDayClick}
+              disabled={isSpanDisabled}
+              numberOfMonths={numberOfMonths}
+              startMonth={calendarStartMonth}
+              endMonth={calendarEndMonth}
+              animate={false}
+              showOutsideDays={false}
+              fixedWeeks={true}
+              className="discover-date-picker rounded-xl border border-slate-200 bg-slate-100 p-2"
+              formatters={{
+                formatWeekdayName: (date) => format(date, "EEEEE"),
+              }}
+              classNames={{
+                months:
+                  "grid w-fit grid-flow-col auto-cols-max justify-center gap-2 mx-auto",
+                month:
+                  "min-w-0 w-fit rounded-xl border border-slate-200 bg-white p-2",
+                nav: "hidden",
+                caption:
+                  "mb-4 flex h-8 items-center justify-center text-center",
+                month_caption:
+                  "mb-4 flex h-8 items-center justify-center text-center",
+                caption_label:
+                  "block text-center text-lg font-semibold text-emerald-800 font-['Playfair_Display']",
+                weekdays: "mb-1 grid grid-cols-7 gap-1",
+                weekday:
+                  "text-center text-[11px] font-bold tracking-[0.08em] text-emerald-800 uppercase",
+                week: "grid grid-cols-7 gap-1",
+                day: "h-9 w-9 p-0.5 mx-auto text-slate-500",
+                day_button:
+                  "discover-day-button h-8 w-8 rounded-full border border-transparent text-sm font-normal text-inherit transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800",
+                today:
+                  "discover-today text-amber-800 [&>button]:border [&>button]:border-amber-300 [&>button]:bg-amber-50/70 [&>button]:text-amber-900",
+                selected:
+                  "discover-range-selected [&>button]:border [&>button]:border-teal-600 [&>button]:bg-teal-600",
+                range_start:
+                  "discover-range-endpoint [&>button]:border [&>button]:border-teal-600 [&>button]:bg-teal-600 [&>button]:!text-white [&>button]:hover:!border-teal-700 [&>button]:hover:!bg-teal-700 [&>button]:hover:!text-white",
+                range_end:
+                  "discover-range-endpoint [&>button]:border [&>button]:border-teal-600 [&>button]:bg-teal-600 [&>button]:!text-white [&>button]:hover:!border-teal-700 [&>button]:hover:!bg-teal-700 [&>button]:hover:!text-white",
+                range_middle:
+                  "discover-range-middle !text-slate-900 [&>button]:mx-auto [&>button]:h-8 [&>button]:w-8 [&>button]:rounded-full [&>button]:!border-emerald-300 [&>button]:!bg-emerald-50 [&>button]:!font-normal",
+                outside: "text-slate-400",
+                disabled: "text-slate-300",
+              }}
+            />
+          </div>
         </div>
       ) : null}
     </div>

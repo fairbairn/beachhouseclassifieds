@@ -12,23 +12,41 @@ import {
   optionsResponse,
 } from "@/core/http/api-http";
 import { normalizeDiscoverListings } from "@/lib/discover/community-normalization";
+import { getDiscoverListings } from "@/lib/discover/discover-listings.server";
 
 export const Route = createFileRoute("/api/discover/listings")({
   component: NullRouteComponent,
   server: {
     handlers: {
-      GET: async () => {
-        const locationAlignedListings = sampleListings.map((listing) => {
-          const beachZone = getBeachZoneFromListing(listing);
-          if (!beachZone) {
-            return verifyGulfFrontClaim(listing);
-          }
+      GET: async ({ request }) => {
+        const url = new URL(request.url);
+        const includeSlug =
+          url.searchParams.get("include")?.trim() || undefined;
+        const sourceListings = await getDiscoverListings({
+          includeSlug,
+          onlySlug: Boolean(includeSlug),
+          disableFallback: true,
+        }).catch(() => []);
 
-          return verifyGulfFrontClaim({
-            ...listing,
-            area: beachZone,
-          });
-        });
+        const resolvedSourceListings = includeSlug
+          ? sourceListings
+          : sourceListings.length > 0
+            ? sourceListings
+            : sampleListings;
+
+        const locationAlignedListings = resolvedSourceListings.map(
+          (listing) => {
+            const beachZone = getBeachZoneFromListing(listing);
+            if (!beachZone) {
+              return verifyGulfFrontClaim(listing);
+            }
+
+            return verifyGulfFrontClaim({
+              ...listing,
+              area: beachZone,
+            });
+          },
+        );
 
         const normalizedListings = normalizeDiscoverListings(
           locationAlignedListings,

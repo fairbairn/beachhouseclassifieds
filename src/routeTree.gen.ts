@@ -19,6 +19,7 @@ import { Route as DevListingRefinementRouteImport } from './routes/dev/listing-r
 import { Route as ApiSessionRouteImport } from './routes/api/session'
 import { Route as ApiLogoutRouteImport } from './routes/api/logout'
 import { Route as ApiLoginRouteImport } from './routes/api/login'
+import { Route as DiscoverListingSlugRouteImport } from './routes/discover.listing.$slug'
 import { Route as ApiDiscoverListingsRouteImport } from './routes/api/discover/listings'
 import { Route as ApiDevListingRefinementRouteImport } from './routes/api/dev/listing-refinement'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -73,6 +74,11 @@ const ApiLoginRoute = ApiLoginRouteImport.update({
   path: '/api/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DiscoverListingSlugRoute = DiscoverListingSlugRouteImport.update({
+  id: '/listing/$slug',
+  path: '/listing/$slug',
+  getParentRoute: () => DiscoverRoute,
+} as any)
 const ApiDiscoverListingsRoute = ApiDiscoverListingsRouteImport.update({
   id: '/api/discover/listings',
   path: '/api/discover/listings',
@@ -91,7 +97,7 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/discover': typeof DiscoverRoute
+  '/discover': typeof DiscoverRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/logo-capture': typeof LogoCaptureRoute
@@ -103,10 +109,11 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/listing-refinement': typeof ApiDevListingRefinementRoute
   '/api/discover/listings': typeof ApiDiscoverListingsRoute
+  '/discover/listing/$slug': typeof DiscoverListingSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/discover': typeof DiscoverRoute
+  '/discover': typeof DiscoverRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/logo-capture': typeof LogoCaptureRoute
@@ -118,11 +125,12 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/listing-refinement': typeof ApiDevListingRefinementRoute
   '/api/discover/listings': typeof ApiDiscoverListingsRoute
+  '/discover/listing/$slug': typeof DiscoverListingSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/discover': typeof DiscoverRoute
+  '/discover': typeof DiscoverRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/logo-capture': typeof LogoCaptureRoute
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/listing-refinement': typeof ApiDevListingRefinementRoute
   '/api/discover/listings': typeof ApiDiscoverListingsRoute
+  '/discover/listing/$slug': typeof DiscoverListingSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/dev/listing-refinement'
     | '/api/discover/listings'
+    | '/discover/listing/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/dev/listing-refinement'
     | '/api/discover/listings'
+    | '/discover/listing/$slug'
   id:
     | '__root__'
     | '/'
@@ -181,11 +192,12 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/dev/listing-refinement'
     | '/api/discover/listings'
+    | '/discover/listing/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DiscoverRoute: typeof DiscoverRoute
+  DiscoverRoute: typeof DiscoverRouteWithChildren
   HomeRoute: typeof HomeRoute
   LoginRoute: typeof LoginRoute
   LogoCaptureRoute: typeof LogoCaptureRoute
@@ -271,6 +283,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/discover/listing/$slug': {
+      id: '/discover/listing/$slug'
+      path: '/listing/$slug'
+      fullPath: '/discover/listing/$slug'
+      preLoaderRoute: typeof DiscoverListingSlugRouteImport
+      parentRoute: typeof DiscoverRoute
+    }
     '/api/discover/listings': {
       id: '/api/discover/listings'
       path: '/api/discover/listings'
@@ -295,9 +314,21 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface DiscoverRouteChildren {
+  DiscoverListingSlugRoute: typeof DiscoverListingSlugRoute
+}
+
+const DiscoverRouteChildren: DiscoverRouteChildren = {
+  DiscoverListingSlugRoute: DiscoverListingSlugRoute,
+}
+
+const DiscoverRouteWithChildren = DiscoverRoute._addFileChildren(
+  DiscoverRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DiscoverRoute: DiscoverRoute,
+  DiscoverRoute: DiscoverRouteWithChildren,
   HomeRoute: HomeRoute,
   LoginRoute: LoginRoute,
   LogoCaptureRoute: LogoCaptureRoute,

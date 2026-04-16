@@ -220,15 +220,18 @@ function toFiniteNumber(value: unknown): number | null {
 function hasValidLatLon(record: DetailRecord): boolean {
   const latCandidates = [record.latitude, record.location?.latitude]
     .map(toFiniteNumber)
-    .filter((value): value is number => value !== null);
+    .filter(
+      (value): value is number =>
+        value !== null && Math.abs(value) <= 90 && Math.abs(value) > 0,
+    );
   const lonCandidates = [record.longitude, record.location?.longitude]
     .map(toFiniteNumber)
-    .filter((value): value is number => value !== null);
+    .filter(
+      (value): value is number =>
+        value !== null && Math.abs(value) <= 180 && Math.abs(value) > 0,
+    );
 
-  return (
-    latCandidates.some((value) => value >= -90 && value <= 90) &&
-    lonCandidates.some((value) => value >= -180 && value <= 180)
-  );
+  return latCandidates.length > 0 && lonCandidates.length > 0;
 }
 
 function isCredibleAddress(value: string): boolean {

@@ -58,18 +58,6 @@ export type SearchFeatureFlags = {
   has_elevator: boolean;
 };
 
-export type SearchSleepingRollups = {
-  bed_count_king: number;
-  bed_count_queen: number;
-  bed_count_full: number;
-  bed_count_twin: number;
-  bed_count_bunk_total: number;
-  bed_count_sofa_bed: number;
-  bed_count_daybed: number;
-  bed_count_trundle: number;
-  bed_count_murphy: number;
-};
-
 export type ListingSearchDocument = {
   id: string;
   slug: string;
@@ -92,7 +80,6 @@ export type ListingSearchDocument = {
   lng: number | null;
   features: SearchFeatureFlags;
   feature_keys: string[];
-  sleeping_rollups: SearchSleepingRollups;
   searchable_sleeping_text: string;
   updated_at: string | null;
 };
@@ -189,29 +176,11 @@ function extract_feature_flags(traits: ListingTrait[]): {
   };
 }
 
-function derive_sleeping_rollups(input: unknown): {
-  sleeping_rollups: SearchSleepingRollups;
-  searchable_sleeping_text: string;
-} {
+function derive_sleeping_search_text(input: unknown): string {
   const parsed = sleeping_arrangements_schema.safeParse(input);
 
-  const rollups: SearchSleepingRollups = {
-    bed_count_king: 0,
-    bed_count_queen: 0,
-    bed_count_full: 0,
-    bed_count_twin: 0,
-    bed_count_bunk_total: 0,
-    bed_count_sofa_bed: 0,
-    bed_count_daybed: 0,
-    bed_count_trundle: 0,
-    bed_count_murphy: 0,
-  };
-
   if (!parsed.success) {
-    return {
-      sleeping_rollups: rollups,
-      searchable_sleeping_text: "",
-    };
+    return "";
   }
 
   const text_parts: string[] = [];
@@ -220,16 +189,6 @@ function derive_sleeping_rollups(input: unknown): {
     text_parts.push(room.room_label);
 
     for (const bed of room.beds) {
-      if (bed.bed_type === "king") rollups.bed_count_king += bed.count;
-      if (bed.bed_type === "queen") rollups.bed_count_queen += bed.count;
-      if (bed.bed_type === "full") rollups.bed_count_full += bed.count;
-      if (bed.bed_type === "twin") rollups.bed_count_twin += bed.count;
-      if (bed.bed_type === "bunk") rollups.bed_count_bunk_total += bed.count;
-      if (bed.bed_type === "sofa_bed") rollups.bed_count_sofa_bed += bed.count;
-      if (bed.bed_type === "daybed") rollups.bed_count_daybed += bed.count;
-      if (bed.bed_type === "trundle") rollups.bed_count_trundle += bed.count;
-      if (bed.bed_type === "murphy") rollups.bed_count_murphy += bed.count;
-
       text_parts.push(`${bed.count} ${bed.bed_type}`);
       if (bed.bunk_configuration) {
         text_parts.push(bed.bunk_configuration);
@@ -237,10 +196,7 @@ function derive_sleeping_rollups(input: unknown): {
     }
   }
 
-  return {
-    sleeping_rollups: rollups,
-    searchable_sleeping_text: text_parts.join(" ").trim(),
-  };
+  return text_parts.join(" ").trim();
 }
 
 export function project_listing_to_search_document(
@@ -249,8 +205,9 @@ export function project_listing_to_search_document(
   const record = canonical_listing_record_schema.parse(input);
   const traits = parse_listing_traits(record.traits);
   const { feature_flags, feature_keys } = extract_feature_flags(traits);
-  const { sleeping_rollups, searchable_sleeping_text } =
-    derive_sleeping_rollups(record.sleeping_arrangements);
+  const searchable_sleeping_text = derive_sleeping_search_text(
+    record.sleeping_arrangements,
+  );
 
   return {
     id: record.id,
@@ -274,7 +231,6 @@ export function project_listing_to_search_document(
     lng: record.lng ?? null,
     features: feature_flags,
     feature_keys,
-    sleeping_rollups,
     searchable_sleeping_text,
     updated_at: record.updated_at ?? null,
   };

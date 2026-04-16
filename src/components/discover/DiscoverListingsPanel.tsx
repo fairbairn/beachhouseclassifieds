@@ -5,6 +5,7 @@ import {
   Heart,
   LayoutGrid,
   MapPin,
+  Maximize2,
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
@@ -27,6 +28,7 @@ export function DiscoverListingsPanel({
   favoriteIds,
   onToggleFavorite,
   onFocusMap,
+  onOpenDetailOverlay,
   nights,
 }: {
   listings: ReadonlyArray<DiscoverListing>;
@@ -37,6 +39,7 @@ export function DiscoverListingsPanel({
   onActiveListingVisibilityChange?: (isVisible: boolean) => void;
   favoriteIds: ReadonlyArray<string>;
   onToggleFavorite: (listingId: string) => void;
+  onOpenDetailOverlay?: (listingId: string) => void;
   onFocusMap: (next: {
     id: string;
     lat: number;
@@ -243,10 +246,25 @@ export function DiscoverListingsPanel({
                   <article
                     key={listing.id}
                     data-listing-id={listing.id}
-                    className={`flex h-full flex-col rounded-2xl bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] ${listing.beachfront ? "border-[3px] border-amber-300 shadow-[0_0_24px_7px_rgba(251,191,36,0.5),0_32px_60px_-20px_rgba(180,83,9,0.82)] drop-shadow-[0_0_16px_rgba(251,191,36,0.6)]" : "border border-slate-200"}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onOpenDetailOverlay?.(listing.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onOpenDetailOverlay?.(listing.id);
+                      }
+                    }}
+                    className={`group relative flex h-full cursor-pointer flex-col rounded-2xl bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_-22px_rgba(15,23,42,0.7)] focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:outline-none ${listing.beachfront ? "border-[3px] border-amber-300 shadow-[0_0_24px_7px_rgba(251,191,36,0.5),0_32px_60px_-20px_rgba(180,83,9,0.82)] drop-shadow-[0_0_16px_rgba(251,191,36,0.6)]" : "border border-slate-200"}`}
                   >
                     {isTwoUpCardLayout ? (
-                      <div className="mb-3 grid grid-cols-2 gap-2">
+                      <div className="relative mb-3 grid grid-cols-2 gap-2">
+                        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center opacity-0 transition duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/80 px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-slate-800 shadow-[0_8px_20px_-12px_rgba(15,23,42,0.7)] backdrop-blur-sm">
+                            <Maximize2 className="h-3.5 w-3.5" />
+                            Click to View Property
+                          </span>
+                        </div>
                         <img
                           src={leftPreviewImage}
                           alt={`${listing.name} preview 1`}
@@ -265,8 +283,14 @@ export function DiscoverListingsPanel({
                       </div>
                     ) : (
                       <div
-                        className={`mb-3 ${isFourUpCardLayout ? "grid grid-cols-1" : "grid grid-cols-2 gap-2"}`}
+                        className={`relative mb-3 ${isFourUpCardLayout ? "grid grid-cols-1" : "grid grid-cols-2 gap-2"}`}
                       >
+                        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center opacity-0 transition duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/80 px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-slate-800 shadow-[0_8px_20px_-12px_rgba(15,23,42,0.7)] backdrop-blur-sm">
+                            <Maximize2 className="h-3.5 w-3.5" />
+                            Click to View Property
+                          </span>
+                        </div>
                         {previewImages.map((img, i) => (
                           <img
                             key={`${listing.id}-${i}`}
@@ -289,15 +313,18 @@ export function DiscoverListingsPanel({
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={(event) => {
+                            event.stopPropagation();
                             onFocusMap({
                               id: listing.id,
                               lat: listingTarget.lat,
                               lng: listingTarget.lng,
                               label: listing.name,
                               zoom: 19,
-                            })
-                          }
+                            });
+                          }}
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => event.stopPropagation()}
                           className={`inline-flex items-center justify-center rounded-full border p-2 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${
                             isPinned
                               ? "border-rose-500 bg-white text-rose-700 shadow-[0_0_0_2px_rgba(251,113,133,0.28),0_10px_20px_-12px_rgba(225,29,72,0.72)]"
@@ -321,7 +348,12 @@ export function DiscoverListingsPanel({
                         </button>
                         <button
                           type="button"
-                          onClick={() => onToggleFavorite(listing.id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleFavorite(listing.id);
+                          }}
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => event.stopPropagation()}
                           className={`inline-flex items-center justify-center rounded-full border p-2 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${isFavorite ? "border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100" : "border-slate-300 text-slate-500 hover:border-rose-300 hover:text-rose-600"}`}
                         >
                           <Heart

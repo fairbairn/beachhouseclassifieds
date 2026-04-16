@@ -20,6 +20,7 @@ import {
 
 type RefinementOutput = {
   description_markdown: string;
+  description_headline_plain: string;
   description_short_plain: string;
   seo_meta_title: string;
   seo_meta_description: string;
@@ -27,20 +28,6 @@ type RefinementOutput = {
   highlights: string[];
   helpful_hints: string[];
   sleeping_arrangements: unknown;
-  sleeping_rollups: Record<string, number>;
-  sleeping_ux_summary: {
-    count_king: number;
-    count_queen: number;
-    count_full: number;
-    count_twin_standalone: number;
-    count_bunk_units: number;
-    count_bunk_sleeps_total: number;
-    count_sleeping_surfaces_total: number;
-    sleep_capacity_from_rollups: number;
-    sleep_capacity_target: number;
-    sleep_capacity_delta: number;
-    sleep_capacity_aligned: boolean;
-  };
   sleeping_summary: {
     bed_counts: {
       king: number;
@@ -133,6 +120,7 @@ export type ListingRefinementSnapshot = {
   source_amenities_original: string[];
   source_amenities_categories: Record<string, string[]>;
   description_markdown: string | null;
+  description_headline_plain: string | null;
   description_short_plain: string | null;
   seo_meta_title: string | null;
   seo_meta_description: string | null;
@@ -140,7 +128,6 @@ export type ListingRefinementSnapshot = {
   highlights: unknown;
   helpful_hints: unknown;
   sleeping_arrangements: unknown;
-  sleeping_rollups: unknown;
   amenities_normalized: unknown;
   ai_refinement: Record<string, unknown> | null;
   source_content_hash: string | null;
@@ -596,6 +583,42 @@ function normalizeHintText(value: string): string {
     .trim();
 }
 
+function normalizeHumanProse(value: string): string {
+  return value
+    .replace(/[–—]/g, " ")
+    .replace(/\s-\s/g, " ")
+    .replace(/([A-Za-z])-(?=[A-Za-z])/g, "$1 ")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .trim();
+}
+
+function ensureSentenceTerminalPunctuation(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/[.!?]$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `${trimmed}.`;
+}
+
+function normalizeHintTone(value: string): string {
+  return value
+    .replace(/\bDO NOT\b/g, "do not")
+    .replace(/\bNOT\b/g, "not")
+    .replace(/\bMUST\b/g, "must")
+    .replace(/\bREQUIRED\b/g, "required")
+    .replace(/\bIS NOT\b/g, "is not")
+    .replace(/\bARE NOT\b/g, "are not")
+    .replace(/\bCAN NOT\b/g, "cannot")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function buildDeterministicLeadSentence(input: {
   canonicalName: string;
   propertyType: string | null;
@@ -643,7 +666,7 @@ function buildDeterministicLeadSentence(input: {
   })();
   const bedroomPrefix =
     typeof input.bedrooms === "number" && input.bedrooms > 0
-      ? `${input.bedrooms}-bedroom `
+      ? `${input.bedrooms} bedroom `
       : "";
 
   const source = input.sourceDescription.toLowerCase();
@@ -707,6 +730,14 @@ function extractHelpfulNotes(sourceDescription: string): string[] {
     return [];
   }
 
+  const policySectionMatch = normalized.match(
+    /\*{2,}\s*other\s+things\s+to\s+know\s*\*{2,}([\s\S]*?)(?:\*{2,}|$)/i,
+  );
+  const policySection = policySectionMatch?.[1]?.trim() ?? "";
+  const policySectionCandidates = policySection
+    ? splitHelpfulHintEntry(policySection)
+    : [];
+
   const sentenceCandidates = splitIntoSentences(normalized);
   const lineCandidates = normalized
     .split(/\n+/)
@@ -714,7 +745,11 @@ function extractHelpfulNotes(sourceDescription: string): string[] {
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-  const candidates = [...sentenceCandidates, ...lineCandidates]
+  const candidates = [
+    ...policySectionCandidates,
+    ...sentenceCandidates,
+    ...lineCandidates,
+  ]
     .map((entry) =>
       normalizeHintText(
         entry
@@ -725,15 +760,185 @@ function extractHelpfulNotes(sourceDescription: string): string[] {
     )
     .filter(Boolean);
 
-  return Array.from(
-    new Set(
-      candidates.filter(
-        (candidate) =>
-          isOperationalHintText(candidate) &&
-          !isRepetitiveFeatureRecap(candidate),
-      ),
-    ),
-  ).slice(0, 4);
+  return finalizeHelpfulHintCandidates(candidates).slice(0, 4);
+}
+
+function splitHelpfulHintEntry(value: string): string[] {
+  const expanded = value
+    .replace(/\*{2,}/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1. $2")
+    .replace(/[•▪●]/g, ". ")
+    .replace(
+      /\b(we\s+do\s+not|travel\s+insurance|payment\s+policy|beach\s+services|waiver\s+required|bicycle\s+rentals?|additional\s+bikes|lsvs?\s+are|please\s+note|per\s+[a-z]+\s+hoa)\b/gi,
+      (match) => `. ${match}`,
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return expanded
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((part) => normalizeHintText(part))
+    .filter(Boolean);
+}
+
+function isHighQualityHelpfulHint(value: string): boolean {
+  if (!value) {
+    return false;
+  }
+
+  if (value.length < 24 || value.length > 220) {
+    return false;
+  }
+
+  if (/[a-z][A-Z]/.test(value)) {
+    return false;
+  }
+
+  if (/\*{2,}|https?:\/\//i.test(value)) {
+    return false;
+  }
+
+  if (
+    /\b(30a\s*escapes|30aescapes|book\s+today|start\s+your\s+30a\s+escape)\b/i.test(
+      value,
+    )
+  ) {
+    return false;
+  }
+
+  const words = value.split(/\s+/).filter(Boolean).length;
+  if (words < 5) {
+    return false;
+  }
+
+  const advisoryPatterns = [
+    /\b(please\s+note|important|note\s+that)\b/i,
+    /\b(required|must|must\s+be|waiver|policy|rules?)\b/i,
+    /\b(not\s+allowed|do\s+not|cannot|not\s+included|not\s+for\s+guest\s+use|prohibited)\b/i,
+    /\b(check\s*in|check\s*out|minimum\s+age|quiet\s+hours|visitor|unregistered\s+guest)\b/i,
+    /\b(parking|vehicles?|permit|hoa|wire\s+transfer|insurance|cancellation)\b/i,
+    /\b(pool\s+heat|fireplace|camera|construction|bikes?|lsv|golf\s*cart)\b/i,
+  ];
+  const featureMarketingPatterns = [
+    /\b(stunning|gorgeous|beautiful|luxury|upscale|chic|designer|elegant|serene|cozy)\b/i,
+    /\b(private\s+courtyard|chef'?s\s+kitchen|living\s+area|dining\s+area|baby\s+grand\s+piano)\b/i,
+    /\b(beach\s+access|walk\s+to\s+beach|resort\s+pools?|boutique\s+shops?)\b/i,
+  ];
+  const hasAdvisorySignal = advisoryPatterns.some((pattern) =>
+    pattern.test(value),
+  );
+  const hasFeatureMarketingSignal = featureMarketingPatterns.some((pattern) =>
+    pattern.test(value),
+  );
+
+  if (!hasAdvisorySignal) {
+    return false;
+  }
+  if (
+    hasFeatureMarketingSignal &&
+    !/\b(required|must|not\s+allowed|do\s+not|policy|waiver|hoa)\b/i.test(value)
+  ) {
+    return false;
+  }
+
+  const lower = value.toLowerCase();
+  const operationalSignals = [
+    "required",
+    "must",
+    "do not",
+    "not included",
+    "not for guest use",
+    "not allowed",
+    "policy",
+    "waiver",
+    "hoa",
+    "wristband",
+    "check in",
+    "check out",
+    "wire transfer",
+    "insurance",
+    "event",
+    "visitor",
+    "vehicles",
+    "pets",
+    "quiet hours",
+  ];
+  if (!operationalSignals.some((signal) => lower.includes(signal))) {
+    return false;
+  }
+
+  return !isRepetitiveFeatureRecap(value);
+}
+
+function normalizeHelpfulHintDedupKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b(get\s+access\s+to|access\s+to)\b/g, "access")
+    .replace(/\b(a|an|the)\b/g, " ")
+    .replace(/\d+/g, "#")
+    .replace(/[^a-z#\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function classifyHelpfulHintTopic(value: string): string {
+  const lower = value.toLowerCase();
+  if (lower.includes("travel insurance") || lower.includes("insurance")) {
+    return "insurance_policy";
+  }
+  if (lower.includes("waiver") && /\bbikes?\b/.test(lower)) {
+    return "waiver_bikes";
+  }
+  if (lower.includes("wire transfer")) {
+    return "wire_transfer";
+  }
+  if (lower.includes("hoa") || lower.includes("unregistered guests")) {
+    return "hoa_guest_policy";
+  }
+  if (lower.includes("lsv") || lower.includes("golf cart")) {
+    return "lsv_policy";
+  }
+  if (lower.includes("check in") || lower.includes("check out")) {
+    return "checkin_checkout";
+  }
+  if (lower.includes("parking") || lower.includes("vehicles")) {
+    return "parking_policy";
+  }
+  return "";
+}
+
+function finalizeHelpfulHintCandidates(values: string[]): string[] {
+  const normalized = values
+    .flatMap((entry) => splitHelpfulHintEntry(entry))
+    .map((entry) => normalizeHumanProse(normalizeHintText(entry)))
+    .map((entry) => normalizeHintTone(entry))
+    .map((entry) => ensureSentenceTerminalPunctuation(entry))
+    .filter((entry) => isHighQualityHelpfulHint(entry));
+
+  const deduped: string[] = [];
+  const seenKeys = new Set<string>();
+  const seenTopics = new Set<string>();
+
+  for (const entry of normalized) {
+    const key = normalizeHelpfulHintDedupKey(entry);
+    const topic = classifyHelpfulHintTopic(entry);
+    if (!key || seenKeys.has(key)) {
+      continue;
+    }
+    if (topic && seenTopics.has(topic)) {
+      continue;
+    }
+    seenKeys.add(key);
+    if (topic) {
+      seenTopics.add(topic);
+    }
+    deduped.push(entry);
+    if (deduped.length >= 6) {
+      break;
+    }
+  }
+
+  return deduped;
 }
 
 function sanitizeHelpfulHints(values: unknown): string[] {
@@ -746,18 +951,10 @@ function sanitizeHelpfulHints(values: unknown): string[] {
       return [];
     }
 
-    return entry
-      .split(/(?=Please note:|If this policy is violated|Per WaterColor HOA)/i)
-      .map((part) => normalizeHintText(part))
-      .filter(Boolean);
+    return splitHelpfulHintEntry(entry);
   });
 
-  const filtered = splitCandidates.filter(
-    (candidate) =>
-      isOperationalHintText(candidate) && !isRepetitiveFeatureRecap(candidate),
-  );
-
-  return Array.from(new Set(filtered)).slice(0, 6);
+  return finalizeHelpfulHintCandidates(splitCandidates);
 }
 
 function formatDescriptionMarkdown(input: {
@@ -799,7 +996,7 @@ function formatDescriptionMarkdown(input: {
         sentences.length > 0
           ? sentences
           : splitIntoSentences(unwrappedParagraph);
-      return normalizedSentences.join(" ").trim();
+      return normalizeHumanProse(normalizedSentences.join(" ").trim());
     })
     .filter(Boolean);
 
@@ -811,17 +1008,6 @@ function formatDescriptionMarkdown(input: {
       sourceDescription: input.sourceDescription,
     });
   }
-
-  const leadSentence = buildDeterministicLeadSentence({
-    canonicalName: input.canonicalName,
-    propertyType: input.propertyType,
-    bedrooms: input.bedrooms,
-    sourceDescription: input.sourceDescription,
-  });
-
-  const firstParagraphSentences = splitIntoSentences(cleanedParagraphs[0]);
-  const remainder = firstParagraphSentences.slice(1);
-  cleanedParagraphs[0] = [leadSentence, ...remainder].join(" ").trim();
 
   return cleanedParagraphs.join("\n\n");
 }
@@ -1504,68 +1690,6 @@ function isSleepAccommodationAcceptable(input: {
   );
 }
 
-function buildSleepingUxSummary(input: {
-  rollups: Record<string, number>;
-  expectedSleeps: number | null;
-}): RefinementOutput["sleeping_ux_summary"] {
-  const countKing = Math.max(0, Math.round(input.rollups.bed_count_king ?? 0));
-  const countQueen = Math.max(
-    0,
-    Math.round(input.rollups.bed_count_queen ?? 0),
-  );
-  const countFull = Math.max(0, Math.round(input.rollups.bed_count_full ?? 0));
-  const countTwinStandalone = Math.max(
-    0,
-    Math.round(
-      (input.rollups.bed_count_twin_standalone ??
-        (input.rollups.bed_count_twin ?? 0) -
-          (input.rollups.bed_count_twin_bunk ?? 0)) as number,
-    ),
-  );
-  const countBunkUnits = Math.max(
-    0,
-    Math.round(
-      (input.rollups.bunk_unit_count_total ??
-        input.rollups.bed_count_bunk_total ??
-        0) as number,
-    ),
-  );
-  const countBunkSleepsTotal = Math.max(
-    0,
-    Math.round(
-      (input.rollups.bunk_sleep_slot_count_total ??
-        input.rollups.bed_count_twin_bunk ??
-        0) as number,
-    ),
-  );
-  const countSleepingSurfacesTotal =
-    countKing +
-    countQueen +
-    countFull +
-    Math.max(0, Math.round(input.rollups.bed_count_twin ?? 0));
-  const derivedCapacity = estimateSleepCapacityFromRollups(input.rollups);
-  const targetCapacity =
-    typeof input.expectedSleeps === "number" &&
-    Number.isFinite(input.expectedSleeps)
-      ? Math.max(0, Math.round(input.expectedSleeps))
-      : Math.max(0, Math.round(input.rollups.sleep_capacity_target ?? 0));
-  const delta = targetCapacity > 0 ? derivedCapacity - targetCapacity : 0;
-
-  return {
-    count_king: countKing,
-    count_queen: countQueen,
-    count_full: countFull,
-    count_twin_standalone: countTwinStandalone,
-    count_bunk_units: countBunkUnits,
-    count_bunk_sleeps_total: countBunkSleepsTotal,
-    count_sleeping_surfaces_total: countSleepingSurfacesTotal,
-    sleep_capacity_from_rollups: derivedCapacity,
-    sleep_capacity_target: targetCapacity,
-    sleep_capacity_delta: delta,
-    sleep_capacity_aligned: targetCapacity > 0 ? delta === 0 : true,
-  };
-}
-
 function buildSleepingSummary(input: {
   arrangements: unknown[];
   expectedSleeps: number | null;
@@ -1750,6 +1874,16 @@ function deriveSleepingRollupsFromSummary(input: {
   return rollups;
 }
 
+function deriveSleepRollupsFromOutput(input: {
+  output: RefinementOutput;
+  expectedSleeps: number | null;
+}): Record<string, number> {
+  return deriveSleepingRollupsFromSummary({
+    sleepingSummary: input.output.sleeping_summary,
+    expectedSleeps: input.expectedSleeps,
+  });
+}
+
 type SleepResolutionResult = {
   arrangements: unknown[];
   rollups: Record<string, number>;
@@ -1820,8 +1954,6 @@ function finalizeSleepingOutput(input: {
   expectedSleeps: number | null;
 }): {
   arrangements: unknown[];
-  rollups: Record<string, number>;
-  uxSummary: RefinementOutput["sleeping_ux_summary"];
   summary: RefinementOutput["sleeping_summary"];
 } {
   const baseArrangements =
@@ -1844,11 +1976,6 @@ function finalizeSleepingOutput(input: {
 
   return {
     arrangements: reconciled.arrangements,
-    rollups: reconciled.rollups,
-    uxSummary: buildSleepingUxSummary({
-      rollups: reconciled.rollups,
-      expectedSleeps: input.expectedSleeps,
-    }),
     summary: buildSleepingSummary({
       arrangements: reconciled.arrangements,
       expectedSleeps: input.expectedSleeps,
@@ -2237,10 +2364,16 @@ function determineAuditTriggerReasons(input: {
   snapshot: ListingRefinementSnapshot;
 }): string[] {
   const reasons: string[] = [];
-
-  if (!input.output.sleeping_ux_summary.sleep_capacity_aligned) {
+  const sleepMatch = evaluateSleepCapacityMatch({
+    rollups: deriveSleepingRollupsFromSummary({
+      sleepingSummary: input.output.sleeping_summary,
+      expectedSleeps: input.snapshot.sleeps,
+    }),
+    expectedSleeps: input.snapshot.sleeps,
+  });
+  if (!sleepMatch.matches && sleepMatch.target !== null) {
     reasons.push(
-      `Sleeping capacity mismatch (${input.output.sleeping_ux_summary.sleep_capacity_from_rollups} vs listing.sleeps ${input.output.sleeping_ux_summary.sleep_capacity_target}).`,
+      `Sleeping capacity mismatch (${sleepMatch.derived} vs listing.sleeps ${sleepMatch.target}).`,
     );
   }
 
@@ -2419,6 +2552,8 @@ function cleanManagerReferences(
 
   const banned = [
     "30a collections",
+    "30a escapes",
+    "30aescapes",
     "property management",
     "management company",
     "book direct",
@@ -2447,12 +2582,29 @@ function cleanManagerReferences(
       .replace(/[^a-z0-9\s]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
+    const compact = normalized.replace(/\s+/g, "");
 
     if (!normalized) {
       return false;
     }
 
-    return !banned.some((token) => token && normalized.includes(token));
+    return !banned.some((token) => {
+      if (!token) {
+        return false;
+      }
+
+      const tokenNormalized = token
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const tokenCompact = tokenNormalized.replace(/\s+/g, "");
+
+      return (
+        normalized.includes(tokenNormalized) ||
+        (tokenCompact.length > 0 && compact.includes(tokenCompact))
+      );
+    });
   });
 
   return filtered.join(" ").trim();
@@ -2501,6 +2653,38 @@ function ensureSeoMetaDescriptionIntent(input: {
   return `${normalized}. This vacation rental is available on ${SEO_BRAND_NAME}.`;
 }
 
+function normalizeHeadlinePlain(input: {
+  headline: string;
+  fallbackShort: string;
+}): string {
+  const cleaned = input.headline
+    .replace(/[^a-zA-Z0-9\s'’-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = input.fallbackShort
+    .replace(/[^a-zA-Z0-9\s'’-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const asWords = (value: string) =>
+    value
+      .split(/\s+/)
+      .map((word) => word.trim())
+      .filter(Boolean);
+
+  const primaryWords = asWords(cleaned);
+  if (primaryWords.length >= 2 && primaryWords.length <= 8) {
+    return primaryWords.join(" ");
+  }
+
+  const fallbackWords = asWords(fallback);
+  if (fallbackWords.length >= 2) {
+    return fallbackWords.slice(0, 8).join(" ");
+  }
+
+  return primaryWords.slice(0, 8).join(" ");
+}
+
 function stripBrandReferencesFromList(
   values: string[],
   adapterKey: string | null,
@@ -2524,6 +2708,7 @@ function buildSchema(): Record<string, unknown> {
     additionalProperties: false,
     properties: {
       description_markdown: { type: "string" },
+      description_headline_plain: { type: "string" },
       description_short_plain: { type: "string" },
       seo_meta_title: { type: "string" },
       seo_meta_description: { type: "string" },
@@ -2565,6 +2750,7 @@ function buildSchema(): Record<string, unknown> {
     },
     required: [
       "description_markdown",
+      "description_headline_plain",
       "description_short_plain",
       "seo_meta_title",
       "seo_meta_description",
@@ -2613,6 +2799,7 @@ export async function loadListingRefinementSnapshot(input: {
       bathrooms: listing.bathrooms,
       sleeps: listing.sleeps,
       descriptionMarkdown: listing.description_markdown,
+      descriptionHeadlinePlain: listing.description_headline_plain,
       descriptionShortPlain: listing.description_short_plain,
       seoMetaTitle: listing.seo_meta_title,
       seoMetaDescription: listing.seo_meta_description,
@@ -2620,7 +2807,6 @@ export async function loadListingRefinementSnapshot(input: {
       highlights: listing.highlights,
       helpfulHints: listing.helpful_hints,
       sleepingArrangements: listing.sleeping_arrangements,
-      sleepingRollups: listing.sleeping_rollups,
       amenitiesNormalized: listing.amenities_normalized,
       sourceLinkId: listing_source_link.id,
       adapterKey: listing_source_link.adapter_key,
@@ -2671,6 +2857,7 @@ export async function loadListingRefinementSnapshot(input: {
     source_amenities_original: sourceAmenities.all,
     source_amenities_categories: sourceAmenities.categories,
     description_markdown: row.descriptionMarkdown,
+    description_headline_plain: row.descriptionHeadlinePlain,
     description_short_plain: row.descriptionShortPlain,
     seo_meta_title: row.seoMetaTitle,
     seo_meta_description: row.seoMetaDescription,
@@ -2678,7 +2865,6 @@ export async function loadListingRefinementSnapshot(input: {
     highlights: row.highlights,
     helpful_hints: row.helpfulHints,
     sleeping_arrangements: row.sleepingArrangements,
-    sleeping_rollups: row.sleepingRollups,
     amenities_normalized: row.amenitiesNormalized,
     ai_refinement: Object.keys(aiRefinement).length > 0 ? aiRefinement : null,
     source_link_id: row.sourceLinkId,
@@ -2689,6 +2875,7 @@ export async function loadListingRefinementSnapshot(input: {
 export async function generateListingRefinement(input: {
   snapshot: ListingRefinementSnapshot;
   model?: string;
+  rebuildHelpfulHints?: boolean;
 }): Promise<RefinementResult> {
   const profileApiKey =
     resolveProfileEnvironment({
@@ -2731,6 +2918,25 @@ export async function generateListingRefinement(input: {
     "Prioritize precision over flourish. Favor specific, source-grounded claims and avoid generic travel copy.",
     "Voice goals: enthusiastic, welcoming, polished, informative, and trustworthy.",
     "Write like you are selling an incredible vacation experience, not just describing real estate.",
+    "description_markdown must feel personal, vivid, and emotionally engaging while remaining factual.",
+    "Write directly to the reader in second person ('you' and 'your') where natural.",
+    "Center the guest perspective: describe what the reader will feel, enjoy, and experience in the home.",
+    "Avoid detached third-person brochure tone.",
+    "Emphasize how families and friends gather, unwind, and make memories in the space.",
+    "Focus on experiential outcomes (comfort, connection, celebration, ease) more than feature inventory.",
+    "Do not lead with specs. Weave factual details into a guest-first narrative.",
+    "When mentioning amenities, tie each one to how the reader will use and enjoy it.",
+    "Keep copy warm, vivid, and aspirational, while remaining truthful to source facts.",
+    "Avoid boilerplate language and repeated formulas across listings.",
+    "Use at least two property-specific cues from source content in the narrative voice (for example courtyard flow, piano moments, carriage house privacy, walkability rhythm), and make those cues feel unique to the listing.",
+    "Do not reuse stock opening patterns such as 'Discover <name>' as a default.",
+    "Never start description_markdown with 'Discover' or with '<Property Name> is'.",
+    "The first sentence of description_markdown must read as a lived guest moment, not an introduction line.",
+    "Vary sentence rhythm, imagery, and paragraph openings so each listing reads personalized rather than templated.",
+    "Use sensory and experiential language grounded in source facts (for example light, atmosphere, rhythm, gathering moments, ease, privacy).",
+    "Avoid clinical or boilerplate phrasing. Do not write like a property spec sheet.",
+    "Avoid formulaic sentence openers repeated across paragraphs (for example repeated 'Discover', 'Step outside', 'Inside').",
+    "Vary cadence and sentence structure so each paragraph feels intentional and human.",
     "Preserve the listing personality and standout character while improving clarity and correctness.",
     "Fix typos, grammar issues, and run-on sentences; keep factual meaning intact.",
     "The authoritative source input fields are: source.h1, source.meta_description, source.description_expanded, source.amenities, and source.property_profile.",
@@ -2738,6 +2944,18 @@ export async function generateListingRefinement(input: {
     "Respect listing.property_type as authoritative asset-type context and keep wording aligned with it.",
     "Do not describe the property as a different asset type than listing.property_type.",
     "description_markdown must be readable markdown: short paragraphs (1-3 sentences each), no wall-of-text blocks.",
+    "description_markdown should open with an evocative lead paragraph before feature specifics.",
+    "description_markdown should balance emotional narrative with concrete guest-relevant details.",
+    "description_markdown should end with a warm, confidence-building closing tone rather than a checklist recap.",
+    "description_headline_plain must be an emotional lead-in phrase that feels evocative, elegant, and coherent as a standalone headline.",
+    "description_headline_plain must be 2 to 8 words, sentence case, and must not include punctuation at the end.",
+    "description_headline_plain should be derived from source.description_expanded mood and standout experiences, without inventing facts.",
+    "Do not force location into description_headline_plain. Include location only if it improves natural phrasing.",
+    "description_headline_plain may include the exact property name once when it reads naturally, but avoid awkward noun stacking.",
+    "Avoid template-like phrasing such as '<property name> in <location> ...' unless no better experiential phrasing is possible.",
+    "Prefer concise experiential wording over geographic labeling for description_headline_plain.",
+    "description_headline_plain should suggest the feeling of the stay, not summarize facts.",
+    "Avoid repeating the same headline construction across listings; make phrasing distinct to the listing personality.",
     "description_markdown should only contain the experiential narrative prose (no 'What Makes It Special' or 'Helpful Hints' sections inside description_markdown).",
     "Do not misclassify the asset type. If a carriage house appears as an accessory feature, do not describe the entire rental as a carriage house or carriage home.",
     "Return highlights as a separate 'highlights' array (4-6 concise bullets).",
@@ -2749,8 +2967,12 @@ export async function generateListingRefinement(input: {
     "Keep description_markdown, description_short_plain, highlights, and helpful_hints property-centric and brand-agnostic.",
     "SEO fields must include the marketplace brand name '30A Collections' in natural wording.",
     "Create short, specific highlights that surface noteworthy attributes as scannable bullets.",
+    "Do not use dashes in prose. Avoid em dash, en dash, or hyphenated style in generated copy.",
     "Normalize amenities to canonical amenity ids only.",
     "If uncertain on structured data, return conservative values (empty arrays or zero counts) rather than guessing.",
+    input.rebuildHelpfulHints
+      ? "Rebuild mode: helpful_hints must be complete standalone sentences, one operational policy per array entry, no concatenated fragments."
+      : "",
   ].join(" ");
 
   const userPayload = {
@@ -2778,6 +3000,9 @@ export async function generateListingRefinement(input: {
       },
     },
     canonical_amenity_ids: [...CANONICAL_AMENITY_IDS],
+    refinement_mode: input.rebuildHelpfulHints
+      ? "rebuild_helpful_hints"
+      : "default",
   };
 
   const refinementResponse = await callStructuredOpenAi({
@@ -2798,24 +3023,39 @@ export async function generateListingRefinement(input: {
     asString(parsed.description_markdown),
     input.snapshot.adapter_key,
   );
-  const cleanedShort = cleanManagerReferences(
+  const cleanedHeadlineRaw = cleanManagerReferences(
+    asString(parsed.description_headline_plain),
+    input.snapshot.adapter_key,
+  );
+  const cleanedShortRaw = cleanManagerReferences(
     asString(parsed.description_short_plain),
     input.snapshot.adapter_key,
   );
-  const cleanedSeoMetaDescription = cleanManagerReferences(
-    asString(parsed.seo_meta_description),
-    input.snapshot.adapter_key,
+  const cleanedShort = normalizeHumanProse(cleanedShortRaw);
+  const cleanedHeadline = normalizeHeadlinePlain({
+    headline: normalizeHumanProse(cleanedHeadlineRaw),
+    fallbackShort: cleanedShort,
+  });
+  const cleanedSeoMetaDescription = normalizeHumanProse(
+    cleanManagerReferences(
+      asString(parsed.seo_meta_description),
+      input.snapshot.adapter_key,
+    ),
   );
-  const cleanedSeoHiddenSummary = cleanManagerReferences(
-    asString(parsed.seo_hidden_summary_plain),
-    input.snapshot.adapter_key,
+  const cleanedSeoHiddenSummary = normalizeHumanProse(
+    cleanManagerReferences(
+      asString(parsed.seo_hidden_summary_plain),
+      input.snapshot.adapter_key,
+    ),
   );
 
   const highlights = stripBrandReferencesFromList(
     sanitizeHighlights((parsed as Record<string, unknown>).highlights),
     input.snapshot.adapter_key,
     8,
-  );
+  )
+    .map((entry) => normalizeHumanProse(entry))
+    .filter(Boolean);
   const helpfulHintsFromModel = stripBrandReferencesFromList(
     sanitizeHelpfulHints((parsed as Record<string, unknown>).helpful_hints),
     input.snapshot.adapter_key,
@@ -2826,9 +3066,13 @@ export async function generateListingRefinement(input: {
     input.snapshot.adapter_key,
     6,
   );
-  const helpfulHints = Array.from(
+  const helpfulHintsMerged = Array.from(
     new Set([...helpfulHintsFromModel, ...helpfulHintsFromSource]),
-  ).slice(0, 6);
+  );
+  const helpfulHints = finalizeHelpfulHintCandidates(helpfulHintsMerged).slice(
+    0,
+    6,
+  );
   const amenitiesFromModel = sanitizeAmenities(
     asStringArray(parsed.amenities_normalized),
   );
@@ -2857,7 +3101,10 @@ export async function generateListingRefinement(input: {
     input.snapshot.sleeping_arrangements,
   );
   const snapshotNormalizedRollups = normalizeSleepingRollups(
-    input.snapshot.sleeping_rollups,
+    deriveSleepingRollupsFromArrangements(
+      snapshotNormalizedSleeping,
+      input.snapshot.sleeps,
+    ),
     input.snapshot.sleeps,
   );
 
@@ -2899,6 +3146,7 @@ export async function generateListingRefinement(input: {
 
   let output: RefinementOutput = {
     description_markdown: formattedMarkdown,
+    description_headline_plain: cleanedHeadline,
     description_short_plain: cleanedShort,
     seo_meta_title: ensureSeoTitleBranding({
       title: asString(parsed.seo_meta_title),
@@ -2915,8 +3163,6 @@ export async function generateListingRefinement(input: {
     highlights,
     helpful_hints: helpfulHints,
     sleeping_arrangements: finalizedSleeping.arrangements,
-    sleeping_rollups: finalizedSleeping.rollups,
-    sleeping_ux_summary: finalizedSleeping.uxSummary,
     sleeping_summary: finalizedSleeping.summary,
     amenities_normalized: mergedAmenities,
     amenities_evidence: mergedAmenityEvidence,
@@ -2954,7 +3200,7 @@ export async function generateListingRefinement(input: {
     "Compare source facts against candidate generated output.",
     "Flag only factual mismatches, overstatements, or misleading wording.",
     "Be strict about primary asset type wording, occupancy, policy constraints, and amenity claims.",
-    "Be strict about sleeping capacity consistency: candidate_output.sleeping_rollups and candidate_output.sleeping_arrangements must align with listing.sleeps.",
+    "Be strict about sleeping capacity consistency: candidate_output.sleeping_summary and candidate_output.sleeping_arrangements must align with listing.sleeps.",
     "Capacity rules: king=2, queen=2, full=2, twin=1, daybed=1, trundle=1, air_mattress=1, sofa_bed=2, murphy=2, futon=2.",
     "For bunk configurations: twin_over_twin=2 sleeps, twin_over_full=3 sleeps, full_over_full=4 sleeps, queen_over_queen=4 sleeps, twin_over_queen=3 sleeps, twin_over_king=3 sleeps.",
     "If output is mostly accurate, keep issue list short.",
@@ -3010,17 +3256,20 @@ export async function generateListingRefinement(input: {
 
       const expectedSleeps = getExpectedSleeps(input.snapshot.sleeps);
       if (expectedSleeps !== null) {
-        const derivedCapacity = estimateSleepCapacityFromRollups(
-          output.sleeping_rollups,
-        );
+        const outputSleepRollups = deriveSleepRollupsFromOutput({
+          output,
+          expectedSleeps,
+        });
+        const derivedCapacity =
+          estimateSleepCapacityFromRollups(outputSleepRollups);
         if (derivedCapacity !== expectedSleeps) {
           issues.unshift({
             severity: "high",
-            field: "sleeping_rollups",
+            field: "sleeping_summary",
             issue: `Derived sleep capacity ${derivedCapacity} does not match listing sleeps ${expectedSleeps}.`,
             source_evidence: `listing.sleeps=${expectedSleeps}; derived_from_rollups=${derivedCapacity}`,
             correction_hint:
-              "Correct sleeping_arrangements and sleeping_rollups so bed counts and bunk configurations produce the exact listing.sleeps value.",
+              "Correct sleeping_arrangements and sleeping_summary so bed counts and bunk configurations produce the exact listing.sleeps value.",
           });
           retryRecommended = true;
           accuracy = Math.min(accuracy, 0.5);
@@ -3066,24 +3315,40 @@ export async function generateListingRefinement(input: {
           asString(parsed.description_markdown),
           input.snapshot.adapter_key,
         );
-        const retryShort = cleanManagerReferences(
-          asString(parsed.description_short_plain),
+        const retryHeadlineRaw = cleanManagerReferences(
+          asString(parsed.description_headline_plain),
           input.snapshot.adapter_key,
         );
-        const retrySeoDescription = cleanManagerReferences(
-          asString(parsed.seo_meta_description),
-          input.snapshot.adapter_key,
+        const retryShort = normalizeHumanProse(
+          cleanManagerReferences(
+            asString(parsed.description_short_plain),
+            input.snapshot.adapter_key,
+          ),
         );
-        const retrySeoHidden = cleanManagerReferences(
-          asString(parsed.seo_hidden_summary_plain),
-          input.snapshot.adapter_key,
+        const retryHeadline = normalizeHeadlinePlain({
+          headline: normalizeHumanProse(retryHeadlineRaw),
+          fallbackShort: retryShort,
+        });
+        const retrySeoDescription = normalizeHumanProse(
+          cleanManagerReferences(
+            asString(parsed.seo_meta_description),
+            input.snapshot.adapter_key,
+          ),
+        );
+        const retrySeoHidden = normalizeHumanProse(
+          cleanManagerReferences(
+            asString(parsed.seo_hidden_summary_plain),
+            input.snapshot.adapter_key,
+          ),
         );
 
         const retryHighlights = stripBrandReferencesFromList(
           sanitizeHighlights((parsed as Record<string, unknown>).highlights),
           input.snapshot.adapter_key,
           8,
-        );
+        )
+          .map((entry) => normalizeHumanProse(entry))
+          .filter(Boolean);
         const retryHintsModel = stripBrandReferencesFromList(
           sanitizeHelpfulHints(
             (parsed as Record<string, unknown>).helpful_hints,
@@ -3091,8 +3356,11 @@ export async function generateListingRefinement(input: {
           input.snapshot.adapter_key,
           6,
         );
-        const retryHints = Array.from(
+        const retryHintsMerged = Array.from(
           new Set([...retryHintsModel, ...helpfulHintsFromSource]),
+        );
+        const retryHints = finalizeHelpfulHintCandidates(
+          retryHintsMerged,
         ).slice(0, 6);
         const retryAmenitiesModel = sanitizeAmenities(
           asStringArray(parsed.amenities_normalized),
@@ -3115,6 +3383,7 @@ export async function generateListingRefinement(input: {
             propertyType: input.snapshot.property_type,
             bedrooms: input.snapshot.bedrooms,
           }),
+          description_headline_plain: retryHeadline,
           description_short_plain: retryShort,
           seo_meta_title: ensureSeoTitleBranding({
             title: asString(parsed.seo_meta_title),
@@ -3131,8 +3400,6 @@ export async function generateListingRefinement(input: {
           highlights: retryHighlights,
           helpful_hints: retryHints,
           sleeping_arrangements: output.sleeping_arrangements,
-          sleeping_rollups: output.sleeping_rollups,
-          sleeping_ux_summary: output.sleeping_ux_summary,
           sleeping_summary: output.sleeping_summary,
           amenities_normalized: retryMergedAmenities,
           amenities_evidence: retryMergedEvidence,
@@ -3148,8 +3415,12 @@ export async function generateListingRefinement(input: {
         const hasSleepRelatedIssue = issues.some(
           (issue) => /sleep/i.test(issue.field) || /sleep/i.test(issue.issue),
         );
+        const postRetryRollups = deriveSleepRollupsFromOutput({
+          output,
+          expectedSleeps,
+        });
         const postRetrySleepMatch = evaluateSleepCapacityMatch({
-          rollups: output.sleeping_rollups,
+          rollups: postRetryRollups,
           expectedSleeps,
         });
 
@@ -3179,26 +3450,28 @@ export async function generateListingRefinement(input: {
             const finalizedRetrySleeping = finalizeSleepingOutput({
               arrangements: sleepResolution.result.arrangements,
               rollups: sleepResolution.result.rollups,
-              fallbackRollups: output.sleeping_rollups,
+              fallbackRollups: postRetryRollups,
               expectedSleeps: input.snapshot.sleeps,
             });
 
             output.sleeping_arrangements = finalizedRetrySleeping.arrangements;
-            output.sleeping_rollups = finalizedRetrySleeping.rollups;
-            output.sleeping_ux_summary = finalizedRetrySleeping.uxSummary;
             output.sleeping_summary = finalizedRetrySleeping.summary;
           } catch {
             // Keep existing retry output and fall through to deterministic reconciliation checks.
           }
         }
 
+        const finalOutputRollups = deriveSleepRollupsFromOutput({
+          output,
+          expectedSleeps,
+        });
         const finalSleepMatch = evaluateSleepCapacityMatch({
-          rollups: output.sleeping_rollups,
+          rollups: finalOutputRollups,
           expectedSleeps,
         });
         const finalSleepAcceptable = isSleepAccommodationAcceptable({
           match: finalSleepMatch,
-          rollups: output.sleeping_rollups,
+          rollups: finalOutputRollups,
         });
         const isSleepIssue = (issue: RefinementAuditIssue): boolean =>
           /sleep/i.test(issue.field) || /sleep/i.test(issue.issue);
@@ -3223,11 +3496,11 @@ export async function generateListingRefinement(input: {
           if (!hasCapacityIssue && finalSleepMatch.target !== null) {
             audit.issues.unshift({
               severity: "high",
-              field: "sleeping_rollups",
+              field: "sleeping_summary",
               issue: `Derived sleep capacity ${finalSleepMatch.derived} does not match listing sleeps ${finalSleepMatch.target}.`,
               source_evidence: `listing.sleeps=${finalSleepMatch.target}; derived_from_rollups=${finalSleepMatch.derived}`,
               correction_hint:
-                "Correct sleeping_arrangements and sleeping_rollups so bed counts and bunk configurations produce the exact listing.sleeps value.",
+                "Correct sleeping_arrangements and sleeping_summary so bed counts and bunk configurations produce the exact listing.sleeps value.",
             });
           }
           audit.retry_recommended = true;
@@ -3276,16 +3549,19 @@ export async function persistListingRefinement(input: {
     typeof input.result.audit?.accuracy_score === "number"
       ? input.result.audit.accuracy_score
       : null;
-  const sleepCapacityMatch = evaluateSleepCapacityMatch({
-    rollups: input.result.output.sleeping_rollups,
+  const outputSleepRollups = deriveSleepRollupsFromOutput({
+    output: input.result.output,
     expectedSleeps: input.snapshot.sleeps,
   });
-  const sleepEnvironmentPresent = hasMeaningfulSleepEnvironment(
-    input.result.output.sleeping_rollups,
-  );
+  const sleepCapacityMatch = evaluateSleepCapacityMatch({
+    rollups: outputSleepRollups,
+    expectedSleeps: input.snapshot.sleeps,
+  });
+  const sleepEnvironmentPresent =
+    hasMeaningfulSleepEnvironment(outputSleepRollups);
   const sleepTolerancePass = isSleepAccommodationAcceptable({
     match: sleepCapacityMatch,
-    rollups: input.result.output.sleeping_rollups,
+    rollups: outputSleepRollups,
   });
   const auditPassed = !auditInvoked
     ? sleepTolerancePass

@@ -248,6 +248,191 @@ function parseNumberLike(value: string | undefined): number | null {
   return numeric;
 }
 
+function parseCoordinateLike(
+  value: string | undefined,
+  axis: "lat" | "lng",
+): number | null {
+  const parsed = parseNumberLike(value);
+  if (parsed === null) {
+    return null;
+  }
+
+  if (Math.abs(parsed) < 1e-9) {
+    return null;
+  }
+
+  if (axis === "lat") {
+    return parsed >= -90 && parsed <= 90 ? parsed : null;
+  }
+
+  return parsed >= -180 && parsed <= 180 ? parsed : null;
+}
+
+function extractGoogleMapsLlCoordinates(
+  html: string,
+): { latitude: number; longitude: number } | null {
+  const match = html.match(
+    /https?:\/\/maps\.google\.com\/maps\?[^"'\s>]*\bll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const latitude = parseCoordinateLike(match[1], "lat");
+  const longitude = parseCoordinateLike(match[2], "lng");
+  if (latitude === null || longitude === null) {
+    return null;
+  }
+
+  return { latitude, longitude };
+}
+
+function extractCoordinatesFromMapValue(
+  value: string,
+): { latitude: number; longitude: number } | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const llMatch = trimmed.match(
+    /(?:[?&]|\b)ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+  );
+  if (llMatch) {
+    const latitude = parseCoordinateLike(llMatch[1], "lat");
+    const longitude = parseCoordinateLike(llMatch[2], "lng");
+    if (latitude !== null && longitude !== null) {
+      return { latitude, longitude };
+    }
+  }
+
+  const qMatch = trimmed.match(
+    /(?:[?&]|\b)q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+  );
+  if (qMatch) {
+    const latitude = parseCoordinateLike(qMatch[1], "lat");
+    const longitude = parseCoordinateLike(qMatch[2], "lng");
+    if (latitude !== null && longitude !== null) {
+      return { latitude, longitude };
+    }
+  }
+
+  const atMatch = trimmed.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i);
+  if (atMatch) {
+    const latitude = parseCoordinateLike(atMatch[1], "lat");
+    const longitude = parseCoordinateLike(atMatch[2], "lng");
+    if (latitude !== null && longitude !== null) {
+      return { latitude, longitude };
+    }
+  }
+
+  return null;
+}
+
+async function extractLocationTabCoordinates(
+  browser: Parameters<
+    ScraperAdapter<OverseeDetailRecord>["fetchDetail"]
+  >[0]["browser"],
+  detailUrl: string,
+): Promise<{ latitude: number; longitude: number } | null> {
+  const page = await browser.newPage();
+
+  try {
+    await page.goto(detailUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 120000,
+    });
+
+    await page.waitForTimeout(1200);
+
+    await page.evaluate(() => {
+      const target =
+        (document.querySelector("#gmaplink") as HTMLElement | null) ??
+        (document.querySelector(
+          'li[aria-controls="location"], [role="tab"][aria-controls="location"]',
+        ) as HTMLElement | null);
+
+      if (!target) {
+        return;
+      }
+
+      target.click();
+      target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await page.waitForTimeout(1800);
+
+    const htmlAfterClick = await page.content();
+    const htmlCoords = extractGoogleMapsLlCoordinates(htmlAfterClick);
+    if (htmlCoords) {
+      return htmlCoords;
+    }
+
+    const extracted = await page.evaluate(() => {
+      const unitData = document.querySelector("#unit-data");
+      const unitLat = unitData?.getAttribute("data-unit-latitude") ?? "";
+      const unitLng = unitData?.getAttribute("data-unit-longitude") ?? "";
+
+      const mapValues = new Set<string>();
+      const mapNodes = Array.from(
+        document.querySelectorAll("a[href], iframe[src]"),
+      );
+      for (const node of mapNodes) {
+        const href =
+          (node as HTMLAnchorElement).getAttribute("href") ||
+          (node as HTMLIFrameElement).getAttribute("src") ||
+          "";
+        if (!href) {
+          continue;
+        }
+        if (
+          href.includes("google.com/maps") ||
+          href.includes("maps.google.com")
+        ) {
+          mapValues.add(href);
+        }
+      }
+
+      const locationRoot = document.querySelector("#location");
+      if (locationRoot) {
+        const text = locationRoot.textContent || "";
+        if (text) {
+          mapValues.add(text);
+        }
+        const locationHtml = locationRoot.outerHTML || "";
+        if (locationHtml) {
+          mapValues.add(locationHtml);
+        }
+      }
+
+      return {
+        unitLat,
+        unitLng,
+        mapValues: Array.from(mapValues),
+      };
+    });
+
+    const latFromUnit = parseCoordinateLike(extracted.unitLat, "lat");
+    const lngFromUnit = parseCoordinateLike(extracted.unitLng, "lng");
+    if (latFromUnit !== null && lngFromUnit !== null) {
+      return { latitude: latFromUnit, longitude: lngFromUnit };
+    }
+
+    for (const value of extracted.mapValues) {
+      const coords = extractCoordinatesFromMapValue(value);
+      if (coords) {
+        return coords;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  } finally {
+    await page.close();
+  }
+}
+
 function absoluteHttpUrl(value: string, baseUrl: string): string | null {
   const raw = value.trim();
   if (!raw) {
@@ -736,6 +921,9 @@ async function discoverListings(
 }
 
 async function fetchDetail(
+  browser: Parameters<
+    ScraperAdapter<OverseeDetailRecord>["fetchDetail"]
+  >[0]["browser"],
   detailUrl: string,
   availabilityHorizonDays: number,
 ): Promise<OverseeDetailRecord | null> {
@@ -810,6 +998,7 @@ async function fetchDetail(
     );
     const amenities = extractAmenities(html);
     const imageUrls = collectMediaUrls(html, normalizedDetailUrl);
+    const mapsHrefCoordinates = extractGoogleMapsLlCoordinates(html);
 
     const addressParts = [
       unitData["unit-address1"],
@@ -980,6 +1169,16 @@ async function fetchDetail(
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
 
+    const unitLatitude = parseCoordinateLike(unitData["unit-latitude"], "lat");
+    const unitLongitude = parseCoordinateLike(
+      unitData["unit-longitude"],
+      "lng",
+    );
+    const lazyLoadedCoordinates =
+      unitLatitude === null || unitLongitude === null
+        ? await extractLocationTabCoordinates(browser, normalizedDetailUrl)
+        : null;
+
     return {
       external_listing_id: externalListingId,
       detail_url: normalizedDetailUrl,
@@ -1004,8 +1203,16 @@ async function fetchDetail(
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
           : "",
         directions_daddr: fullAddress,
-        latitude: parseNumberLike(unitData["unit-latitude"]),
-        longitude: parseNumberLike(unitData["unit-longitude"]),
+        latitude:
+          unitLatitude ??
+          mapsHrefCoordinates?.latitude ??
+          lazyLoadedCoordinates?.latitude ??
+          null,
+        longitude:
+          unitLongitude ??
+          mapsHrefCoordinates?.longitude ??
+          lazyLoadedCoordinates?.longitude ??
+          null,
       },
       media_gallery: {
         image_count: imageUrls.length,
@@ -1114,7 +1321,11 @@ export function createAlysBeach30AAdapter(): ScraperAdapter<OverseeDetailRecord>
       );
     },
     async fetchDetail(context) {
-      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+      return fetchDetail(
+        context.browser,
+        context.detailUrl,
+        context.availabilityHorizonDays,
+      );
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(

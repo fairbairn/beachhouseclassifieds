@@ -64,6 +64,7 @@ export const listing = pgTable(
     bathrooms: numeric("bathrooms", { precision: 4, scale: 1 }),
     sleeps: integer("sleeps"),
     description_markdown: text("description_markdown"),
+    description_headline_plain: text("description_headline_plain"),
     description_short_plain: text("description_short_plain"),
     seo_meta_description: text("seo_meta_description"),
     seo_meta_title: text("seo_meta_title"),
@@ -77,7 +78,7 @@ export const listing = pgTable(
     sleeping_arrangements: jsonb("sleeping_arrangements")
       .notNull()
       .default(sql`'[]'::jsonb`),
-    sleeping_rollups: jsonb("sleeping_rollups")
+    sleeping_summary: jsonb("sleeping_summary")
       .notNull()
       .default(sql`'{}'::jsonb`),
     content_version: integer("content_version").notNull().default(1),

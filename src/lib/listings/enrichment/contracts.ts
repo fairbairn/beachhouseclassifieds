@@ -32,7 +32,7 @@ export type ListingAiEnrichmentOutputPayload = {
   highlights: string[];
   helpful_hints: string[];
   sleeping_arrangements: unknown[];
-  sleeping_rollups: Record<string, number>;
+  sleeping_summary: Record<string, unknown>;
   amenities_normalized: string[];
 };
 
@@ -45,7 +45,7 @@ export const LISTING_AI_ENRICHMENT_OUTPUT_REQUIRED_KEYS = [
   "highlights",
   "helpful_hints",
   "sleeping_arrangements",
-  "sleeping_rollups",
+  "sleeping_summary",
   "amenities_normalized",
 ] as const;
 
@@ -154,8 +154,8 @@ export function validateOutputPayloadStructure(value: unknown): string[] {
     }
   }
 
-  if (!isRecord(value.sleeping_rollups)) {
-    issues.push("sleeping_rollups must be an object.");
+  if (!isRecord(value.sleeping_summary)) {
+    issues.push("sleeping_summary must be an object.");
   }
 
   return issues;

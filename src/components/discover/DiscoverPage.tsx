@@ -1,16 +1,22 @@
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { differenceInCalendarDays, format, isValid, parseISO } from "date-fns";
 import {
   Accessibility,
   ArrowUpDown,
+  BedDouble,
+  CalendarDays,
   CarFront,
   ChevronDown,
   Dog,
   Droplets,
+  Heart,
   SlidersHorizontal,
   Waves,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import {
   DateRangeField,
@@ -26,10 +32,12 @@ import {
   type DiscoverListing,
 } from "@/components/discover/discover-data";
 import {
+  formatBathrooms,
   formatNights,
   getAreaFromListing,
   getBeachZoneFromListing,
   getListingGeoTarget,
+  getLocationPresentation,
   verifyGulfFrontClaim,
 } from "@/components/discover/discover-utils";
 import { DiscoverFacetSidebar } from "@/components/discover/DiscoverFacetSidebar";
@@ -50,8 +58,40 @@ const defaultMapTarget = {
 
 // TODO: Temporary UX toggle. Keep false so Clear Pin does not recenter map.
 const RESET_MAP_ON_CLEAR_PIN = false;
+const BRAND_DISPLAY_FONT_FAMILY = "'Playfair Display', serif";
 
-export function DiscoverPage() {
+export function DiscoverPage({
+  overlayListingId,
+  initialListings,
+}: {
+  overlayListingId?: string;
+  initialListings?: DiscoverListing[];
+}) {
+  const navigate = useNavigate();
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const overlayListingIdFromPath = (() => {
+    const match = pathname.match(/^\/discover\/listing\/(.+)$/);
+    if (!match) {
+      return undefined;
+    }
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  })();
+  const requestedOverlayListingId =
+    overlayListingId ?? overlayListingIdFromPath;
+  const isOverlayRoute = Boolean(requestedOverlayListingId);
+  const initialLoadedListings = initialListings ?? [];
+  const hasInitialOverlayListing = Boolean(
+    requestedOverlayListingId &&
+    initialLoadedListings.some(
+      (listing) => listing.id === requestedOverlayListingId,
+    ),
+  );
   const defaultMinSleeps = 0;
   const defaultMinBedrooms = 0;
   const defaultMinBathrooms = 0;
@@ -98,11 +138,13 @@ export function DiscoverPage() {
         previousHtmlOverscroll;
       document.body.style.overscrollBehavior = previousBodyOverscroll;
     };
-  }, []);
+  }, [requestedOverlayListingId]);
 
   const [locationQuery, setLocationQuery] = useState("");
   const [earliestDate, setEarliestDate] = useState("");
   const [latestDate, setLatestDate] = useState("");
+  const [checkInDate, setCheckInDate] = useState("");
+  const [checkOutDate, setCheckOutDate] = useState("");
   const [nights, setNights] = useState(7);
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
@@ -110,6 +152,8 @@ export function DiscoverPage() {
   const [datePanelOpenRequestToken, setDatePanelOpenRequestToken] = useState<
     number | undefined
   >(undefined);
+  const [checkDatePanelOpenRequestToken, setCheckDatePanelOpenRequestToken] =
+    useState<number | undefined>(undefined);
   const [minSleeps, setMinSleeps] = useState(defaultMinSleeps);
   const [minBedrooms, setMinBedrooms] = useState(defaultMinBedrooms);
   const [minBathrooms, setMinBathrooms] = useState(defaultMinBathrooms);
@@ -131,11 +175,19 @@ export function DiscoverPage() {
     3 | 4
   >(3);
   const [sortOption, setSortOption] = useState<SortOption>("recommended");
-  const [fetchedListings, setFetchedListings] = useState<DiscoverListing[]>([]);
+  const [fetchedListings, setFetchedListings] = useState<DiscoverListing[]>(
+    () => initialLoadedListings,
+  );
+  const fetchedListingsRef = useRef<DiscoverListing[]>([]);
+  const [isOverlayDetailLoading, setIsOverlayDetailLoading] = useState(
+    isOverlayRoute && !hasInitialOverlayListing,
+  );
   const [favoriteListingIds, setFavoriteListingIds] = useState<string[]>([]);
   const [selectedCardSyncRequestToken, setSelectedCardSyncRequestToken] =
     useState(0);
   const [isPinnedCardVisible, setIsPinnedCardVisible] = useState(true);
+  const [overlayMapExpandedListingId, setOverlayMapExpandedListingId] =
+    useState<string | undefined>(undefined);
 
   useEffect(() => {
     const chooseVariant = () => {
@@ -148,7 +200,7 @@ export function DiscoverPage() {
     return () => {
       window.removeEventListener("resize", chooseVariant);
     };
-  }, []);
+  }, [requestedOverlayListingId]);
 
   const clearPinnedListing = useCallback(() => {
     setActiveListingId(undefined);
@@ -233,22 +285,53 @@ export function DiscoverPage() {
   );
 
   useEffect(() => {
+    fetchedListingsRef.current = fetchedListings;
+  }, [fetchedListings]);
+
+  useEffect(() => {
     let isCancelled = false;
 
     const loadListings = async () => {
+      const hasRequestedListingAlreadyLoaded = Boolean(
+        requestedOverlayListingId &&
+        fetchedListingsRef.current.some(
+          (listing) => listing.id === requestedOverlayListingId,
+        ),
+      );
+      if (hasRequestedListingAlreadyLoaded) {
+        setIsOverlayDetailLoading(false);
+        return;
+      }
+
       try {
-        const response = await fetch("/api/discover/listings");
+        setIsOverlayDetailLoading(Boolean(requestedOverlayListingId));
+        const endpoint = requestedOverlayListingId
+          ? `/api/discover/listings?include=${encodeURIComponent(requestedOverlayListingId)}`
+          : "/api/discover/listings";
+        const response = await fetch(endpoint);
         if (!response.ok || isCancelled) {
+          if (!isCancelled) {
+            setIsOverlayDetailLoading(false);
+          }
           return;
         }
 
         const payload = (await response.json()) as { listings?: unknown };
         if (!Array.isArray(payload.listings)) {
+          if (!isCancelled) {
+            setIsOverlayDetailLoading(false);
+          }
           return;
         }
 
         setFetchedListings(payload.listings as DiscoverListing[]);
+        if (!isCancelled) {
+          setIsOverlayDetailLoading(false);
+        }
       } catch {
+        if (!isCancelled) {
+          setIsOverlayDetailLoading(false);
+        }
         // Keep local sample data fallback when fetch fails.
       }
     };
@@ -258,12 +341,19 @@ export function DiscoverPage() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [requestedOverlayListingId]);
 
-  const sourceListings =
-    fetchedListings.length > 0
-      ? fetchedListings.map(verifyGulfFrontClaim)
-      : sampleListings.map(verifyGulfFrontClaim);
+  const sourceListings = useMemo(() => {
+    if (fetchedListings.length > 0) {
+      return fetchedListings.map(verifyGulfFrontClaim);
+    }
+
+    if (isOverlayRoute) {
+      return [] as DiscoverListing[];
+    }
+
+    return sampleListings.map(verifyGulfFrontClaim);
+  }, [fetchedListings, isOverlayRoute]);
 
   const guestCount = adults + children;
 
@@ -321,28 +411,8 @@ export function DiscoverPage() {
     sourceListings,
   ]);
 
-  const baseDisplayListings = useMemo(() => {
-    const orderedListings = [...sourceListings];
-    const targetMockCount = 96;
-
-    return Array.from({ length: targetMockCount }, (_, index) => {
-      const baseListing = orderedListings[index % orderedListings.length];
-      const cycle = Math.floor(index / orderedListings.length) + 1;
-
-      if (cycle === 1) {
-        return baseListing;
-      }
-
-      return {
-        ...baseListing,
-        id: `${baseListing.id}-sample-${cycle}`,
-        name: `${baseListing.name} ${cycle}`,
-      };
-    });
-  }, [sourceListings]);
-
   const displayListings = useMemo(() => {
-    const listings = [...baseDisplayListings];
+    const listings = [...filtered];
 
     if (sortOption === "recommended") {
       return listings;
@@ -377,7 +447,7 @@ export function DiscoverPage() {
       }
       return b.sleeps - a.sleeps;
     });
-  }, [baseDisplayListings, nights, sortOption]);
+  }, [filtered, nights, sortOption]);
 
   const mapListings = useMemo(
     () =>
@@ -520,6 +590,214 @@ export function DiscoverPage() {
     );
   }, []);
 
+  const effectiveOverlayListingId = requestedOverlayListingId;
+  const isDetailOverlayOpen = Boolean(effectiveOverlayListingId);
+  const isOverlayMapExpanded =
+    Boolean(effectiveOverlayListingId) &&
+    overlayMapExpandedListingId === effectiveOverlayListingId;
+
+  const overlayListing = useMemo(
+    () =>
+      sourceListings.find(
+        (listing) => listing.id === effectiveOverlayListingId,
+      ),
+    [sourceListings, effectiveOverlayListingId],
+  );
+
+  const overlayLocation = useMemo(() => {
+    if (!overlayListing) {
+      return null;
+    }
+    return getLocationPresentation(overlayListing);
+  }, [overlayListing]);
+
+  const closeDetailOverlay = useCallback(() => {
+    setOverlayMapExpandedListingId(undefined);
+    void navigate({ to: "/discover" });
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!isDetailOverlayOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      closeDetailOverlay();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeDetailOverlay, isDetailOverlayOpen]);
+
+  const overlayMapTarget = useMemo(() => {
+    if (!overlayListing) {
+      return {
+        ...defaultMapTarget,
+        id: undefined,
+        zoom: 13,
+      };
+    }
+
+    const geoTarget = getListingGeoTarget(overlayListing);
+    return {
+      id: overlayListing.id,
+      lat: geoTarget.lat,
+      lng: geoTarget.lng,
+      label: overlayListing.name,
+      zoom: 19,
+    };
+  }, [overlayListing]);
+
+  const overlayMapListings = useMemo(() => {
+    if (!overlayListing) {
+      return [] as Array<{
+        id: string;
+        name: string;
+        lat: number;
+        lng: number;
+        hoverPriceAmount: string;
+      }>;
+    }
+
+    const geoTarget = getListingGeoTarget(overlayListing);
+    const total = Math.ceil(overlayListing.typicalAllInNightly * nights);
+    return [
+      {
+        id: overlayListing.id,
+        name: overlayListing.name,
+        lat: geoTarget.lat,
+        lng: geoTarget.lng,
+        hoverPriceAmount: `$${total.toLocaleString("en-US")}`,
+      },
+    ];
+  }, [nights, overlayListing]);
+
+  const overlayEmotionalHeadline = useMemo(() => {
+    if (!overlayListing) {
+      return null;
+    }
+
+    const candidate = (overlayListing.descriptionHeadline ?? "")
+      .replace(/[^a-zA-Z0-9\s'’-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const wordCount = candidate.length > 0 ? candidate.split(/\s+/).length : 0;
+    if (wordCount >= 2 && wordCount <= 8) {
+      return candidate;
+    }
+    return null;
+  }, [overlayListing]);
+
+  const overlayFeaturePills = useMemo(() => {
+    if (!overlayListing) {
+      return [] as string[];
+    }
+
+    const features = [
+      overlayListing.beachfront ? "Gulf Front" : null,
+      overlayListing.privatePool ? "Private Pool" : null,
+      overlayListing.golfCart ? "Golf Cart" : null,
+    ].filter((value): value is string => Boolean(value));
+
+    return features;
+  }, [overlayListing]);
+
+  const overlayCommunityPill = useMemo(() => {
+    const value = overlayLocation?.locationChip?.trim();
+    return value && value.length > 0 ? value : null;
+  }, [overlayLocation?.locationChip]);
+
+  const overlayAvailabilityByMonth = useMemo(() => {
+    const availability = overlayListing?.availabilityCalendar;
+    if (!availability || Object.keys(availability).length === 0) {
+      return [] as Array<{
+        key: string;
+        label: string;
+        count: number;
+        min: number;
+        max: number;
+      }>;
+    }
+
+    const grouped = new Map<string, number[]>();
+    for (const [iso, nightly] of Object.entries(availability)) {
+      const date = parseISO(iso);
+      if (!isValid(date)) {
+        continue;
+      }
+      const key = format(date, "yyyy-MM");
+      const values = grouped.get(key) ?? [];
+      values.push(Math.max(0, Math.round(nightly)));
+      grouped.set(key, values);
+    }
+
+    return Array.from(grouped.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(0, 12)
+      .map(([key, values]) => {
+        const sample = values.length > 0 ? values : [0];
+        const monthDate = parseISO(`${key}-01`);
+        return {
+          key,
+          label: isValid(monthDate) ? format(monthDate, "MMM yyyy") : key,
+          count: values.length,
+          min: Math.min(...sample),
+          max: Math.max(...sample),
+        };
+      });
+  }, [overlayListing?.availabilityCalendar]);
+
+  const overlayBedStats = useMemo(() => {
+    if (!overlayListing) {
+      return [] as Array<{ key: string; label: string; count: number }>;
+    }
+
+    const bedCounts = overlayListing.sleepingSummary?.bed_counts;
+    const count = (value: unknown, fallback = 0) => {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return Math.max(0, Math.round(value));
+      }
+      return Math.max(0, Math.round(fallback));
+    };
+
+    return [
+      { key: "king", label: "King Bed", count: count(bedCounts?.king, 0) },
+      {
+        key: "queen",
+        label: "Queen Bed",
+        count: count(bedCounts?.queen, 0),
+      },
+      { key: "full", label: "Full Bed", count: count(bedCounts?.full, 0) },
+      {
+        key: "twin",
+        label: "Twin Bed",
+        count: count(bedCounts?.twin_standalone, 0),
+      },
+      {
+        key: "bunk",
+        label: "Bunk Bed",
+        count: count(bedCounts?.bunk_beds, 0),
+      },
+    ].filter((entry) => entry.count > 0);
+  }, [overlayListing]);
+
+  const openDetailOverlay = useCallback(
+    (listingId: string) => {
+      setOverlayMapExpandedListingId(undefined);
+      void navigate({
+        to: "/discover/listing/$slug",
+        params: { slug: listingId },
+      });
+    },
+    [navigate],
+  );
+
   return (
     <HomeMarketingShell
       preferDarkTopNavText={false}
@@ -543,7 +821,7 @@ export function DiscoverPage() {
           <div className="flex min-w-32 flex-col items-center">
             <span
               className="text-4xl leading-none tracking-[0.06em] text-white"
-              style={{ fontFamily: "'Playfair Display', serif" }}
+              style={{ fontFamily: BRAND_DISPLAY_FONT_FAMILY }}
             >
               30<span className="text-[#2DD4BF]">A</span>
             </span>
@@ -589,6 +867,7 @@ export function DiscoverPage() {
               <DateRangeField
                 startDate={earliestDate}
                 endDate={latestDate}
+                selectedNights={nights}
                 openRequestToken={datePanelOpenRequestToken}
                 onChange={({ startDate, endDate }) => {
                   setEarliestDate(startDate);
@@ -801,11 +1080,6 @@ export function DiscoverPage() {
               </div>
             </div>
           </div>
-
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute top-full right-0 left-0 z-30 hidden h-9 bg-linear-to-b from-slate-950/24 via-slate-900/10 to-transparent blur-md xl:block"
-          />
         </header>
 
         <div
@@ -835,20 +1109,378 @@ export function DiscoverPage() {
             favoriteIds={favoriteListingIds}
             onToggleFavorite={toggleFavoriteListing}
             onFocusMap={handleFocusMap}
+            onOpenDetailOverlay={openDetailOverlay}
           />
 
-          <DiscoverMapPanel
-            mapTarget={mapTarget}
-            listings={mapListings}
-            onClearPin={clearPinnedListing}
-            onResetMapView={resetMapView}
-            onSelectListing={handleSelectListingFromMap}
-            onSyncSelectedListingCard={requestSelectedCardSync}
-            isSyncSelectedListingCardAvailable={canSyncSelectedListingCard}
-            isExpanded={isMapExpanded}
-            onToggleExpanded={() => setIsMapExpanded((current) => !current)}
-          />
+          {!isDetailOverlayOpen ? (
+            <DiscoverMapPanel
+              mapTarget={mapTarget}
+              listings={mapListings}
+              onClearPin={clearPinnedListing}
+              onResetMapView={resetMapView}
+              onSelectListing={handleSelectListingFromMap}
+              onSyncSelectedListingCard={requestSelectedCardSync}
+              isSyncSelectedListingCardAvailable={canSyncSelectedListingCard}
+              isExpanded={isMapExpanded}
+              onToggleExpanded={() => setIsMapExpanded((current) => !current)}
+            />
+          ) : (
+            <aside className="hidden xl:block" aria-hidden="true" />
+          )}
         </div>
+
+        {effectiveOverlayListingId ? (
+          <div className="absolute inset-0 z-40 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_32px_80px_-42px_rgba(15,23,42,0.9)]">
+            {overlayListing ? (
+              <div className="grid h-full min-h-0 gap-x-4 gap-y-3 overflow-x-hidden p-3 md:gap-y-4 md:p-4 xl:grid-cols-[290px_minmax(0,1fr)_290px] xl:grid-rows-[auto_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]">
+                <section className="relative col-span-full h-[clamp(15rem,34vh,20rem)] overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-[0_24px_48px_-34px_rgba(15,23,42,0.85)] md:h-[clamp(17rem,40vh,24rem)] xl:h-[clamp(19rem,46vh,28rem)]">
+                  <img
+                    src={
+                      overlayListing.imageGallery?.[0]?.url ??
+                      overlayListing.previewImages[0]
+                    }
+                    alt={`${overlayListing.name} hero image`}
+                    className="absolute inset-0 block h-full w-full object-cover"
+                  />
+                  <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[44%] bg-gradient-to-b from-slate-950/70 via-slate-900/30 to-transparent" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[30%] bg-gradient-to-t from-slate-950/80 via-slate-900/45 to-transparent" />
+
+                  <div className="absolute top-4 right-4 z-30 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (effectiveOverlayListingId) {
+                          toggleFavoriteListing(effectiveOverlayListingId);
+                        }
+                      }}
+                      className={`inline-flex h-12 items-center gap-2 rounded-full border px-5 text-sm font-bold shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] transition ${effectiveOverlayListingId && favoriteListingIds.includes(effectiveOverlayListingId) ? "border-rose-500 bg-rose-600 text-white" : "border-rose-300 bg-rose-50 text-rose-700 hover:border-rose-500 hover:bg-rose-100"}`}
+                      aria-label="Toggle favorite"
+                      title="Toggle favorite"
+                    >
+                      <Heart
+                        className="h-5 w-5"
+                        fill={
+                          effectiveOverlayListingId &&
+                          favoriteListingIds.includes(effectiveOverlayListingId)
+                            ? "currentColor"
+                            : "none"
+                        }
+                      />
+                      Favorite
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeDetailOverlay}
+                      className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/70 bg-white/95 text-slate-700 shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] transition hover:border-slate-400 hover:bg-white"
+                      aria-label="Close details box"
+                      title="Close details box"
+                    >
+                      <X className="h-6 w-6" />
+                    </button>
+                  </div>
+
+                  {overlayCommunityPill ? (
+                    <span className="absolute right-4 bottom-4 z-30 rounded-full border border-teal-300 bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-900 md:right-6 md:bottom-6">
+                      {overlayCommunityPill}
+                    </span>
+                  ) : null}
+
+                  <div className="absolute top-4 left-4 z-20 max-w-4xl md:top-6 md:left-6">
+                    <p className="text-[10px] font-bold tracking-[0.2em] text-cyan-200 uppercase">
+                      {overlayLocation?.subline ??
+                        `${overlayListing.community} • ${overlayListing.area}`}
+                    </p>
+                    <h2
+                      className="mt-2 max-w-4xl text-6xl leading-[0.95] text-white md:text-7xl xl:text-8xl"
+                      style={{
+                        fontFamily: BRAND_DISPLAY_FONT_FAMILY,
+                        textShadow: "0 10px 24px rgba(15,23,42,0.72)",
+                      }}
+                    >
+                      {overlayListing.name}
+                    </h2>
+                  </div>
+
+                  <div className="absolute bottom-4 left-4 z-30 md:bottom-6 md:left-6">
+                    <p className="text-left text-sm font-semibold tracking-[0.03em] text-white md:text-base">
+                      {overlayListing.bedrooms} BR,{" "}
+                      {formatBathrooms(overlayListing.bathrooms)} BA, Sleeps{" "}
+                      {overlayListing.sleeps}
+                    </p>
+                  </div>
+
+                  <div className="absolute right-4 bottom-4 left-4 z-20 md:right-6 md:bottom-6 md:left-6">
+                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                      {overlayFeaturePills.map((pill, index) => (
+                        <span
+                          key={`${pill}-${index}`}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-sm ${pill === "Gulf Front" ? "border-amber-200 bg-amber-50 text-amber-800" : pill === "Private Pool" ? "border-blue-200 bg-blue-50 text-blue-800" : pill === "Golf Cart" ? "border-teal-200 bg-teal-50 text-teal-800" : "border-teal-300 bg-teal-100 text-teal-900"}`}
+                        >
+                          {pill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                {isOverlayMapExpanded ? (
+                  <section className="col-span-full min-h-0 rounded-2xl border border-white/75 bg-white/95 p-4 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)]">
+                    <div className="h-full min-h-80">
+                      <DiscoverMapPanel
+                        mapTarget={overlayMapTarget}
+                        listings={overlayMapListings}
+                        onClearPin={() => {}}
+                        onResetMapView={() => {}}
+                        onSelectListing={() => {}}
+                        onSyncSelectedListingCard={() => {}}
+                        isSyncSelectedListingCardAvailable={false}
+                        isExpanded={true}
+                        onToggleExpanded={() =>
+                          setOverlayMapExpandedListingId(undefined)
+                        }
+                        showExpandControl={true}
+                        showSyncControl={false}
+                        showClearPinControl={false}
+                        resetToInitialTargetView={true}
+                        stickyOnDesktop={false}
+                        panelClassName="h-full border-0 bg-transparent p-0 shadow-none"
+                        mapViewportClassName="relative mt-2 h-[calc(100%-2.5rem)] min-h-80 overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+                      />
+                    </div>
+                  </section>
+                ) : (
+                  <>
+                    <aside className="hidden min-h-0 rounded-2xl border border-white/75 bg-white/92 p-4 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)] xl:flex xl:flex-col">
+                      <p className="text-[10px] font-bold tracking-[0.16em] text-slate-500 uppercase">
+                        Availability Calendar
+                      </p>
+                      <p className="mt-2 text-sm text-slate-700">
+                        Month-by-month price and night availability.
+                      </p>
+                      <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+                        {overlayAvailabilityByMonth.length > 0 ? (
+                          <ul className="space-y-2">
+                            {overlayAvailabilityByMonth.map((month) => (
+                              <li
+                                key={month.key}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+                              >
+                                <p className="text-xs font-semibold text-slate-900">
+                                  {month.label}
+                                </p>
+                                <p className="text-[11px] text-slate-600">
+                                  {month.count} nights • $
+                                  {month.min.toLocaleString("en-US")} - $
+                                  {month.max.toLocaleString("en-US")}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                            Availability data is loading.
+                          </div>
+                        )}
+                      </div>
+                    </aside>
+
+                    <section className="min-h-0 overflow-hidden rounded-2xl border border-white/75 bg-white/95 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)] xl:flex xl:flex-col">
+                      <article className="discover-cards-scroll min-h-0 overflow-y-auto px-8 pt-6 pb-5 md:px-11 md:pt-7 xl:h-full xl:flex-1 xl:px-12">
+                        <div className="min-h-0 space-y-6">
+                          {overlayEmotionalHeadline ? (
+                            <h3
+                              className="mb-7 text-[2.3rem] leading-[1.16] text-slate-800 italic md:mb-9 md:text-[2.75rem]"
+                              style={{ fontFamily: BRAND_DISPLAY_FONT_FAMILY }}
+                            >
+                              {overlayEmotionalHeadline.replace(/[.!?]+$/, "") +
+                                "."}
+                            </h3>
+                          ) : null}
+
+                          <div className="grid min-h-0 gap-y-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:items-start xl:gap-x-14 2xl:gap-x-18">
+                            <section className="min-h-0 space-y-6 xl:pr-2 2xl:pr-3">
+                              <div className="prose prose-slate prose-strong:font-semibold prose-em:italic max-w-none text-slate-800">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm]}
+                                  components={{
+                                    p: ({ children }) => (
+                                      <p className="mb-4 max-w-[70ch] font-sans text-[1.1rem] leading-8 font-normal text-slate-600 last:mb-0">
+                                        {children}
+                                      </p>
+                                    ),
+                                    li: ({ children }) => (
+                                      <li className="font-sans text-[1rem] leading-7 text-slate-700">
+                                        {children}
+                                      </li>
+                                    ),
+                                  }}
+                                >
+                                  {overlayListing.descriptionMarkdown ??
+                                    overlayListing.description ??
+                                    `A bright, coastal-forward stay in ${overlayListing.area} with room for ${overlayListing.sleeps} guests.`}
+                                </ReactMarkdown>
+                              </div>
+
+                              <aside className="min-h-0 border-t border-slate-200/80 pt-5">
+                                {overlayBedStats.length > 0 ? (
+                                  <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                                    {overlayBedStats.map((entry) => (
+                                      <span
+                                        key={entry.key}
+                                        className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-sm font-medium text-slate-700"
+                                      >
+                                        <BedDouble className="h-3.5 w-3.5 text-slate-500" />
+                                        {entry.count} {entry.label}
+                                        {entry.count === 1 ? "" : "s"}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                <section className="rounded-2xl border border-slate-200 bg-slate-50/75 p-4 md:p-5">
+                                  <h3 className="font-sans text-[0.95rem] font-bold tracking-[0.2em] text-slate-900 uppercase">
+                                    Special Features
+                                  </h3>
+                                  <ul className="mt-3 list-outside list-disc space-y-2 pl-5 font-sans text-[1rem] leading-7 text-slate-700 marker:text-slate-400">
+                                    {(overlayListing.highlightsList?.length
+                                      ? overlayListing.highlightsList.slice(
+                                          0,
+                                          10,
+                                        )
+                                      : [
+                                          overlayListing.beachfront
+                                            ? "Gulf Front"
+                                            : null,
+                                          overlayListing.privatePool
+                                            ? "Private Pool"
+                                            : null,
+                                          overlayListing.golfCart
+                                            ? "Golf Cart"
+                                            : null,
+                                          overlayListing.elevator
+                                            ? "Elevator"
+                                            : null,
+                                          overlayListing.accessible
+                                            ? "Accessible"
+                                            : null,
+                                          overlayListing.petsAllowed
+                                            ? "Pets Allowed"
+                                            : null,
+                                        ].filter((chip): chip is string =>
+                                          Boolean(chip),
+                                        )
+                                    ).map((line) => (
+                                      <li key={line} className="font-medium">
+                                        {line}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </section>
+                              </aside>
+                            </section>
+
+                            <div className="space-y-6 xl:pl-2 2xl:space-y-7 2xl:pl-3">
+                              <section className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] md:p-5">
+                                <div className="flex items-center gap-2 text-slate-700">
+                                  <CalendarDays className="h-4 w-4" />
+                                  <p className="text-[10px] font-bold tracking-[0.14em] uppercase">
+                                    Define Your {nights} Night Stay
+                                  </p>
+                                </div>
+                                <div className="mt-2">
+                                  <DateRangeField
+                                    startDate={checkInDate}
+                                    endDate={checkOutDate}
+                                    selectedNights={nights}
+                                    emptyLabel="Check-In / Check-out"
+                                    openRequestToken={
+                                      checkDatePanelOpenRequestToken
+                                    }
+                                    onChange={({ startDate, endDate }) => {
+                                      setCheckInDate(startDate);
+                                      setCheckOutDate(endDate);
+                                    }}
+                                  />
+                                </div>
+                                <div className="mt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCheckDatePanelOpenRequestToken(
+                                        (current) => (current ?? 0) + 1,
+                                      )
+                                    }
+                                    className="inline-flex h-10 w-full items-center justify-center rounded-md border border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 px-3 text-sm font-semibold whitespace-nowrap text-white shadow-[0_8px_18px_-12px_rgba(13,148,136,0.75)] transition hover:brightness-105"
+                                  >
+                                    Check Availability
+                                  </button>
+                                </div>
+                              </section>
+
+                              <section className="rounded-2xl border border-slate-200 bg-slate-50/75 p-4 md:p-5">
+                                <h3 className="font-sans text-[0.9rem] font-bold tracking-[0.2em] text-slate-900 uppercase">
+                                  Helpful Hints
+                                </h3>
+                                <ul className="mt-3 list-outside list-disc space-y-2 pl-5 font-sans text-[0.95rem] leading-6 text-slate-600 marker:text-slate-400">
+                                  {(overlayListing.helpfulHints?.length
+                                    ? overlayListing.helpfulHints.slice(0, 6)
+                                    : [
+                                        `Check-in: ${overlayListing.checkInTime ?? "4:00 PM"}.`,
+                                        `Check-out: ${overlayListing.checkOutTime ?? "10:00 AM"}.`,
+                                      ]
+                                  ).map((line) => (
+                                    <li key={line} className="font-medium">
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </section>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    </section>
+
+                    <aside className="min-h-0 min-w-0 overflow-hidden">
+                      <DiscoverMapPanel
+                        mapTarget={overlayMapTarget}
+                        listings={overlayMapListings}
+                        onClearPin={() => {}}
+                        onResetMapView={() => {}}
+                        onSelectListing={() => {}}
+                        onSyncSelectedListingCard={() => {}}
+                        isSyncSelectedListingCardAvailable={false}
+                        isExpanded={false}
+                        onToggleExpanded={() =>
+                          setOverlayMapExpandedListingId(
+                            effectiveOverlayListingId,
+                          )
+                        }
+                        showExpandControl={true}
+                        showSyncControl={false}
+                        showClearPinControl={false}
+                        resetToInitialTargetView={true}
+                        stickyOnDesktop={false}
+                        panelClassName="min-h-0 min-w-0 self-stretch h-full"
+                        mapViewportClassName="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+                      />
+                    </aside>
+                  </>
+                )}
+              </div>
+            ) : isOverlayDetailLoading ? (
+              <div className="grid h-full min-h-0 gap-x-4 gap-y-3 overflow-x-hidden p-3 md:gap-y-4 md:p-4 xl:grid-cols-[290px_minmax(0,1fr)_290px] xl:grid-rows-[auto_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]">
+                <div className="col-span-full h-[clamp(15rem,34vh,20rem)] animate-pulse rounded-2xl border border-slate-200 bg-slate-300/55 md:h-[clamp(17rem,40vh,24rem)] xl:h-[clamp(19rem,46vh,28rem)]" />
+                <div className="hidden animate-pulse rounded-2xl border border-white/75 bg-white/85 xl:block" />
+                <div className="min-h-0 animate-pulse rounded-2xl border border-white/75 bg-white/85" />
+                <div className="animate-pulse rounded-2xl border border-white/75 bg-white/85" />
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-700">
+                Property details are not available for this listing yet.
+              </div>
+            )}
+          </div>
+        ) : null}
       </section>
     </HomeMarketingShell>
   );
