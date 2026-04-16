@@ -417,6 +417,10 @@ function dedupePreserveOrder(values: string[]): string[] {
   return out;
 }
 
+function isTemplateToken(value: string): boolean {
+  return /\{\{|\}\}/.test(value);
+}
+
 function extractRoomsGuidanceFromHtmlRoomCards(html: string): string[] {
   const sectionMatch = html.match(
     /<section[^>]+id=["']roomcards["'][^>]*>([\s\S]*?)<\/section>/i,
@@ -435,12 +439,15 @@ function extractRoomsGuidanceFromHtmlRoomCards(html: string): string[] {
   for (const roomCard of roomCards) {
     const cardHtml = roomCard[1] ?? "";
     const roomName = extractFirst(/<h3[^>]*>([\s\S]*?)<\/h3>/i, cardHtml);
+    if (isTemplateToken(roomName)) {
+      continue;
+    }
     const afterHeading = cardHtml.split(/<h3[^>]*>[\s\S]*?<\/h3>/i)[1] ?? "";
     const features = Array.from(
       afterHeading.matchAll(/<div[^>]*>([\s\S]*?)<\/div>/gi),
     )
       .map((match) => stripHtml(match[1] ?? ""))
-      .filter(Boolean);
+      .filter((value) => value && !isTemplateToken(value));
 
     if (!roomName && features.length === 0) {
       continue;
@@ -1279,7 +1286,53 @@ async function fetchDetail(
     const titleNormalized = normalizeForMatch(name);
 
     const descriptionExpanded = description;
-    const roomsGuidance = extractRoomsGuidanceFromHtmlRoomCards(html);
+    const roomsGuidanceFromCards: string[] = [];
+
+    for (const room of roomCards) {
+      if (!room || typeof room !== "object") {
+        continue;
+      }
+
+      const roomNameRaw = (room as { room_name?: unknown }).room_name;
+      const roomName =
+        typeof roomNameRaw === "string" ? stripHtml(roomNameRaw).trim() : "";
+      if (!roomName || isTemplateToken(roomName)) {
+        continue;
+      }
+
+      const features: string[] = [];
+      const roomAmenitiesRaw = (room as { room_group_amens?: unknown })
+        .room_group_amens;
+      if (typeof roomAmenitiesRaw === "string" && roomAmenitiesRaw.trim()) {
+        try {
+          const parsedRoomAmenities = JSON.parse(roomAmenitiesRaw) as unknown;
+          if (Array.isArray(parsedRoomAmenities)) {
+            for (const entry of parsedRoomAmenities) {
+              if (typeof entry !== "string") {
+                continue;
+              }
+              const clean = stripHtml(entry).trim();
+              if (!clean || isTemplateToken(clean)) {
+                continue;
+              }
+              features.push(clean);
+            }
+          }
+        } catch {
+          // Ignore malformed room amenity payloads.
+        }
+      }
+
+      roomsGuidanceFromCards.push(
+        features.length > 0 ? `${roomName} | ${features.join(", ")}` : roomName,
+      );
+    }
+
+    const roomsGuidanceFromHtml = extractRoomsGuidanceFromHtmlRoomCards(html);
+    const roomsGuidance =
+      dedupePreserveOrder(roomsGuidanceFromCards).length > 0
+        ? dedupePreserveOrder(roomsGuidanceFromCards)
+        : roomsGuidanceFromHtml;
 
     const amenitiesCategories: Record<string, string[]> = {};
     const amenitiesAll: string[] = [];

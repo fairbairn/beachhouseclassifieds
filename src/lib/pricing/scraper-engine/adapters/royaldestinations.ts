@@ -35,7 +35,7 @@ type RoyalDestinationsDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
-  rooms_guidance: string[];
+  rooms_guidance: false;
   amenities: {
     categories: AmenityGroups;
     all: string[];
@@ -269,82 +269,6 @@ function parseExpandedDescription(html: string): string {
   );
 
   return stripHtml(decodeHtmlEntities(bodyBlock)).slice(0, 40000);
-}
-
-function dedupePreserveOrder(values: string[]): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const value of values) {
-    const normalized = value.trim();
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    out.push(normalized);
-  }
-  return out;
-}
-
-function extractRoomsGuidanceHeuristic(input: {
-  description: string;
-  html: string;
-  beds: number | null;
-}): string[] {
-  const out: string[] = [];
-
-  const descriptionSegments = input.description
-    .replace(/\s+/g, " ")
-    .split(/(?<=[.!?])\s+/)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-
-  for (const segment of descriptionSegments) {
-    const normalized = segment.toLowerCase();
-    if (segment.length < 12 || segment.length > 280) {
-      continue;
-    }
-
-    if (
-      normalized.includes("bedroom") ||
-      /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
-        normalized,
-      )
-    ) {
-      out.push(segment.replace(/\s+/g, " ").trim());
-    }
-  }
-
-  for (const captionMatch of input.html.matchAll(/data-caption="([^"]+)"/gi)) {
-    const caption = stripHtml(decodeHtmlEntities(captionMatch[1] ?? ""))
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!caption || caption.length > 220) {
-      continue;
-    }
-
-    if (
-      /bedroom|king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
-        caption,
-      )
-    ) {
-      out.push(caption);
-    }
-  }
-
-  const deduped = dedupePreserveOrder(out).slice(0, 80);
-  if (deduped.length > 0) {
-    return deduped;
-  }
-
-  if (
-    typeof input.beds === "number" &&
-    Number.isFinite(input.beds) &&
-    input.beds > 0
-  ) {
-    return [`Layout summary: ${input.beds} bedrooms`];
-  }
-
-  return [];
 }
 
 function monthNameToNumber(label: string): number | null {
@@ -1592,12 +1516,6 @@ async function fetchDetail(
       Number.isFinite(Number(propDetails.bed)) && Number(propDetails.bed) > 0
         ? Number(propDetails.bed)
         : bedsFromHtml;
-    const roomDetailsGuidance = extractRoomsGuidanceHeuristic({
-      description,
-      html,
-      beds: resolvedBeds,
-    });
-
     return {
       external_listing_id: externalListingId,
       detail_url: normalizedDetailUrl,
@@ -1608,7 +1526,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: expandedDescription,
-      rooms_guidance: roomDetailsGuidance,
+      rooms_guidance: false,
       amenities,
       location: {
         address: locationMetadata.address,
