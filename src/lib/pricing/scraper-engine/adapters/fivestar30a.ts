@@ -3,7 +3,6 @@ import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-a
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Browser } from "playwright";
 
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
@@ -398,6 +397,26 @@ function extractExternalListingId(detailUrl: string, html: string): string {
   return detailUrl;
 }
 
+function dedupePreserveOrder(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized) {
+      continue;
+    }
+    const key = normalizeForMatch(normalized);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(normalized);
+  }
+
+  return out;
+}
+
 function extractRoomsGuidanceFromHtmlRoomCards(html: string): string[] {
   const sectionMatch = html.match(
     /<section[^>]+id=["']roomcards["'][^>]*>([\s\S]*?)<\/section>/i,
@@ -406,27 +425,33 @@ function extractRoomsGuidanceFromHtmlRoomCards(html: string): string[] {
     return [];
   }
 
-  const out: string[] = [];
-  const roomCardRegex =
-    /<div[^>]*class=["'][^"']*roomcard[^"']*["'][^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>([\s\S]*?)<\/div>\s*<\/div>/gi;
+  const roomCards = Array.from(
+    sectionMatch[1].matchAll(
+      /<div[^>]*class=["'][^"']*roomcard[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi,
+    ),
+  );
+  const guidance: string[] = [];
 
-  for (const match of sectionMatch[1].matchAll(roomCardRegex)) {
-    const roomName = stripHtml(match[1] ?? "").trim();
-    const body = match[2] ?? "";
-    const features = Array.from(body.matchAll(/<div[^>]*>([\s\S]*?)<\/div>/gi))
-      .map((part) => stripHtml(part[1] ?? "").trim())
+  for (const roomCard of roomCards) {
+    const cardHtml = roomCard[1] ?? "";
+    const roomName = extractFirst(/<h3[^>]*>([\s\S]*?)<\/h3>/i, cardHtml);
+    const afterHeading = cardHtml.split(/<h3[^>]*>[\s\S]*?<\/h3>/i)[1] ?? "";
+    const features = Array.from(
+      afterHeading.matchAll(/<div[^>]*>([\s\S]*?)<\/div>/gi),
+    )
+      .map((match) => stripHtml(match[1] ?? ""))
       .filter(Boolean);
 
     if (!roomName && features.length === 0) {
       continue;
     }
 
-    out.push(
+    guidance.push(
       features.length > 0 ? `${roomName} | ${features.join(", ")}` : roomName,
     );
   }
 
-  return dedupePreserveOrder(out);
+  return dedupePreserveOrder(guidance);
 }
 
 function parseSlashDate(value: string): Date | null {
@@ -904,7 +929,6 @@ async function discoverListings(
 }
 
 async function fetchDetail(
-  browser: Browser,
   detailUrl: string,
   availabilityHorizonDays: number,
 ): Promise<FiveStarDetailRecord | null> {
@@ -913,27 +937,28 @@ async function fetchDetail(
     return null;
   }
 
-  const page = await browser.newPage({
-    userAgent:
+  const headers = {
+    "user-agent":
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-  });
+    accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    referer: DEFAULT_ANCHOR_URL,
+  };
 
   try {
-    const response = await page.goto(normalizedDetailUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 120000,
+    const response = await fetch(normalizedDetailUrl, {
+      method: "GET",
+      redirect: "follow",
+      headers,
     });
 
-    const statusCode = response?.status() ?? 0;
-    if (statusCode >= 400) {
+    const contentType = (
+      response.headers.get("content-type") || ""
+    ).toLowerCase();
+    if (response.status !== 200 || !contentType.includes("text/html")) {
       return null;
     }
 
-    await page.waitForTimeout(1200);
-    const html = await page.content();
-    if (!html || html.length < 500) {
-      return null;
-    }
+    const html = await response.text();
     const externalListingId = extractExternalListingId(
       normalizedDetailUrl,
       html,
@@ -1254,52 +1279,7 @@ async function fetchDetail(
     const titleNormalized = normalizeForMatch(name);
 
     const descriptionExpanded = description;
-
-    const roomsGuidanceFromCards: string[] = [];
-    for (const room of roomCards) {
-      if (!room || typeof room !== "object") {
-        continue;
-      }
-
-      const roomNameRaw = (room as { room_name?: unknown }).room_name;
-      const roomName =
-        typeof roomNameRaw === "string" ? stripHtml(roomNameRaw).trim() : "";
-      const features: string[] = [];
-
-      const roomAmenitiesRaw = (room as { room_group_amens?: unknown })
-        .room_group_amens;
-      if (typeof roomAmenitiesRaw === "string" && roomAmenitiesRaw.trim()) {
-        try {
-          const parsedRoomAmenities = JSON.parse(roomAmenitiesRaw) as unknown;
-          if (Array.isArray(parsedRoomAmenities)) {
-            for (const entry of parsedRoomAmenities) {
-              if (typeof entry !== "string") {
-                continue;
-              }
-              const clean = stripHtml(entry).trim();
-              if (clean) {
-                features.push(clean);
-              }
-            }
-          }
-        } catch {
-          // Ignore malformed room amenity payloads.
-        }
-      }
-
-      if (!roomName && features.length === 0) {
-        continue;
-      }
-
-      roomsGuidanceFromCards.push(
-        features.length > 0 ? `${roomName} | ${features.join(", ")}` : roomName,
-      );
-    }
-
-    const roomsGuidance =
-      dedupePreserveOrder(roomsGuidanceFromCards).length > 0
-        ? dedupePreserveOrder(roomsGuidanceFromCards)
-        : extractRoomsGuidanceFromHtmlRoomCards(html);
+    const roomsGuidance = extractRoomsGuidanceFromHtmlRoomCards(html);
 
     const amenitiesCategories: Record<string, string[]> = {};
     const amenitiesAll: string[] = [];
@@ -1586,14 +1566,8 @@ async function fetchDetail(
         detail_url: normalizedDetailUrl,
       },
     };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(
-      `[fivestar30a] detail pull failed for ${normalizedDetailUrl}: ${message}`,
-    );
+  } catch {
     return null;
-  } finally {
-    await page.close();
   }
 }
 
@@ -1628,11 +1602,7 @@ export function createFiveStar30AAdapter(): ScraperAdapter<FiveStarDetailRecord>
       );
     },
     async fetchDetail(context) {
-      return fetchDetail(
-        context.browser,
-        context.detailUrl,
-        context.availabilityHorizonDays,
-      );
+      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
