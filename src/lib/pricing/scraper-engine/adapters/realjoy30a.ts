@@ -21,6 +21,7 @@ type RealJoyDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -766,6 +767,54 @@ async function fetchDetail(
         ".be-property-widget",
       ) as HTMLElement | null;
 
+      const beddingSection = document.querySelector(
+        ".pdp-section.pdp-bedding",
+      ) as HTMLElement | null;
+      const roomsGuidance = Array.from(
+        beddingSection?.querySelectorAll(".bedroom-type-item") ?? [],
+      )
+        .map((item) => {
+          const name = (
+            item.querySelector(".bedroom-type-bedroom-name")?.textContent || ""
+          )
+            .replace(/\s+/g, " ")
+            .trim();
+
+          const sleepsRaw = (
+            item.querySelector(".bedroom-type-sleeps")?.textContent || ""
+          )
+            .replace(/\s+/g, " ")
+            .trim();
+          const sleeps = sleepsRaw.replace(/^sleeps\s*:\s*/i, "").trim();
+
+          const bedNames = Array.from(
+            item.querySelectorAll(".bedroom-type-name"),
+          )
+            .map((node) => (node.textContent || "").replace(/\s+/g, " ").trim())
+            .filter(Boolean);
+
+          const notes = Array.from(item.querySelectorAll("p"))
+            .map((node) => (node.textContent || "").replace(/\s+/g, " ").trim())
+            .filter(Boolean);
+
+          const parts: string[] = [];
+          if (name) {
+            parts.push(name);
+          }
+          if (sleeps) {
+            parts.push(`Sleeps ${sleeps}`);
+          }
+          if (bedNames.length > 0) {
+            parts.push(`Beds: ${bedNames.join(", ")}`);
+          }
+          if (notes.length > 0) {
+            parts.push(`Notes: ${notes.join(", ")}`);
+          }
+
+          return parts.join(" | ");
+        })
+        .filter((value) => value.length > 0);
+
       const amenitiesGroups = Array.from(
         document.querySelectorAll(".pdp-amenities-list-group"),
       ).map((group) => {
@@ -882,6 +931,7 @@ async function fetchDetail(
 
       return {
         descriptionText,
+        roomsGuidance,
         amenitiesGroups,
         mediaCandidates,
         widgetData: {
@@ -1072,6 +1122,13 @@ async function fetchDetail(
     const descriptionExpanded =
       stripHtml(extractedFromDom.descriptionText).slice(0, 20000) ||
       stripHtml(metaDescription).slice(0, 20000);
+    const roomsGuidance = Array.from(
+      new Set(
+        extractedFromDom.roomsGuidance
+          .map((entry) => stripHtml(entry).replace(/\s+/g, " ").trim())
+          .filter(Boolean),
+      ),
+    );
     const description = descriptionExpanded;
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
@@ -1140,6 +1197,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomsGuidance,
       amenities: {
         categories: amenitiesCategories,
         all: Array.from(amenitiesAll),

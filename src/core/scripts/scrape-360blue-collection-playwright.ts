@@ -56,6 +56,7 @@ type Blue360DetailData = {
   external_listing_id: string;
   detail_url: string;
   fetched_at: string;
+  rooms_guidance: false;
   title: string;
   h1: string;
   canonical_url: string;
@@ -1083,6 +1084,7 @@ async function fetchDetailPage(
       external_listing_id: externalListingId,
       detail_url: detailUrl,
       fetched_at: new Date().toISOString(),
+      rooms_guidance: false,
       title,
       h1,
       canonical_url: canonicalUrl,

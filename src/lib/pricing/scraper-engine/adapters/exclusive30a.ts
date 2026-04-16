@@ -22,6 +22,7 @@ type ExclusiveDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -166,6 +167,40 @@ function extractDescriptionFromPanel(html: string): string {
   }
 
   return stripHtmlFragment(panelMatch[1]).slice(0, 20000);
+}
+
+function extractRoomsGuidanceFromPanel(html: string): string[] {
+  const panelMatch = html.match(
+    /<div[^>]+id=["']panel-bedrooms["'][^>]*>([\s\S]*?)<\/div>\s*<!--\s*end accordion-body\s*-->/i,
+  );
+  if (!panelMatch?.[1]) {
+    return [];
+  }
+
+  const body = panelMatch[1];
+  const rows: string[] = [];
+
+  const rowRegex =
+    /<div[^>]*class=["'][^"']*\brow\b[^"']*["'][^>]*>[\s\S]*?<div[^>]*class=["'][^"']*col-4[^"']*["'][^>]*>[\s\S]*?<div[^>]*class=["'][^"']*mb-3[^"']*["'][^>]*>([\s\S]*?)<\/div>[\s\S]*?<\/div>[\s\S]*?<div[^>]*class=["'][^"']*col-8[^"']*["'][^>]*>[\s\S]*?<div[^>]*class=["'][^"']*mb-3[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
+
+  for (const rowMatch of body.matchAll(rowRegex)) {
+    const room = stripHtmlFragment(rowMatch[1] ?? "").trim();
+    const features = stripHtmlFragment(rowMatch[2] ?? "").trim();
+
+    if (!room) {
+      continue;
+    }
+
+    const roomKey = normalizeForMatch(room);
+    const featureKey = normalizeForMatch(features);
+    if (roomKey === "room" && (featureKey === "features" || !featureKey)) {
+      continue;
+    }
+
+    rows.push(features ? `${room} | ${features}` : room);
+  }
+
+  return Array.from(new Set(rows));
 }
 
 function addAmenityValue(
@@ -797,6 +832,7 @@ async function fetchDetail(
         ? stripHtmlFragment(vacationRentalSchema.description)
         : "";
     const panelDescription = extractDescriptionFromPanel(html);
+    const roomsGuidance = extractRoomsGuidanceFromPanel(html);
     const description =
       [panelDescription, schemaDescription, metaDescription]
         .map((value) => stripHtmlFragment(value))
@@ -977,6 +1013,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: description,
+      rooms_guidance: roomsGuidance,
       amenities: {
         categories: amenitiesCategories,
         all: amenitiesAll,

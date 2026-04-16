@@ -16,6 +16,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -360,6 +361,35 @@ function extractExternalListingId(detailUrl: string): string {
   } catch {
     return detailUrl;
   }
+}
+
+function extractRoomsGuidanceFromHtml(html: string): string[] {
+  const sectionMatch = html.match(
+    /<section[^>]+id=["']room-details["'][^>]*>([\s\S]*?)<\/section>/i,
+  );
+  if (!sectionMatch?.[1]) {
+    return [];
+  }
+
+  const sectionHtml = sectionMatch[1];
+  const rows: string[] = [];
+  const rowRegex =
+    /<div[^>]*class=["'][^"']*rc-core-item-room-bedroom[^"']*["'][^>]*>[\s\S]*?<div[^>]*class=["'][^"']*bedding-name[^"']*["'][^>]*>([\s\S]*?)<\/div>[\s\S]*?<div[^>]*class=["'][^"']*bedding-description[^"']*["'][^>]*>([\s\S]*?)<\/div>[\s\S]*?<\/div>/gi;
+
+  for (const match of sectionHtml.matchAll(rowRegex)) {
+    const roomName = stripHtml(match[1] ?? "").trim();
+    const bedding = stripHtml(match[2] ?? "").trim();
+    if (!roomName && !bedding) {
+      continue;
+    }
+    if (roomName && bedding) {
+      rows.push(`${roomName} | ${bedding}`);
+    } else {
+      rows.push(roomName || bedding);
+    }
+  }
+
+  return dedupePreserveOrder(rows);
 }
 
 async function installEvaluateNameShim(page: Page): Promise<void> {
@@ -1215,6 +1245,7 @@ async function fetchDetail(
     );
     const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
+    const roomsGuidance = extractRoomsGuidanceFromHtml(html);
     const quoteContext = extractQuoteContextFromHtml(html);
 
     const locationPayload = extractFieldLocationFromHtml(html);
@@ -1331,6 +1362,7 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomsGuidance,
       amenities,
       location,
       media_gallery: mediaGallery,
