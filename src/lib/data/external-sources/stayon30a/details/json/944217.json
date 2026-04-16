@@ -1,7 +1,7 @@
 {
   "external_listing_id": "944217",
   "detail_url": "https://www.stayon30a.com/944217",
-  "fetched_at": "2026-04-16T13:36:20.240Z",
+  "fetched_at": "2026-04-16T20:16:42.120Z",
   "quote_context": {
     "listing_id": "944217",
     "unit_id": "944217",
@@ -12,6 +12,11 @@
   "canonical_url": "https://stayon30a.com/944217/",
   "meta_description": "Stay on 30A Property Management: Seabirds in Seacrest. Seacrest: Bikes, Beach Gear, Private Beach!",
   "description_expanded": "class=\"property_description\"> Welcome to &#39;Seabirds,&#39; &nbsp;where coastal elegance meets effortless luxury in the heart of Seacrest! This beautifully renovated retreat offers sweeping Gulf views and puts you just steps from the soft, sugar-white sands. Every detail of Seabirds has been thoughtfully curated, blending breezy sophistication with modern comfort. Cruise the iconic coastline in style with the included 4 adult bikes, then return home to unwind in your chic, sun-soaked sanctuary. Whether you&#39;re sipping morning coffee with a view or chasing sunsets by the shore, Seabirds promises an unforgettable stay filled with beauty and relaxation! **Condo front door is located on the 3rd floor of the building. No elevator, stairs required** HOME HIGHLIGHTS: - Gulf Front - Private Beach Access - 4 Adult Bikes - Balcony with Seating - Smart TVs - Fully Stocked Kitchen - Full Washer Dryer - Beach Gear - 1 Dedicated Parking Spot ACCOMMODATIONS: Sleeps: 8 3 Bedrooms / 3 Baths FIRST FLOOR: -Bedroom 1: King Bed, Shared Bath -Bedroom 2: King Bed with Private Bath SECOND FLOOR: -Bedroom 3: Queen Bed with (2) Twins, Private Bath **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | Pool Towels WELCOME BUNDLE:&nbsp;Coffee Grounds | Coffee Filters | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING There is 1 dedicated parking spot directly in front of the unit with overflow available on a first come first serve basis. Included are 4 bicycles (adult) for your convenience. SEACREST COMMUNITY HIGHLIGHTS: Seacrest is casually upscale, making it easy for guests to find endless relaxation. Turn off your phone and forget about your emails as you explore all that Seacrest has to offer. The area s legendary sugar-white sand and turquoise water are only part of what makes Seacrest a true getaway. Grab a bite to eat and a cup of coffee at Seacrest Sundries, the local grocery store, before spending the day wandering through Seacrest s shops and riding bikes along the Timpoochee Trail. BEACH ACCESS Enjoy private deeded beach access just past the green space toward the back of the home. Big Fish Bike and Beach Rentals is the exclusive provider at your private beach access.&nbsp; HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises. *No Smoking: Smoking is strictly prohibited including back porch/deck. *No parties or events. *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. *Capacity for 1 vehicle in the parking lot. Additional parking on north end at a first come first serve basis. *Home must remain pet free. IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver s license and 2) a . Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Bedroom #1: King",
+    "Bedroom #2: King",
+    "Bedroom #3: Queen + Twin Single"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -138,7 +143,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "944217",
-    "captured_at": "2026-04-16T13:36:20.240Z",
+    "captured_at": "2026-04-16T20:16:42.120Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4185,6 +4190,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "NNNNNNYYNNNNNNNNNYYYNNNNNNYYYNNNNNNNNNNNYYYYYYYYYYYYYYYYYYYYYYNNNNYYYYYYYYYYYYYYYYYYYYYYNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/944217.html"
 }

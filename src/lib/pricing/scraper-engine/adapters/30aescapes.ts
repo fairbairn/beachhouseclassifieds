@@ -24,6 +24,7 @@ type EscapeDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -1883,6 +1884,7 @@ async function fetchDetail(
     metaDescription: string;
     description: string;
     descriptionExpanded: string;
+    roomsGuidance: string[];
     bodyText: string;
     infoPairs: Record<string, string>;
     iconText: string;
@@ -1927,6 +1929,14 @@ async function fetchDetail(
             description:
               existing.normalized_matching_profile?.description ?? "",
             descriptionExpanded: existing.description_expanded ?? "",
+            roomsGuidance: Array.isArray(existing.rooms_guidance)
+              ? existing.rooms_guidance
+                  .map((entry) =>
+                    typeof entry === "string" ? entry.trim() : "",
+                  )
+                  .filter(Boolean)
+                  .slice(0, 80)
+              : [],
             bodyText: "",
             infoPairs: {
               address: existing.location?.address ?? "",
@@ -1987,6 +1997,11 @@ async function fetchDetail(
             .toLowerCase();
 
           if (text.includes("read more") || text.includes("show more")) {
+            el.click();
+            continue;
+          }
+
+          if (text.includes("room details")) {
             el.click();
           }
         }
@@ -2078,6 +2093,61 @@ async function fetchDetail(
           document.querySelector(".property-info.property-info-icons")
             ?.textContent ?? "";
 
+        const normalizeText = (value: string): string =>
+          value.replace(/\s+/g, " ").trim();
+
+        const roomDetailsGuidance: string[] = [];
+        const roomDetailsSeen = new Set<string>();
+        const roomDetailsTables = Array.from(
+          document.querySelectorAll(
+            '#room-details table, table[ng-if*="room_details"], table.table-bordered',
+          ),
+        );
+        for (const table of roomDetailsTables) {
+          const headerTexts = Array.from(table.querySelectorAll("thead th"))
+            .map((header) =>
+              normalizeText(header.textContent ?? "").toLowerCase(),
+            )
+            .filter(Boolean);
+
+          if (!headerTexts.includes("room") || !headerTexts.includes("beds")) {
+            continue;
+          }
+
+          const rows = Array.from(table.querySelectorAll("tbody tr"));
+          for (const row of rows) {
+            const cells = Array.from(row.querySelectorAll("td"));
+            if (cells.length < 2) {
+              continue;
+            }
+
+            const room = normalizeText(cells[0]?.textContent ?? "");
+            const beds = normalizeText(cells[1]?.textContent ?? "");
+            const comments = normalizeText(cells[4]?.textContent ?? "");
+            if (!room) {
+              continue;
+            }
+
+            const signal = `${room} ${beds} ${comments}`;
+            if (
+              !/king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+                signal,
+              )
+            ) {
+              continue;
+            }
+
+            const lineCore = beds ? `${room}: ${beds}` : room;
+            const line = comments ? `${lineCore} - ${comments}` : lineCore;
+            if (!line || roomDetailsSeen.has(line)) {
+              continue;
+            }
+
+            roomDetailsSeen.add(line);
+            roomDetailsGuidance.push(line);
+          }
+        }
+
         const propertyDetailsNode = document.querySelector("#propertyDetails");
         const unitId =
           propertyDetailsNode?.getAttribute("data-unitcode")?.trim() ??
@@ -2159,6 +2229,7 @@ async function fetchDetail(
           description:
             descriptions.sort((a, b) => b.length - a.length)[0] ?? "",
           descriptionExpanded,
+          roomsGuidance: roomDetailsGuidance.slice(0, 80),
           bodyText,
           infoPairs,
           iconText,
@@ -2920,6 +2991,7 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: extracted.roomsGuidance,
       amenities,
       location,
       media_gallery: mediaGallery,

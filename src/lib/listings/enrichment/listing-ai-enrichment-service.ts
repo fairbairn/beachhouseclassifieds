@@ -402,6 +402,7 @@ export async function processPendingListingAiEnrichment(input: {
   listingId?: string;
   dryRun: boolean;
   rebuildHelpfulHints?: boolean;
+  sleepRepairOnly?: boolean;
   progressEvery?: number;
   heartbeatIntervalMs?: number;
   onProgress?: (event: PendingEnrichmentProgressEvent) => void | Promise<void>;
@@ -523,6 +524,7 @@ export async function processPendingListingAiEnrichment(input: {
             snapshot,
             model: input.model,
             rebuildHelpfulHints: input.rebuildHelpfulHints,
+            sleepRepairOnly: input.sleepRepairOnly,
           });
 
           if (!input.dryRun) {

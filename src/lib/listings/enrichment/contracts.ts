@@ -2,6 +2,7 @@ export type ListingAiEnrichmentSourceSnapshotPayload = {
   canonical_name: string;
   description_expanded: string | null;
   meta_description: string | null;
+  rooms_guidance?: string[];
   property_type: string | null;
   amenities: string[];
   bedrooms: number | null;
@@ -87,6 +88,15 @@ export function validateSourceSnapshotPayload(value: unknown): string[] {
   }
   if (!isStringOrNull(value.meta_description)) {
     issues.push("meta_description must be string|null.");
+  }
+  if (
+    value.rooms_guidance !== undefined &&
+    !(
+      Array.isArray(value.rooms_guidance) &&
+      value.rooms_guidance.every((entry) => typeof entry === "string")
+    )
+  ) {
+    issues.push("rooms_guidance must be string[] when provided.");
   }
   if (!isStringOrNull(value.property_type)) {
     issues.push("property_type must be string|null.");

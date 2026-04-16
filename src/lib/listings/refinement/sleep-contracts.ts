@@ -43,10 +43,18 @@ export function extractStructuredOutputText(
 
 export const SLEEP_RESOLUTION_PROMPT_BASE = [
   "Task: extract sleeping_arrangements and sleeping_summary from provided listing context.",
-  "Context fields available: description_expanded, bedrooms, bathrooms, sleeps.",
+  "This is a correction task focused on sleeping data structures; preserve structure when possible and only change what is required for correctness.",
+  "Context fields available: description_expanded, rooms_guidance, bedrooms, bathrooms, sleeps.",
+  "Prioritize rooms_guidance as high-signal evidence when it contains room or bed breakdown details.",
   "Output exactly one JSON object with this shape: { sleeping_arrangements: [...], sleeping_summary: { bed_counts: {...}, bunk_configurations: {...}, sleep_capacity: {...} } }.",
   "Rules: sleeps is a strict target for total capacity; use explicit evidence from description_expanded; keep counts conservative; do not double count bunk beds as standalone beds.",
-  "Capacity map: king/queen/full/sofa_bed/murphy/futon=2; twin/daybed/trundle/air_mattress=1; bunk twin_over_twin=2, twin_over_full=3, full_over_full=4, queen_over_queen=4, twin_over_queen=3, twin_over_king=3.",
+  "Reconciliation logic: recompute room sleeps from bed types and counts, remove duplicated rooms, include missing bunk/carriage sleeping areas when explicitly supported, and keep arrangements plus summary aligned.",
+  "Hard constraint: total derived sleep capacity must equal sleeps exactly before returning output.",
+  "Capacity map: standalone king=2, queen=2, full=2, twin=1, sofa_bed=2, murphy=2, futon=2, daybed=1, trundle=1, air_mattress=1.",
+  "Bunk rules: bunks are stacked two-bed units, so compute capacity from bunk_configuration only and never add bunk surfaces as standalone beds.",
+  "Bunk capacity map: twin_over_twin=2, full_over_full=4, queen_over_queen=4, twin_over_full=3, twin_over_queen=3, twin_over_king=3.",
+  "When standalone bed counts are provided in context as trusted anchors, keep those counts fixed and adjust bunk interpretations to align derived_total to sleeps.",
+  "Validation before output: check total capacity equals sleeps, check room entries are not missing or duplicated, and ensure sleeping_summary matches sleeping_arrangements.",
   "Return JSON only matching schema.",
 ];
 

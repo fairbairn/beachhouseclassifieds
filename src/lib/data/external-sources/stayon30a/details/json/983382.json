@@ -1,7 +1,7 @@
 {
   "external_listing_id": "983382",
   "detail_url": "https://www.stayon30a.com/983382",
-  "fetched_at": "2026-04-16T13:36:27.805Z",
+  "fetched_at": "2026-04-16T20:16:52.227Z",
   "quote_context": {
     "listing_id": "983382",
     "unit_id": "983382",
@@ -12,6 +12,13 @@
   "canonical_url": "https://stayon30a.com/983382/",
   "meta_description": "Stay on 30A Property Management: Water and Wine in Watersound. Sleeps 12-Pool",
   "description_expanded": "class=\"property_description\"> Welcome to &#39;Water and Wine,&#39; &nbsp;a coastal retreat designed for gathering, unwinding, and soaking in the best of 30A living. Perfectly situated within the private, gated community of WaterSound, this five-bedroom, 5.5-bath home sleeps up to 12 guests and offers the perfect blend of comfort, convenience, and coastal charm. From the moment you arrive, the relaxed elegance of Water and Wine invites you to slow down and truly embrace vacation mode. Mornings are best spent sipping coffee on the outdoor patio while the neighborhood wakes around you. By midday, you can choose your own adventure cool off in your private pool, take a quick ride to one of the beautiful WaterSound community pools, or hop on the bikes for a breezy trip to the private beach access just minutes away.. Head up to the top level in the evening for a special treat of sweeping Gulf views that make sunset hour feel extra magical. Whether you&rsquo;re enjoying a quiet drink, taking family photos, or simply letting the ocean breeze wash over you, it&rsquo;s the perfect way to end the day. Exploring the area is effortless with eight adult bikes included with your stay. Ride over to The Big Chill, a lively gathering spot for dining, shopping, live music, and outdoor movies that&rsquo;s perfect for guests of all ages. Beyond that, 30A&rsquo;s scenic bike trails, charming beach towns, and world-class dining are all at your fingertips. Back at the house, evenings can be spent grilling and dining, swapping stories by the pool, or cozying up for a movie night. Every detail of Water and Wine is designed to make your stay feel easy, refreshing, and memorable whether you&rsquo;re here for a week of family fun or a relaxing getaway with friends. With private beach access, a prime WaterSound location, and the perfect mix of private and community amenities, Water and Wine offers everything you need for a quintessential 30A vacation plus those Gulf views you&rsquo;ll dream about long after you leave. HOME HIGHLIGHTS: -Gated community&nbsp; -Gulf views from crows nest with outdoor seating -Private heated pool ***Pool heating available for an additional fee of $25 per day** -Access to private beach with optional chair service (additional charge direct to vendor) -WiFi -8 adult bikes -Fully stocked kitchen -Full washer &amp; dryer -Outdoor seating/lounging -Outdoor shower -Outdoor built-in gas grill -Beach gear -Sunroom with fireplace -Outdoor TV ACCOMMODATIONS: Sleeps: 12 5 Bedrooms / 5.5 Baths FIRST FLOOR: Bedroom #1: King Bed, with Ensuite SECOND FLOOR: Bedroom #2: Queen, with Ensuite Bedroom #3: King, with Ensuite Bedroom #4: King, with Ensuite THIRD FLOOR: Bedroom #5: (2) Twin/Twin Bunk, with Jack/Jill Bathroom **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | WELCOME BUNDLE: Coffee Grounds | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING Two parking spaces available (2 driveway). No street parking allowed. Included are 8 bicycles (adult) for your convenience.&nbsp; WATERSOUND COMMUNITY HIGHLIGHTS: -Over 250 Acre Gated Beach Community on the Gulf of Mexico between Seaside and Rosemary Beach -(2) Community Pools&nbsp; -Parks, Walking Trails and Meandering Boardwalks -Bike to Alys Beach, Seacrest Beach and Rosemary Beach -A short walk to The Big Chill (formerly The Hub) **Please Note: *Access to the WaterSound Beach Club is not included. *WaterSound does not allow golf cart rentals. HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises. *No Smoking: Smoking is strictly prohibited including back porch/deck.&nbsp; *No parties or events.&nbsp; *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. *Private Heated Pool **Pool heating is available for an additional fee of $25/day. Must be heated for duration of stay. If selected, it must be requested 48 hours prior to check in and paid before the heater will be turned on. *Space must remain pet free! *There are no refunds for weather related events. We advise trip insurance during hurricane season (May-November) IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver&rsquo;s license and 2) a &quot;selfie&quot;. Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Bedroom #1: King",
+    "Bedroom #2: King",
+    "Bedroom #3: Queen",
+    "Bedroom #4: King",
+    "Bedroom #5: Bunk Bed"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -174,7 +181,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "983382",
-    "captured_at": "2026-04-16T13:36:27.805Z",
+    "captured_at": "2026-04-16T20:16:52.227Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4221,6 +4228,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "YYNNNNNNNNNNNNNNNNNNYYNNNNNNNYNNNNNNNYYYYYYYYNNNNNNYYYYYNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNNNNNNNNNNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/983382.html"
 }

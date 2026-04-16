@@ -1,7 +1,7 @@
 {
   "external_listing_id": "1040904",
   "detail_url": "https://www.stayon30a.com/1040904",
-  "fetched_at": "2026-04-16T13:35:52.824Z",
+  "fetched_at": "2026-04-16T20:15:56.363Z",
   "quote_context": {
     "listing_id": "1040904",
     "unit_id": "1040904",
@@ -12,6 +12,13 @@
   "canonical_url": "https://stayon30a.com/1040904/",
   "meta_description": "Stay on 30A Property Management: The Grove 10 in Inlet Beach.The Grove 10 is a 5 bedroom, 4.5-bathroom Inlet Beach home with Gulf views that sleeps 16.",
   "description_expanded": "class=\"property_description\"> Welcome to &lsquo;The Magnolia&rsquo; , professionally managed by Stay on 30A! A stunning multi-level home designed for families and groups of up to 16. With four spacious king bedrooms, a bunk room that sleeps 8 kids, and 4.5 bathrooms, everyone has space to relax in comfort, while the first-floor primary suite adds convenience for parents. Living areas on the first and third floors create the perfect flow for gathering and spending time together, and the third-floor balcony with an outdoor kitchen and the fourth-floor observation deck offer panoramic Gulf views ideal for sunsets and coastal evenings. Pool days, firepit nights, arcade battles, and bike rides along scenic 30A this home delivers fun at every turn with a heated communal pool, fully equipped kitchen, and six complimentary adult bikes for all ages to enjoy. Just a short walk to the beach, this home sits in the charming boutique community of The Grove at Inlet, with a communal pool, green space, and easy access to Highway 98&rsquo;s scenic path and all that 30A has to offer. Designed for unforgettable 30A escapes, this home blends coastal elegance with resort-style comfort, giving your group the perfect place to relax, reconnect, and soak in every moment of beachside living.&nbsp; Luxury Village Feel: Tucked within a single, thoughtfully designed block, The Grove at Inlet features just nine upscale beach homes, a private community pool, and a spacious green area for gathering and play. With direct pedestrian access to Highway 98&rsquo;s scenic walking path, this intimate enclave offers a true village-style experience perfect for families seeking a refined and relaxed 30A beach escape. Unbeatable 30A Location: Perfectly positioned near the heart of it all, this newer neighborhood delivers easy access without the crowds. Enjoy a short walk to Rosemary Beach, 30Avenue, and nearby dining and shopping, while retreating back to a quieter, more peaceful setting. This is coastal living done right and 30A vacationing at its finest. HOME HIGHLIGHTS: -Gulf Views -6 Adult Bikes -4 Minute Walk From the Gulf -Heated Community Pool&nbsp; -Spacious Porches -Green Space -Observation Deck With Panoramic Views -Arcade machine -Third&nbsp;Floor Balcony + Outdoor Kitchen -4 Dedicated Parking Spots -Short walk to Rosemary Beach -First Floor Master Bedroom -Fully Equipped Kitchen BEACH ACCESS Two access points, just a short walk from the home: 1. Inlet Beach Public Access. This access has parking, restrooms, and lifeguards during peak season. Located at the end of South Orange Street about 200 yards south of US Hwy 98. Inlet Beach Regional Access is the largest county access and features three dune walkovers and 117 parking spaces. 2. Wall Street Beach Public Access. This access is at the end of South Wall Street. About 200 yards east of the intersection of Scenic 30A and Hwy 98, turn south on to South Wall Street then proceed two blocks to the dead end at the gulf. There is no parking but there is plenty of parking, along with restrooms and outdoor showers about 1/4 mile east at the Inlet Beach Access. **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | Pool Towels WELCOME BUNDLE: Coffee Grounds | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING Four parking spaces available (4 driveway). No street parking allowed. Included is 6 bicycles (adult) for your convenience.&nbsp; ACCOMMODATIONS: Sleeps: 16 FIRST FLOOR: Bedroom #1- King, Ensuite Bathroom&nbsp; SECOND FLOOR:&nbsp; Bedroom #2- King, Ensuite Bathroom&nbsp; Bedroom #3-&nbsp;(2) Queen/Queen Bunks Bedroom #4- King THIRD FLOOR: Bedroom #5- King HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises. *No Smoking: Smoking is strictly prohibited including back porch/deck.&nbsp; *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver&rsquo;s license and 2) a &quot;selfie&quot;. Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Bedroom #1: King",
+    "Bedroom #2: King",
+    "Bedroom #3: Bunk Bed",
+    "Bedroom #4: King",
+    "Bedroom #5: King"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -143,7 +150,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "1040904",
-    "captured_at": "2026-04-16T13:35:52.824Z",
+    "captured_at": "2026-04-16T20:15:56.363Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4190,6 +4197,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNYYYYYNNNNNNNYYYYYYYNNNNNNNYYNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/1040904.html"
 }

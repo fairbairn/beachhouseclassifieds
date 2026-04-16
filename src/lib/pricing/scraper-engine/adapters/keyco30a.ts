@@ -88,6 +88,7 @@ type KeycoDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -1631,7 +1632,35 @@ async function fetchDetail(
     );
   };
 
-  if (refreshMode === "dynamic" && existingDetailJsonPath) {
+  let allowDynamicReuse =
+    refreshMode === "dynamic" && Boolean(existingDetailJsonPath);
+  if (allowDynamicReuse && existingDetailJsonPath) {
+    try {
+      const existingRaw = await readFile(existingDetailJsonPath, "utf8");
+      const existing = JSON.parse(existingRaw) as KeycoDetailRecord;
+      const existingRoomsGuidance = Array.isArray(existing.rooms_guidance)
+        ? existing.rooms_guidance
+            .map((entry) =>
+              typeof entry === "string"
+                ? entry.replace(/\s+/g, " ").trim()
+                : "",
+            )
+            .filter(Boolean)
+        : [];
+
+      if (existingRoomsGuidance.length === 0) {
+        allowDynamicReuse = false;
+        logStage(
+          "PAGE_SCRAPE",
+          "dynamic fallback to full scrape (existing rooms_guidance missing/empty)",
+        );
+      }
+    } catch {
+      // If legacy detail cannot be parsed, continue with standard flow.
+    }
+  }
+
+  if (allowDynamicReuse && existingDetailJsonPath) {
     try {
       logStage("PAGE_HTML_PULL", "skipped (dynamic mode)");
       logStage("PAGE_SCRAPE", "skipped (dynamic mode)");
@@ -2218,6 +2247,16 @@ async function fetchDetail(
         ...existing,
         quote_context: {},
         fetched_at: new Date().toISOString(),
+        rooms_guidance: Array.isArray(existing.rooms_guidance)
+          ? existing.rooms_guidance
+              .map((entry) =>
+                typeof entry === "string"
+                  ? entry.replace(/\s+/g, " ").trim()
+                  : "",
+              )
+              .filter(Boolean)
+              .slice(0, 80)
+          : [],
         property_profile: {
           ...existing.property_profile,
           beds: dynamicCapacity.beds,
@@ -2391,6 +2430,100 @@ async function fetchDetail(
         .filter((line) => /\b[A-Za-z .'-]+,\s*FL\b/i.test(line))
         .slice(0, 12);
 
+      const roomsGuidanceCandidates: string[] = [];
+
+      const sectionRoomsNode = document.querySelector("#section-rooms");
+      if (sectionRoomsNode) {
+        const roomSpans = Array.from(
+          sectionRoomsNode.querySelectorAll("span.text-base.text-brand-navy"),
+        );
+        for (const roomSpan of roomSpans) {
+          const text = (roomSpan.textContent || "")
+            .replace(/\s+/g, " ")
+            .replace(/\s*-\s*/g, " - ")
+            .replace(/\s*:\s*/g, ": ")
+            .trim();
+          if (!text || text.length < 6 || text.length > 260) {
+            continue;
+          }
+          if (/bed\s*size\s*guide/i.test(text)) {
+            continue;
+          }
+          if (
+            /\b(?:bedroom|bunk\s*room|bunk|loft|hallway|bonus\s*room|carriage\s*house)\b/i.test(
+              text,
+            ) &&
+            /:\s*/.test(text) &&
+            /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+              text,
+            )
+          ) {
+            roomsGuidanceCandidates.push(text);
+          }
+        }
+
+        const gridNodes = Array.from(
+          sectionRoomsNode.querySelectorAll(
+            "section > div > div, section > div span",
+          ),
+        );
+        for (const node of gridNodes) {
+          const text = (node.textContent || "")
+            .replace(/\u00a0/g, " ")
+            .replace(/\s+/g, " ")
+            .replace(/\s*-\s*/g, " - ")
+            .replace(/\s*:\s*/g, ": ")
+            .trim();
+          if (!text || text.length < 6 || text.length > 260) {
+            continue;
+          }
+          if (/bed\s*size\s*guide/i.test(text)) {
+            continue;
+          }
+          if (
+            /\b(?:bedroom|bunk\s*room|bunk|loft|hallway|bonus\s*room|carriage\s*house)\b/i.test(
+              text,
+            ) &&
+            /:\s*/.test(text) &&
+            /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+              text,
+            )
+          ) {
+            roomsGuidanceCandidates.push(text);
+          }
+        }
+
+        const sectionLines = (sectionRoomsNode.textContent || "")
+          .replace(/\u00a0/g, " ")
+          .split(/\n+/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        for (const line of sectionLines) {
+          const text = line
+            .replace(/\s+/g, " ")
+            .replace(/\s*-\s*/g, " - ")
+            .replace(/\s*:\s*/g, ": ")
+            .trim();
+          if (!text || text.length < 6 || text.length > 260) {
+            continue;
+          }
+          if (/bed\s*size\s*guide/i.test(text)) {
+            continue;
+          }
+          if (
+            /\b(?:bedroom|bunk\s*room|bunk|loft|hallway|bonus\s*room|carriage\s*house)\b/i.test(
+              text,
+            ) &&
+            /:\s*/.test(text) &&
+            /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+              text,
+            )
+          ) {
+            roomsGuidanceCandidates.push(text);
+          }
+        }
+      }
+
       const hasCalendarWidget = /availability|calendar/i.test(bodyText);
 
       const imageCandidates: string[] = [];
@@ -2450,6 +2583,9 @@ async function fetchDetail(
         canonicalUrl,
         metaDescription,
         descriptionCandidates,
+        roomsGuidanceCandidates: Array.from(
+          new Set(roomsGuidanceCandidates),
+        ).slice(0, 40),
         amenityCandidates,
         locationCandidates,
         imageCandidates,
@@ -2480,6 +2616,24 @@ async function fetchDetail(
     const descriptionExpanded = buildDescriptionExpanded(
       allDescriptionCandidates,
     );
+
+    const roomsGuidance = dedupe(
+      extracted.roomsGuidanceCandidates
+        .map((value) => stripHtml(value))
+        .map((value) => value.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .filter((value) => value.length >= 6 && value.length <= 260)
+        .filter(
+          (value) =>
+            /\b(?:bedroom|bunk\s*room|bunk|loft|hallway|bonus\s*room|carriage\s*house)\b/i.test(
+              value,
+            ) &&
+            /:\s*/.test(value) &&
+            /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+              value,
+            ),
+        ),
+    ).slice(0, 50);
 
     const rawAmenityTokens = dedupe(
       extracted.amenityCandidates
@@ -3139,6 +3293,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomsGuidance,
       amenities: {
         categories: amenitiesCategories,
         all: amenitiesAll,

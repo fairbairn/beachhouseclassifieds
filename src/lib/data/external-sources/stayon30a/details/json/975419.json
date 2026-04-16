@@ -1,7 +1,7 @@
 {
   "external_listing_id": "975419",
   "detail_url": "https://www.stayon30a.com/975419",
-  "fetched_at": "2026-04-16T13:36:24.902Z",
+  "fetched_at": "2026-04-16T20:16:50.433Z",
   "quote_context": {
     "listing_id": "975419",
     "unit_id": "975419",
@@ -12,6 +12,13 @@
   "canonical_url": "https://stayon30a.com/975419/",
   "meta_description": "Stay on 30A Property Management: Grateful Tide in Watersound. Sleeps 12-Pool, Fire Pit",
   "description_expanded": "class=\"property_description\"> Welcome to &#39;Grateful Tide,&#39; &nbsp;a beautifully designed retreat tucked away in one of WaterSound&rsquo;s most tranquil neighborhoods, ideal for a peaceful and unforgettable 30A getaway. This 5-bedroom, 4.5-bath&nbsp;home combines timeless coastal charm with upscale finishes, creating the perfect setting for families and groups to relax, reconnect, and recharge. Step inside to find professionally curated interiors that blend&nbsp;elegance and comfort, with a bright, open-concept layout that flows seamlessly between the cozy living room, spacious dining area, and&nbsp;gourmet kitchen. Outfitted with high-end appliances, granite countertops, custom cabinetry, and a large breakfast bar, the kitchen is ideal for gathering after a day at the beach. The outdoor living spaces are just as impressive. Enjoy your morning coffee on the front porch, unwind in the screened-in lounge, or host dinner al fresco on the&nbsp;private back patio, complete with a&nbsp;sparkling pool&nbsp;and a&nbsp;fully equipped outdoor kitchen. Whether you&#39;re soaking up the sun, grilling with family, or enjoying a quiet evening under the stars, there&#39;s no shortage of space to relax and make memories. ACCOMMODATIONS: Sleeps: 12 5 Bedrooms / 4.5 Baths FIRST FLOOR: Bedroom #1: Primary suite with King Bed and Ensuite double vanity.&nbsp; SECOND FLOOR: Bedroom #2: Primary bedroom with King Bed and Ensuite double vanity.&nbsp; Bedroom #3: King Bed, with Jack/Jill Bathroom Bedroom #4: Two Twin-over-Twin Bunks Bedroom #5: King Bed, with Ensuite HOME HIGHLIGHTS: -Gated community&nbsp; -Gulf views -Private heated pool **Pool heating available for an additional daily fee/$25** -Access to private beach with optional chair service (additional charge direct to vendor) -WiFi -6 adult bikes -Beach chairs -4 seater golf cart (permitted to drive on boardwalk) -Fully stocked kitchen -Full washer &amp; dryer -Fire Pit -Indoor gas fireplace **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | Pool Towels WELCOME BUNDLE: Coffee Grounds | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING Two parking spaces available (2 driveway). Some street parking available at first come basis. Included is a 4 seater golf cart and 6 bicycles (adult) for your convenience. To drive golf cart, you must be: 25 years old, sign a liability waiver, and have valid insurance and drivers license. Golf Cart is included as an amenity, at no additional cost. WATERSOUND COMMUNITY HIGHLIGHTS: -Over 250 Acre Gated Beach Community on the Gulf of Mexico between Seaside and Rosemary Beach -(2) Community Pools&nbsp; -Parks, Walking Trails and Meandering Boardwalks -Bike to Alys Beach, Seacrest Beach and Rosemary Beach -A short walk to The Big Chill (formerly The Hub) -Puttering Park featuring Miniature Golf Course, Children&#39;s Park, Picnic Porch, &amp; Bocce Ball.&nbsp; **Please Note: *Access to the WaterSound Beach Club is not included. *WaterSound does not allow golf cart rentals. **The Shingle Lane cart path is closed for replacement. Please utilize the Dune Sider cart path during your stay.** HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises. *No Smoking: Smoking is strictly prohibited including back porch/deck.&nbsp; *No parties or events.&nbsp; *Complimentary golf cart can only be operated by guests over 25 years of age who provide verification. Rental agreement requires a valid drivers license and proof of existing auto insurance coverage. *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. *Private Heated Pool **Pool heating is available for an additional fee of $25/day. Must be heated for duration of stay. If selected, it must be requested 48 hours prior to check in and paid before the heater will be turned on. IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver&rsquo;s license and 2) a &quot;selfie&quot;. Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Bedroom #1: King",
+    "Bedroom #2: King",
+    "Bedroom #3: King",
+    "Bedroom #4: Bunk Bed",
+    "Bedroom #5: King"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -182,7 +189,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "975419",
-    "captured_at": "2026-04-16T13:36:24.902Z",
+    "captured_at": "2026-04-16T20:16:50.433Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4229,6 +4236,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "NNNNNNNNYYYYYYYYNNNNNNNNNNNNNNNNNNYYNNNNNYYYNNNNNNNYYYYYYYYYYYYYYNNNNNNNNNNNNNNNNNNYYYYYYYYYNNNYYYYNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNNNNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/975419.html"
 }

@@ -1,7 +1,7 @@
 {
   "external_listing_id": "1046614",
   "detail_url": "https://www.stayon30a.com/1046614",
-  "fetched_at": "2026-04-16T13:36:00.125Z",
+  "fetched_at": "2026-04-16T20:16:06.720Z",
   "quote_context": {
     "listing_id": "1046614",
     "unit_id": "1046614",
@@ -12,6 +12,11 @@
   "canonical_url": "https://stayon30a.com/1046614/",
   "meta_description": "Stay on 30A Property Management: Haus of Tides in Resting Beach Place Seacrest Beach: Bikes, Beach Gear, Pool!",
   "description_expanded": "class=\"property_description\"> Stop scrolling your Spring Break spot just found you! Welcome to &#39;Resting Beach Place&#39; , your relaxed and well-located coastal retreat just off Scenic Highway 30A. Perfectly positioned for easy beach days and effortless exploring, this inviting vacation home offers comfort, convenience, and laid-back coastal charm for your next 30A getaway. Step inside and feel instantly at ease. Designed with families and groups in mind, Resting Beach Place blends coastal style with practical, welcoming spaces that make it easy to settle in and enjoy time together. The open-concept living area features comfortable seating, coastal-inspired finishes, and natural light that creates a bright, airy space to unwind after a day in the sun. The layout flows seamlessly into the home&rsquo;s private porches, extending your living space outdoors and offering peaceful spots to relax and recharge. The fully equipped kitchen is thoughtfully designed for both convenience and connection, with quality appliances, ample prep space, and everything you need to prepare meals or snacks between beach adventures. To elevate your stay even more, take advantage of the included four adult bikes, giving you fun and flexible ways to explore 30A. Cruise to Rosemary, browse the boutiques of Alys, or bike over to The Big Chill for dinner and live music. Kids will love the bunk beds, a favorite gathering spot for movie nights, sleepovers, and making unforgettable vacation memories, while adults enjoy knowing there&rsquo;s space for everyone to spread out and unwind. Upstairs, the second-floor porch offers charming golf views, the perfect backdrop for morning coffee or evening wind-downs after a full day on 30A. Just steps away, guests can enjoy the community pool, ideal for cooling off after the beach or spending an easy afternoon close to home. With the beach, dining, shopping, and local favorites all nearby, everything you need is within reach. With its prime location off 30A, family-friendly layout, private porches, and community amenities, Resting Beach Place is the perfect setting to slow down, soak in the coastal lifestyle, and create beach memories that last long after your stay ends. TWO STORY UNIT&nbsp;ACCOMMODATIONS: Resting Beach Place Comfortably Sleeps: 8 3 Bedrooms / 3 Baths FIRST FLOOR: -Bedroom 1: Bunk Room, (2) Twin over Twin Bunk -Bedroom 2: King Bed with Private Bath SECOND FLOOR: -Bedroom 3: King HOME HIGHLIGHTS: -Private Deed Beach Access -Community Pool -Gulf Views -4 Adult Bikes -Bunk Beds -Fully Stocked Kitchen -Private Balconies -Smart TVs -Beach Gear -2 Dedicated Parking Spots **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | Pool Towels WELCOME BUNDLE: &nbsp;Coffee Grounds | Coffee Filters | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING -Two parking spaces available. -Included are 4 bicycles (adult) for your convenience. NEARBY BEACH ACCESS 1. Private Deeded Beach Access is found at the end of Patina Blvd across Hwy 30A. You must rent a &quot;set&quot; (2 chairs and an umbrella) from the exclusive provider to enjoy this access.&nbsp;Gate code found in Welcome Guide. 2. Gulf Lakes Access is on Scenic 30A about 1/4 mile east of Camp Creek Lake and about 100 yards east of Pelican Circle. Halfway down the boardwalk there is a bike rack and shower but no car parking. The dune walkover sits on a high bluff overlooking the gulf. 3. Seacrest Drive Access is on Scenic 30A at the intersection of Seacrest Drive. A short boardwalk leads to a dune walkover high atop a bluff overlooking the Gulf of Mexico. HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises. *No Smoking: Smoking is strictly prohibited including back porch/deck. *No parties or events. *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. *Capacity for 2 vehicles in parking lot. *Home must remain pet free. IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver s license and 2) a . Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Bedroom #1: King",
+    "Bedroom #2: Bunk Bed",
+    "Bedroom #3: King"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -126,7 +131,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "1046614",
-    "captured_at": "2026-04-16T13:36:00.125Z",
+    "captured_at": "2026-04-16T20:16:06.720Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4173,6 +4178,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "NNNNNNNNNNNNNNYYYYYYYYYYYNNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/1046614.html"
 }

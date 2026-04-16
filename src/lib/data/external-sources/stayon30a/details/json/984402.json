@@ -1,7 +1,7 @@
 {
   "external_listing_id": "984402",
   "detail_url": "https://www.stayon30a.com/984402",
-  "fetched_at": "2026-04-16T13:36:28.448Z",
+  "fetched_at": "2026-04-16T20:16:56.322Z",
   "quote_context": {
     "listing_id": "984402",
     "unit_id": "984402",
@@ -12,6 +12,12 @@
   "canonical_url": "https://stayon30a.com/984402/",
   "meta_description": "Stay on 30A Property Management: 30A Dunes in Watersound. Sleeps 8-Pool, Private screened in porch",
   "description_expanded": "class=\"property_description\"> Welcome to &#39;30A Dunes,&#39; a 4-bedroom, 3.5-bath home in the gated community of WaterSound that comfortably sleeps 8. This inviting retreat blends timeless coastal charm with elevated design and craftsmanship, creating a warm and elegant escape just steps from the Gulf! Inside, the home&rsquo;s thoughtful design shines through in every detail, from the Venetian plaster walls to the 100-year-old repurposed wooden beams that add both texture and character. The open-concept living and dining spaces offer the perfect backdrop for gathering with family and friends, while the well-equipped kitchen makes preparing meals and entertaining a pleasure. Step outside to your own private oasis featuring a sparkling pool and a spacious screened-in porch complete with a fireplace and TV, perfect for slow mornings with coffee or cozy evenings under the glow of the fire. When you&rsquo;re ready for sand and surf, the private deeded beach access is just steps away, offering effortless days along the sugar-white shoreline. Guests also enjoy access to two community pools and six adult bikes, ideal for exploring the scenic paths, trails, and neighboring coastal towns along 30A. With its refined interiors, inviting outdoor spaces, and unbeatable location,&nbsp;30A Dunes offers the perfect balance of comfort, craftsmanship, and coastal relaxation. ACCOMMODATIONS: 30A Dunes comfortably accommodates up to 8 people: First Floor: -Bedroom 1: Queen, Ensuite Bathroom Second Floor: -Bedroom 2: King, Ensuite Bathroom -Bedroom 3: Twin/Twin Bunk -Bedroom 4: King, Ensuite Bathroom HOME HIGHLIGHTS: -Gated community&nbsp; -Private heated pool **Pool heating available for an additional fee/$25** -Access to private beach with optional chair service (additional charge direct to vendor) -WiFi -6 adult bikes -Fully stocked kitchen -Full washer &amp; dryer -Private screened in porch -Community pool access -Sonos sound system&nbsp; -Indoor &amp; outdoor fireplace **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | WELCOME BUNDLE: Coffee Grounds | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING Two parking spaces available (2 driveway). No street parking allowed. Included is 6 bicycles (adult) for your convenience.&nbsp; WATERSOUND COMMUNITY HIGHLIGHTS: -Over 250 Acre Gated Beach Community on the Gulf of Mexico between Seaside and Rosemary Beach -(2) Community Pools&nbsp; -Parks, Walking Trails and Meandering Boardwalks -Bike to Alys Beach, Seacrest Beach and Rosemary Beach -A short walk to The Big Chill (formerly The Hub) **Please Note: *Access to the WaterSound Beach Club is not included. *WaterSound does not allow golf cart rentals. HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises. *No Smoking: Smoking is strictly prohibited including back porch/deck.&nbsp; *No parties or events.&nbsp; *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. *Private Heated Pool **Pool heating is available for an additional fee of $25/day. Must be heated for duration of stay. If selected, it must be requested 48 hours prior to check in and paid before the heater will be turned on. IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver&rsquo;s license and 2) a &quot;selfie&quot;. Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Bedroom #1: Queen",
+    "Bedroom #2: King",
+    "Bedroom #3: Bunk Bed",
+    "Bedroom #4: King"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -155,7 +161,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "984402",
-    "captured_at": "2026-04-16T13:36:28.448Z",
+    "captured_at": "2026-04-16T20:16:56.322Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4202,6 +4208,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "NNNYYYYYYYYYYYYYYYYYNNNNNNYYNNNNNYYYYYYYYYYYNNNYYNNNNNNYNNNNNNNYNNNNNYYYYYYYYYYYYNNNNNYYNNNNNYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/984402.html"
 }

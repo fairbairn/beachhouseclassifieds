@@ -1,7 +1,7 @@
 {
   "external_listing_id": "875010",
   "detail_url": "https://www.stayon30a.com/875010",
-  "fetched_at": "2026-04-16T13:36:11.673Z",
+  "fetched_at": "2026-04-16T20:16:24.521Z",
   "quote_context": {
     "listing_id": "875010",
     "unit_id": "875010",
@@ -12,6 +12,13 @@
   "canonical_url": "https://stayon30a.com/875010/",
   "meta_description": "",
   "description_expanded": "class=\"property_description\"> Welcome to &#39;Wave on Wave&#39; ! Located right on 30A, this 5 bed/3bath coastal cottage provides everything you need. The open floor concept provides ample space to gather, prepare meals, and relax. Wake up in the morning and enjoy a cup of coffee on the beautiful backyard patio or the third floor balcony with views of the Gulf! A private beach access is available just across the street from the home! With on-site parking for 3 vehicles&mdash;plus 6 complimentary adult bikes&mdash;exploring the local shops, dining spots, and entertainment of nearby Rosemary Beach and Alys Beach is a breeze. HOME HIGHLIGHTS: -6 Bikes- Adult -Private Beach Access -Balconies on Each Floor -Gulf View from the 3rd Floor Balcony -Community Pool -Smart TVs -Private Backyard Patio -Gas Grill -Beach Gear -3 Dedicated Parking Spots **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | WELCOME BUNDLE: Coffee Grounds | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING Three parking spaces available (3 driveway). No street parking allowed. Included are 6 bicycles (adult) for your convenience.&nbsp; SEACREST COMMUNITY HIGHLIGHTS: Seacrest is casually upscale, making it easy for guests to find endless relaxation. Turn off your phone and forget about your emails as you explore all that Seacrest has to offer.&nbsp;The area&rsquo;s legendary sugar-white sand and turquoise water are only part of what makes Seacrest a true getaway. Grab a bite to eat and a cup of coffee at Seacrest Sundries, the local grocery store, before spending the day wandering through Seacrest&rsquo;s shops and riding bikes along the Timpoochee Trail. ACCOMMODATIONS: Sleeps: 10 5 Bedrooms / 3 Baths FIRST FLOOR: -Bedroom 1: (2) Twin Beds with Ensuite -Bedroom 2: Queen Bed SECOND FLOOR: -Bedroom 3: Queen Bed -Bedroom 4: King Bed with Private Bath -Full Bath THIRD FLOOR: -Bedroom 5: Loft with Full Bed BEACH ACCESS 1. Tranquility on the Beach- Private Beach Access across the street from the home. Gate code found in Welcome Guide. 2. Seacrest Drive Access is on Scenic 30A at the intersection of Seacrest Drive, just a 2 minute walk from the home. A short boardwalk leads to a dune walkover high atop a bluff overlooking the Gulf of Mexico. 3.&nbsp;Gulf Lakes Access is a South Walton County beach access (.5 mile east of the home). Small access that can be easily missed. Parking not available but easy bike ride to the beach. HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises.&nbsp; *No Smoking: Smoking is strictly prohibited including back porch/deck. Additional cleaning charges of $500 will be charged if in violation. *Capacity for 3 vehicles in the driveway. No street parking allowed.&nbsp; *Towels and other clothing may not be hung from balcony railings.&nbsp; *No parties or events. *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. *Space must remain pet free! IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver&rsquo;s license and 2) a &quot;selfie&quot;. Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Bedroom #1: Twin Single",
+    "Bedroom #2: Queen",
+    "Bedroom #3: Queen",
+    "Bedroom #4: King",
+    "Bedroom #5: Double"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -139,7 +146,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "875010",
-    "captured_at": "2026-04-16T13:36:11.673Z",
+    "captured_at": "2026-04-16T20:16:24.521Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4186,6 +4193,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "YYNNNNYYNNNNNYYYYYYYYYYYYYYNNNNNNYYYYNNNNNNNYYYYYNNNYYYYYYYYYYNNNYYYYYNNNYYYYNNNYYYNNNNNNNNNNYYYYYYYNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/875010.html"
 }

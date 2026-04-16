@@ -43,6 +43,18 @@ Primary differences include:
 
 - Sensitivity to concurrency, timeout windows, and request cadence.
 
+## Platform Capability Reuse Rule
+
+When an adapter belongs to the same underlying platform family, test known platform capabilities first before creating adapter-specific DOM logic.
+
+For Streamline WordPress bridge adapters (`/wp-admin/admin-ajax.php?action=streamlinecore-api-request`):
+
+1. Probe `GetPropertyRoomDetails` first for structured room/bed data.
+2. If unavailable, parse rendered Room Details table content.
+3. Use description heuristics only as a final fallback.
+
+This keeps `rooms_guidance` extraction deterministic and reduces fragile UI-only parsing work across adapters that share the same stack.
+
 ## Adapter Inventory Source of Truth
 
 Current adapter-by-adapter status is tracked in:

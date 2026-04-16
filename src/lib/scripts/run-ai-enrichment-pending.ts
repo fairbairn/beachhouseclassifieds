@@ -17,6 +17,7 @@ type Options = {
   listingId: string | null;
   model: string | null;
   rebuildHelpfulHints: boolean;
+  sleepRepairOnly: boolean;
   dryRun: boolean;
 };
 
@@ -43,6 +44,9 @@ function printUsage(): void {
   console.log(
     "  --rebuild-helpful-hints  Rebuild helpful_hints with stricter sentence-quality rules",
   );
+  console.log(
+    "  --sleep-repair-only      Repair sleeping structures only; preserve existing non-sleep fields",
+  );
   console.log("  --dry-run            Do not persist enrichment output");
   console.log("  --help               Show help");
 }
@@ -55,6 +59,7 @@ function parseArgs(argv: string[]): Options {
   let listingId: string | null = null;
   let model: string | null = null;
   let rebuildHelpfulHints = false;
+  let sleepRepairOnly = false;
   let dryRun = false;
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -73,6 +78,11 @@ function parseArgs(argv: string[]): Options {
 
     if (arg === "--rebuild-helpful-hints") {
       rebuildHelpfulHints = true;
+      continue;
+    }
+
+    if (arg === "--sleep-repair-only") {
+      sleepRepairOnly = true;
       continue;
     }
 
@@ -132,6 +142,7 @@ function parseArgs(argv: string[]): Options {
     listingId,
     model,
     rebuildHelpfulHints,
+    sleepRepairOnly,
     dryRun,
   };
 }
@@ -164,7 +175,7 @@ async function run(): Promise<number> {
   const startedAtMs = Date.now();
 
   progress.phase(
-    `starting pending enrichment limit=${options.limit} concurrency=${options.concurrency} progress_every=${options.progressEvery} dry_run=${options.dryRun} adapter_key=${options.adapterKey ?? "all"} listing_id=${options.listingId ?? "all"} model=${options.model ?? "default"} rebuild_helpful_hints=${options.rebuildHelpfulHints}`,
+    `starting pending enrichment limit=${options.limit} concurrency=${options.concurrency} progress_every=${options.progressEvery} dry_run=${options.dryRun} adapter_key=${options.adapterKey ?? "all"} listing_id=${options.listingId ?? "all"} model=${options.model ?? "default"} rebuild_helpful_hints=${options.rebuildHelpfulHints} sleep_repair_only=${options.sleepRepairOnly}`,
   );
 
   const summary = await processPendingListingAiEnrichment({
@@ -175,6 +186,7 @@ async function run(): Promise<number> {
     listingId: options.listingId ?? undefined,
     dryRun: options.dryRun,
     rebuildHelpfulHints: options.rebuildHelpfulHints,
+    sleepRepairOnly: options.sleepRepairOnly,
     progressEvery: options.progressEvery,
     onProgress: (event) => {
       if (event.outcome === "start") {

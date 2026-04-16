@@ -53,6 +53,7 @@ type CanonicalDetailRecord = {
   h1?: unknown;
   description_expanded?: unknown;
   meta_description?: unknown;
+  rooms_guidance?: unknown;
   amenities?: unknown;
   property_profile?: unknown;
   location?: unknown;
@@ -511,6 +512,22 @@ function extractAmenities(detail: CanonicalDetailRecord): string[] {
         .filter(Boolean),
     ),
   );
+}
+
+function extractRoomsGuidance(detail: CanonicalDetailRecord): string[] {
+  if (!Array.isArray(detail.rooms_guidance)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      detail.rooms_guidance
+        .map((entry) => asString(entry))
+        .map((entry) => entry.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .filter((entry) => entry.length >= 6 && entry.length <= 240),
+    ),
+  ).slice(0, 80);
 }
 
 function toTraitObjects(detail: CanonicalDetailRecord, amenities: string[]) {
@@ -1016,6 +1033,7 @@ export async function ingestAdapterDetailsToCanonical(
     const beachAreaCode = toBeachAreaCodeFromLabel(beachAreaName);
     const communityCode = toCommunityCodeFromLabel(communityName);
     const amenities = extractAmenities(detail);
+    const roomsGuidance = extractRoomsGuidance(detail);
     const traits = toTraitObjects(detail, amenities);
     const bedrooms = inferBedroomCount(asNumber(profile?.beds), detail);
     const sleeps = inferSleepsCount(asNumber(profile?.sleeps), detail);
@@ -1090,6 +1108,7 @@ export async function ingestAdapterDetailsToCanonical(
       canonical_name: canonicalName,
       description_expanded: descriptionExpanded || null,
       meta_description: metaDescription || null,
+      rooms_guidance: roomsGuidance,
       property_type: listingValues.property_type ?? null,
       amenities,
       area: sourceAreaName,

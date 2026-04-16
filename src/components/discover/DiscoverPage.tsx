@@ -678,6 +678,13 @@ export function DiscoverPage({
     ];
   }, [nights, overlayListing]);
 
+  const overlayTypicalAllInTotal = useMemo(() => {
+    if (!overlayListing) {
+      return null;
+    }
+    return Math.ceil(overlayListing.typicalAllInNightly * nights);
+  }, [nights, overlayListing]);
+
   const overlayEmotionalHeadline = useMemo(() => {
     if (!overlayListing) {
       return null;
@@ -1153,37 +1160,31 @@ export function DiscoverPage({
                           toggleFavoriteListing(effectiveOverlayListingId);
                         }
                       }}
-                      className={`inline-flex h-12 items-center gap-2 rounded-full border px-5 text-sm font-bold shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] transition ${effectiveOverlayListingId && favoriteListingIds.includes(effectiveOverlayListingId) ? "border-rose-500 bg-rose-600 text-white" : "border-rose-300 bg-rose-50 text-rose-700 hover:border-rose-500 hover:bg-rose-100"}`}
+                      className={`inline-flex h-12 w-12 items-center justify-center rounded-full shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] backdrop-blur-md transition ${effectiveOverlayListingId && favoriteListingIds.includes(effectiveOverlayListingId) ? "bg-rose-900/65 text-rose-100 hover:bg-rose-100 hover:text-rose-700" : "bg-slate-950/35 text-white hover:bg-white/85 hover:text-slate-900"}`}
                       aria-label="Toggle favorite"
                       title="Toggle favorite"
                     >
                       <Heart
-                        className="h-5 w-5"
+                        className="h-6 w-6"
                         fill={
                           effectiveOverlayListingId &&
                           favoriteListingIds.includes(effectiveOverlayListingId)
                             ? "currentColor"
                             : "none"
                         }
+                        stroke="currentColor"
                       />
-                      Favorite
                     </button>
                     <button
                       type="button"
                       onClick={closeDetailOverlay}
-                      className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/70 bg-white/95 text-slate-700 shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] transition hover:border-slate-400 hover:bg-white"
+                      className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950/35 text-white shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] backdrop-blur-md transition hover:bg-white/85 hover:text-slate-900"
                       aria-label="Close details box"
                       title="Close details box"
                     >
                       <X className="h-6 w-6" />
                     </button>
                   </div>
-
-                  {overlayCommunityPill ? (
-                    <span className="absolute right-4 bottom-4 z-30 rounded-full border border-teal-300 bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-900 md:right-6 md:bottom-6">
-                      {overlayCommunityPill}
-                    </span>
-                  ) : null}
 
                   <div className="absolute top-4 left-4 z-20 max-w-4xl md:top-6 md:left-6">
                     <p className="text-[10px] font-bold tracking-[0.2em] text-cyan-200 uppercase">
@@ -1201,16 +1202,18 @@ export function DiscoverPage({
                     </h2>
                   </div>
 
-                  <div className="absolute bottom-4 left-4 z-30 md:bottom-6 md:left-6">
-                    <p className="text-left text-sm font-semibold tracking-[0.03em] text-white md:text-base">
-                      {overlayListing.bedrooms} BR,{" "}
-                      {formatBathrooms(overlayListing.bathrooms)} BA, Sleeps{" "}
-                      {overlayListing.sleeps}
-                    </p>
+                  <div className="absolute bottom-4 left-4 z-30 max-w-[72vw] md:bottom-6 md:left-6 md:max-w-[62vw]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-left text-sm font-semibold tracking-[0.03em] text-slate-100 md:text-base">
+                        {overlayListing.bedrooms} BR,{" "}
+                        {formatBathrooms(overlayListing.bathrooms)} BA, Sleeps{" "}
+                        {overlayListing.sleeps}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="absolute right-4 bottom-4 left-4 z-20 md:right-6 md:bottom-6 md:left-6">
-                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                  <div className="absolute right-4 bottom-4 z-30 max-w-[72vw] md:right-6 md:bottom-6 md:max-w-[62vw]">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       {overlayFeaturePills.map((pill, index) => (
                         <span
                           key={`${pill}-${index}`}
@@ -1219,6 +1222,11 @@ export function DiscoverPage({
                           {pill}
                         </span>
                       ))}
+                      {overlayCommunityPill ? (
+                        <span className="rounded-full border border-teal-300 bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-900">
+                          {overlayCommunityPill}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </section>
@@ -1414,6 +1422,27 @@ export function DiscoverPage({
                                     Check Availability
                                   </button>
                                 </div>
+                              </section>
+
+                              <section className="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] md:p-5">
+                                <h3 className="font-sans text-[0.9rem] font-bold tracking-[0.2em] text-cyan-900 uppercase">
+                                  Typical Pricing
+                                </h3>
+                                <p className="mt-3 text-sm leading-6 text-slate-700">
+                                  Typical all-in price for {nights}{" "}
+                                  {nights === 1 ? "night" : "nights"}:{" "}
+                                  <span className="font-semibold text-slate-900">
+                                    {overlayTypicalAllInTotal !== null
+                                      ? `$${overlayTypicalAllInTotal.toLocaleString("en-US")}`
+                                      : "Loading..."}
+                                  </span>
+                                  .
+                                </p>
+                                <p className="mt-2 text-xs leading-5 text-slate-600">
+                                  This is a planning estimate. Once you check
+                                  availability and dates are confirmed, we will
+                                  provide an accurate live quote for this stay.
+                                </p>
                               </section>
 
                               <section className="rounded-2xl border border-slate-200 bg-slate-50/75 p-4 md:p-5">

@@ -2,12 +2,15 @@ import "@/core/tooling/env/load-env-profile";
 
 import { createHash } from "node:crypto";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { pgDb } from "@/core/server/db";
 import { resolveProfileEnvironment } from "@/core/tooling/env/profile-env";
 import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
-import { listing_ai_enrichment } from "@/lib/db/schema-postgres";
+import {
+  listing_ai_enrichment,
+  listing_source_link,
+} from "@/lib/db/schema-postgres";
 import {
   buildSleepResolutionSchema,
   extractStructuredOutputText,
@@ -21,6 +24,8 @@ type Options = {
   progressEvery: number;
   adapterKey: string | null;
   listingId: string | null;
+  externalListingId: string | null;
+  includeAuditPassed: boolean;
   primaryModel: string;
   secondaryModel: string | null;
   deterministicFallback: boolean;
@@ -87,7 +92,7 @@ function printUsage(): void {
   console.log("Repair Enrichment Sleep Data Only");
   console.log("Usage:");
   console.log(
-    "  tsx src/lib/scripts/run-ai-enrichment-sleep-repair.ts [--limit 100] [--concurrency 10] [--adapter-key <key>] [--listing-id <id>] [--primary-model gpt-4.1-mini] [--secondary-model gpt-4.1] [--disable-secondary-model] [--disable-deterministic-fallback] [--dry-run]",
+    "  tsx src/lib/scripts/run-ai-enrichment-sleep-repair.ts [--limit 100] [--concurrency 10] [--adapter-key <key>] [--listing-id <id>] [--external-listing-id <id>] [--include-audit-passed] [--primary-model gpt-4.1-mini] [--secondary-model gpt-4.1] [--disable-secondary-model] [--disable-deterministic-fallback] [--dry-run]",
   );
   console.log("");
   console.log("Options:");
@@ -102,6 +107,12 @@ function printUsage(): void {
   );
   console.log("  --adapter-key <key>                 Restrict to one adapter");
   console.log("  --listing-id <id>                   Restrict to one listing");
+  console.log(
+    "  --external-listing-id <id>          Restrict via source link external listing id",
+  );
+  console.log(
+    "  --include-audit-passed              Allow targeting rows even when audit_passed=true",
+  );
   console.log(
     "  --primary-model <name>              First model (default gpt-4.1-mini)",
   );
@@ -124,6 +135,8 @@ function parseArgs(argv: string[]): Options {
   let progressEvery = 25;
   let adapterKey: string | null = null;
   let listingId: string | null = null;
+  let externalListingId: string | null = null;
+  let includeAuditPassed = false;
   let primaryModel = "gpt-4.1-mini";
   let secondaryModel: string | null = "gpt-4.1";
   let deterministicFallback = true;
@@ -150,6 +163,11 @@ function parseArgs(argv: string[]): Options {
 
     if (arg === "--disable-deterministic-fallback") {
       deterministicFallback = false;
+      continue;
+    }
+
+    if (arg === "--include-audit-passed") {
+      includeAuditPassed = true;
       continue;
     }
 
@@ -195,6 +213,12 @@ function parseArgs(argv: string[]): Options {
       continue;
     }
 
+    if (arg === "--external-listing-id" && next) {
+      externalListingId = next.trim() || null;
+      i += 1;
+      continue;
+    }
+
     if (arg === "--primary-model" && next) {
       primaryModel = next.trim() || primaryModel;
       i += 1;
@@ -216,6 +240,8 @@ function parseArgs(argv: string[]): Options {
     progressEvery,
     adapterKey,
     listingId,
+    externalListingId,
+    includeAuditPassed,
     primaryModel,
     secondaryModel,
     deterministicFallback,
@@ -1041,9 +1067,18 @@ async function run(): Promise<number> {
     throw new Error("OPENAI_API_KEY is missing.");
   }
 
-  const predicates = [
-    sql`(${listing_ai_enrichment.audit_payload}->>'audit_passed')::boolean = false`,
-  ];
+  if (options.externalListingId && !options.adapterKey) {
+    throw new Error(
+      "--external-listing-id requires --adapter-key to avoid cross-adapter ambiguity.",
+    );
+  }
+
+  const predicates = [];
+  if (!options.includeAuditPassed) {
+    predicates.push(
+      sql`(${listing_ai_enrichment.audit_payload}->>'audit_passed')::boolean = false`,
+    );
+  }
 
   if (options.adapterKey) {
     predicates.push(eq(listing_ai_enrichment.adapter_key, options.adapterKey));
@@ -1051,6 +1086,33 @@ async function run(): Promise<number> {
 
   if (options.listingId) {
     predicates.push(eq(listing_ai_enrichment.listing_id, options.listingId));
+  }
+
+  if (options.externalListingId) {
+    const sourceLinkRows = await pgDb
+      .select({ id: listing_source_link.id })
+      .from(listing_source_link)
+      .where(
+        and(
+          eq(listing_source_link.adapter_key, options.adapterKey!),
+          eq(
+            listing_source_link.external_listing_id,
+            options.externalListingId,
+          ),
+        ),
+      );
+
+    const sourceLinkIds = sourceLinkRows
+      .map((row) => row.id)
+      .filter((value) => value.trim().length > 0);
+
+    if (sourceLinkIds.length === 0) {
+      predicates.push(sql`1 = 0`);
+    } else {
+      predicates.push(
+        inArray(listing_ai_enrichment.source_link_id, sourceLinkIds),
+      );
+    }
   }
 
   const rows = await pgDb
@@ -1069,7 +1131,7 @@ async function run(): Promise<number> {
     .limit(options.limit);
 
   progress.phase(
-    `starting sleep repair selected=${rows.length} concurrency=${options.concurrency} primary_model=${options.primaryModel} secondary_model=${options.secondaryModel ?? "none"} deterministic_fallback=${options.deterministicFallback} dry_run=${options.dryRun}`,
+    `starting sleep repair selected=${rows.length} concurrency=${options.concurrency} primary_model=${options.primaryModel} secondary_model=${options.secondaryModel ?? "none"} deterministic_fallback=${options.deterministicFallback} dry_run=${options.dryRun} include_audit_passed=${options.includeAuditPassed}`,
   );
 
   let processed = 0;
@@ -1113,16 +1175,6 @@ async function run(): Promise<number> {
     `sleep repair complete selected=${rows.length} processed=${processed} repaired=${repaired} unresolved=${unresolved} primary=${resolvedPrimary} secondary=${resolvedSecondary} deterministic=${resolvedDeterministic} dry_run=${options.dryRun}`,
   );
 
-  const remaining = await pgDb
-    .select({
-      count: sql<number>`count(*)::int`,
-    })
-    .from(listing_ai_enrichment)
-    .where(
-      sql`(${listing_ai_enrichment.audit_payload}->>'audit_passed')::boolean = false`,
-    );
-
-  const remainingCount = remaining[0]?.count ?? 0;
   console.log("listing_ai_enrichment_sleep_repair_complete");
   console.log(`- selected: ${rows.length}`);
   console.log(`- processed: ${processed}`);
@@ -1131,7 +1183,21 @@ async function run(): Promise<number> {
   console.log(`- resolved_primary_model: ${resolvedPrimary}`);
   console.log(`- resolved_secondary_model: ${resolvedSecondary}`);
   console.log(`- resolved_deterministic: ${resolvedDeterministic}`);
-  console.log(`- remaining_audit_false: ${remainingCount}`);
+  if (!options.includeAuditPassed) {
+    const remaining = await pgDb
+      .select({
+        count: sql<number>`count(*)::int`,
+      })
+      .from(listing_ai_enrichment)
+      .where(
+        sql`(${listing_ai_enrichment.audit_payload}->>'audit_passed')::boolean = false`,
+      );
+
+    const remainingCount = remaining[0]?.count ?? 0;
+    console.log(`- remaining_audit_false: ${remainingCount}`);
+  } else {
+    console.log("- remaining_audit_false: skipped (include_audit_passed=true)");
+  }
   console.log(`- dry_run: ${options.dryRun}`);
 
   return unresolved > 0 ? 1 : 0;

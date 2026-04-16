@@ -18,6 +18,7 @@ type StayDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -90,6 +91,15 @@ type StayDetailRecord = DetailRecordBase & {
     begin_date: string;
     end_date: string;
     day_codes: string;
+  };
+  pricing_api_hints: {
+    provider: "streamlinecore-api-request";
+    endpoint_path: "/wp-admin/admin-ajax.php";
+    method_names: {
+      availability: "GetPropertyAvailabilityRawData";
+      room_details: "GetPropertyRoomDetails";
+    };
+    notes: string;
   };
 };
 
@@ -508,6 +518,164 @@ function decodeAvailabilityDays(
   return days;
 }
 
+type StreamlineRoomDetailsPayload = {
+  data?: {
+    room_details?: Array<{
+      name?: unknown;
+      group?: Array<{
+        name?: unknown;
+        amenity?: Array<{
+          name?: unknown;
+        }>;
+      }>;
+    }>;
+  };
+};
+
+function dedupePreserveOrder(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function extractRoomDetailsGuidanceFromApi(
+  payload: StreamlineRoomDetailsPayload | null,
+): string[] {
+  const hasSleepSignal = (value: string): boolean =>
+    /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+      value,
+    );
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const rooms = Array.isArray(payload?.data?.room_details)
+    ? payload.data.room_details
+    : [];
+
+  for (const room of rooms) {
+    const roomName = String(room?.name ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!roomName) {
+      continue;
+    }
+
+    const amenities: string[] = [];
+    const groups = Array.isArray(room?.group) ? room.group : [];
+    for (const group of groups) {
+      const entries = Array.isArray(group?.amenity) ? group.amenity : [];
+      for (const entry of entries) {
+        const value = String(entry?.name ?? "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!value) {
+          continue;
+        }
+        amenities.push(value);
+      }
+    }
+
+    const beds = dedupePreserveOrder(amenities).join(" + ");
+    const line = beds ? `${roomName}: ${beds}` : roomName;
+    const signal = `${roomName} ${beds}`.toLowerCase();
+    if (!hasSleepSignal(signal) || seen.has(line)) {
+      continue;
+    }
+
+    seen.add(line);
+    out.push(line);
+  }
+
+  return out.slice(0, 80);
+}
+
+function extractRoomDetailsGuidanceFromDescription(
+  description: string,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const lines = description
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    if (line.length < 10 || line.length > 240) {
+      continue;
+    }
+
+    const normalized = line.toLowerCase();
+    const hasRoomLabel =
+      normalized.includes("bedroom") ||
+      /^bed\s*\d+\s*:/i.test(normalized) ||
+      normalized.includes("bunk room");
+    if (!hasRoomLabel) {
+      continue;
+    }
+    if (
+      !/king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+        normalized,
+      )
+    ) {
+      continue;
+    }
+
+    const cleaned = line
+      .replace(/^[-*]\s*/, "")
+      .replace(/\s*:\s*/g, ": ")
+      .trim();
+    if (seen.has(cleaned)) {
+      continue;
+    }
+
+    seen.add(cleaned);
+    out.push(cleaned);
+  }
+
+  return out.slice(0, 80);
+}
+
+async function callStreamlineApi<T>(
+  origin: string,
+  methodName: string,
+  params: Record<string, unknown>,
+): Promise<T | null> {
+  const apiUrl = `${origin}/wp-admin/admin-ajax.php?${new URLSearchParams({
+    action: "streamlinecore-api-request",
+    params: JSON.stringify({
+      methodName,
+      params,
+    }),
+  }).toString()}`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        accept: "application/json,text/plain,*/*",
+      },
+    });
+
+    if (response.status !== 200) {
+      return null;
+    }
+
+    const raw = await response.text();
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function discoverListings(
   page: Parameters<
     ScraperAdapter<StayDetailRecord>["discoverListings"]
@@ -679,6 +847,7 @@ async function fetchDetail(
   };
 
   try {
+    const detailOrigin = new URL(detailUrl).origin;
     const detailResponse = await fetch(detailUrl, {
       method: "GET",
       redirect: "follow",
@@ -888,45 +1057,35 @@ async function fetchDetail(
     const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
-    const availabilityApiUrl = `https://stayon30a.com/wp-admin/admin-ajax.php?${new URLSearchParams(
-      {
-        action: "streamlinecore-api-request",
-        params: JSON.stringify({
-          methodName: "GetPropertyAvailabilityRawData",
-          params: {
-            unit_id: Number(rentalId),
-            use_room_type_logic: "no",
-            standard_pricing: 1,
-          },
-        }),
-      },
-    ).toString()}`;
-
-    const availabilityResponse = await fetch(availabilityApiUrl, {
-      method: "GET",
-      headers,
-    });
+    const roomDetailsApiPayload =
+      await callStreamlineApi<StreamlineRoomDetailsPayload>(
+        detailOrigin,
+        "GetPropertyRoomDetails",
+        {
+          unit_id: Number(rentalId),
+          use_room_type_logic: "no",
+          standard_pricing: 1,
+        },
+      );
 
     let rawBeginDate = "";
     let rawEndDate = "";
     let rawAvailabilityCodes = "";
 
-    if (availabilityResponse.status === 200) {
-      const raw = await availabilityResponse.text();
-      try {
-        const parsed = JSON.parse(raw) as {
-          data?: {
-            range?: { beginDate?: string; endDate?: string };
-            availability?: string;
-          };
-        };
-        rawBeginDate = parsed.data?.range?.beginDate ?? "";
-        rawEndDate = parsed.data?.range?.endDate ?? "";
-        rawAvailabilityCodes = parsed.data?.availability ?? "";
-      } catch {
-        // Ignore malformed availability payload.
-      }
-    }
+    const availabilityPayload = await callStreamlineApi<{
+      data?: {
+        range?: { beginDate?: string; endDate?: string };
+        availability?: string;
+      };
+    }>(detailOrigin, "GetPropertyAvailabilityRawData", {
+      unit_id: Number(rentalId),
+      use_room_type_logic: "no",
+      standard_pricing: 1,
+    });
+
+    rawBeginDate = availabilityPayload?.data?.range?.beginDate ?? "";
+    rawEndDate = availabilityPayload?.data?.range?.endDate ?? "";
+    rawAvailabilityCodes = availabilityPayload?.data?.availability ?? "";
 
     const allAvailabilityDays = decodeAvailabilityDays(
       rawBeginDate,
@@ -973,6 +1132,13 @@ async function fetchDetail(
 
     const description =
       descriptionExpanded || stripHtml(metaDescription).slice(0, 20000);
+    const roomDetailsGuidanceFromApi = extractRoomDetailsGuidanceFromApi(
+      roomDetailsApiPayload,
+    );
+    const roomDetailsGuidance =
+      roomDetailsGuidanceFromApi.length > 0
+        ? roomDetailsGuidanceFromApi
+        : extractRoomDetailsGuidanceFromDescription(description);
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
@@ -991,6 +1157,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomDetailsGuidance,
       amenities: {
         categories: categoryMap,
         all: amenitiesAll,
@@ -1059,6 +1226,16 @@ async function fetchDetail(
         begin_date: rawBeginDate,
         end_date: rawEndDate,
         day_codes: rawAvailabilityCodes,
+      },
+      pricing_api_hints: {
+        provider: "streamlinecore-api-request",
+        endpoint_path: "/wp-admin/admin-ajax.php",
+        method_names: {
+          availability: "GetPropertyAvailabilityRawData",
+          room_details: "GetPropertyRoomDetails",
+        },
+        notes:
+          "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty.",
       },
       html_path: htmlPath,
     };

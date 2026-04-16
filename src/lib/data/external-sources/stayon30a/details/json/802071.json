@@ -1,7 +1,7 @@
 {
   "external_listing_id": "802071",
   "detail_url": "https://www.stayon30a.com/802071",
-  "fetched_at": "2026-04-16T13:36:03.423Z",
+  "fetched_at": "2026-04-16T20:16:12.215Z",
   "quote_context": {
     "listing_id": "802071",
     "unit_id": "802071",
@@ -12,6 +12,13 @@
   "canonical_url": "https://stayon30a.com/802071/",
   "meta_description": "Stay on 30A Property Management: Gulf Bridge in Watersound. Gulf Views! Sleeps 12-Pool, Spa, Fire Pit",
   "description_expanded": "class=\"property_description\"> Welcome to &#39;Gulf Bridge,&#39; &nbsp;a luxury, modern coastal home with stunning Gulf views! This exquisite Gulf view home is located in 30A&#39;s premiere gated neighborhood destination, WaterSound Peninsula. Details from the generous patio/deck space, heated pool &amp; spa, gas fire pit, to the rooftop retreat are beyond compare! Every element has been fine-tuned to perfection, making it a home for all to enjoy. Gulf Bridge is truly a home to experience a luxury vacation! Simply relax and watch the sunset over the Gulf of Mexico, take a dip in the private pool, or stroll along the meandering boardwalks that lead you to the white sand beaches of the beautiful Emerald Coast. This home has five bedrooms, five and a half bathrooms, living space area, and a generous sized kitchen. Offering impeccable accommodations for up to twelve, guests will love this community. This home offers seclusion compared to most areas of 30A so close to the water and one of the quietest stretches of beach along 30A. HOME HIGHLIGHTS: -Gulf and white sandy beaches a short boardwalk away -Access to private beach with optional chair service (additional charge direct to vendor) -Located on Camp Creek Lake -Parking Spaces: 4 in Driveway -Dining Accommodations: Table for 6, Island Seating for 4, Outdoor Dining Table -Panoramic Gulf Views From Viewing Tower -Fourth Floor Viewing Tower -Private Heated Pool With Spa&nbsp;**Pool heating is available for an additional fee of $80/day. Pool &amp; spa are heated together. ** -Wine Fridge -Gas Fire Pit -Indoor Gas Fireplace -Outdoor Wolf Gas Grill -Golf Cart -Bikes- 8 Adult -2 Paddleboards -Elevator (Elevator usage is not available for guests unless it is needed by an elderly or handicapped individual.&nbsp; Please contact Stay on 30a prior to the arrival date for such arrangements) **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | Pool Towels WELCOME BUNDLE: Coffee Grounds | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING Four parking spaces available (4 driveway). No street parking allowed. Included is a 6 seater golf cart and 8 bicycles (adult) for your convenience. To drive golf cart, you must be: 25 years old, sign a liability waiver, and have valid insurance and drivers license. Golf Cart is included as an amenity, at no additional cost. WATERSOUND COMMUNITY HIGHLIGHTS: -Over 250 Acre Gated Beach Community on the Gulf of Mexico between Seaside and Rosemary Beach -(2) Community Pools (Dunesider Pool in Main Gate and Bridges Pool within the Bridges Gate, which can be accessed directly from the boardwalk in front of the home) -Parks, Walking Trails and Meandering Boardwalks -Bike to Alys Beach, Seacrest Beach and Rosemary Beach -A short walk to The Big Chill (formerly The Hub) **Please Note: *Access to the WaterSound Beach Club is not included. *WaterSound does not allow golf cart rentals. ACCOMMODATIONS: Sleeps: 12 5 Bedrooms / 5.5 Baths FIRST FLOOR: -Bedroom 1: King Bed with Private Bath -Laundry SECOND FLOOR: -Bedroom 2 (Primary): King Bed with Private Bath -Bedroom 3: Queen Bed with Private Bath -Bedroom 4: 2 Twin Bunk Beds (4 Beds Total) with Private Bath -Bedroom 5: King Bed with Private Bath -Half Bath HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises. *No Smoking: Smoking is strictly prohibited including back porch/deck.&nbsp; *No parties or events.&nbsp; *Complimentary golf cart can only be operated by guests over 25 years of age who provide verification. Rental agreement requires a valid drivers license and proof of existing auto insurance coverage. *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. *Private Heated Pool With Spa **Pool heating is available for an additional fee of $80/day. Pool &amp; spa are heated together. Must be heated for duration of stay. If selected, it must be requested 48 hours prior to check in and paid before the heater will be turned on. IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver&rsquo;s license and 2) a &quot;selfie&quot;. Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Primary Bedroom: King",
+    "Bedroom #2: King",
+    "Bedroom #3: King",
+    "Bedroom #4: Queen",
+    "Bedroom #5: Bunk Bed"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -171,7 +178,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "802071",
-    "captured_at": "2026-04-16T13:36:03.423Z",
+    "captured_at": "2026-04-16T20:16:12.215Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4218,6 +4225,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "NNNNYYYYYYYYYNNNNYYYYYYYYYYYYNNNNNYYYYYYNNNNNNNNNNNYNNNNNYYNNNNYYNNNNNNNYYYYYYYYYYYYNNNYYYYYYNNNNNNNYYYYYYYYYYNNNNNYYYYNNNYYYYNNNNYYYYYNNNNNNNYYYYYNNNYYYYYYYYYYYNNYYYYYYYYYYYYYYYYYYYYNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNYYYYYYYYYYYYYYYYYYYNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/802071.html"
 }

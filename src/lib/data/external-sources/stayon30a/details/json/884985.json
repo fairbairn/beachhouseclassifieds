@@ -1,7 +1,7 @@
 {
   "external_listing_id": "884985",
   "detail_url": "https://www.stayon30a.com/884985",
-  "fetched_at": "2026-04-16T13:36:13.023Z",
+  "fetched_at": "2026-04-16T20:16:28.770Z",
   "quote_context": {
     "listing_id": "884985",
     "unit_id": "884985",
@@ -12,6 +12,11 @@
   "canonical_url": "https://stayon30a.com/884985/",
   "meta_description": "Stay on 30A Property Management: Camp Creek Cottage in Seacrest. Quaint and Quite- Camp Creek Cottage includes private beach access! This 3 bed/2 bath coastal cottage provides everything you need.",
   "description_expanded": "class=\"property_description\"> Welcome to &#39;Camp Creek Cottage!&#39; &nbsp;Quaint and Quite, this Camp Creek Cottage includes private beach access!&nbsp;This 3 bed/2 bath coastal cottage provides everything you need. The open floor concept provides space to gather, prepare meals, and relax.&nbsp;Wake up in the morning and enjoy a cup of coffee on the beautiful back patio.&nbsp;With on-site parking for 2 vehicles &amp; 6 complimentary adult bikes&mdash;exploring the local shops, dining spots, and entertainment of nearby Rosemary Beach and Alys Beach is a breeze. HOME HIGHLIGHTS: -6 Bikes- Adult -Private Beach Access -Beautiful Back Patio -Community Pool &amp; Hot Tub -Smart TVs -Gas Grill -Beach Gear -2 Dedicated Parking Spots **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | Pool Towels WELCOME BUNDLE: Coffee Grounds | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING Two parking spaces available (2 spaces in front of cottage). There is limited extra parking in the front of the neighborhood. Boats and RV&#39;s are prohibited on the property. Included are 6 bicycles (adult) for your convenience.&nbsp; SEACREST COMMUNITY HIGHLIGHTS: Seacrest is casually upscale, making it easy for guests to find endless relaxation. Turn off your phone and forget about your emails as you explore all that Seacrest has to offer.&nbsp;The area&rsquo;s legendary sugar-white sand and turquoise water are only part of what makes Seacrest a true getaway. Grab a bite to eat and a cup of coffee at Seacrest Sundries, the local grocery store, before spending the day wandering through Seacrest&rsquo;s shops and riding bikes along the Timpoochee Trail. ACCOMMODATIONS: Sleeps: 8 3 Bedrooms / 2 Baths FIRST FLOOR: -Bedroom 1: King Bed with ensuite -Bedroom 2: Queen Bed -Bedroom 3: (2) Twin over Twin Bunks BEACH ACCESS 1. Private Beach Access is right across the street from the home,&nbsp;about 50 yards east (left), between two private residences, to the left of the large white house. No tents allowed. Exclusive Beach Service provider is Dillon&#39;s Beach Service. 2. Seacrest Drive Access is on Scenic 30A at the intersection of Seacrest Drive, just a 7 minute walk (.3 miles) from the home. A short boardwalk leads to a dune walkover high atop a bluff overlooking the Gulf of Mexico. 3.&nbsp;Gulf Lakes Access is a South Walton County beach access (.7 mile west of the home). It is a small access that can be easily missed. Parking is not available but is just an easy 4 minute bike ride away. HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises.&nbsp; *No Smoking: Smoking is strictly prohibited including back porch/deck. Additional cleaning charges of $500 will be charged if in violation. *Capacity for 2 vehicles in the driveway. There is limited extra parking in the front of the neighborhood.&nbsp;Boats and RV&#39;s are prohibited on the property. *Towels and other clothing may not be hung from cottage railings.&nbsp; *No parties or events. *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. *Space must remain pet free! IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver&rsquo;s license and 2) a &quot;selfie&quot;. Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Bedroom #1: King",
+    "Bedroom #2: Queen",
+    "Bedroom #3: Twin over Twin"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -139,7 +144,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "884985",
-    "captured_at": "2026-04-16T13:36:13.023Z",
+    "captured_at": "2026-04-16T20:16:28.770Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4186,6 +4191,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "NNNNYYYYYNNNNNNYNNNNNNNNNNYYYYYYYNNNNNNYYYYYYYYYYYYNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/884985.html"
 }

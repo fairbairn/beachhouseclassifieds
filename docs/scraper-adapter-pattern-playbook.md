@@ -138,6 +138,9 @@ Use this table to pick the nearest adapter template before starting a new manage
 
 - For Streamline-like adapters using `/wp-admin/admin-ajax.php?action=streamlinecore-api-request`, probe method names before building UI-only logic.
 - Common methods seen in current adapters include `GetPropertyAvailabilityRawData`, `GetPropertyRates` or `GetPropertyRatesRawData`, and (on some managers) `GetPreReservationPrice` for ad-hoc full-stay quote calculations.
+- Rooms guidance capability (Streamline WordPress bridge): probe `GetPropertyRoomDetails` early for structured room/bed payloads before attempting DOM-only table parsing.
+- For room-details enrichment, prefer this order: `GetPropertyRoomDetails` API -> rendered Room Details table in DOM -> description-based fallback heuristics.
+- When `GetPropertyRoomDetails` is available, map room rows into canonical `rooms_guidance` entries and preserve concise room + bed context only (avoid wrapper labels and non-room chrome).
 - For RESCMS/RCAPI Streamline variants, parse detail-page Riot mount payloads at scrape time and persist `entity.eid`, `entity.id` (inventory id), and `entity.type` into detail JSON to avoid fragile name-based eid lookups during quoting.
 - For RCAPI quote endpoints that return only grand totals, keep quote retrieval on `/rcapi/item/avail/search` for speed and derive provisional base/tax split deterministically until a reliable fee/tax breakout endpoint is validated.
 - Treat ad-hoc quote methods as optional enrichment: keep nightly/day rates in `normalized_rates` and store quote-response diagnostics in a provider-specific raw sidecar until a shared quote schema is introduced.

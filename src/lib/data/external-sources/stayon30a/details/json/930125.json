@@ -1,7 +1,7 @@
 {
   "external_listing_id": "930125",
   "detail_url": "https://www.stayon30a.com/930125",
-  "fetched_at": "2026-04-16T13:36:19.225Z",
+  "fetched_at": "2026-04-16T20:16:36.509Z",
   "quote_context": {
     "listing_id": "930125",
     "unit_id": "930125",
@@ -12,6 +12,12 @@
   "canonical_url": "https://stayon30a.com/930125/",
   "meta_description": "Stay on 30A Property Management: Coach&#039;s Corner in Seacrest. Wave on Wave is a hidden gem! Located right on 30A, this 5 bed/3bath coastal cottage provides everything you need.",
   "description_expanded": "class=\"property_description\"> Welcome to &#39;Coach&#39;s Corner&#39; !&nbsp;A luxurious haven in Seacrest that combines comfort, convenience, and coastal beauty. Tucked away in a tranquil setting bordering a scenic state park, this retreat offers ultimate privacy and relaxation. Enjoy lazy afternoons by your private pool, or take a short golf cart ride to your private deeded beach access where sugar-white sands and emerald waters wait. With plenty of space for your group, and modern amenities Coach&#39;s Corner is more than just a vacation-it&#39;s an experience. Come make unforgettable memories at this coastal gem!&nbsp; ACCOMMODATIONS: Sleeps: 13 4 Bedrooms / 3.5 Baths FIRST FLOOR: Bedroom 1: King Bed, Ensuite Half Bath SECOND FLOOR: Bedroom 2: Bunk Room (1) Twin over Twin, (1) Twin over Full King Bed, Ensuite Bedroom 3: Full Beds (2) Bedroom 4:&nbsp;King Bed, Ensuite Full Bath BEACH ACCESS 1. White&#39;s Gulfview- Private Beach Access at the end of Clareon Dr across Hwy 30A. Gate code found in Welcome Guide. Golf cart parking is available. 2. Seacrest Drive Access is on Scenic 30A at the intersection of Seacrest Drive, just a 3 minute bike ride from the home. A short boardwalk leads to a dune walkover high atop a bluff overlooking the Gulf of Mexico. Bike parking is available at the access. 3.&nbsp;Gulf Lakes Access is a South Walton County beach access (.9 mile west of the home). Small access that can be easily missed. Access is an easy bike ride from the home.&nbsp;Halfway down the boardwalk there is a bike rack and shower but no car parking. The dune walkover sits on a high bluff overlooking the gulf. HOME HIGHLIGHTS: 6-Seater Golf Cart 6 Bikes- Adult Private Pool&nbsp;**Pool heating is available for this property for $50 per day** Private Deeded Beach Access with Golf Cart Parking Large Screened in Back Patio with Seating and TV Fireplace Sun Deck Smart TVs Gas Grill Gas Firepit Beach Gear 2 Dedicated Parking Spots **WHAT WE OFFER** A STARTER SUPPLY OF PREMIUM AMENITIES: Body Wash | Shampoo | Conditioner | Hand Soap | Toilet Paper | Dish Soap | Dishwasher Pods | Laundry Detergent | Paper Towels | Trash Bags | Dish Sponge | Bath Towels | Bed Linens | Pool Towels WELCOME BUNDLE: Coffee Grounds | 2 Keurig Pods | Popcorn | Olive Oil | Fiji Water PARKING Four parking spaces available (4 driveway). No street parking allowed. Included is a 6-seater golf cart &amp; 6 bicycles (adult) for your convenience. SEACREST COMMUNITY HIGHLIGHTS: Seacrest is casually upscale, making it easy for guests to find endless relaxation. Turn off your phone and forget about your emails as you explore all that Seacrest has to offer.&nbsp;The area&rsquo;s legendary sugar-white sand and turquoise water are only part of what makes Seacrest a true getaway. Grab a bite to eat and a cup of coffee at Seacrest Sundries, the local grocery store, before spending the day wandering through Seacrest&rsquo;s shops and riding bikes along the Timpoochee Trail. HOUSE RULES *Check-In: After 4PM | Check-Out: Before 10AM *Must be 25 years of age to book. Guests under 25 must be accompanied by a parent or guardian that is staying on premises.&nbsp; *No Smoking: Smoking is strictly prohibited including back porch/deck. Additional cleaning charges of $500 will be charged if in violation. *Capacity for 4 vehicles in the driveway. No street parking allowed.&nbsp; *Towels and other clothing may not be hung from balcony railings.&nbsp; *No parties or events. *During busier times and due to limited infrastructure, internet connectivity may be affected. No refunds will be given for connection issues no wifi, or slow wifi. *Space must remain pet free! IMPORTANT PRIOR TO ARRIVAL All guests will be required to sign a rental agreement, as well as provide a valid ID that matches with the name of the person that made the reservation which includes: 1) a photo of your government issued ID such as a driver&rsquo;s license and 2) a &quot;selfie&quot;. Both should be uploaded to our Happy Stays app. read more + less -",
+  "rooms_guidance": [
+    "Bedroom #1: King",
+    "Bedroom #2: Bunk Bed",
+    "Bedroom #3: Double",
+    "Bedroom #4: King"
+  ],
   "amenities": {
     "categories": {
       "Cleanliness": [
@@ -168,7 +174,7 @@
   "normalized_availability": {
     "source": "pm_stayon30a",
     "external_listing_id": "930125",
-    "captured_at": "2026-04-16T13:36:19.225Z",
+    "captured_at": "2026-04-16T20:16:36.509Z",
     "window_start": "2026-04-16",
     "window_end": "2027-08-31",
     "code_legend": {
@@ -4215,6 +4221,15 @@
     "begin_date": "04/16/2026",
     "end_date": "08/31/2027",
     "day_codes": "NNNNYYYNNNNYYYNNNNYNNNNNNNNYNNNYYYNNNNYYYYNNNYYYYNNNYYYYYNNNYYYNNNYYYYNNNNNNNNNNNNNNNYYYYYYNNNYYYYYNNNYYYYYNNNNNNNYYYYNNNNYYYYNNNYYYYNNNYYYYYNNNYYYYYYYYYYNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNYYYYYYYYYYYNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+  },
+  "pricing_api_hints": {
+    "provider": "streamlinecore-api-request",
+    "endpoint_path": "/wp-admin/admin-ajax.php",
+    "method_names": {
+      "availability": "GetPropertyAvailabilityRawData",
+      "room_details": "GetPropertyRoomDetails"
+    },
+    "notes": "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty."
   },
   "html_path": "src/lib/data/external-sources/stayon30a/details/html/930125.html"
 }

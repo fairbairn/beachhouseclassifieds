@@ -41,6 +41,7 @@ type ThirtyABeachDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -147,6 +148,7 @@ type ThirtyABeachDetailRecord = DetailRecordBase & {
     endpoint_path: "/wp-admin/admin-ajax.php";
     method_names: {
       availability: "GetPropertyAvailabilityRawData";
+      room_details: "GetPropertyRoomDetails";
       rates: "GetPropertyRatesRawData";
       pre_reservation_price: "GetPreReservationPrice";
     };
@@ -676,6 +678,170 @@ function extractRoomDetailsStats(html: string): {
     baths,
     sleeps,
   };
+}
+
+function extractRoomDetailsGuidance(html: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const hasSleepSignal = (value: string): boolean =>
+    /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+      value,
+    );
+
+  const tables = Array.from(html.matchAll(/<table[^>]*>([\s\S]*?)<\/table>/gi));
+  for (const tableMatch of tables) {
+    const tableHtml = tableMatch[1] ?? "";
+    const headerText = stripHtml(tableHtml).toLowerCase();
+    if (!headerText.includes("room") || !headerText.includes("beds")) {
+      continue;
+    }
+
+    const rows = Array.from(tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
+    for (const rowMatch of rows) {
+      const rowHtml = rowMatch[1] ?? "";
+      const cells = Array.from(rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi));
+      if (cells.length < 2) {
+        continue;
+      }
+
+      const room = stripHtml(cells[0]?.[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const beds = stripHtml(cells[1]?.[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const comments = stripHtml(cells[4]?.[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!room) {
+        continue;
+      }
+
+      const signal = `${room} ${beds} ${comments}`;
+      if (!hasSleepSignal(signal)) {
+        continue;
+      }
+
+      const lineCore = beds ? `${room}: ${beds}` : room;
+      const line = comments ? `${lineCore} - ${comments}` : lineCore;
+      if (!line || seen.has(line)) {
+        continue;
+      }
+
+      seen.add(line);
+      out.push(line);
+    }
+  }
+
+  // Newer 30abeach pages render room details as a card/grid block instead of a table.
+  const sectionMatch = html.match(
+    /<div[^>]+id=["']section-rooms["'][^>]*>([\s\S]*?)<div[^>]+id=["']section-location["']/i,
+  );
+  const sectionHtml = sectionMatch?.[1] ?? "";
+  if (sectionHtml) {
+    const spanMatches = Array.from(
+      sectionHtml.matchAll(
+        /<span[^>]+class=["'][^"']*text-base\s+text-brand-navy[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi,
+      ),
+    );
+
+    for (const spanMatch of spanMatches) {
+      const line = stripHtml(spanMatch[1] ?? "")
+        .replace(/\s+/g, " ")
+        .replace(/\s*:\s*/g, ": ")
+        .trim();
+
+      if (!line || seen.has(line)) {
+        continue;
+      }
+
+      const lineLower = line.toLowerCase();
+      if (lineLower.includes("bed size guide")) {
+        continue;
+      }
+
+      if (!lineLower.includes("bedroom") || !hasSleepSignal(lineLower)) {
+        continue;
+      }
+
+      seen.add(line);
+      out.push(line);
+    }
+  }
+
+  return out.slice(0, 80);
+}
+
+type StreamlineRoomDetailsPayload = {
+  data?: {
+    room_details?: Array<{
+      name?: unknown;
+      group?: Array<{
+        name?: unknown;
+        amenity?: Array<{
+          name?: unknown;
+        }>;
+      }>;
+    }>;
+  };
+};
+
+function extractRoomDetailsGuidanceFromApi(
+  payload: StreamlineRoomDetailsPayload | null,
+): string[] {
+  const hasSleepSignal = (value: string): boolean =>
+    /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+      value,
+    );
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const rooms = Array.isArray(payload?.data?.room_details)
+    ? payload.data.room_details
+    : [];
+
+  for (const room of rooms) {
+    const roomName = String(room?.name ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!roomName) {
+      continue;
+    }
+
+    const amenities: string[] = [];
+    const groups = Array.isArray(room?.group) ? room.group : [];
+    for (const group of groups) {
+      const entries = Array.isArray(group?.amenity) ? group.amenity : [];
+      for (const entry of entries) {
+        const value = String(entry?.name ?? "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!value) {
+          continue;
+        }
+        amenities.push(value);
+      }
+    }
+
+    const beds = dedupePreserveOrder(amenities).join(" + ");
+    const line = beds ? `${roomName}: ${beds}` : roomName;
+    const signal = `${roomName} ${beds}`.toLowerCase();
+
+    if (!hasSleepSignal(signal)) {
+      continue;
+    }
+
+    if (seen.has(line)) {
+      continue;
+    }
+    seen.add(line);
+    out.push(line);
+  }
+
+  return out.slice(0, 80);
 }
 
 function extractImageUrlsFromListingRow(
@@ -1367,6 +1533,23 @@ async function fetchDetail(
       Object.values(amenitiesCategories).flat(),
     );
     const roomDetailsStats = extractRoomDetailsStats(html);
+    const roomDetailsApiPayload =
+      await callStreamlineApi<StreamlineRoomDetailsPayload>(
+        origin,
+        "GetPropertyRoomDetails",
+        {
+          unit_id: Number(unitId),
+          use_room_type_logic: "no",
+          standard_pricing: 1,
+        },
+      );
+    const roomDetailsGuidanceFromApi = extractRoomDetailsGuidanceFromApi(
+      roomDetailsApiPayload,
+    );
+    const roomDetailsGuidance =
+      roomDetailsGuidanceFromApi.length > 0
+        ? roomDetailsGuidanceFromApi
+        : extractRoomDetailsGuidance(html);
 
     const latitudeFromHtml = parseNumberLike(
       html.match(/["']latitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i)?.[1],
@@ -1554,6 +1737,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: description,
+      rooms_guidance: roomDetailsGuidance,
       amenities: {
         categories: amenitiesCategories,
         all: amenitiesAll,
@@ -1666,6 +1850,7 @@ async function fetchDetail(
         endpoint_path: "/wp-admin/admin-ajax.php",
         method_names: {
           availability: "GetPropertyAvailabilityRawData",
+          room_details: "GetPropertyRoomDetails",
           rates: "GetPropertyRatesRawData",
           pre_reservation_price: "GetPreReservationPrice",
         },
