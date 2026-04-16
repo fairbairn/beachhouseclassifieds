@@ -184,6 +184,8 @@
     "pricing:validate:cache": "npm run pricing:validate:cache:raw --",
     "pricing:validate:rooms:raw": "tsx src/lib/scripts/run-rooms-guidance-validation.ts",
     "pricing:validate:rooms": "npm run pricing:validate:rooms:raw --",
+    "pricing:validate:rooms:all:raw": "tsx src/lib/scripts/run-rooms-guidance-validation-all.ts",
+    "pricing:validate:rooms:all": "npm run pricing:validate:rooms:all:raw --",
     "pricing:validate:scrape-filenames:raw": "tsx src/lib/scripts/run-scrape-filename-validation.ts",
     "pricing:validate:scrape-filenames": "npm run pricing:validate:scrape-filenames:raw --",
     "pricing:validate:scrape-filenames:all:raw": "tsx src/lib/scripts/run-scrape-filename-validation-all.ts",

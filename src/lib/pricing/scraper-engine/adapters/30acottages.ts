@@ -16,6 +16,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -308,6 +309,71 @@ function dedupePreserveOrder(values: string[]): string[] {
     out.push(normalized);
   }
   return out;
+}
+
+function extractRoomDetailsGuidanceFromHtml(html: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const hasSleepSignal = (value: string): boolean =>
+    /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|sleeper|daybed|futon|sleeps?/i.test(
+      value,
+    );
+
+  const sectionMatch = html.match(
+    /<section[^>]*id=["']room-details["'][^>]*>([\s\S]*?)<\/section>/i,
+  );
+  const sectionHtml = sectionMatch?.[1] ?? html;
+
+  const tables = Array.from(
+    sectionHtml.matchAll(/<table[^>]*>([\s\S]*?)<\/table>/gi),
+  );
+  for (const tableMatch of tables) {
+    const tableHtml = tableMatch[1] ?? "";
+    const headerText = stripHtml(tableHtml).toLowerCase();
+    if (!headerText.includes("room") || !headerText.includes("beds")) {
+      continue;
+    }
+
+    const rows = Array.from(tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
+    for (const rowMatch of rows) {
+      const rowHtml = rowMatch[1] ?? "";
+      const cells = Array.from(rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi));
+      if (cells.length < 2) {
+        continue;
+      }
+
+      const room = stripHtml(cells[0]?.[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const beds = stripHtml(cells[1]?.[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const comments = stripHtml(cells[4]?.[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!room) {
+        continue;
+      }
+
+      const signal = `${room} ${beds} ${comments}`;
+      if (!hasSleepSignal(signal)) {
+        continue;
+      }
+
+      const lineCore = beds ? `${room}: ${beds}` : room;
+      const line = comments ? `${lineCore} - ${comments}` : lineCore;
+      if (!line || seen.has(line)) {
+        continue;
+      }
+
+      seen.add(line);
+      out.push(line);
+    }
+  }
+
+  return out.slice(0, 80);
 }
 
 function parseFirstNumber(value: string): number | null {
@@ -1819,6 +1885,7 @@ async function fetchDetail(
       descriptionExpanded,
       detailHtml: html,
     });
+    const roomDetailsGuidance = extractRoomDetailsGuidanceFromHtml(html);
 
     const locationPayload = extractFieldLocationFromHtml(html);
 
@@ -1975,6 +2042,7 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomDetailsGuidance,
       amenities,
       location,
       media_gallery: mediaGallery,
