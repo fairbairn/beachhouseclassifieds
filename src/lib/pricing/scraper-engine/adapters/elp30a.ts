@@ -434,6 +434,23 @@ function parsePropIdFromHtml(html: string, unitSlug: string): string | null {
   return null;
 }
 
+function isInvalidUnitPage(params: {
+  title: string;
+  h1: string;
+  html: string;
+}): boolean {
+  const title = params.title.toLowerCase();
+  const h1 = params.h1.toLowerCase();
+  const html = params.html.toLowerCase();
+
+  return (
+    title.includes("page not found") ||
+    h1.includes("no results found") ||
+    html.includes("this property is no longer available") ||
+    html.includes("this property is no longer in our inventory")
+  );
+}
+
 function collectMediaUrls(html: string, baseUrl: string): string[] {
   const urls = new Set<string>();
   const regex = /(?:src|data-src|data-image|content)=["']([^"']+)["']/gi;
@@ -1124,6 +1141,19 @@ async function fetchDetail(
     }
 
     const html = await response.text();
+    const parsedTitle = extractFirst(
+      /<title[^>]*>([\s\S]*?)<\/title>/i,
+      html,
+    ).slice(0, 240);
+    const parsedH1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html).slice(
+      0,
+      240,
+    );
+
+    if (isInvalidUnitPage({ title: parsedTitle, h1: parsedH1, html })) {
+      return null;
+    }
+
     const propId = parsePropIdFromHtml(html, slug);
     if (!propId) {
       return null;
@@ -1183,11 +1213,8 @@ async function fetchDetail(
         };
 
     const unit = parsedAvailability.unit;
-    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
-      0,
-      240,
-    );
-    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html).slice(0, 240);
+    const title = parsedTitle;
+    const h1 = parsedH1;
     const canonicalUrl =
       extractFirst(
         /<link[^>]+rel=["']canonical["'][^>]+href=["']([\s\S]*?)["'][^>]*>/i,
