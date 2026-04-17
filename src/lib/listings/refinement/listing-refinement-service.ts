@@ -151,7 +151,7 @@ export type RefinementResult = {
   audit_decision: RefinementAuditDecision;
 };
 
-const PROMPT_VERSION = "v8";
+const PROMPT_VERSION = "v7";
 export const LISTING_REFINEMENT_PROMPT_VERSION = PROMPT_VERSION;
 const AUDIT_MIN_ACCURACY_SCORE = 0.9;
 const SEO_BRAND_NAME = "30A Collections";

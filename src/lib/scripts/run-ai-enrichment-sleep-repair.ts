@@ -273,6 +273,15 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter((entry) => entry.length > 0);
+}
+
 function normalizeCount(value: unknown): number {
   const parsed = asNumber(value);
   if (parsed === null) {
@@ -758,6 +767,19 @@ async function callSleepResolutionModel(input: {
     "Return sleeping_arrangements and sleeping_summary.",
   ].join(" ");
 
+  const sourceRoomsGuidance = asStringArray(
+    input.sourceSnapshot.rooms_guidance,
+  );
+  const sourceContext: Record<string, unknown> = {
+    description_expanded: asString(input.sourceSnapshot.description_expanded),
+    bedrooms: asNumber(input.sourceSnapshot.bedrooms),
+    bathrooms: asString(input.sourceSnapshot.bathrooms),
+    sleeps: input.expectedSleeps,
+  };
+  if (sourceRoomsGuidance.length > 0) {
+    sourceContext.rooms_guidance = sourceRoomsGuidance;
+  }
+
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -776,14 +798,7 @@ async function callSleepResolutionModel(input: {
           content: [
             {
               type: "input_text",
-              text: JSON.stringify({
-                description_expanded: asString(
-                  input.sourceSnapshot.description_expanded,
-                ),
-                bedrooms: asNumber(input.sourceSnapshot.bedrooms),
-                bathrooms: asString(input.sourceSnapshot.bathrooms),
-                sleeps: input.expectedSleeps,
-              }),
+              text: JSON.stringify(sourceContext),
             },
           ],
         },
