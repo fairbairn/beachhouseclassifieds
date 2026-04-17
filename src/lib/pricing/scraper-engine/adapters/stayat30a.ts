@@ -21,6 +21,7 @@ type StayAt30ADetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -219,6 +220,60 @@ function dedupePreserveOrder(values: string[]): string[] {
     out.push(normalized);
   }
   return out;
+}
+
+function extractRoomsGuidanceFromHtml(html: string): string[] {
+  const cardStarts = Array.from(
+    html.matchAll(/<div[^>]*class=["'][^"']*roomcard[^"']*["'][^>]*>/gi),
+  )
+    .map((match) => match.index)
+    .filter((index): index is number => typeof index === "number");
+
+  const lines: string[] = [];
+
+  for (let index = 0; index < cardStarts.length; index += 1) {
+    const start = cardStarts[index];
+    const end = cardStarts[index + 1] ?? html.length;
+    const cardHtml = html.slice(start, end);
+
+    const isBedCard = /\bbed-symbol\b/i.test(cardHtml);
+    if (!isBedCard) {
+      continue;
+    }
+
+    const room = stripHtml(
+      cardHtml.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i)?.[1] ?? "",
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const bedTypes = Array.from(
+      cardHtml.matchAll(
+        /<div[^>]*style=["'][^"']*display\s*:\s*block[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
+      ),
+    )
+      .map((match) =>
+        stripHtml(match[1] ?? "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      )
+      .filter((value) => value.length > 0);
+
+    const bedSummary = dedupePreserveOrder(bedTypes).join(", ");
+    if (!room && !bedSummary) {
+      continue;
+    }
+
+    if (room && bedSummary) {
+      lines.push(`${room}: ${bedSummary}`);
+    } else if (room) {
+      lines.push(room);
+    } else {
+      lines.push(bedSummary);
+    }
+  }
+
+  return dedupePreserveOrder(lines);
 }
 
 function parseFirstNumber(value: string): number | null {
@@ -2135,6 +2190,7 @@ async function fetchDetail(
     );
     const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
+    const roomsGuidance = extractRoomsGuidanceFromHtml(html);
 
     const rightWidgetAvailability = extractAvailabilityFromRightWidgetHtml(
       html,
@@ -2464,6 +2520,7 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomsGuidance,
       amenities,
       location,
       media_gallery: mediaGallery,

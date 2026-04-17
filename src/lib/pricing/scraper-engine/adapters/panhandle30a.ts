@@ -16,6 +16,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -247,6 +248,84 @@ function parseFirstNumber(value: string): number | null {
   }
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractRoomsGuidance(html: string): string[] {
+  const beddingStart = html.search(
+    /<div[^>]*class=["'][^"']*pdp-section[^"']*pdp-bedding[^"']*["'][^>]*>/i,
+  );
+  if (beddingStart < 0) {
+    return [];
+  }
+
+  const afterStart = html.slice(beddingStart);
+  const beddingHtml = afterStart;
+
+  const itemStarts = Array.from(
+    beddingHtml.matchAll(
+      /<div[^>]*class=["'][^"']*bedroom-type-item[^"']*["'][^>]*>/gi,
+    ),
+  )
+    .map((match) => match.index)
+    .filter((index): index is number => typeof index === "number");
+
+  if (itemStarts.length === 0) {
+    return [];
+  }
+
+  const lines: string[] = [];
+
+  for (let index = 0; index < itemStarts.length; index += 1) {
+    const start = itemStarts[index];
+    const end = itemStarts[index + 1] ?? beddingHtml.length;
+    const itemHtml = beddingHtml.slice(start, end);
+
+    const roomName = stripHtml(
+      itemHtml.match(
+        /<div[^>]*class=["'][^"']*bedroom-type-bedroom-name[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      )?.[1] ?? "",
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const bedNames = Array.from(
+      itemHtml.matchAll(
+        /<div[^>]*class=["'][^"']*bedroom-type-name[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
+      ),
+    )
+      .map((match) =>
+        stripHtml(match[1] ?? "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      )
+      .filter((value) => value.length > 0);
+
+    let bedSummary = dedupePreserveOrder(bedNames).join(", ");
+    if (!bedSummary) {
+      const imageAlt = stripHtml(
+        itemHtml.match(/<img[^>]*alt=["']([^"']+)["'][^>]*>/i)?.[1] ?? "",
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+      if (imageAlt) {
+        bedSummary = imageAlt;
+      }
+    }
+
+    if (!roomName && !bedSummary) {
+      continue;
+    }
+
+    if (roomName && bedSummary) {
+      lines.push(`${roomName}: ${bedSummary}`);
+    } else if (roomName) {
+      lines.push(roomName);
+    } else if (bedSummary) {
+      lines.push(bedSummary);
+    }
+  }
+
+  return dedupePreserveOrder(lines);
 }
 
 function parseCityStateFromAddress(address: string): {
@@ -1377,6 +1456,7 @@ async function fetchDetail(
     );
     const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
+    const roomsGuidance = extractRoomsGuidance(html);
 
     const locationPayload = extractFieldLocationFromHtml(html);
 
@@ -1501,6 +1581,7 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomsGuidance,
       amenities,
       location,
       media_gallery: mediaGallery,

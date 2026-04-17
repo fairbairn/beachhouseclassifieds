@@ -1,7 +1,7 @@
 {
   "external_listing_id": "prominence-30a-30ashack",
   "detail_url": "https://www.prominenceon30a.com/30a-vacation-rentals/prominence-30a-30ashack",
-  "fetched_at": "2026-04-16T22:02:33.378Z",
+  "fetched_at": "2026-04-17T00:40:01.881Z",
   "title": "Prominence on 30A 30Ashack Prominence on 30A",
   "h1": "30Ashack",
   "canonical_url": "https://www.prominenceon30a.com/30a-vacation-rentals/prominence-30a-30ashack",
@@ -180,7 +180,7 @@
   "normalized_availability": {
     "source": "pm_prominence30a",
     "external_listing_id": "prominence-30a-30ashack",
-    "captured_at": "2026-04-16T22:02:33.378Z",
+    "captured_at": "2026-04-17T00:40:01.881Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key #Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -190,8 +190,8 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-16",
-    "window_end": "2028-04-15",
+    "window_start": "2026-04-17",
+    "window_end": "2028-04-16",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -199,17 +199,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAUUUUUUUUUUUUUUUUAAAAAAAAAUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUUUUUUUUUUUUUUUUUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "AAAAAAAAAAUUUUUUUUUUUUUUUUAAAAAAAAAUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUUUUUUUUUUUUUUUUUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-16",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-17",
         "status_code": "A",
@@ -6779,24 +6770,33 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-16",
+        "status_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
-      "available": 285,
+      "available": 284,
       "unavailable": 65,
       "checkin_only": 0,
       "checkout_only": 0,
-      "other": 381,
-      "booking_available": 285,
+      "other": 382,
+      "booking_available": 284,
       "booking_unavailable": 65,
-      "booking_unknown": 381
+      "booking_unknown": 382
     }
   },
   "html_path": "src/lib/data/external-sources/prominence30a/details/html/prominence-30a-30ashack.html",
   "scrape_metrics": {
-    "total_ms": 26981,
-    "page_load_ms": 5765,
-    "extraction_ms": 21009,
+    "total_ms": 26895,
+    "page_load_ms": 5849,
+    "extraction_ms": 20844,
     "calendar_clicks": 26,
     "calendar_iterations": 26
   }

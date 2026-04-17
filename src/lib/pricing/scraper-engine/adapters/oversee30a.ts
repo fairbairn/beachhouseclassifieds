@@ -53,6 +53,7 @@ type OverseeDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -385,6 +386,81 @@ function extractAmenities(html: string): {
     categories,
     all: Array.from(all),
   };
+}
+
+function extractRoomsGuidance(html: string): string[] {
+  const section = extractSectionBetween(html, "bedandbaths", [
+    "location",
+    "community",
+    "rates",
+    "reviews",
+  ]);
+
+  if (!section) {
+    return [];
+  }
+
+  const levelMarkers = Array.from(
+    section.matchAll(
+      /<p[^>]*class=["'][^"']*level[^"']*["'][^>]*>([\s\S]*?)<\/p>/gi,
+    ),
+  )
+    .map((match) => ({
+      index: match.index ?? -1,
+      level: stripHtml(match[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    }))
+    .filter((value) => value.index >= 0 && value.level.length > 0);
+
+  if (levelMarkers.length === 0) {
+    return [];
+  }
+
+  const rows: string[] = [];
+
+  for (let index = 0; index < levelMarkers.length; index += 1) {
+    const current = levelMarkers[index];
+    const start = current.index;
+    const end = levelMarkers[index + 1]?.index ?? section.length;
+    const levelHtml = section.slice(start, end);
+
+    const detailItems: string[] = [];
+    const pairRegex =
+      /<p[^>]*class=["'][^"']*bedroom-title[^"']*["'][^>]*>([\s\S]*?)<\/p>[\s\S]*?<p[^>]*class=["'][^"']*bed-type[^"']*["'][^>]*>([\s\S]*?)<\/p>/gi;
+    let pairMatch: RegExpExecArray | null = pairRegex.exec(levelHtml);
+
+    while (pairMatch) {
+      const rawTitle = stripHtml(pairMatch[1] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const rawBeds = stripHtml(pairMatch[2] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (rawBeds.length > 0 && !/^&nbsp;?$/i.test(rawBeds)) {
+        const normalizedTitle = rawTitle.toLowerCase();
+        if (normalizedTitle.includes("bathroom")) {
+          pairMatch = pairRegex.exec(levelHtml);
+          continue;
+        }
+
+        if (rawTitle.length > 0 && normalizedTitle !== "bedroom") {
+          detailItems.push(`${rawTitle}: ${rawBeds}`);
+        } else {
+          detailItems.push(rawBeds);
+        }
+      }
+
+      pairMatch = pairRegex.exec(levelHtml);
+    }
+
+    if (detailItems.length > 0) {
+      rows.push(`${current.level}: ${detailItems.join(", ")}`);
+    }
+  }
+
+  return Array.from(new Set(rows));
 }
 
 function collectMediaUrls(html: string, baseUrl: string): string[] {
@@ -801,6 +877,7 @@ async function fetchDetail(
       html,
       descriptionSource,
     );
+    const roomsGuidance = extractRoomsGuidance(html);
     const amenities = extractAmenities(html);
     const imageUrls = collectMediaUrls(html, normalizedDetailUrl);
 
@@ -989,6 +1066,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomsGuidance,
       amenities,
       location: {
         address: fullAddress,

@@ -1,7 +1,7 @@
 {
   "external_listing_id": "prominence-30a-sugar-magnolia",
   "detail_url": "https://www.prominenceon30a.com/30a-vacation-rentals/prominence-30a-sugar-magnolia",
-  "fetched_at": "2026-04-16T22:05:08.451Z",
+  "fetched_at": "2026-04-17T00:42:37.787Z",
   "title": "Prominence on 30A Sugar Magnolia Prominence on 30A",
   "h1": "Sugar Magnolia",
   "canonical_url": "https://www.prominenceon30a.com/30a-vacation-rentals/prominence-30a-sugar-magnolia",
@@ -209,7 +209,7 @@
   "normalized_availability": {
     "source": "pm_prominence30a",
     "external_listing_id": "prominence-30a-sugar-magnolia",
-    "captured_at": "2026-04-16T22:05:08.451Z",
+    "captured_at": "2026-04-17T00:42:37.787Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key #Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -219,8 +219,8 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-16",
-    "window_end": "2028-04-15",
+    "window_start": "2026-04-17",
+    "window_end": "2028-04-16",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -228,17 +228,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAUUUAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAUUUAAAAAAAUUUUAAAAAAAAAAAAAUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAUUUAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAUUUAAAAAAAUUUUAAAAAAAAAAAAAUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-16",
-        "status_code": "A",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-17",
         "status_code": "A",
@@ -6808,24 +6799,33 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-16",
+        "status_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
-      "available": 325,
+      "available": 324,
       "unavailable": 25,
       "checkin_only": 0,
       "checkout_only": 0,
-      "other": 381,
-      "booking_available": 325,
+      "other": 382,
+      "booking_available": 324,
       "booking_unavailable": 25,
-      "booking_unknown": 381
+      "booking_unknown": 382
     }
   },
   "html_path": "src/lib/data/external-sources/prominence30a/details/html/prominence-30a-sugar-magnolia.html",
   "scrape_metrics": {
-    "total_ms": 25104,
-    "page_load_ms": 4603,
-    "extraction_ms": 20416,
+    "total_ms": 25232,
+    "page_load_ms": 4916,
+    "extraction_ms": 20204,
     "calendar_clicks": 26,
     "calendar_iterations": 26
   }
