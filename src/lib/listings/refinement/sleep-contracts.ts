@@ -1,3 +1,5 @@
+import { loadPromptLinesFromMarkdown } from "./prompt-markdown-loader";
+
 function asObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -41,22 +43,24 @@ export function extractStructuredOutputText(
   return "";
 }
 
-export const SLEEP_RESOLUTION_PROMPT_BASE = [
-  "Task: extract sleeping_arrangements and sleeping_summary from provided listing context.",
-  "This is a correction task focused on sleeping data structures; preserve structure when possible and only change what is required for correctness.",
-  "Context fields available: description_expanded, rooms_guidance, bedrooms, bathrooms, sleeps.",
-  "Prioritize rooms_guidance as high-signal evidence when it contains room or bed breakdown details.",
-  "Output exactly one JSON object with this shape: { sleeping_arrangements: [...], sleeping_summary: { bed_counts: {...}, bunk_configurations: {...}, sleep_capacity: {...} } }.",
-  "Rules: sleeps is a strict target for total capacity; use explicit evidence from description_expanded; keep counts conservative; do not double count bunk beds as standalone beds.",
-  "Reconciliation logic: recompute room sleeps from bed types and counts, remove duplicated rooms, include missing bunk/carriage sleeping areas when explicitly supported, and keep arrangements plus summary aligned.",
-  "Hard constraint: total derived sleep capacity must equal sleeps exactly before returning output.",
-  "Capacity map: standalone king=2, queen=2, full=2, twin=1, sofa_bed=2, murphy=2, futon=2, daybed=1, trundle=1, air_mattress=1.",
-  "Bunk rules: bunks are stacked two-bed units, so compute capacity from bunk_configuration only and never add bunk surfaces as standalone beds.",
-  "Bunk capacity map: twin_over_twin=2, full_over_full=4, queen_over_queen=4, twin_over_full=3, twin_over_queen=3, twin_over_king=3.",
-  "When standalone bed counts are provided in context as trusted anchors, keep those counts fixed and adjust bunk interpretations to align derived_total to sleeps.",
-  "Validation before output: check total capacity equals sleeps, check room entries are not missing or duplicated, and ensure sleeping_summary matches sleeping_arrangements.",
-  "Return JSON only matching schema.",
-];
+export const SLEEP_RESOLUTION_PROMPT_BASE = loadPromptLinesFromMarkdown({
+  fileName: "sleep-resolution-system.md",
+});
+
+const SLEEP_RESOLUTION_ROOMS_GUIDANCE_INSTRUCTION =
+  "Context field available: rooms_guidance. Treat rooms_guidance as property-sourced, high-confidence baseline evidence for room and bed breakdowns when present; use it to anchor sleeping_arrangements and sleeping_summary before falling back to description text.";
+
+export function buildSleepResolutionPrompt(input: {
+  hasRoomsGuidance: boolean;
+}): string {
+  return [
+    ...SLEEP_RESOLUTION_PROMPT_BASE,
+    input.hasRoomsGuidance ? SLEEP_RESOLUTION_ROOMS_GUIDANCE_INSTRUCTION : "",
+    "Return sleeping_arrangements and sleeping_summary.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 export function buildSleepResolutionSchema(): Record<string, unknown> {
   return {
@@ -141,6 +145,7 @@ export function buildSleepResolutionSchema(): Record<string, unknown> {
               full: { type: "number" },
               twin_standalone: { type: "number" },
               bunk_beds: { type: "number" },
+              trundles: { type: "number" },
               other: { type: "number" },
             },
             required: [
@@ -149,6 +154,7 @@ export function buildSleepResolutionSchema(): Record<string, unknown> {
               "full",
               "twin_standalone",
               "bunk_beds",
+              "trundles",
               "other",
             ],
           },

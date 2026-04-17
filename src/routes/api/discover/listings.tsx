@@ -1,18 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { sampleListings } from "@/components/discover/discover-data";
-import {
-  getBeachZoneFromListing,
-  verifyGulfFrontClaim,
-} from "@/components/discover/discover-utils";
 import {
   NullRouteComponent,
   createNoStoreHeaders,
   methodNotAllowedResponse,
   optionsResponse,
 } from "@/core/http/api-http";
-import { normalizeDiscoverListings } from "@/lib/discover/community-normalization";
-import { getDiscoverListings } from "@/lib/discover/discover-listings.server";
+import {
+  buildDiscoverListingsPagePayload,
+  buildDiscoverListingsPayload,
+} from "@/lib/discover/discover-listings-api.server";
 
 export const Route = createFileRoute("/api/discover/listings")({
   component: NullRouteComponent,
@@ -22,49 +19,60 @@ export const Route = createFileRoute("/api/discover/listings")({
         const url = new URL(request.url);
         const includeSlug =
           url.searchParams.get("include")?.trim() || undefined;
-        const sourceListings = await getDiscoverListings({
-          includeSlug,
-          onlySlug: Boolean(includeSlug),
-          disableFallback: true,
-        }).catch(() => []);
+        const limit = Number(url.searchParams.get("limit") ?? "");
+        const cursor = url.searchParams.get("cursor")?.trim() || undefined;
 
-        const resolvedSourceListings = includeSlug
-          ? sourceListings
-          : sourceListings.length > 0
-            ? sourceListings
-            : sampleListings;
+        if (includeSlug) {
+          const listings = await buildDiscoverListingsPayload({ includeSlug });
 
-        const locationAlignedListings = resolvedSourceListings.map(
-          (listing) => {
-            const beachZone = getBeachZoneFromListing(listing);
-            if (!beachZone) {
-              return verifyGulfFrontClaim(listing);
-            }
+          return Response.json(
+            {
+              _stats: {
+                nextCursor: null,
+                hasMore: false,
+                totalCount: listings.length,
+                metadata: {
+                  totalCount: listings.length,
+                  mapListings: listings.map((listing) => ({
+                    id: listing.id,
+                    name: listing.name,
+                    lat: listing.lat,
+                    lng: listing.lng,
+                    typicalAllInNightly: listing.typicalAllInNightly,
+                  })),
+                  facets: {
+                    areas: {},
+                    beaches: {},
+                    communities: {},
+                    features: {
+                      gulfFront: listings.filter(
+                        (listing) => listing.beachfront,
+                      ).length,
+                      privatePool: listings.filter(
+                        (listing) => listing.privatePool,
+                      ).length,
+                      golfCart: listings.filter((listing) => listing.golfCart)
+                        .length,
+                    },
+                  },
+                },
+              },
+              listings,
+            },
+            {
+              headers: createNoStoreHeaders(),
+            },
+          );
+        }
 
-            return verifyGulfFrontClaim({
-              ...listing,
-              area: beachZone,
-            });
-          },
-        );
-
-        const normalizedListings = normalizeDiscoverListings(
-          locationAlignedListings,
-        );
-
-        const listings = [...normalizedListings].sort((a, b) => {
-          if (a.demoOrder !== b.demoOrder) {
-            return a.demoOrder - b.demoOrder;
-          }
-          return a.id.localeCompare(b.id);
+        const payload = await buildDiscoverListingsPagePayload({
+          limit,
+          cursor,
         });
 
-        return Response.json(
-          { listings },
-          {
-            headers: createNoStoreHeaders(),
-          },
-        );
+        return Response.json(payload, {
+          headers: createNoStoreHeaders(),
+        });
       },
       OPTIONS: async () => optionsResponse("GET, OPTIONS"),
       POST: async () => methodNotAllowedResponse(),

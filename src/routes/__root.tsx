@@ -1,10 +1,11 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   HeadContent,
   Scripts,
   createRootRoute,
   useRouterState,
 } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
 import { LoginHeader } from "@/components/LoginHeader";
@@ -81,6 +82,19 @@ export const Route = createRootRoute({
 });
 
 function RootDocument({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60_000,
+            gcTime: 10 * 60_000,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
+
   const { session } = Route.useRouteContext();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -107,19 +121,21 @@ function RootDocument({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {header}
-        <main
-          className={
-            isLoginPage
-              ? "app-main app-main-login"
-              : isChromeFreePage
-                ? "app-main app-main-home"
-                : "app-main"
-          }
-        >
-          {children}
-        </main>
-        <Scripts />
+        <QueryClientProvider client={queryClient}>
+          {header}
+          <main
+            className={
+              isLoginPage
+                ? "app-main app-main-login"
+                : isChromeFreePage
+                  ? "app-main app-main-home"
+                  : "app-main"
+            }
+          >
+            {children}
+          </main>
+          <Scripts />
+        </QueryClientProvider>
       </body>
     </html>
   );

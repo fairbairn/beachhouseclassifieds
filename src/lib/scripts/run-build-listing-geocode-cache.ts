@@ -1,6 +1,6 @@
 import "@/core/tooling/env/load-env-profile";
 
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 import { pgDb } from "@/core/server/db";
 import { listing } from "@/lib/db/schema-postgres";
@@ -94,6 +94,7 @@ async function run(): Promise<number> {
           isNull(listing.city),
           isNull(listing.state),
           isNull(listing.postal_code),
+          sql`${listing.state} is not null and ${listing.state} !~ '^[A-Z]{2}$'`,
         ),
       );
 

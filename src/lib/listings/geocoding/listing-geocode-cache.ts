@@ -38,12 +38,135 @@ type GoogleGeocodeResult = {
   address_components?: GoogleAddressComponent[];
 };
 
+const US_STATE_CODES = new Set([
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY",
+  "DC",
+]);
+
+const US_STATE_NAME_TO_CODE: Record<string, string> = {
+  alabama: "AL",
+  alaska: "AK",
+  arizona: "AZ",
+  arkansas: "AR",
+  california: "CA",
+  colorado: "CO",
+  connecticut: "CT",
+  delaware: "DE",
+  florida: "FL",
+  georgia: "GA",
+  hawaii: "HI",
+  idaho: "ID",
+  illinois: "IL",
+  indiana: "IN",
+  iowa: "IA",
+  kansas: "KS",
+  kentucky: "KY",
+  louisiana: "LA",
+  maine: "ME",
+  maryland: "MD",
+  massachusetts: "MA",
+  michigan: "MI",
+  minnesota: "MN",
+  mississippi: "MS",
+  missouri: "MO",
+  montana: "MT",
+  nebraska: "NE",
+  nevada: "NV",
+  "new hampshire": "NH",
+  "new jersey": "NJ",
+  "new mexico": "NM",
+  "new york": "NY",
+  "north carolina": "NC",
+  "north dakota": "ND",
+  ohio: "OH",
+  oklahoma: "OK",
+  oregon: "OR",
+  pennsylvania: "PA",
+  "rhode island": "RI",
+  "south carolina": "SC",
+  "south dakota": "SD",
+  tennessee: "TN",
+  texas: "TX",
+  utah: "UT",
+  vermont: "VT",
+  virginia: "VA",
+  washington: "WA",
+  "west virginia": "WV",
+  wisconsin: "WI",
+  wyoming: "WY",
+  "district of columbia": "DC",
+};
+
 function hashHex(value: string, length: number): string {
   return createHash("sha1").update(value).digest("hex").slice(0, length);
 }
 
 function normalizeText(value: string | null): string {
   return (value ?? "").trim();
+}
+
+function normalizeUsStateCode(value: string | null): string | null {
+  const text = normalizeText(value);
+  if (!text) {
+    return null;
+  }
+
+  const upper = text.toUpperCase();
+  if (US_STATE_CODES.has(upper)) {
+    return upper;
+  }
+
+  const mapped = US_STATE_NAME_TO_CODE[text.toLowerCase()];
+  return mapped ?? null;
 }
 
 function buildSourceFingerprint(input: GeocodeInput): string {
@@ -75,6 +198,26 @@ function getAddressComponent(
   }
 
   return (found.long_name ?? found.short_name ?? "").trim() || null;
+}
+
+function getAddressComponentShort(
+  components: GoogleAddressComponent[] | undefined,
+  type: string,
+): string | null {
+  if (!components) {
+    return null;
+  }
+
+  const found = components.find(
+    (component) =>
+      Array.isArray(component.types) && component.types.includes(type),
+  );
+
+  if (!found) {
+    return null;
+  }
+
+  return (found.short_name ?? found.long_name ?? "").trim() || null;
 }
 
 function getStreetAddress(
@@ -224,15 +367,18 @@ export async function resolveListingGeocode(
     };
   }
 
+  const normalizedInputState = normalizeUsStateCode(input.state);
+  const hasInvalidState =
+    normalizeText(input.state).length > 0 && !normalizedInputState;
   const hasMissingAddress =
     !normalizeText(input.city) ||
-    !normalizeText(input.state) ||
+    !normalizedInputState ||
     !normalizeText(input.postalCode);
 
-  if (!hasMissingAddress) {
+  if (!hasMissingAddress && !hasInvalidState) {
     return {
       city: input.city,
-      state: input.state,
+      state: normalizedInputState,
       postalCode: input.postalCode,
       countryCode: "US",
     };
@@ -254,7 +400,9 @@ export async function resolveListingGeocode(
   if (existing.length > 0 && existing[0].status === "resolved") {
     return {
       city: existing[0].city ?? input.city,
-      state: existing[0].state ?? input.state,
+      state:
+        normalizeUsStateCode(existing[0].state) ??
+        normalizeUsStateCode(input.state),
       postalCode: existing[0].postalCode ?? input.postalCode,
       countryCode: existing[0].countryCode ?? "US",
     };
@@ -264,7 +412,7 @@ export async function resolveListingGeocode(
   if (!apiKey) {
     return {
       city: input.city,
-      state: input.state,
+      state: normalizeUsStateCode(input.state),
       postalCode: input.postalCode,
       countryCode: "US",
     };
@@ -284,12 +432,17 @@ export async function resolveListingGeocode(
     getAddressComponent(components, "postal_town") ||
     getAddressComponent(components, "administrative_area_level_2") ||
     input.city;
-  const state =
+  const resolvedStateRaw =
+    getAddressComponentShort(components, "administrative_area_level_1") ||
     getAddressComponent(components, "administrative_area_level_1") ||
     input.state;
+  const state = normalizeUsStateCode(resolvedStateRaw);
   const postalCode =
     getAddressComponent(components, "postal_code") || input.postalCode;
-  const countryCode = getAddressComponent(components, "country") || "US";
+  const countryCode =
+    getAddressComponentShort(components, "country") ||
+    getAddressComponent(components, "country") ||
+    "US";
 
   const now = new Date().toISOString();
   const cacheId = `lgc_${hashHex(`${input.listingId}:google`, 20)}`;

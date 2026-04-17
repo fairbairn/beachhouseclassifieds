@@ -13,6 +13,7 @@ import {
   loadListingRefinementSnapshot,
   persistListingRefinement,
 } from "@/lib/listings/refinement/listing-refinement-service";
+import { computeSleepChangeBoundarySignature } from "@/lib/listings/refinement/sleep-change-boundary";
 
 export type EnrichmentSeedInput = {
   listingId: string;
@@ -322,40 +323,81 @@ export async function seedListingAiEnrichmentFromIngest(
 
   const now = new Date().toISOString();
 
-  await pgDb
-    .insert(listing_ai_enrichment)
-    .values({
-      id: `lae_${randomUUID().replace(/-/g, "")}`,
-      listing_id: input.listingId,
-      source_link_id: input.sourceLinkId,
-      adapter_key: input.adapterKey,
-      source_content_hash: input.sourceContentHash,
-      status: "pending",
-      model: null,
-      audit_model: null,
-      prompt_version: LISTING_REFINEMENT_PROMPT_VERSION,
-      output_hash: null,
-      source_snapshot_payload: input.sourceSnapshot,
-      output_payload: {},
-      usage_payload: {},
-      audit_payload: {},
-      generated_at: now,
-      applied_at: null,
-      updated_at: now,
+  const existingRows = await pgDb
+    .select({
+      id: listing_ai_enrichment.id,
+      status: listing_ai_enrichment.status,
+      source_snapshot_payload: listing_ai_enrichment.source_snapshot_payload,
     })
-    .onConflictDoUpdate({
-      target: [
-        listing_ai_enrichment.listing_id,
-        listing_ai_enrichment.source_content_hash,
-        listing_ai_enrichment.prompt_version,
-      ],
-      set: {
+    .from(listing_ai_enrichment)
+    .where(
+      and(
+        eq(listing_ai_enrichment.listing_id, input.listingId),
+        eq(listing_ai_enrichment.source_content_hash, input.sourceContentHash),
+        eq(
+          listing_ai_enrichment.prompt_version,
+          LISTING_REFINEMENT_PROMPT_VERSION,
+        ),
+      ),
+    )
+    .limit(1);
+
+  const currentSleepBoundary = computeSleepChangeBoundarySignature({
+    bedrooms: input.sourceSnapshot.bedrooms,
+    bathrooms: input.sourceSnapshot.bathrooms,
+    sleeps: input.sourceSnapshot.sleeps,
+    roomsGuidance: input.sourceSnapshot.rooms_guidance,
+  });
+
+  const existing = existingRows[0];
+  if (existing) {
+    const previousSnapshot =
+      existing.source_snapshot_payload &&
+      typeof existing.source_snapshot_payload === "object"
+        ? (existing.source_snapshot_payload as Record<string, unknown>)
+        : {};
+    const previousSleepBoundary = computeSleepChangeBoundarySignature({
+      bedrooms: previousSnapshot.bedrooms,
+      bathrooms: previousSnapshot.bathrooms,
+      sleeps: previousSnapshot.sleeps,
+      roomsGuidance: previousSnapshot.rooms_guidance,
+    });
+    const shouldResetToPending = previousSleepBoundary !== currentSleepBoundary;
+
+    await pgDb
+      .update(listing_ai_enrichment)
+      .set({
         source_link_id: input.sourceLinkId,
         adapter_key: input.adapterKey,
         source_snapshot_payload: input.sourceSnapshot,
+        status: shouldResetToPending ? "pending" : existing.status,
+        applied_at: shouldResetToPending ? null : undefined,
         updated_at: now,
-      },
-    });
+      })
+      .where(eq(listing_ai_enrichment.id, existing.id));
+
+    return;
+  }
+
+  await pgDb.insert(listing_ai_enrichment).values({
+    id: `lae_${randomUUID().replace(/-/g, "")}`,
+    listing_id: input.listingId,
+    source_link_id: input.sourceLinkId,
+    adapter_key: input.adapterKey,
+    source_content_hash: input.sourceContentHash,
+    status: "pending",
+    model: null,
+    audit_model: null,
+    prompt_version: LISTING_REFINEMENT_PROMPT_VERSION,
+    output_hash: null,
+    source_snapshot_payload: input.sourceSnapshot,
+    output_payload: {},
+    usage_payload: {},
+    audit_payload: {},
+    generated_at: now,
+    applied_at: null,
+    updated_at: now,
+  });
 }
 
 export async function selectPendingListingAiEnrichment(input: {

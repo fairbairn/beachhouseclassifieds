@@ -2,7 +2,7 @@ import "@/core/tooling/env/load-env-profile";
 
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { pgDb } from "@/core/server/db";
 import { resolveProfileEnvironment } from "@/core/tooling/env/profile-env";
@@ -16,11 +16,13 @@ import {
   buildListingRefinementAuditPrompt,
   buildListingRefinementPrompt,
 } from "./prompt-templates";
+import { computeSleepChangeBoundarySignature } from "./sleep-change-boundary";
 import {
+  buildSleepResolutionPrompt,
   buildSleepResolutionSchema,
   extractStructuredOutputText,
-  SLEEP_RESOLUTION_PROMPT_BASE,
 } from "./sleep-contracts";
+import { resolveSleepResolutionModelCascadeFromEnv } from "./sleep-resolution-model-cascade";
 
 type RefinementOutput = {
   description_markdown: string;
@@ -39,6 +41,7 @@ type RefinementOutput = {
       full: number;
       twin_standalone: number;
       bunk_beds: number;
+      trundles: number;
       other: number;
     };
     bunk_configurations: {
@@ -140,10 +143,22 @@ export type ListingRefinementSnapshot = {
   match_evidence: Record<string, unknown>;
 };
 
+type PreviousEnrichmentForReuse = {
+  source_content_hash: string;
+  source_snapshot_payload: Record<string, unknown>;
+  output_payload: Record<string, unknown>;
+};
+
 export type RefinementResult = {
   model: string;
   audit_model: string;
   prompt_version: string;
+  sleep_resolution: {
+    model_cascade: string[];
+    selected_model: string | null;
+    deterministic_reconciliation_applied: boolean;
+    deterministic_reconciliation_selected_output: boolean;
+  };
   output: RefinementOutput;
   usage: RefinementUsage | null;
   usage_by_model: ModelUsage[];
@@ -160,29 +175,8 @@ const DEFAULT_GENERATION_MODEL =
   process.env.LISTING_REFINEMENT_MODEL?.trim() || "gpt-5.4-nano";
 const DEFAULT_AUDIT_MODEL =
   process.env.LISTING_REFINEMENT_AUDIT_MODEL?.trim() || "gpt-4.1-mini";
-const DEFAULT_SLEEP_RESOLUTION_MODEL_CASCADE = (() => {
-  const cascadeEnv =
-    process.env.LISTING_REFINEMENT_SLEEP_RESOLUTION_MODELS?.trim() ?? "";
-  if (cascadeEnv.length > 0) {
-    return Array.from(
-      new Set(
-        cascadeEnv
-          .split(",")
-          .map((model) => model.trim())
-          .filter(Boolean),
-      ),
-    );
-  }
-
-  const singleModelOverride =
-    process.env.LISTING_REFINEMENT_SLEEP_RESOLUTION_MODEL?.trim() ?? "";
-  if (singleModelOverride.length > 0) {
-    return [singleModelOverride];
-  }
-
-  // Run from lower-cost model to higher-cost model unless explicitly overridden.
-  return ["gpt-4.1-mini", "gpt-4.1", "gpt-5.4-nano"];
-})();
+const DEFAULT_SLEEP_RESOLUTION_MODEL_CASCADE =
+  resolveSleepResolutionModelCascadeFromEnv();
 const PRESERVE_ACCURATE_SNAPSHOT_SLEEP_DATA =
   process.env.LISTING_REFINEMENT_PRESERVE_ACCURATE_SLEEP !== "0";
 
@@ -1839,6 +1833,7 @@ function buildSleepingSummary(input: {
     full: 0,
     twin_standalone: 0,
     bunk_beds: 0,
+    trundles: 0,
     other: 0,
   };
 
@@ -1938,13 +1933,15 @@ function buildSleepingSummary(input: {
         continue;
       }
 
+      if (bedType === "trundle") {
+        bedCounts.trundles += count;
+        derivedTotal += count;
+        continue;
+      }
+
       // Keep uncommon bed types visible without overfitting UX fields.
       bedCounts.other += count;
-      if (
-        bedType === "daybed" ||
-        bedType === "trundle" ||
-        bedType === "air_mattress"
-      ) {
+      if (bedType === "daybed" || bedType === "air_mattress") {
         derivedTotal += count;
       } else if (
         bedType === "sofa_bed" ||
@@ -1982,21 +1979,25 @@ function deriveSleepingRollupsFromSummary(input: {
   const bedCounts = asObject(summary.bed_counts);
   const bunkConfigurations = asObject(summary.bunk_configurations);
 
+  const configuredBunkUnits =
+    (asNumber(bunkConfigurations.default_twin_over_twin) ?? 0) +
+    (asNumber(bunkConfigurations.twin_over_full) ?? 0) +
+    (asNumber(bunkConfigurations.full_over_full) ?? 0) +
+    (asNumber(bunkConfigurations.queen_over_queen) ?? 0) +
+    (asNumber(bunkConfigurations.twin_over_queen) ?? 0) +
+    (asNumber(bunkConfigurations.twin_over_king) ?? 0) +
+    (asNumber(bunkConfigurations.other) ?? 0);
+  const declaredBunkUnits = asNumber(bedCounts.bunk_beds) ?? 0;
+
   const rollups = normalizeSleepingRollups(
     {
       bed_count_king: asNumber(bedCounts.king) ?? 0,
       bed_count_queen: asNumber(bedCounts.queen) ?? 0,
       bed_count_full: asNumber(bedCounts.full) ?? 0,
       bed_count_twin: asNumber(bedCounts.twin_standalone) ?? 0,
-      bed_count_bunk_total:
-        (asNumber(bedCounts.bunk_beds) ?? 0) +
-        (asNumber(bunkConfigurations.default_twin_over_twin) ?? 0) +
-        (asNumber(bunkConfigurations.twin_over_full) ?? 0) +
-        (asNumber(bunkConfigurations.full_over_full) ?? 0) +
-        (asNumber(bunkConfigurations.queen_over_queen) ?? 0) +
-        (asNumber(bunkConfigurations.twin_over_queen) ?? 0) +
-        (asNumber(bunkConfigurations.twin_over_king) ?? 0) +
-        (asNumber(bunkConfigurations.other) ?? 0),
+      bed_count_trundle: asNumber(bedCounts.trundles) ?? 0,
+      // Prevent overlap when both bunk_beds and bunk_configurations are present.
+      bed_count_bunk_total: Math.max(declaredBunkUnits, configuredBunkUnits),
       bed_count_twin_bunk:
         (asNumber(bunkConfigurations.default_twin_over_twin) ?? 0) * 2,
       bed_count_full_bunk:
@@ -2049,13 +2050,6 @@ function extractTrustedStandaloneBedCounts(
   };
 }
 
-function buildSleepResolutionPrompt(): string {
-  return [
-    ...SLEEP_RESOLUTION_PROMPT_BASE,
-    "Return sleeping_arrangements and sleeping_summary.",
-  ].join(" ");
-}
-
 async function resolveSleepWithModel(input: {
   model: string;
   apiKey: string;
@@ -2071,23 +2065,29 @@ async function resolveSleepWithModel(input: {
   result: SleepResolutionResult;
   usage: RefinementUsage | null;
 }> {
+  const sourceRoomsGuidance = Array.isArray(input.sourceRoomsGuidance)
+    ? input.sourceRoomsGuidance
+    : [];
+  const userPayload: Record<string, unknown> = {
+    description_expanded: input.sourceDescription,
+    bedrooms: input.bedrooms,
+    bathrooms: input.bathrooms,
+    sleeps: input.sleeps,
+    previous_sleeping_arrangements: input.previousSleepingArrangements ?? null,
+    previous_sleeping_summary: input.previousSleepingSummary ?? null,
+    trusted_standalone_bed_counts: input.trustedStandaloneBeds ?? null,
+  };
+  if (sourceRoomsGuidance.length > 0) {
+    userPayload.rooms_guidance = sourceRoomsGuidance;
+  }
+
   const sleepResolutionResponse = await callStructuredOpenAi({
     apiKey: input.apiKey,
     model: input.model,
-    systemPrompt: buildSleepResolutionPrompt(),
-    userPayload: {
-      description_expanded: input.sourceDescription,
-      rooms_guidance: Array.isArray(input.sourceRoomsGuidance)
-        ? input.sourceRoomsGuidance
-        : [],
-      bedrooms: input.bedrooms,
-      bathrooms: input.bathrooms,
-      sleeps: input.sleeps,
-      previous_sleeping_arrangements:
-        input.previousSleepingArrangements ?? null,
-      previous_sleeping_summary: input.previousSleepingSummary ?? null,
-      trusted_standalone_bed_counts: input.trustedStandaloneBeds ?? null,
-    },
+    systemPrompt: buildSleepResolutionPrompt({
+      hasRoomsGuidance: sourceRoomsGuidance.length > 0,
+    }),
+    userPayload,
     schemaName: "listing_refinement_sleep_resolution",
     schema: buildSleepResolutionSchema(),
   });
@@ -2237,6 +2237,7 @@ function finalizeSleepingOutput(input: {
 }): {
   arrangements: unknown[];
   summary: RefinementOutput["sleeping_summary"];
+  deterministic_reconciliation_applied: boolean;
 } {
   const baseArrangements =
     input.arrangements.length > 0
@@ -2256,12 +2257,17 @@ function finalizeSleepingOutput(input: {
     expectedSleeps: input.expectedSleeps,
   });
 
+  const deterministicReconciliationApplied =
+    JSON.stringify(baseArrangements) !==
+    JSON.stringify(reconciled.arrangements);
+
   return {
     arrangements: reconciled.arrangements,
     summary: buildSleepingSummary({
       arrangements: reconciled.arrangements,
       expectedSleeps: input.expectedSleeps,
     }),
+    deterministic_reconciliation_applied: deterministicReconciliationApplied,
   };
 }
 
@@ -3201,6 +3207,69 @@ export async function generateListingRefinement(input: {
     );
   }
 
+  let previousEnrichmentForReuse: PreviousEnrichmentForReuse | null = null;
+  if (pgDb) {
+    const previousRows = await pgDb
+      .select({
+        source_content_hash: listing_ai_enrichment.source_content_hash,
+        source_snapshot_payload: listing_ai_enrichment.source_snapshot_payload,
+        output_payload: listing_ai_enrichment.output_payload,
+      })
+      .from(listing_ai_enrichment)
+      .where(
+        and(
+          eq(listing_ai_enrichment.listing_id, input.snapshot.listing_id),
+          eq(listing_ai_enrichment.prompt_version, PROMPT_VERSION),
+          isNotNull(listing_ai_enrichment.output_hash),
+        ),
+      )
+      .orderBy(
+        desc(listing_ai_enrichment.generated_at),
+        desc(listing_ai_enrichment.updated_at),
+      )
+      .limit(1);
+
+    const previous = previousRows[0];
+    if (previous) {
+      previousEnrichmentForReuse = {
+        source_content_hash: asString(previous.source_content_hash),
+        source_snapshot_payload:
+          previous.source_snapshot_payload &&
+          typeof previous.source_snapshot_payload === "object"
+            ? (previous.source_snapshot_payload as Record<string, unknown>)
+            : {},
+        output_payload:
+          previous.output_payload && typeof previous.output_payload === "object"
+            ? (previous.output_payload as Record<string, unknown>)
+            : {},
+      };
+    }
+  }
+
+  const currentContentBoundary = asString(input.snapshot.source_content_hash);
+  const currentSleepBoundary = computeSleepChangeBoundarySignature({
+    bedrooms: input.snapshot.bedrooms,
+    bathrooms: input.snapshot.bathrooms,
+    sleeps: input.snapshot.sleeps,
+    roomsGuidance: input.snapshot.source_rooms_guidance,
+  });
+
+  const previousSleepBoundary = previousEnrichmentForReuse
+    ? computeSleepChangeBoundarySignature({
+        bedrooms: previousEnrichmentForReuse.source_snapshot_payload.bedrooms,
+        bathrooms: previousEnrichmentForReuse.source_snapshot_payload.bathrooms,
+        sleeps: previousEnrichmentForReuse.source_snapshot_payload.sleeps,
+        roomsGuidance:
+          previousEnrichmentForReuse.source_snapshot_payload.rooms_guidance,
+      })
+    : "";
+  const canReuseContentStage =
+    previousEnrichmentForReuse !== null &&
+    previousEnrichmentForReuse.source_content_hash === currentContentBoundary;
+  const canReuseSleepStage =
+    previousEnrichmentForReuse !== null &&
+    previousSleepBoundary === currentSleepBoundary;
+
   const systemPrompt = buildListingRefinementPrompt({
     rebuildHelpfulHints: input.rebuildHelpfulHints,
   });
@@ -3265,6 +3334,38 @@ export async function generateListingRefinement(input: {
       amenities_normalized: asStringArray(input.snapshot.amenities_normalized),
       amenities_evidence: sanitizeAmenitiesEvidence(
         asObject(input.snapshot.ai_refinement).amenities_evidence,
+      ),
+    };
+    refinementUsage = null;
+  } else if (canReuseContentStage && previousEnrichmentForReuse) {
+    const reusedOutput = previousEnrichmentForReuse.output_payload;
+    const reusedArrangements = normalizeSleepingArrangements(
+      reusedOutput.sleeping_arrangements,
+    );
+    const reusedSummaryObject = asObject(reusedOutput.sleeping_summary);
+
+    parsed = {
+      description_markdown: asString(reusedOutput.description_markdown),
+      description_headline_plain: asString(
+        reusedOutput.description_headline_plain,
+      ),
+      description_short_plain: asString(reusedOutput.description_short_plain),
+      seo_meta_title: asString(reusedOutput.seo_meta_title),
+      seo_meta_description: asString(reusedOutput.seo_meta_description),
+      seo_hidden_summary_plain: asString(reusedOutput.seo_hidden_summary_plain),
+      highlights: sanitizeHighlights(reusedOutput.highlights),
+      helpful_hints: sanitizeHelpfulHints(reusedOutput.helpful_hints),
+      sleeping_arrangements: reusedArrangements,
+      sleeping_summary:
+        Object.keys(reusedSummaryObject).length > 0
+          ? (reusedSummaryObject as RefinementOutput["sleeping_summary"])
+          : buildSleepingSummary({
+              arrangements: reusedArrangements,
+              expectedSleeps: input.snapshot.sleeps,
+            }),
+      amenities_normalized: asStringArray(reusedOutput.amenities_normalized),
+      amenities_evidence: sanitizeAmenitiesEvidence(
+        reusedOutput.amenities_evidence,
       ),
     };
     refinementUsage = null;
@@ -3373,33 +3474,64 @@ export async function generateListingRefinement(input: {
 
   let resolvedSleepingArrangements = snapshotNormalizedSleeping;
   let resolvedSleepingRollups = snapshotNormalizedRollups;
+  let reusedSleepingSummary: RefinementOutput["sleeping_summary"] | null = null;
+  let sleepResolutionSelectedModel: string | null = null;
+  let sleepResolutionModelCascade = [...DEFAULT_SLEEP_RESOLUTION_MODEL_CASCADE];
+  let deterministicReconciliationApplied = false;
+  let deterministicReconciliationSelectedOutput = false;
 
-  try {
-    const sleepResolution = await resolveSleepWithModelCascade({
-      apiKey,
-      sourceDescription,
-      sourceRoomsGuidance,
-      bedrooms: input.snapshot.bedrooms,
-      bathrooms: input.snapshot.bathrooms,
-      sleeps: input.snapshot.sleeps,
-      previousSleepingArrangements: snapshotNormalizedSleeping,
-      previousSleepingSummary: snapshotSummary,
-      trustedStandaloneBeds: snapshotTrustedStandaloneBeds,
+  if (canReuseSleepStage && previousEnrichmentForReuse) {
+    const reusedSleepArrangements = normalizeSleepingArrangements(
+      previousEnrichmentForReuse.output_payload.sleeping_arrangements,
+    );
+    const reusedSleepSummary = asObject(
+      previousEnrichmentForReuse.output_payload.sleeping_summary,
+    );
+    const reusedRollups = deriveSleepingRollupsFromSummary({
+      sleepingSummary: reusedSleepSummary,
+      expectedSleeps: input.snapshot.sleeps,
     });
 
-    for (const usageEntry of sleepResolution.usageByModel) {
-      pushModelUsage(usageByModel, usageEntry.model, usageEntry.usage);
-    }
-    refinementUsage = mergeUsage([refinementUsage, sleepResolution.usage]);
-
-    resolvedSleepingArrangements = sleepResolution.result.arrangements;
-    resolvedSleepingRollups = hasMeaningfulSleepingRollups(
-      sleepResolution.result.rollups,
-    )
-      ? sleepResolution.result.rollups
+    resolvedSleepingArrangements = reusedSleepArrangements;
+    resolvedSleepingRollups = hasMeaningfulSleepingRollups(reusedRollups)
+      ? reusedRollups
       : snapshotNormalizedRollups;
-  } catch {
-    // Keep snapshot-derived sleep state and rely on deterministic reconciliation below.
+    if (Object.keys(reusedSleepSummary).length > 0) {
+      reusedSleepingSummary =
+        reusedSleepSummary as RefinementOutput["sleeping_summary"];
+    }
+  } else {
+    try {
+      const sleepResolution = await resolveSleepWithModelCascade({
+        apiKey,
+        sourceDescription,
+        sourceRoomsGuidance,
+        bedrooms: input.snapshot.bedrooms,
+        bathrooms: input.snapshot.bathrooms,
+        sleeps: input.snapshot.sleeps,
+        previousSleepingArrangements: snapshotNormalizedSleeping,
+        previousSleepingSummary: snapshotSummary,
+        trustedStandaloneBeds: snapshotTrustedStandaloneBeds,
+      });
+
+      for (const usageEntry of sleepResolution.usageByModel) {
+        pushModelUsage(usageByModel, usageEntry.model, usageEntry.usage);
+      }
+      refinementUsage = mergeUsage([refinementUsage, sleepResolution.usage]);
+      sleepResolutionSelectedModel = sleepResolution.selectedModel;
+      sleepResolutionModelCascade = sleepResolution.usageByModel.map(
+        (entry) => entry.model,
+      );
+
+      resolvedSleepingArrangements = sleepResolution.result.arrangements;
+      resolvedSleepingRollups = hasMeaningfulSleepingRollups(
+        sleepResolution.result.rollups,
+      )
+        ? sleepResolution.result.rollups
+        : snapshotNormalizedRollups;
+    } catch {
+      // Keep snapshot-derived sleep state and rely on deterministic reconciliation below.
+    }
   }
 
   const finalizedSleeping = finalizeSleepingOutput({
@@ -3408,6 +3540,8 @@ export async function generateListingRefinement(input: {
     fallbackRollups: snapshotNormalizedRollups,
     expectedSleeps: input.snapshot.sleeps,
   });
+  deterministicReconciliationApplied =
+    finalizedSleeping.deterministic_reconciliation_applied;
 
   const snapshotSleepMatch = evaluateSleepCapacityMatch({
     sleepingSummary: snapshotSummary,
@@ -3425,15 +3559,26 @@ export async function generateListingRefinement(input: {
     match: finalizedSleepMatch,
     sleepingSummary: finalizedSleeping.summary,
   });
-  const selectedSleeping =
+  const selectedSnapshotSleepOutput =
     PRESERVE_ACCURATE_SNAPSHOT_SLEEP_DATA &&
     snapshotSleepAcceptable &&
-    !finalizedSleepAcceptable
+    !finalizedSleepAcceptable;
+
+  const selectedSleeping = reusedSleepingSummary
+    ? {
+        arrangements: resolvedSleepingArrangements,
+        summary: reusedSleepingSummary,
+      }
+    : selectedSnapshotSleepOutput
       ? {
           arrangements: snapshotNormalizedSleeping,
           summary: snapshotSummary,
         }
       : finalizedSleeping;
+  deterministicReconciliationSelectedOutput =
+    !reusedSleepingSummary &&
+    !selectedSnapshotSleepOutput &&
+    deterministicReconciliationApplied;
 
   let output: RefinementOutput = {
     description_markdown: formattedMarkdown,
@@ -3527,12 +3672,15 @@ export async function generateListingRefinement(input: {
         systemPrompt: auditPrompt,
         userPayload: {
           listing: {
+            h1: input.snapshot.canonical_name,
             id: input.snapshot.listing_id,
+            slug: input.snapshot.slug,
             canonical_name: input.snapshot.canonical_name,
             property_type: input.snapshot.property_type,
             bedrooms: input.snapshot.bedrooms,
             bathrooms: input.snapshot.bathrooms,
             sleeps: input.snapshot.sleeps,
+            adapter_key: input.snapshot.adapter_key,
           },
           source: {
             h1: input.snapshot.canonical_name,
@@ -3553,8 +3701,6 @@ export async function generateListingRefinement(input: {
         schema: buildAuditSchema(),
       });
 
-      auditUsage = auditResponse.usage;
-      pushModelUsage(usageByModel, DEFAULT_AUDIT_MODEL, auditUsage);
       const auditParsed = auditResponse.parsed;
       const accuracyRaw = (auditParsed.accuracy_score as number) ?? 0;
       let accuracy =
@@ -3763,6 +3909,15 @@ export async function generateListingRefinement(input: {
               expectedSleeps: input.snapshot.sleeps,
             });
 
+            sleepResolutionSelectedModel = sleepResolution.selectedModel;
+            sleepResolutionModelCascade = sleepResolution.usageByModel.map(
+              (entry) => entry.model,
+            );
+            deterministicReconciliationApplied =
+              finalizedRetrySleeping.deterministic_reconciliation_applied;
+            deterministicReconciliationSelectedOutput =
+              deterministicReconciliationApplied;
+
             output.sleeping_arrangements = finalizedRetrySleeping.arrangements;
             output.sleeping_summary = finalizedRetrySleeping.summary;
           } catch {
@@ -3821,6 +3976,13 @@ export async function generateListingRefinement(input: {
     model,
     audit_model: DEFAULT_AUDIT_MODEL,
     prompt_version: PROMPT_VERSION,
+    sleep_resolution: {
+      model_cascade: sleepResolutionModelCascade,
+      selected_model: sleepResolutionSelectedModel,
+      deterministic_reconciliation_applied: deterministicReconciliationApplied,
+      deterministic_reconciliation_selected_output:
+        deterministicReconciliationSelectedOutput,
+    },
     output,
     usage: mergeUsage([refinementUsage, auditUsage]),
     usage_by_model: Array.from(usageByModel.values()),
@@ -3891,6 +4053,14 @@ export async function persistListingRefinement(input: {
     deterministic_sleep_capacity_match: sleepCapacityMatch.matches,
     deterministic_sleep_environment_present: sleepEnvironmentPresent,
     deterministic_sleep_capacity_tolerance_pass: sleepTolerancePass,
+    sleep_resolution: input.result.sleep_resolution,
+    deterministic_fallback_used:
+      input.result.sleep_resolution
+        .deterministic_reconciliation_selected_output,
+    audit_passed_via_deterministic_fallback:
+      auditPassed &&
+      input.result.sleep_resolution
+        .deterministic_reconciliation_selected_output,
     audit_passed: auditPassed,
   }) as Record<string, unknown>;
   const costUsd = estimateRunCostUsd({

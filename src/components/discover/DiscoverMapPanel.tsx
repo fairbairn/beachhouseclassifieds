@@ -7,7 +7,7 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { discoverCustomPois } from "@/components/discover/discover-custom-pois";
 import { googleMapsApiKey } from "@/components/discover/discover-data";
@@ -345,6 +345,27 @@ export function DiscoverMapPanel({
   const syncSelectedListingCardRef = useRef(onSyncSelectedListingCard);
   const [isMapInResetState, setIsMapInResetState] = useState(true);
   const [mapReadyRevision, setMapReadyRevision] = useState(0);
+  const listingsGeometryKey = useMemo(
+    () =>
+      [...listings]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map(
+          (listing) =>
+            `${listing.id}:${listing.lat.toFixed(6)}:${listing.lng.toFixed(6)}`,
+        )
+        .join("|"),
+    [listings],
+  );
+  const listingsGeometry = useMemo(
+    () =>
+      listings.map((listing) => ({
+        id: listing.id,
+        name: listing.name,
+        lat: listing.lat,
+        lng: listing.lng,
+      })),
+    [listingsGeometryKey],
+  );
 
   const mapEmbedSrc = `https://maps.google.com/maps?q=${encodeURIComponent(`${mapTarget.lat},${mapTarget.lng}`)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
   const openInMapsHref = `https://www.google.com/maps/search/?api=1&query=${mapTarget.lat}%2C${mapTarget.lng}`;
@@ -863,12 +884,13 @@ export function DiscoverMapPanel({
       return;
     }
 
-    clearSecondaryMarkers();
     listingHoverPriceMapRef.current = new Map(
       listings.map((listing) => [listing.id, listing.hoverPriceAmount]),
     );
 
-    for (const listing of listings) {
+    clearSecondaryMarkers();
+
+    for (const listing of listingsGeometry) {
       if (mapTarget.id && listing.id === mapTarget.id) {
         continue;
       }
@@ -879,7 +901,7 @@ export function DiscoverMapPanel({
         content: createSecondaryMarkerContent(
           markerLibrary,
           map.getZoom(),
-          listing.hoverPriceAmount,
+          listingHoverPriceMapRef.current.get(listing.id),
         ),
         gmpClickable: true,
       });
@@ -899,7 +921,28 @@ export function DiscoverMapPanel({
     }
 
     applySecondaryMarkerIcons(map.getZoom());
-  }, [listings, mapTarget.id, onSelectListing, mapReadyRevision]);
+  }, [listingsGeometry, mapTarget.id, onSelectListing, mapReadyRevision]);
+
+  useEffect(() => {
+    const map = googleMapRef.current;
+    const markerLibrary = googleMapsMarkerNamespaceRef.current;
+    if (!map || !markerLibrary) {
+      return;
+    }
+
+    listingHoverPriceMapRef.current = new Map(
+      listings.map((listing) => [listing.id, listing.hoverPriceAmount]),
+    );
+
+    applySecondaryMarkerIcons(map.getZoom());
+
+    if (mapTarget.id && googleMapMarkerRef.current) {
+      googleMapMarkerRef.current.content = createPrimaryMarkerContent(
+        markerLibrary,
+        listingHoverPriceMapRef.current.get(mapTarget.id),
+      );
+    }
+  }, [listings, mapTarget.id]);
 
   useEffect(() => {
     const map = googleMapRef.current;
@@ -919,13 +962,11 @@ export function DiscoverMapPanel({
     marker.map = map;
 
     const markerLibrary = googleMapsMarkerNamespaceRef.current;
-    const activeListing = listings.find(
-      (listing) => listing.id === mapTarget.id,
-    );
+    const activeHoverPrice = listingHoverPriceMapRef.current.get(mapTarget.id);
     if (markerLibrary) {
       marker.content = createPrimaryMarkerContent(
         markerLibrary,
-        activeListing?.hoverPriceAmount,
+        activeHoverPrice,
       );
     }
 
@@ -957,7 +998,7 @@ export function DiscoverMapPanel({
       map.panTo(nextCenter);
       previousPinnedListingIdRef.current = mapTarget.id;
     }
-  }, [animateZoom, clearFocusAnimation, listings, mapTarget, mapReadyRevision]);
+  }, [animateZoom, clearFocusAnimation, mapTarget, mapReadyRevision]);
 
   const basePanelClassName =
     "flex flex-col self-start rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)]";

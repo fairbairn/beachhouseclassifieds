@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { pgDb } from "@/core/server/db";
 import {
@@ -42,6 +42,7 @@ export type IngestStats = {
   updatedListings: number;
   insertedSourceLinks: number;
   updatedSourceLinks: number;
+  skippedExcludedByMatch: number;
   skippedMissingDetailJson: number;
   skippedMissingName: number;
 };
@@ -169,8 +170,130 @@ const AREA_ALIAS_TO_SPECIFIC_ZONE: Record<string, SpecificBeachZone> = {
   "rosemary inlet beach": "Rosemary Beach",
 };
 
+const US_STATE_CODES = new Set([
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY",
+  "DC",
+]);
+
+const US_STATE_NAME_TO_CODE: Record<string, string> = {
+  alabama: "AL",
+  alaska: "AK",
+  arizona: "AZ",
+  arkansas: "AR",
+  california: "CA",
+  colorado: "CO",
+  connecticut: "CT",
+  delaware: "DE",
+  florida: "FL",
+  georgia: "GA",
+  hawaii: "HI",
+  idaho: "ID",
+  illinois: "IL",
+  indiana: "IN",
+  iowa: "IA",
+  kansas: "KS",
+  kentucky: "KY",
+  louisiana: "LA",
+  maine: "ME",
+  maryland: "MD",
+  massachusetts: "MA",
+  michigan: "MI",
+  minnesota: "MN",
+  mississippi: "MS",
+  missouri: "MO",
+  montana: "MT",
+  nebraska: "NE",
+  nevada: "NV",
+  "new hampshire": "NH",
+  "new jersey": "NJ",
+  "new mexico": "NM",
+  "new york": "NY",
+  "north carolina": "NC",
+  "north dakota": "ND",
+  ohio: "OH",
+  oklahoma: "OK",
+  oregon: "OR",
+  pennsylvania: "PA",
+  "rhode island": "RI",
+  "south carolina": "SC",
+  "south dakota": "SD",
+  tennessee: "TN",
+  texas: "TX",
+  utah: "UT",
+  vermont: "VT",
+  virginia: "VA",
+  washington: "WA",
+  "west virginia": "WV",
+  wisconsin: "WI",
+  wyoming: "WY",
+  "district of columbia": "DC",
+};
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeUsStateCode(value: string | null): string | null {
+  const text = asString(value);
+  if (!text) {
+    return null;
+  }
+
+  const upper = text.toUpperCase();
+  if (US_STATE_CODES.has(upper)) {
+    return upper;
+  }
+
+  return US_STATE_NAME_TO_CODE[text.toLowerCase()] ?? null;
 }
 
 function asNumber(value: unknown): number | null {
@@ -605,7 +728,7 @@ function parseCityState(detail: CanonicalDetailRecord): {
   if (profileCity || profileState) {
     return {
       city: profileCity || null,
-      state: profileState || null,
+      state: normalizeUsStateCode(profileState),
     };
   }
 
@@ -651,7 +774,7 @@ function parseCityState(detail: CanonicalDetailRecord): {
   if (bestNested) {
     return {
       city: bestNested.city,
-      state: bestNested.state,
+      state: normalizeUsStateCode(bestNested.state),
     };
   }
 
@@ -664,7 +787,7 @@ function parseCityState(detail: CanonicalDetailRecord): {
     const stateToken = parts[1]?.split(/\s+/)[0]?.trim() || null;
     return {
       city: parts[0] || null,
-      state: stateToken,
+      state: normalizeUsStateCode(stateToken),
     };
   }
 
@@ -802,11 +925,7 @@ function inferSpecificAreaFromCoordinates(
     }
   }
 
-  if (lng > -86.055 && lng <= -86.012) {
-    return "Inlet Beach";
-  }
-
-  return "Santa Rosa Beach";
+  return null;
 }
 
 function inferSpecificAreaFromSourceArea(
@@ -842,9 +961,9 @@ function resolveBroadAreaName(input: {
       input.lat,
       input.lng,
     );
-    if (specificByPolygon) {
-      return SPECIFIC_AREA_TO_BROAD_AREA[specificByPolygon];
-    }
+    return specificByPolygon
+      ? SPECIFIC_AREA_TO_BROAD_AREA[specificByPolygon]
+      : null;
   }
 
   const specificBySourceArea = inferSpecificAreaFromSourceArea(
@@ -968,6 +1087,27 @@ export async function ingestAdapterDetailsToCanonical(
     rootDir,
   });
 
+  const excludedSourceLinks = await pgDb
+    .select({
+      externalListingId: listing_source_link.external_listing_id,
+    })
+    .from(listing_source_link)
+    .where(
+      and(
+        eq(listing_source_link.adapter_key, options.adapterKey),
+        eq(listing_source_link.is_primary_source, true),
+        eq(listing_source_link.source_status, "active"),
+        isNull(listing_source_link.active_to),
+        eq(listing_source_link.excluded_by_match, true),
+      ),
+    );
+
+  const excludedExternalListingIds = new Set(
+    excludedSourceLinks
+      .map((row) => row.externalListingId.trim())
+      .filter((value) => value.length > 0),
+  );
+
   const stats: IngestStats = {
     adapterKey: options.adapterKey,
     scanned: 0,
@@ -975,12 +1115,18 @@ export async function ingestAdapterDetailsToCanonical(
     updatedListings: 0,
     insertedSourceLinks: 0,
     updatedSourceLinks: 0,
+    skippedExcludedByMatch: 0,
     skippedMissingDetailJson: 0,
     skippedMissingName: 0,
   };
 
   for (const candidate of canonicalListings) {
     stats.scanned += 1;
+
+    if (excludedExternalListingIds.has(candidate.externalListingId)) {
+      stats.skippedExcludedByMatch += 1;
+      continue;
+    }
 
     const detailResolution = await readDetailJson(rootDir, options.adapterKey, [
       candidate.detailFileBaseName,

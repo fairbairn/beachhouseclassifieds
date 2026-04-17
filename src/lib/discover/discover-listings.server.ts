@@ -3,11 +3,34 @@ import {
   type DiscoverListing,
 } from "@/components/discover/discover-data";
 import { pgDb } from "@/core/server/db";
-import { listing } from "@/lib/db/schema-postgres";
+import { listing, site } from "@/lib/db/schema-postgres";
 import { getDiscoverDemoListings } from "@/lib/discover/discover-demo-listings.server";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 
 const TARGET_LISTING_COUNT = 96;
+const DISCOVER_SITE_SLUG = "30acollections";
+
+let cachedDiscoverSiteId: string | null | undefined;
+
+async function resolveDiscoverSiteId(): Promise<string | null> {
+  if (cachedDiscoverSiteId !== undefined) {
+    return cachedDiscoverSiteId;
+  }
+
+  if (!pgDb) {
+    cachedDiscoverSiteId = null;
+    return cachedDiscoverSiteId;
+  }
+
+  const rows = await pgDb
+    .select({ id: site.id })
+    .from(site)
+    .where(eq(site.slug, DISCOVER_SITE_SLUG))
+    .limit(1);
+
+  cachedDiscoverSiteId = rows[0]?.id ?? null;
+  return cachedDiscoverSiteId;
+}
 
 function asObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -280,6 +303,11 @@ async function loadFromListingTable(input?: {
     return [];
   }
 
+  const discoverSiteId = await resolveDiscoverSiteId();
+  if (!discoverSiteId) {
+    return [];
+  }
+
   const selectFields = {
     slug: listing.slug,
     canonical_name: listing.canonical_name,
@@ -315,13 +343,29 @@ async function loadFromListingTable(input?: {
           ...selectFields,
         })
         .from(listing)
-        .where(eq(listing.slug, includeSlug as string))
+        .where(
+          and(
+            eq(listing.site_id, discoverSiteId),
+            eq(listing.status, "active"),
+            eq(listing.state, "FL"),
+            isNotNull(listing.area_name),
+            eq(listing.slug, includeSlug as string),
+          ),
+        )
         .limit(1)
     : await pgDb
         .select({
           ...selectFields,
         })
         .from(listing)
+        .where(
+          and(
+            eq(listing.site_id, discoverSiteId),
+            eq(listing.status, "active"),
+            eq(listing.state, "FL"),
+            isNotNull(listing.area_name),
+          ),
+        )
         .limit(TARGET_LISTING_COUNT);
 
   const hasIncluded = Boolean(
@@ -334,7 +378,15 @@ async function loadFromListingTable(input?: {
         ...selectFields,
       })
       .from(listing)
-      .where(eq(listing.slug, includeSlug))
+      .where(
+        and(
+          eq(listing.site_id, discoverSiteId),
+          eq(listing.status, "active"),
+          eq(listing.state, "FL"),
+          isNotNull(listing.area_name),
+          eq(listing.slug, includeSlug),
+        ),
+      )
       .limit(1);
 
     if (includeRows.length > 0) {

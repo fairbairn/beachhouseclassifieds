@@ -185,6 +185,7 @@ function renderAdapterStatLine(stats: IngestStats, dryRun: boolean): string {
     `updated_listings=${stats.updatedListings}`,
     `inserted_source_links=${stats.insertedSourceLinks}`,
     `updated_source_links=${stats.updatedSourceLinks}`,
+    `skipped_excluded_by_match=${stats.skippedExcludedByMatch}`,
     `skipped_missing_detail_json=${stats.skippedMissingDetailJson}`,
     `skipped_missing_name=${stats.skippedMissingName}`,
     `dry_run=${dryRun}`,
@@ -286,6 +287,7 @@ function sumStats(results: AdapterRunResult[]): IngestStats {
       acc.updatedListings += entry.stats.updatedListings;
       acc.insertedSourceLinks += entry.stats.insertedSourceLinks;
       acc.updatedSourceLinks += entry.stats.updatedSourceLinks;
+      acc.skippedExcludedByMatch += entry.stats.skippedExcludedByMatch;
       acc.skippedMissingDetailJson += entry.stats.skippedMissingDetailJson;
       acc.skippedMissingName += entry.stats.skippedMissingName;
       return acc;
@@ -297,6 +299,7 @@ function sumStats(results: AdapterRunResult[]): IngestStats {
       updatedListings: 0,
       insertedSourceLinks: 0,
       updatedSourceLinks: 0,
+      skippedExcludedByMatch: 0,
       skippedMissingDetailJson: 0,
       skippedMissingName: 0,
     },
@@ -484,7 +487,7 @@ export async function runCanonicalListingIngestCli(
         ),
   );
   console.log(
-    `totals scanned=${totals.scanned} inserted_listings=${totals.insertedListings} updated_listings=${totals.updatedListings} inserted_source_links=${totals.insertedSourceLinks} updated_source_links=${totals.updatedSourceLinks} skipped_missing_detail_json=${totals.skippedMissingDetailJson} skipped_missing_name=${totals.skippedMissingName}`,
+    `totals scanned=${totals.scanned} inserted_listings=${totals.insertedListings} updated_listings=${totals.updatedListings} inserted_source_links=${totals.insertedSourceLinks} updated_source_links=${totals.updatedSourceLinks} skipped_excluded_by_match=${totals.skippedExcludedByMatch} skipped_missing_detail_json=${totals.skippedMissingDetailJson} skipped_missing_name=${totals.skippedMissingName}`,
   );
 
   if (failed.length > 0) {

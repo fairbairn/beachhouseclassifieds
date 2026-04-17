@@ -2,6 +2,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { differenceInCalendarDays, format, isValid, parseISO } from "date-fns";
 import {
   Accessibility,
+  ArrowRight,
   ArrowUpDown,
   BedDouble,
   CalendarDays,
@@ -10,14 +11,23 @@ import {
   Dog,
   Droplets,
   Heart,
+  Mouse,
   SlidersHorizontal,
   Waves,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import beachEntryTexture from "@/assets/images/beach-entry.png";
 import {
   DateRangeField,
   GuestStepper,
@@ -28,7 +38,6 @@ import {
   known30AAreas,
   known30ABeachZones,
   known30ACommunities,
-  sampleListings,
   type DiscoverListing,
 } from "@/components/discover/discover-data";
 import {
@@ -47,7 +56,22 @@ import {
   DiscoverSortLayoutControls,
   type SortOption,
 } from "@/components/discover/DiscoverSortLayoutControls";
+import {
+  HOME_ACTION_BUTTON_BASE,
+  HOME_ACTION_BUTTON_LARGE_SIZE,
+  HOME_ACTION_BUTTON_TEAL,
+} from "@/components/home/homeButtonStyles";
 import { HomeMarketingShell } from "@/components/home/HomeMarketingShell";
+import {
+  fetchDiscoverListingDetailWithCache,
+  primeDiscoverListingDetailCache,
+  primeDiscoverListingsCache,
+} from "@/lib/discover/discover-listings-client-cache";
+import {
+  fetchDiscoverListingsPage,
+  type DiscoverListingsPageResponse,
+} from "@/lib/discover/discover-listings-query";
+import { markDiscoverModalIntent } from "@/lib/discover/discover-modal-intent";
 
 const defaultMapTarget = {
   lat: 30.3199786,
@@ -59,19 +83,35 @@ const defaultMapTarget = {
 // TODO: Temporary UX toggle. Keep false so Clear Pin does not recenter map.
 const RESET_MAP_ON_CLEAR_PIN = false;
 const BRAND_DISPLAY_FONT_FAMILY = "'Playfair Display', serif";
+const DISCOVER_RESULT_SET_TARGET_COUNT = 96;
+const STANDALONE_CLOSE_FADE_MS = 3000;
+
+let discoverListingsSnapshotCache: DiscoverListing[] | null = null;
 
 export function DiscoverPage({
   overlayListingId,
   initialListings,
+  initialListingsPage,
+  initialOverlayListing,
+  overlayOnlyMode,
+  disableOverlayFromPath,
 }: {
   overlayListingId?: string;
   initialListings?: DiscoverListing[];
+  initialListingsPage?: DiscoverListingsPageResponse;
+  initialOverlayListing?: DiscoverListing;
+  overlayOnlyMode?: boolean;
+  disableOverlayFromPath?: boolean;
 }) {
   const navigate = useNavigate();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
   const overlayListingIdFromPath = (() => {
+    if (disableOverlayFromPath) {
+      return undefined;
+    }
+
     const match = pathname.match(/^\/discover\/listing\/(.+)$/);
     if (!match) {
       return undefined;
@@ -85,12 +125,13 @@ export function DiscoverPage({
   const requestedOverlayListingId =
     overlayListingId ?? overlayListingIdFromPath;
   const isOverlayRoute = Boolean(requestedOverlayListingId);
-  const initialLoadedListings = initialListings ?? [];
+  const initialLoadedListings = useMemo(
+    () => initialListings ?? initialListingsPage?.listings ?? [],
+    [initialListings, initialListingsPage],
+  );
   const hasInitialOverlayListing = Boolean(
     requestedOverlayListingId &&
-    initialLoadedListings.some(
-      (listing) => listing.id === requestedOverlayListingId,
-    ),
+    (initialOverlayListing?.id ?? "") === requestedOverlayListingId,
   );
   const defaultMinSleeps = 0;
   const defaultMinBedrooms = 0;
@@ -140,6 +181,32 @@ export function DiscoverPage({
     };
   }, [requestedOverlayListingId]);
 
+  useEffect(() => {
+    if (!overlayOnlyMode || typeof document === "undefined") {
+      return;
+    }
+
+    const existing = document.querySelector<HTMLLinkElement>(
+      'link[data-discover-ssr-prefetch="true"]',
+    );
+    if (existing) {
+      return;
+    }
+
+    const prefetchLink = document.createElement("link");
+    prefetchLink.rel = "prefetch";
+    prefetchLink.as = "document";
+    prefetchLink.href = "/discover";
+    prefetchLink.dataset.discoverSsrPrefetch = "true";
+    document.head.appendChild(prefetchLink);
+
+    return () => {
+      if (prefetchLink.parentNode) {
+        prefetchLink.parentNode.removeChild(prefetchLink);
+      }
+    };
+  }, [overlayOnlyMode]);
+
   const [locationQuery, setLocationQuery] = useState("");
   const [earliestDate, setEarliestDate] = useState("");
   const [latestDate, setLatestDate] = useState("");
@@ -175,9 +242,18 @@ export function DiscoverPage({
     3 | 4
   >(3);
   const [sortOption, setSortOption] = useState<SortOption>("recommended");
+  const initialDiscoverListingsSeed =
+    !requestedOverlayListingId &&
+    Array.isArray(discoverListingsSnapshotCache) &&
+    discoverListingsSnapshotCache.length > 0
+      ? discoverListingsSnapshotCache
+      : initialLoadedListings;
   const [fetchedListings, setFetchedListings] = useState<DiscoverListing[]>(
-    () => initialLoadedListings,
+    () => initialDiscoverListingsSeed,
   );
+  const [overlayDetailListing, setOverlayDetailListing] = useState<
+    DiscoverListing | undefined
+  >(() => initialOverlayListing);
   const fetchedListingsRef = useRef<DiscoverListing[]>([]);
   const [isOverlayDetailLoading, setIsOverlayDetailLoading] = useState(
     isOverlayRoute && !hasInitialOverlayListing,
@@ -186,8 +262,32 @@ export function DiscoverPage({
   const [selectedCardSyncRequestToken, setSelectedCardSyncRequestToken] =
     useState(0);
   const [isPinnedCardVisible, setIsPinnedCardVisible] = useState(true);
+  const overlayContainerRef = useRef<HTMLDivElement | null>(null);
+  const overlayDetailScrollRef = useRef<HTMLElement | null>(null);
+  const deferredCloseTimeoutRef = useRef<number | null>(null);
+  const closeNavigateFrameRef = useRef<number | null>(null);
+  const closeTriggeredByPointerRef = useRef(false);
   const [overlayMapExpandedListingId, setOverlayMapExpandedListingId] =
     useState<string | undefined>(undefined);
+  const [showOverlayScrollIndicator, setShowOverlayScrollIndicator] =
+    useState(false);
+  const [showOverlayScrollFade, setShowOverlayScrollFade] = useState(false);
+  const didBackgroundFillRef = useRef(false);
+  const [isBackgroundFillLoading, setIsBackgroundFillLoading] = useState(() => {
+    if (isOverlayRoute || !initialListingsPage?._stats?.hasMore) {
+      return false;
+    }
+
+    const desiredTotal = Math.min(
+      DISCOVER_RESULT_SET_TARGET_COUNT,
+      Math.max(
+        initialListingsPage._stats.totalCount,
+        initialDiscoverListingsSeed.length,
+      ),
+    );
+
+    return desiredTotal > initialDiscoverListingsSeed.length;
+  });
 
   useEffect(() => {
     const chooseVariant = () => {
@@ -289,73 +389,278 @@ export function DiscoverPage({
   }, [fetchedListings]);
 
   useEffect(() => {
+    if (requestedOverlayListingId || fetchedListings.length === 0) {
+      return;
+    }
+
+    discoverListingsSnapshotCache = fetchedListings;
+  }, [fetchedListings, requestedOverlayListingId]);
+
+  useEffect(() => {
+    if (isOverlayRoute) {
+      return;
+    }
+
+    if (didBackgroundFillRef.current) {
+      return;
+    }
+
+    const seedPage = initialListingsPage;
+    if (!seedPage?._stats?.hasMore || !seedPage._stats.nextCursor) {
+      return;
+    }
+
+    const seedCount = Math.max(
+      initialDiscoverListingsSeed.length,
+      fetchedListingsRef.current.length,
+    );
+    const desiredTotal = Math.min(
+      DISCOVER_RESULT_SET_TARGET_COUNT,
+      Math.max(seedPage._stats.totalCount, seedCount),
+    );
+    const remaining = desiredTotal - seedCount;
+
+    if (remaining <= 0) {
+      return;
+    }
+
+    didBackgroundFillRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsBackgroundFillLoading(true);
     let isCancelled = false;
 
-    const loadListings = async () => {
-      const hasRequestedListingAlreadyLoaded = Boolean(
-        requestedOverlayListingId &&
-        fetchedListingsRef.current.some(
-          (listing) => listing.id === requestedOverlayListingId,
-        ),
-      );
-      if (hasRequestedListingAlreadyLoaded) {
-        setIsOverlayDetailLoading(false);
+    const loadRemainingListings = async () => {
+      const page = await fetchDiscoverListingsPage({
+        cursor: seedPage._stats.nextCursor ?? undefined,
+        limit: remaining,
+      }).catch(() => null);
+
+      if (isCancelled) {
         return;
       }
 
-      try {
-        setIsOverlayDetailLoading(Boolean(requestedOverlayListingId));
-        const endpoint = requestedOverlayListingId
-          ? `/api/discover/listings?include=${encodeURIComponent(requestedOverlayListingId)}`
-          : "/api/discover/listings";
-        const response = await fetch(endpoint);
-        if (!response.ok || isCancelled) {
-          if (!isCancelled) {
-            setIsOverlayDetailLoading(false);
-          }
-          return;
-        }
-
-        const payload = (await response.json()) as { listings?: unknown };
-        if (!Array.isArray(payload.listings)) {
-          if (!isCancelled) {
-            setIsOverlayDetailLoading(false);
-          }
-          return;
-        }
-
-        setFetchedListings(payload.listings as DiscoverListing[]);
-        if (!isCancelled) {
-          setIsOverlayDetailLoading(false);
-        }
-      } catch {
-        if (!isCancelled) {
-          setIsOverlayDetailLoading(false);
-        }
-        // Keep local sample data fallback when fetch fails.
+      if (!page || page.listings.length === 0) {
+        setIsBackgroundFillLoading(false);
+        return;
       }
+
+      setFetchedListings((current) => {
+        if (current.length === 0) {
+          return page.listings;
+        }
+
+        const existingIds = new Set(current.map((listing) => listing.id));
+        const additions = page.listings.filter(
+          (listing) => !existingIds.has(listing.id),
+        );
+
+        return additions.length > 0 ? [...current, ...additions] : current;
+      });
+
+      setIsBackgroundFillLoading(false);
     };
 
-    void loadListings();
+    void loadRemainingListings();
 
     return () => {
       isCancelled = true;
+
+      // In React Strict Mode, effects are intentionally mounted/cleaned/re-mounted.
+      // Reset this guard so the replay mount can run the real backfill request.
+      didBackgroundFillRef.current = false;
+      setIsBackgroundFillLoading(false);
     };
-  }, [requestedOverlayListingId]);
+  }, [initialDiscoverListingsSeed.length, initialListingsPage, isOverlayRoute]);
+
+  useEffect(() => {
+    if (initialLoadedListings.length === 0) {
+      return;
+    }
+
+    primeDiscoverListingsCache({
+      includeSlug: requestedOverlayListingId,
+      listings: initialLoadedListings,
+    });
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFetchedListings((current) => {
+      if (current.length > 0) {
+        return current;
+      }
+      return initialLoadedListings;
+    });
+  }, [initialLoadedListings, requestedOverlayListingId]);
+
+  useEffect(() => {
+    if (!initialOverlayListing) {
+      return;
+    }
+
+    const initialOverlayListingId =
+      typeof (initialOverlayListing as { id?: unknown }).id === "string"
+        ? (initialOverlayListing as { id: string }).id.trim()
+        : "";
+    if (!initialOverlayListingId) {
+      return;
+    }
+
+    primeDiscoverListingDetailCache({
+      slug: initialOverlayListingId,
+      listing: initialOverlayListing,
+    });
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOverlayDetailListing((current) =>
+      current?.id === initialOverlayListingId ? current : initialOverlayListing,
+    );
+  }, [initialOverlayListing]);
+
+  useEffect(() => {
+    if (!requestedOverlayListingId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setOverlayDetailListing(undefined);
+      return;
+    }
+
+    if (overlayDetailListing?.id === requestedOverlayListingId) {
+      return;
+    }
+
+    setOverlayDetailListing(undefined);
+  }, [overlayDetailListing?.id, requestedOverlayListingId]);
+
+  useLayoutEffect(() => {
+    if (!requestedOverlayListingId) {
+      return;
+    }
+
+    const hasResolvedOverlayListing =
+      overlayDetailListing?.id === requestedOverlayListingId ||
+      initialOverlayListing?.id === requestedOverlayListingId;
+
+    if (!hasResolvedOverlayListing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsOverlayDetailLoading(true);
+    }
+  }, [
+    initialOverlayListing?.id,
+    overlayDetailListing?.id,
+    requestedOverlayListingId,
+  ]);
+
+  useEffect(() => {
+    if (!requestedOverlayListingId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsOverlayDetailLoading(false);
+      return;
+    }
+
+    if (
+      initialOverlayListing &&
+      initialOverlayListing.id === requestedOverlayListingId
+    ) {
+      setOverlayDetailListing((current) =>
+        current?.id === requestedOverlayListingId
+          ? current
+          : initialOverlayListing,
+      );
+      setIsOverlayDetailLoading(false);
+      return;
+    }
+
+    const hasRequestedListingAlreadyLoaded = Boolean(
+      requestedOverlayListingId &&
+      ((overlayDetailListing?.id ?? "") === requestedOverlayListingId ||
+        hasInitialOverlayListing),
+    );
+
+    if (!hasRequestedListingAlreadyLoaded && !overlayOnlyMode) {
+      let isCancelled = false;
+      setIsOverlayDetailLoading(true);
+
+      void fetchDiscoverListingDetailWithCache({
+        slug: requestedOverlayListingId,
+      })
+        .then((listing) => {
+          if (isCancelled) {
+            return;
+          }
+
+          if (listing) {
+            setOverlayDetailListing(listing);
+          }
+          setIsOverlayDetailLoading(false);
+        })
+        .catch(() => {
+          if (isCancelled) {
+            return;
+          }
+          setIsOverlayDetailLoading(false);
+        });
+
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    // Route detail rendering is SSR/loader-driven only.
+    // Do not trigger a client-side detail fetch for this route.
+    setIsOverlayDetailLoading(!hasRequestedListingAlreadyLoaded);
+  }, [
+    overlayOnlyMode,
+    overlayDetailListing?.id,
+    initialOverlayListing,
+    hasInitialOverlayListing,
+    requestedOverlayListingId,
+  ]);
 
   const sourceListings = useMemo(() => {
     if (fetchedListings.length > 0) {
       return fetchedListings.map(verifyGulfFrontClaim);
     }
 
-    if (isOverlayRoute) {
-      return [] as DiscoverListing[];
+    return [] as DiscoverListing[];
+  }, [fetchedListings]);
+  const isDiscoverListingsInitialLoading =
+    !isOverlayRoute && fetchedListings.length === 0;
+  const backgroundFillTargetCount = useMemo(() => {
+    if (isOverlayRoute || !initialListingsPage?._stats) {
+      return 0;
     }
-
-    return sampleListings.map(verifyGulfFrontClaim);
-  }, [fetchedListings, isOverlayRoute]);
+    return Math.min(
+      DISCOVER_RESULT_SET_TARGET_COUNT,
+      Math.max(
+        initialListingsPage._stats.totalCount,
+        initialLoadedListings.length,
+      ),
+    );
+  }, [
+    initialListingsPage?._stats,
+    initialLoadedListings.length,
+    isOverlayRoute,
+  ]);
+  const loadingPlaceholderCount =
+    isBackgroundFillLoading &&
+    backgroundFillTargetCount > fetchedListings.length
+      ? backgroundFillTargetCount - fetchedListings.length
+      : 0;
 
   const guestCount = adults + children;
+  const hasClientSideNarrowing =
+    locationQuery.trim().length > 0 ||
+    minSleeps > 0 ||
+    minBedrooms > 0 ||
+    minBathrooms > 0 ||
+    minKingBeds > 0 ||
+    minQueenBeds > 0 ||
+    filterPool ||
+    filterBeachfront ||
+    filterGolfCart ||
+    filterPets ||
+    filterAccessible ||
+    filterElevator ||
+    adults !== 2 ||
+    children !== 0;
 
   const filtered = useMemo(() => {
     const normalized = locationQuery.trim().toLowerCase();
@@ -449,21 +754,39 @@ export function DiscoverPage({
     });
   }, [filtered, nights, sortOption]);
 
-  const mapListings = useMemo(
-    () =>
-      displayListings.map((listing) => {
-        const geoTarget = getListingGeoTarget(listing);
+  const mapListings = useMemo(() => {
+    const mapSeedListings = initialListingsPage?._stats?.metadata?.mapListings;
+
+    if (!hasClientSideNarrowing && Array.isArray(mapSeedListings)) {
+      return mapSeedListings.map((listing) => {
         const typicalTotal = Math.ceil(listing.typicalAllInNightly * nights);
         return {
           id: listing.id,
           name: listing.name,
-          lat: geoTarget.lat,
-          lng: geoTarget.lng,
+          lat: listing.lat,
+          lng: listing.lng,
           hoverPriceAmount: `$${typicalTotal.toLocaleString("en-US")}`,
         };
-      }),
-    [displayListings, nights],
-  );
+      });
+    }
+
+    return displayListings.map((listing) => {
+      const geoTarget = getListingGeoTarget(listing);
+      const typicalTotal = Math.ceil(listing.typicalAllInNightly * nights);
+      return {
+        id: listing.id,
+        name: listing.name,
+        lat: geoTarget.lat,
+        lng: geoTarget.lng,
+        hoverPriceAmount: `$${typicalTotal.toLocaleString("en-US")}`,
+      };
+    });
+  }, [
+    displayListings,
+    hasClientSideNarrowing,
+    initialListingsPage?._stats?.metadata?.mapListings,
+    nights,
+  ]);
 
   const areaCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -529,6 +852,56 @@ export function DiscoverPage({
     ];
   }, [filtered]);
 
+  const effectiveListingCount =
+    !hasClientSideNarrowing && initialListingsPage?._stats?.metadata?.totalCount
+      ? initialListingsPage._stats.metadata.totalCount
+      : displayListings.length;
+
+  const effectiveAreaCounts = useMemo(() => {
+    if (hasClientSideNarrowing || !initialListingsPage?._stats?.metadata) {
+      return areaCounts;
+    }
+
+    const facetAreas = initialListingsPage._stats.metadata.facets.areas;
+    return known30AAreas.map((name) => [name, facetAreas[name] ?? 0] as const);
+  }, [areaCounts, hasClientSideNarrowing, initialListingsPage]);
+
+  const effectiveBeachCounts = useMemo(() => {
+    if (hasClientSideNarrowing || !initialListingsPage?._stats?.metadata) {
+      return beachCounts;
+    }
+
+    const facetBeaches = initialListingsPage._stats.metadata.facets.beaches;
+    return known30ABeachZones.map(
+      (name) => [name, facetBeaches[name] ?? 0] as const,
+    );
+  }, [beachCounts, hasClientSideNarrowing, initialListingsPage]);
+
+  const effectiveCommunityCounts = useMemo(() => {
+    if (hasClientSideNarrowing || !initialListingsPage?._stats?.metadata) {
+      return communityCounts;
+    }
+
+    const facetCommunities =
+      initialListingsPage._stats.metadata.facets.communities;
+    return known30ACommunities.map(
+      (name) => [name, facetCommunities[name] ?? 0] as const,
+    );
+  }, [communityCounts, hasClientSideNarrowing, initialListingsPage]);
+
+  const effectiveFeatureCounts = useMemo(() => {
+    if (hasClientSideNarrowing || !initialListingsPage?._stats?.metadata) {
+      return featureCounts;
+    }
+
+    const featureFacets = initialListingsPage._stats.metadata.facets.features;
+    return [
+      { label: "Gulf Front", count: featureFacets.gulfFront ?? 0 },
+      { label: "Private Pool", count: featureFacets.privatePool ?? 0 },
+      { label: "Golf Cart", count: featureFacets.golfCart ?? 0 },
+    ];
+  }, [featureCounts, hasClientSideNarrowing, initialListingsPage]);
+
   const earliestParsed = parseSummaryDate(earliestDate);
   const latestParsed = parseSummaryDate(latestDate);
 
@@ -591,18 +964,31 @@ export function DiscoverPage({
   }, []);
 
   const effectiveOverlayListingId = requestedOverlayListingId;
+  const shouldRenderOverlay = Boolean(effectiveOverlayListingId);
   const isDetailOverlayOpen = Boolean(effectiveOverlayListingId);
   const isOverlayMapExpanded =
     Boolean(effectiveOverlayListingId) &&
     overlayMapExpandedListingId === effectiveOverlayListingId;
 
-  const overlayListing = useMemo(
-    () =>
-      sourceListings.find(
-        (listing) => listing.id === effectiveOverlayListingId,
-      ),
-    [sourceListings, effectiveOverlayListingId],
-  );
+  const overlayListing = useMemo(() => {
+    if (
+      overlayDetailListing &&
+      overlayDetailListing.id === effectiveOverlayListingId
+    ) {
+      return verifyGulfFrontClaim(overlayDetailListing);
+    }
+
+    if (
+      initialOverlayListing &&
+      initialOverlayListing.id === effectiveOverlayListingId
+    ) {
+      return verifyGulfFrontClaim(initialOverlayListing);
+    }
+
+    // Avoid painting summary-card data in the detail overlay while
+    // the full detail payload is still loading.
+    return undefined;
+  }, [overlayDetailListing, initialOverlayListing, effectiveOverlayListingId]);
 
   const overlayLocation = useMemo(() => {
     if (!overlayListing) {
@@ -612,9 +998,91 @@ export function DiscoverPage({
   }, [overlayListing]);
 
   const closeDetailOverlay = useCallback(() => {
+    if (closeNavigateFrameRef.current !== null) {
+      window.cancelAnimationFrame(closeNavigateFrameRef.current);
+      closeNavigateFrameRef.current = null;
+    }
+
+    if (deferredCloseTimeoutRef.current !== null) {
+      window.clearTimeout(deferredCloseTimeoutRef.current);
+      deferredCloseTimeoutRef.current = null;
+    }
+
+    if (overlayOnlyMode) {
+      if (overlayContainerRef.current) {
+        overlayContainerRef.current.style.transition = `opacity ${STANDALONE_CLOSE_FADE_MS}ms ease`;
+        overlayContainerRef.current.style.opacity = "0";
+        overlayContainerRef.current.style.pointerEvents = "none";
+      }
+
+      closeNavigateFrameRef.current = window.requestAnimationFrame(() => {
+        closeNavigateFrameRef.current = null;
+        window.location.assign("/discover");
+      });
+
+      return;
+    }
+
     setOverlayMapExpandedListingId(undefined);
-    void navigate({ to: "/discover" });
-  }, [navigate]);
+
+    if (overlayContainerRef.current) {
+      overlayContainerRef.current.style.display = "none";
+      overlayContainerRef.current.style.opacity = "0";
+      overlayContainerRef.current.style.pointerEvents = "none";
+    }
+
+    closeNavigateFrameRef.current = window.requestAnimationFrame(() => {
+      closeNavigateFrameRef.current = null;
+      deferredCloseTimeoutRef.current = window.setTimeout(() => {
+        deferredCloseTimeoutRef.current = null;
+        void navigate({ to: "/discover" }).catch(() => {
+          if (overlayContainerRef.current) {
+            overlayContainerRef.current.style.display = "";
+            overlayContainerRef.current.style.opacity = "";
+            overlayContainerRef.current.style.pointerEvents = "";
+            overlayContainerRef.current.style.transition = "";
+          }
+        });
+      }, 0);
+    });
+  }, [navigate, overlayOnlyMode]);
+
+  const handleCloseDetailOverlayPointerDown = useCallback(() => {
+    closeTriggeredByPointerRef.current = true;
+    closeDetailOverlay();
+  }, [closeDetailOverlay]);
+
+  const handleCloseDetailOverlayClick = useCallback(() => {
+    if (closeTriggeredByPointerRef.current) {
+      closeTriggeredByPointerRef.current = false;
+      return;
+    }
+
+    closeDetailOverlay();
+  }, [closeDetailOverlay]);
+
+  useEffect(() => {
+    if (overlayContainerRef.current) {
+      overlayContainerRef.current.style.display = "";
+      overlayContainerRef.current.style.opacity = "";
+      overlayContainerRef.current.style.pointerEvents = "";
+      overlayContainerRef.current.style.transition = "";
+    }
+  }, [requestedOverlayListingId]);
+
+  useEffect(() => {
+    return () => {
+      if (closeNavigateFrameRef.current !== null) {
+        window.cancelAnimationFrame(closeNavigateFrameRef.current);
+        closeNavigateFrameRef.current = null;
+      }
+
+      if (deferredCloseTimeoutRef.current !== null) {
+        window.clearTimeout(deferredCloseTimeoutRef.current);
+        deferredCloseTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isDetailOverlayOpen) {
@@ -634,6 +1102,65 @@ export function DiscoverPage({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [closeDetailOverlay, isDetailOverlayOpen]);
+
+  const updateOverlayScrollIndicator = useCallback(() => {
+    const node = overlayDetailScrollRef.current;
+    if (!node) {
+      setShowOverlayScrollIndicator(false);
+      setShowOverlayScrollFade(false);
+      return;
+    }
+
+    const remainingScroll =
+      node.scrollHeight - node.clientHeight - node.scrollTop;
+    const hasOverflow = node.scrollHeight - node.clientHeight > 24;
+    const hasMoreBelow = remainingScroll > 24;
+    const isNearTop = node.scrollTop <= 16;
+    setShowOverlayScrollFade(hasOverflow && hasMoreBelow);
+    setShowOverlayScrollIndicator(hasOverflow && hasMoreBelow && isNearTop);
+  }, []);
+
+  const handleOverlayScrollIndicatorClick = useCallback(() => {
+    const node = overlayDetailScrollRef.current;
+    if (!node) {
+      return;
+    }
+
+    node.scrollTo({
+      top: Math.max(node.scrollHeight, 0),
+      behavior: "smooth",
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isDetailOverlayOpen || !overlayListing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowOverlayScrollIndicator(false);
+      setShowOverlayScrollFade(false);
+      return;
+    }
+
+    const node = overlayDetailScrollRef.current;
+    if (!node) {
+      setShowOverlayScrollIndicator(false);
+      setShowOverlayScrollFade(false);
+      return;
+    }
+
+    updateOverlayScrollIndicator();
+
+    const handleScroll = () => {
+      updateOverlayScrollIndicator();
+    };
+
+    node.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", updateOverlayScrollIndicator);
+
+    return () => {
+      node.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", updateOverlayScrollIndicator);
+    };
+  }, [isDetailOverlayOpen, overlayListing, updateOverlayScrollIndicator]);
 
   const overlayMapTarget = useMemo(() => {
     if (!overlayListing) {
@@ -796,6 +1323,7 @@ export function DiscoverPage({
 
   const openDetailOverlay = useCallback(
     (listingId: string) => {
+      markDiscoverModalIntent(listingId);
       setOverlayMapExpandedListingId(undefined);
       void navigate({
         to: "/discover/listing/$slug",
@@ -823,6 +1351,10 @@ export function DiscoverPage({
       />
       <div className="pointer-events-none fixed inset-0 z-0 bg-slate-950/28" />
 
+      <div hidden data-page-marker="discover-page" />
+      <div hidden data-overlay-only-mode={overlayOnlyMode ? "true" : "false"} />
+      <div hidden data-overlay-listing-id={effectiveOverlayListingId ?? ""} />
+
       <div className="fixed top-4 left-4 z-30 md:top-6 md:left-8">
         <div className="px-2 py-1">
           <div className="flex min-w-32 flex-col items-center">
@@ -840,305 +1372,323 @@ export function DiscoverPage({
         </div>
       </div>
 
-      <section className="relative z-10 mx-auto mt-6 w-full max-w-475 space-y-6 xl:flex xl:h-[calc(100dvh-2rem)] xl:flex-col xl:gap-6 xl:space-y-0">
-        <header className="relative z-20 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)]">
-          <div>
-            <div className="grid gap-1.5 xl:grid-cols-[minmax(0,3.85fr)_minmax(19rem,2fr)_minmax(8.5rem,0.84fr)_minmax(8.5rem,0.84fr)_minmax(8.5rem,0.84fr)] xl:items-end">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={locationQuery}
-                  onChange={(event) => setLocationQuery(event.target.value)}
-                  maxLength={120}
-                  placeholder="Where would you love to stay? Try an area, community, or property name."
-                  className="h-16 w-full rounded-lg border border-slate-300 bg-white px-4 pr-44 text-lg text-teal-800 placeholder:text-slate-400 focus:outline-none focus-visible:border-teal-300 focus-visible:ring-2 focus-visible:ring-teal-200/70"
-                />
-                {locationQuery ? (
-                  <button
-                    type="button"
-                    onClick={() => setLocationQuery("")}
-                    className="absolute top-1/2 right-35 z-10 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
-                    aria-label="Clear search input"
-                    title="Clear search input"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="absolute top-1/2 right-2 h-12 w-32 -translate-y-1/2 rounded-md border border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 px-4 text-sm font-bold whitespace-nowrap text-white shadow-[0_8px_20px_-12px_rgba(13,148,136,0.75)] transition hover:brightness-105"
-                >
-                  Search
-                </button>
-              </div>
-              <DateRangeField
-                startDate={earliestDate}
-                endDate={latestDate}
-                selectedNights={nights}
-                openRequestToken={datePanelOpenRequestToken}
-                onChange={({ startDate, endDate }) => {
-                  setEarliestDate(startDate);
-                  setLatestDate(endDate);
-                }}
-              />
-              <GuestStepper
-                controlLabel="minimum stay"
-                pillText={formatNights(nights)}
-                value={nights}
-                min={1}
-                max={21}
-                onChange={setNights}
-              />
-              <GuestStepper
-                controlLabel="adults"
-                pillText={`${adults} ${adults === 1 ? "Adult" : "Adults"}`}
-                value={adults}
-                min={1}
-                onChange={setAdults}
-              />
-              <GuestStepper
-                controlLabel="children"
-                pillText={`${children} ${children === 1 ? "Child" : "Children"}`}
-                value={children}
-                min={0}
-                onChange={setChildren}
-              />
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center gap-2 xl:flex-nowrap">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced((current) => !current)}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 px-3 text-xs font-semibold text-white shadow-[0_8px_20px_-12px_rgba(13,148,136,0.75)] transition hover:brightness-105"
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                Advanced Filters
-                <ChevronDown
-                  className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
-                />
-              </button>
-              <div className="inline-flex items-center gap-1.5">
-                <span className="text-xs font-normal text-slate-600">
-                  Filters:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(true)}
-                  className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 transition hover:border-teal-300 hover:bg-teal-100/60"
-                  aria-label="Open filters panel"
-                >
-                  {filtersSummary}
-                </button>
-              </div>
-              <div className="inline-flex items-center gap-1.5">
-                <span className="text-xs font-normal text-slate-600">
-                  Dates:
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDatePanelOpenRequestToken(
-                      (current) => (current ?? 0) + 1,
-                    )
-                  }
-                  className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-100/60"
-                  aria-label="Open date range panel"
-                >
-                  {dateSummary}
-                </button>
-              </div>
-              <div className="inline-flex items-center gap-1.5">
-                <span className="text-xs font-normal text-slate-600">
-                  Guests:
-                </span>
-                <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800">
-                  {guestCount}
-                </span>
-              </div>
-              <DiscoverSortLayoutControls
-                sortOption={sortOption}
-                onSortChange={setSortOption}
-                cardsPerRow={cardsPerRow}
-                onCardsPerRowChange={setCardsPerRow}
-                isCardLayoutLocked={isMapExpanded}
-              />
-            </div>
-
-            <div
-              className={`overflow-hidden transition-all duration-300 ${showAdvanced ? "mt-3 max-h-[72vh] opacity-100" : "max-h-0 opacity-0"}`}
-            >
-              <div className="max-h-[68vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4">
-                <div className="rounded-lg border border-teal-200 bg-teal-50/70 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-bold tracking-widest text-teal-800 uppercase">
-                      Filters
-                    </p>
-                    <div className="flex items-center gap-1.5">
+      <section
+        className={`relative z-10 mx-auto w-full max-w-475 space-y-6 xl:flex xl:h-[calc(100dvh-2rem)] xl:flex-col xl:gap-6 xl:space-y-0 ${overlayOnlyMode ? "mt-4 md:mt-6" : "mt-6"}`}
+      >
+        {!overlayOnlyMode ? (
+          <>
+            <header className="relative z-20 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)]">
+              <div>
+                <div className="grid gap-1.5 xl:grid-cols-[minmax(0,3.85fr)_minmax(19rem,2fr)_minmax(8.5rem,0.84fr)_minmax(8.5rem,0.84fr)_minmax(8.5rem,0.84fr)] xl:items-end">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={locationQuery}
+                      onChange={(event) => setLocationQuery(event.target.value)}
+                      maxLength={120}
+                      placeholder="Where would you love to stay? Try an area, community, or property name."
+                      className="h-16 w-full rounded-lg border border-slate-300 bg-white px-4 pr-44 text-lg text-teal-800 placeholder:text-slate-400 focus:outline-none focus-visible:border-teal-300 focus-visible:ring-2 focus-visible:ring-teal-200/70"
+                    />
+                    {locationQuery ? (
                       <button
                         type="button"
-                        onClick={resetFilters}
-                        className="inline-flex h-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold tracking-[0.08em] text-slate-600 uppercase transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
+                        onClick={() => setLocationQuery("")}
+                        className="absolute top-1/2 right-35 z-10 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                        aria-label="Clear search input"
+                        title="Clear search input"
                       >
-                        Reset Filters
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowAdvanced(false)}
-                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold tracking-[0.08em] text-slate-700 uppercase transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
-                        aria-label="Close filters panel"
-                        title="Close filters panel"
-                      >
-                        <span>Close</span>
                         <X className="h-3.5 w-3.5" />
                       </button>
-                    </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="absolute top-1/2 right-2 h-12 w-32 -translate-y-1/2 rounded-md border border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 px-4 text-sm font-bold whitespace-nowrap text-white shadow-[0_8px_20px_-12px_rgba(13,148,136,0.75)] transition hover:brightness-105"
+                    >
+                      Search
+                    </button>
                   </div>
-                  <div className="mt-2 flex items-stretch gap-2 overflow-x-auto pb-1">
-                    <div className="w-53 shrink-0">
-                      <GuestStepper
-                        controlLabel="minimum sleeps"
-                        pillText={`Sleeps ${minSleeps}+`}
-                        value={minSleeps}
-                        min={0}
-                        max={30}
-                        onChange={setMinSleeps}
-                      />
-                    </div>
-                    <div className="w-53 shrink-0">
-                      <GuestStepper
-                        controlLabel="minimum bedrooms"
-                        pillText={`${minBedrooms}+ Bedrooms`}
-                        value={minBedrooms}
-                        min={0}
-                        max={10}
-                        onChange={setMinBedrooms}
-                      />
-                    </div>
-                    <div className="w-53 shrink-0">
-                      <GuestStepper
-                        controlLabel="minimum bathrooms"
-                        pillText={`${minBathrooms}+ Bathrooms`}
-                        value={minBathrooms}
-                        min={0}
-                        max={10}
-                        onChange={setMinBathrooms}
-                      />
-                    </div>
-                    <div className="w-53 shrink-0">
-                      <GuestStepper
-                        controlLabel="minimum king beds"
-                        pillText={`${minKingBeds}+ King Beds`}
-                        value={minKingBeds}
-                        min={0}
-                        max={10}
-                        onChange={setMinKingBeds}
-                      />
-                    </div>
-                    <div className="w-53 shrink-0">
-                      <GuestStepper
-                        controlLabel="minimum queen beds"
-                        pillText={`${minQueenBeds}+ Queen Beds`}
-                        value={minQueenBeds}
-                        min={0}
-                        max={10}
-                        onChange={setMinQueenBeds}
-                      />
-                    </div>
-                    <div className="grid min-w-136 flex-1 grid-cols-6 gap-2">
-                      <IconOptionBox
-                        label="Gulf Front"
-                        selected={filterBeachfront}
-                        onToggle={() => setFilterBeachfront((v) => !v)}
-                        icon={<Waves className="h-5 w-5" />}
-                      />
-                      <IconOptionBox
-                        label="Private Pool"
-                        selected={filterPool}
-                        onToggle={() => setFilterPool((v) => !v)}
-                        icon={<Droplets className="h-5 w-5" />}
-                      />
-                      <IconOptionBox
-                        label="Golf Cart"
-                        selected={filterGolfCart}
-                        onToggle={() => setFilterGolfCart((v) => !v)}
-                        icon={<CarFront className="h-5 w-5" />}
-                      />
-                      <IconOptionBox
-                        label="Pets"
-                        selected={filterPets}
-                        onToggle={() => setFilterPets((v) => !v)}
-                        icon={<Dog className="h-5 w-5" />}
-                      />
-                      <IconOptionBox
-                        label="Elevator"
-                        selected={filterElevator}
-                        onToggle={() => setFilterElevator((v) => !v)}
-                        icon={<ArrowUpDown className="h-5 w-5" />}
-                      />
-                      <IconOptionBox
-                        label="Accessible"
-                        selected={filterAccessible}
-                        onToggle={() => setFilterAccessible((v) => !v)}
-                        icon={<Accessibility className="h-5 w-5" />}
-                      />
+                  <DateRangeField
+                    startDate={earliestDate}
+                    endDate={latestDate}
+                    selectedNights={nights}
+                    openRequestToken={datePanelOpenRequestToken}
+                    onChange={({ startDate, endDate }) => {
+                      setEarliestDate(startDate);
+                      setLatestDate(endDate);
+                    }}
+                  />
+                  <GuestStepper
+                    controlLabel="minimum stay"
+                    pillText={formatNights(nights)}
+                    value={nights}
+                    min={1}
+                    max={21}
+                    onChange={setNights}
+                  />
+                  <GuestStepper
+                    controlLabel="adults"
+                    pillText={`${adults} ${adults === 1 ? "Adult" : "Adults"}`}
+                    value={adults}
+                    min={1}
+                    onChange={setAdults}
+                  />
+                  <GuestStepper
+                    controlLabel="children"
+                    pillText={`${children} ${children === 1 ? "Child" : "Children"}`}
+                    value={children}
+                    min={0}
+                    onChange={setChildren}
+                  />
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2 xl:flex-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced((current) => !current)}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 px-3 text-xs font-semibold text-white shadow-[0_8px_20px_-12px_rgba(13,148,136,0.75)] transition hover:brightness-105"
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    Advanced Filters
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  <div className="inline-flex items-center gap-1.5">
+                    <span className="text-xs font-normal text-slate-600">
+                      Filters:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvanced(true)}
+                      className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 transition hover:border-teal-300 hover:bg-teal-100/60"
+                      aria-label="Open filters panel"
+                    >
+                      {filtersSummary}
+                    </button>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5">
+                    <span className="text-xs font-normal text-slate-600">
+                      Dates:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDatePanelOpenRequestToken(
+                          (current) => (current ?? 0) + 1,
+                        )
+                      }
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-100/60"
+                      aria-label="Open date range panel"
+                    >
+                      {dateSummary}
+                    </button>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5">
+                    <span className="text-xs font-normal text-slate-600">
+                      Guests:
+                    </span>
+                    <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800">
+                      {guestCount}
+                    </span>
+                  </div>
+                  <DiscoverSortLayoutControls
+                    sortOption={sortOption}
+                    onSortChange={setSortOption}
+                    cardsPerRow={cardsPerRow}
+                    onCardsPerRowChange={setCardsPerRow}
+                    isCardLayoutLocked={isMapExpanded}
+                  />
+                </div>
+
+                <div
+                  className={`overflow-hidden transition-all duration-300 ${showAdvanced ? "mt-3 max-h-[72vh] opacity-100" : "max-h-0 opacity-0"}`}
+                >
+                  <div className="max-h-[68vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="rounded-lg border border-teal-200 bg-teal-50/70 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold tracking-widest text-teal-800 uppercase">
+                          Filters
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={resetFilters}
+                            className="inline-flex h-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold tracking-[0.08em] text-slate-600 uppercase transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
+                          >
+                            Reset Filters
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowAdvanced(false)}
+                            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold tracking-[0.08em] text-slate-700 uppercase transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
+                            aria-label="Close filters panel"
+                            title="Close filters panel"
+                          >
+                            <span>Close</span>
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-stretch gap-2 overflow-x-auto pb-1">
+                        <div className="w-53 shrink-0">
+                          <GuestStepper
+                            controlLabel="minimum sleeps"
+                            pillText={`Sleeps ${minSleeps}+`}
+                            value={minSleeps}
+                            min={0}
+                            max={30}
+                            onChange={setMinSleeps}
+                          />
+                        </div>
+                        <div className="w-53 shrink-0">
+                          <GuestStepper
+                            controlLabel="minimum bedrooms"
+                            pillText={`${minBedrooms}+ Bedrooms`}
+                            value={minBedrooms}
+                            min={0}
+                            max={10}
+                            onChange={setMinBedrooms}
+                          />
+                        </div>
+                        <div className="w-53 shrink-0">
+                          <GuestStepper
+                            controlLabel="minimum bathrooms"
+                            pillText={`${minBathrooms}+ Bathrooms`}
+                            value={minBathrooms}
+                            min={0}
+                            max={10}
+                            onChange={setMinBathrooms}
+                          />
+                        </div>
+                        <div className="w-53 shrink-0">
+                          <GuestStepper
+                            controlLabel="minimum king beds"
+                            pillText={`${minKingBeds}+ King Beds`}
+                            value={minKingBeds}
+                            min={0}
+                            max={10}
+                            onChange={setMinKingBeds}
+                          />
+                        </div>
+                        <div className="w-53 shrink-0">
+                          <GuestStepper
+                            controlLabel="minimum queen beds"
+                            pillText={`${minQueenBeds}+ Queen Beds`}
+                            value={minQueenBeds}
+                            min={0}
+                            max={10}
+                            onChange={setMinQueenBeds}
+                          />
+                        </div>
+                        <div className="grid min-w-136 flex-1 grid-cols-6 gap-2">
+                          <IconOptionBox
+                            label="Gulf Front"
+                            selected={filterBeachfront}
+                            onToggle={() => setFilterBeachfront((v) => !v)}
+                            icon={<Waves className="h-5 w-5" />}
+                          />
+                          <IconOptionBox
+                            label="Private Pool"
+                            selected={filterPool}
+                            onToggle={() => setFilterPool((v) => !v)}
+                            icon={<Droplets className="h-5 w-5" />}
+                          />
+                          <IconOptionBox
+                            label="Golf Cart"
+                            selected={filterGolfCart}
+                            onToggle={() => setFilterGolfCart((v) => !v)}
+                            icon={<CarFront className="h-5 w-5" />}
+                          />
+                          <IconOptionBox
+                            label="Pets"
+                            selected={filterPets}
+                            onToggle={() => setFilterPets((v) => !v)}
+                            icon={<Dog className="h-5 w-5" />}
+                          />
+                          <IconOptionBox
+                            label="Elevator"
+                            selected={filterElevator}
+                            onToggle={() => setFilterElevator((v) => !v)}
+                            icon={<ArrowUpDown className="h-5 w-5" />}
+                          />
+                          <IconOptionBox
+                            label="Accessible"
+                            selected={filterAccessible}
+                            onToggle={() => setFilterAccessible((v) => !v)}
+                            icon={<Accessibility className="h-5 w-5" />}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
+            </header>
+
+            <div
+              className={`grid gap-6 xl:min-h-0 xl:flex-1 ${
+                isMapExpanded
+                  ? "xl:grid-cols-[240px_minmax(0,0.9fr)_minmax(0,2.1fr)] 2xl:grid-cols-[220px_minmax(0,0.85fr)_minmax(0,2.25fr)]"
+                  : "xl:grid-cols-[240px_minmax(0,1.45fr)_400px] 2xl:grid-cols-[220px_minmax(0,1.85fr)_340px]"
+              }`}
+            >
+              <DiscoverFacetSidebar
+                listingCount={effectiveListingCount}
+                favoriteCount={favoriteListingIds.length}
+                areaCounts={effectiveAreaCounts}
+                beachCounts={effectiveBeachCounts}
+                communityCounts={effectiveCommunityCounts}
+                featureCounts={effectiveFeatureCounts}
+              />
+
+              <DiscoverListingsPanel
+                listings={displayListings}
+                isLoading={isDiscoverListingsInitialLoading}
+                loadingPlaceholderCount={loadingPlaceholderCount}
+                nights={nights}
+                cardsPerRow={isMapExpanded ? 1 : cardsPerRow}
+                singleColumnCardVariant={expandedSingleCardVariant}
+                activeListingId={activeListingId}
+                scrollToListingRequestToken={selectedCardSyncRequestToken}
+                onActiveListingVisibilityChange={setIsPinnedCardVisible}
+                favoriteIds={favoriteListingIds}
+                onToggleFavorite={toggleFavoriteListing}
+                onFocusMap={handleFocusMap}
+                onOpenDetailOverlay={openDetailOverlay}
+              />
+
+              <div
+                className={
+                  isDetailOverlayOpen ? "pointer-events-none invisible" : ""
+                }
+                aria-hidden={isDetailOverlayOpen}
+              >
+                <DiscoverMapPanel
+                  mapTarget={mapTarget}
+                  listings={mapListings}
+                  onClearPin={clearPinnedListing}
+                  onResetMapView={resetMapView}
+                  onSelectListing={handleSelectListingFromMap}
+                  onSyncSelectedListingCard={requestSelectedCardSync}
+                  isSyncSelectedListingCardAvailable={
+                    canSyncSelectedListingCard
+                  }
+                  isExpanded={isMapExpanded}
+                  onToggleExpanded={() =>
+                    setIsMapExpanded((current) => !current)
+                  }
+                />
+              </div>
             </div>
-          </div>
-        </header>
+          </>
+        ) : null}
 
-        <div
-          className={`grid gap-6 xl:min-h-0 xl:flex-1 ${
-            isMapExpanded
-              ? "xl:grid-cols-[240px_minmax(0,0.9fr)_minmax(0,2.1fr)] 2xl:grid-cols-[220px_minmax(0,0.85fr)_minmax(0,2.25fr)]"
-              : "xl:grid-cols-[240px_minmax(0,1.45fr)_400px] 2xl:grid-cols-[220px_minmax(0,1.85fr)_340px]"
-          }`}
-        >
-          <DiscoverFacetSidebar
-            listingCount={displayListings.length}
-            favoriteCount={favoriteListingIds.length}
-            areaCounts={areaCounts}
-            beachCounts={beachCounts}
-            communityCounts={communityCounts}
-            featureCounts={featureCounts}
-          />
-
-          <DiscoverListingsPanel
-            listings={displayListings}
-            nights={nights}
-            cardsPerRow={isMapExpanded ? 1 : cardsPerRow}
-            singleColumnCardVariant={expandedSingleCardVariant}
-            activeListingId={activeListingId}
-            scrollToListingRequestToken={selectedCardSyncRequestToken}
-            onActiveListingVisibilityChange={setIsPinnedCardVisible}
-            favoriteIds={favoriteListingIds}
-            onToggleFavorite={toggleFavoriteListing}
-            onFocusMap={handleFocusMap}
-            onOpenDetailOverlay={openDetailOverlay}
-          />
-
-          {!isDetailOverlayOpen ? (
-            <DiscoverMapPanel
-              mapTarget={mapTarget}
-              listings={mapListings}
-              onClearPin={clearPinnedListing}
-              onResetMapView={resetMapView}
-              onSelectListing={handleSelectListingFromMap}
-              onSyncSelectedListingCard={requestSelectedCardSync}
-              isSyncSelectedListingCardAvailable={canSyncSelectedListingCard}
-              isExpanded={isMapExpanded}
-              onToggleExpanded={() => setIsMapExpanded((current) => !current)}
-            />
-          ) : (
-            <aside className="hidden xl:block" aria-hidden="true" />
-          )}
-        </div>
-
-        {effectiveOverlayListingId ? (
-          <div className="absolute inset-0 z-40 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_32px_80px_-42px_rgba(15,23,42,0.9)]">
-            {overlayListing ? (
+        {shouldRenderOverlay ? (
+          <div
+            ref={overlayContainerRef}
+            className={`${overlayOnlyMode ? "relative h-[calc(100dvh-6rem)] md:h-[calc(100dvh-5.5rem)] xl:h-[calc(100dvh-2rem)]" : "absolute inset-0"} z-40 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_32px_80px_-42px_rgba(15,23,42,0.9)] transition-opacity duration-75 ${isDetailOverlayOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}
+          >
+            {!isDetailOverlayOpen ? null : overlayListing ? (
               <div className="grid h-full min-h-0 gap-x-4 gap-y-3 overflow-x-hidden p-3 md:gap-y-4 md:p-4 xl:grid-cols-[290px_minmax(0,1fr)_290px] xl:grid-rows-[auto_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]">
                 <section className="relative col-span-full h-[clamp(15rem,34vh,20rem)] overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-[0_24px_48px_-34px_rgba(15,23,42,0.85)] md:h-[clamp(17rem,40vh,24rem)] xl:h-[clamp(19rem,46vh,28rem)]">
                   <img
@@ -1149,8 +1699,8 @@ export function DiscoverPage({
                     alt={`${overlayListing.name} hero image`}
                     className="absolute inset-0 block h-full w-full object-cover"
                   />
-                  <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[44%] bg-gradient-to-b from-slate-950/70 via-slate-900/30 to-transparent" />
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[30%] bg-gradient-to-t from-slate-950/80 via-slate-900/45 to-transparent" />
+                  <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[44%] bg-linear-to-b from-slate-950/70 via-slate-900/30 to-transparent" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[30%] bg-linear-to-t from-slate-950/80 via-slate-900/45 to-transparent" />
 
                   <div className="absolute top-4 right-4 z-30 flex items-center gap-3">
                     <button
@@ -1177,7 +1727,8 @@ export function DiscoverPage({
                     </button>
                     <button
                       type="button"
-                      onClick={closeDetailOverlay}
+                      onPointerDown={handleCloseDetailOverlayPointerDown}
+                      onClick={handleCloseDetailOverlayClick}
                       className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950/35 text-white shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] backdrop-blur-md transition hover:bg-white/85 hover:text-slate-900"
                       aria-label="Close details box"
                       title="Close details box"
@@ -1292,8 +1843,11 @@ export function DiscoverPage({
                       </div>
                     </aside>
 
-                    <section className="min-h-0 overflow-hidden rounded-2xl border border-white/75 bg-white/95 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)] xl:flex xl:flex-col">
-                      <article className="discover-cards-scroll min-h-0 overflow-y-auto px-8 pt-6 pb-5 md:px-11 md:pt-7 xl:h-full xl:flex-1 xl:px-12">
+                    <section className="relative min-h-0 overflow-hidden rounded-2xl border border-white/75 bg-white/95 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)] xl:flex xl:flex-col">
+                      <article
+                        ref={overlayDetailScrollRef}
+                        className="discover-cards-scroll min-h-0 overflow-y-auto px-8 pt-6 pb-20 md:px-11 md:pt-7 xl:h-full xl:flex-1 xl:px-12"
+                      >
                         <div className="min-h-0 space-y-6">
                           {overlayEmotionalHeadline ? (
                             <h3
@@ -1467,6 +2021,27 @@ export function DiscoverPage({
                           </div>
                         </div>
                       </article>
+                      {showOverlayScrollFade ? (
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-8 h-20 bg-linear-to-t from-white/95 via-white/70 to-transparent backdrop-blur-[1.5px]" />
+                      ) : null}
+                      {showOverlayScrollIndicator ? (
+                        <div className="absolute right-4 bottom-4 z-10">
+                          <button
+                            type="button"
+                            onClick={handleOverlayScrollIndicatorClick}
+                            className="relative inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-teal-200 bg-teal-50 px-2.5 py-2 text-teal-800 shadow-[0_16px_30px_-18px_rgba(13,148,136,0.75)] transition hover:border-teal-300 hover:bg-teal-100/60"
+                            aria-label="Scroll detail content down"
+                            title="Scroll down"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute -inset-1 animate-ping rounded-2xl border border-teal-300/80"
+                            />
+                            <Mouse className="h-4 w-4" />
+                            <ChevronDown className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : null}
                     </section>
 
                     <aside className="min-h-0 min-w-0 overflow-hidden">
@@ -1498,14 +2073,152 @@ export function DiscoverPage({
               </div>
             ) : isOverlayDetailLoading ? (
               <div className="grid h-full min-h-0 gap-x-4 gap-y-3 overflow-x-hidden p-3 md:gap-y-4 md:p-4 xl:grid-cols-[290px_minmax(0,1fr)_290px] xl:grid-rows-[auto_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]">
-                <div className="col-span-full h-[clamp(15rem,34vh,20rem)] animate-pulse rounded-2xl border border-slate-200 bg-slate-300/55 md:h-[clamp(17rem,40vh,24rem)] xl:h-[clamp(19rem,46vh,28rem)]" />
-                <div className="hidden animate-pulse rounded-2xl border border-white/75 bg-white/85 xl:block" />
-                <div className="min-h-0 animate-pulse rounded-2xl border border-white/75 bg-white/85" />
-                <div className="animate-pulse rounded-2xl border border-white/75 bg-white/85" />
+                <section className="relative col-span-full h-[clamp(15rem,34vh,20rem)] overflow-hidden rounded-2xl border border-slate-200 bg-slate-300/55 shadow-[0_24px_48px_-34px_rgba(15,23,42,0.85)] md:h-[clamp(17rem,40vh,24rem)] xl:h-[clamp(19rem,46vh,28rem)]">
+                  <div className="absolute inset-0 animate-pulse bg-slate-300/70" />
+                  <div className="absolute top-4 right-4 z-30 flex items-center gap-3">
+                    <div className="h-12 w-12 animate-pulse rounded-full bg-white/55" />
+                    <div className="h-12 w-12 animate-pulse rounded-full bg-white/55" />
+                  </div>
+                  <div className="absolute top-4 left-4 z-20 max-w-4xl space-y-2 md:top-6 md:left-6">
+                    <div className="h-3 w-40 animate-pulse rounded-full bg-white/60" />
+                    <div className="h-12 w-96 max-w-[80vw] animate-pulse rounded-lg bg-white/65 md:h-14" />
+                  </div>
+                  <div className="absolute right-4 bottom-4 z-30 flex gap-2 md:right-6 md:bottom-6">
+                    <div className="h-6 w-22 animate-pulse rounded-full bg-white/60" />
+                    <div className="h-6 w-20 animate-pulse rounded-full bg-white/60" />
+                  </div>
+                </section>
+
+                <aside className="hidden min-h-0 rounded-2xl border border-white/75 bg-white/92 p-4 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)] xl:block">
+                  <div className="h-3 w-36 animate-pulse rounded-full bg-slate-200/75" />
+                  <div className="mt-2 h-4 w-52 animate-pulse rounded-full bg-slate-200/65" />
+                  <div className="mt-4 space-y-2">
+                    <div className="h-12 animate-pulse rounded-lg bg-slate-200/60" />
+                    <div className="h-12 animate-pulse rounded-lg bg-slate-200/60" />
+                    <div className="h-12 animate-pulse rounded-lg bg-slate-200/60" />
+                    <div className="h-12 animate-pulse rounded-lg bg-slate-200/60" />
+                  </div>
+                </aside>
+
+                <section className="min-h-0 overflow-hidden rounded-2xl border border-white/75 bg-white/95 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)] xl:flex xl:flex-col">
+                  <div className="discover-cards-scroll min-h-0 overflow-y-auto px-8 pt-6 pb-5 md:px-11 md:pt-7 xl:h-full xl:flex-1 xl:px-12">
+                    <div className="space-y-6">
+                      <div className="h-10 w-3/4 animate-pulse rounded-lg bg-slate-200/70 md:h-12" />
+                      <div className="grid gap-y-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:items-start xl:gap-x-14 2xl:gap-x-18">
+                        <div className="space-y-3 xl:pr-2 2xl:pr-3">
+                          <div className="h-4 w-full animate-pulse rounded-full bg-slate-200/60" />
+                          <div className="h-4 w-[92%] animate-pulse rounded-full bg-slate-200/60" />
+                          <div className="h-4 w-[88%] animate-pulse rounded-full bg-slate-200/60" />
+                          <div className="h-4 w-[85%] animate-pulse rounded-full bg-slate-200/60" />
+                          <div className="mt-4 h-36 animate-pulse rounded-2xl bg-slate-200/65" />
+                        </div>
+                        <div className="space-y-5 xl:pl-2 2xl:pl-3">
+                          <div className="h-40 animate-pulse rounded-2xl bg-slate-200/65" />
+                          <div className="h-30 animate-pulse rounded-2xl bg-slate-200/60" />
+                          <div className="h-32 animate-pulse rounded-2xl bg-slate-200/55" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <aside className="min-h-0 rounded-2xl border border-white/75 bg-white/92 p-4 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)]">
+                  <div className="h-3 w-24 animate-pulse rounded-full bg-slate-200/75" />
+                  <div className="mt-3 h-[calc(100%-1.25rem)] min-h-55 animate-pulse rounded-xl bg-slate-200/60" />
+                </aside>
               </div>
             ) : (
-              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-700">
-                Property details are not available for this listing yet.
+              <div className="grid h-full min-h-0 gap-x-4 gap-y-3 overflow-x-hidden p-3 md:gap-y-4 md:p-4 xl:grid-cols-[290px_minmax(0,1fr)_290px] xl:grid-rows-[auto_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]">
+                <section className="relative col-span-full h-[clamp(15rem,34vh,20rem)] overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-[0_24px_48px_-34px_rgba(15,23,42,0.85)] md:h-[clamp(17rem,40vh,24rem)] xl:h-[clamp(19rem,46vh,28rem)]">
+                  <img
+                    src={beachEntryTexture}
+                    alt="30A shoreline path"
+                    className="absolute inset-0 block h-full w-full object-cover"
+                  />
+                  <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[44%] bg-linear-to-b from-slate-950/70 via-slate-900/30 to-transparent" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[30%] bg-linear-to-t from-slate-950/80 via-slate-900/45 to-transparent" />
+
+                  <div className="absolute top-4 right-4 z-30 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onPointerDown={handleCloseDetailOverlayPointerDown}
+                      onClick={handleCloseDetailOverlayClick}
+                      className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950/35 text-white shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] backdrop-blur-md transition hover:bg-white/85 hover:text-slate-900"
+                      aria-label="Close details box"
+                      title="Close details box"
+                    >
+                      <X className="h-6 w-6" />
+                    </button>
+                  </div>
+
+                  <div className="absolute top-4 left-4 z-20 max-w-4xl md:top-6 md:left-6">
+                    <h2
+                      className="mt-2 max-w-4xl text-6xl leading-[0.95] text-white md:text-7xl xl:text-8xl"
+                      style={{
+                        fontFamily: BRAND_DISPLAY_FONT_FAMILY,
+                        textShadow: "0 10px 24px rgba(15,23,42,0.72)",
+                      }}
+                    >
+                      Sorry, it wasn't meant to be.
+                    </h2>
+                  </div>
+
+                  <div className="absolute right-4 bottom-4 z-30 md:right-6 md:bottom-6">
+                    <div className="inline-flex w-fit items-center rounded-full border border-cyan-200/85 bg-white/92 px-3 py-1 text-[0.66rem] font-black tracking-[0.18em] text-cyan-900 uppercase shadow-[0_10px_22px_-14px_rgba(8,145,178,0.85)] backdrop-blur-sm">
+                      Listing Unavailable
+                    </div>
+                  </div>
+                </section>
+
+                <aside className="hidden min-h-0 rounded-2xl border border-white/75 bg-white/85 p-4 xl:block">
+                  <div className="h-7 w-32 rounded-full bg-slate-200/80" />
+                  <div className="mt-3 h-5 w-44 rounded-full bg-slate-200/65" />
+                  <div className="mt-2 h-5 w-36 rounded-full bg-slate-200/55" />
+                  <div className="mt-5 h-24 rounded-xl bg-slate-200/60" />
+                  <div className="mt-3 h-24 rounded-xl bg-slate-200/50" />
+                </aside>
+
+                <section className="relative min-h-0 overflow-hidden rounded-2xl border border-white/75 bg-white/90 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.9)]">
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-linear-to-b from-[#d2f6f1]/80 via-[#ebfaf7]/55 to-transparent" />
+                  <div className="relative flex h-full flex-col items-center justify-start p-5 pt-10 text-center md:p-6 md:pt-12">
+                    <h2
+                      className="text-[clamp(1.75rem,2.7vw,2.35rem)] leading-[1.08] tracking-tight text-slate-900"
+                      style={{ fontFamily: BRAND_DISPLAY_FONT_FAMILY }}
+                    >
+                      Find the <span className="text-[#14B8A6]">30A</span> home
+                      that fits your trip right now.
+                    </h2>
+
+                    <p className="mt-5 max-w-2xl text-base leading-7 text-slate-700 md:text-[1.1rem] md:leading-8">
+                      This listing is no longer available in the active
+                      collection. Browse current options with live availability
+                      and pricing details across 30A Collections.
+                    </p>
+
+                    <div className="mt-8">
+                      <button
+                        type="button"
+                        onPointerDown={handleCloseDetailOverlayPointerDown}
+                        onClick={handleCloseDetailOverlayClick}
+                        className={`inline-flex items-center justify-center gap-2 ${HOME_ACTION_BUTTON_BASE} ${HOME_ACTION_BUTTON_LARGE_SIZE} ${HOME_ACTION_BUTTON_TEAL}`}
+                      >
+                        <span>EXPLORE THE COLLECTION</span>
+                        <ArrowRight
+                          className="h-4 w-4"
+                          strokeWidth={2.25}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <aside className="min-h-0 rounded-2xl border border-white/75 bg-white/85 p-4">
+                  <div className="h-6 w-28 rounded-full bg-slate-200/75" />
+                  <div className="mt-4 h-28 rounded-xl bg-slate-200/60" />
+                  <div className="mt-3 h-24 rounded-xl bg-slate-200/50" />
+                  <div className="mt-3 h-24 rounded-xl bg-slate-200/45" />
+                </aside>
               </div>
             )}
           </div>

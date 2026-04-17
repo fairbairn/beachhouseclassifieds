@@ -117,6 +117,12 @@ export const listing = pgTable(
     slug_unique_idx: uniqueIndex("listing_slug_unique_idx").on(table.slug),
     site_id_idx: index("listing_site_id_idx").on(table.site_id),
     status_idx: index("listing_status_idx").on(table.status),
+    discover_visibility_idx: index("listing_discover_visibility_idx").on(
+      table.site_id,
+      table.status,
+      table.state,
+      table.area_name,
+    ),
     city_idx: index("listing_city_idx").on(table.city),
     state_idx: index("listing_state_idx").on(table.state),
     community_name_idx: index("listing_community_name_idx").on(

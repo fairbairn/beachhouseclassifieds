@@ -12,10 +12,11 @@ import {
   listing_source_link,
 } from "@/lib/db/schema-postgres";
 import {
+  buildSleepResolutionPrompt,
   buildSleepResolutionSchema,
   extractStructuredOutputText,
-  SLEEP_RESOLUTION_PROMPT_BASE,
 } from "@/lib/listings/refinement/sleep-contracts";
+import { resolveSleepResolutionModelCascadeFromEnv } from "@/lib/listings/refinement/sleep-resolution-model-cascade";
 import { runWithConcurrency } from "@/lib/pricing/quotes/shared/run-with-concurrency";
 
 type Options = {
@@ -28,6 +29,7 @@ type Options = {
   includeAuditPassed: boolean;
   primaryModel: string;
   secondaryModel: string | null;
+  tertiaryModel: string | null;
   deterministicFallback: boolean;
   dryRun: boolean;
 };
@@ -52,7 +54,7 @@ type SleepMatch = {
 type SleepRepairAttemptResult = {
   sleeping_arrangements: unknown[];
   modelUsed: string | null;
-  resolvedBy: "primary" | "secondary" | "deterministic" | "none";
+  resolvedBy: "primary" | "secondary" | "tertiary" | "deterministic" | "none";
   attempts: string[];
 };
 
@@ -92,7 +94,7 @@ function printUsage(): void {
   console.log("Repair Enrichment Sleep Data Only");
   console.log("Usage:");
   console.log(
-    "  tsx src/lib/scripts/run-ai-enrichment-sleep-repair.ts [--limit 100] [--concurrency 10] [--adapter-key <key>] [--listing-id <id>] [--external-listing-id <id>] [--include-audit-passed] [--primary-model gpt-4.1-mini] [--secondary-model gpt-4.1] [--disable-secondary-model] [--disable-deterministic-fallback] [--dry-run]",
+    "  tsx src/lib/scripts/run-ai-enrichment-sleep-repair.ts [--limit 100] [--concurrency 10] [--adapter-key <key>] [--listing-id <id>] [--external-listing-id <id>] [--include-audit-passed] [--primary-model gpt-5.4-nano] [--secondary-model gpt-4.1-mini] [--tertiary-model gpt-4.1] [--disable-secondary-model] [--disable-tertiary-model] [--disable-deterministic-fallback] [--dry-run]",
   );
   console.log("");
   console.log("Options:");
@@ -114,12 +116,16 @@ function printUsage(): void {
     "  --include-audit-passed              Allow targeting rows even when audit_passed=true",
   );
   console.log(
-    "  --primary-model <name>              First model (default gpt-4.1-mini)",
+    "  --primary-model <name>              First model (default gpt-5.4-nano)",
   );
   console.log(
-    "  --secondary-model <name>            Fallback model (default gpt-4.1)",
+    "  --secondary-model <name>            Second model (default gpt-4.1-mini)",
+  );
+  console.log(
+    "  --tertiary-model <name>             Third model (default gpt-4.1)",
   );
   console.log("  --disable-secondary-model           Skip second model stage");
+  console.log("  --disable-tertiary-model            Skip third model stage");
   console.log(
     "  --disable-deterministic-fallback    Skip deterministic fallback",
   );
@@ -137,8 +143,11 @@ function parseArgs(argv: string[]): Options {
   let listingId: string | null = null;
   let externalListingId: string | null = null;
   let includeAuditPassed = false;
-  let primaryModel = "gpt-4.1-mini";
-  let secondaryModel: string | null = "gpt-4.1";
+  const defaultSleepModelCascade = resolveSleepResolutionModelCascadeFromEnv();
+  let primaryModel = defaultSleepModelCascade[0] ?? "gpt-5.4-nano";
+  let secondaryModel: string | null =
+    defaultSleepModelCascade[1] ?? "gpt-4.1-mini";
+  let tertiaryModel: string | null = defaultSleepModelCascade[2] ?? "gpt-4.1";
   let deterministicFallback = true;
   let dryRun = false;
 
@@ -158,6 +167,11 @@ function parseArgs(argv: string[]): Options {
 
     if (arg === "--disable-secondary-model") {
       secondaryModel = null;
+      continue;
+    }
+
+    if (arg === "--disable-tertiary-model") {
+      tertiaryModel = null;
       continue;
     }
 
@@ -231,6 +245,12 @@ function parseArgs(argv: string[]): Options {
       continue;
     }
 
+    if (arg === "--tertiary-model" && next) {
+      tertiaryModel = next.trim() || null;
+      i += 1;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -244,6 +264,7 @@ function parseArgs(argv: string[]): Options {
     includeAuditPassed,
     primaryModel,
     secondaryModel,
+    tertiaryModel,
     deterministicFallback,
     dryRun,
   };
@@ -661,6 +682,7 @@ function buildSleepingSummaryFromRollups(
       full: normalizeCount(rollups.bed_count_full),
       twin_standalone: normalizeCount(rollups.bed_count_twin),
       bunk_beds: normalizeCount(rollups.bed_count_bunk_total),
+      trundles: normalizeCount(rollups.bed_count_trundle),
       other: 0,
     },
     bunk_configurations: {
@@ -762,14 +784,13 @@ async function callSleepResolutionModel(input: {
   currentArrangements: unknown[];
   currentRollups: Record<string, number>;
 }): Promise<{ arrangements: unknown[]; summary: Record<string, unknown> }> {
-  const prompt = [
-    ...SLEEP_RESOLUTION_PROMPT_BASE,
-    "Return sleeping_arrangements and sleeping_summary.",
-  ].join(" ");
-
   const sourceRoomsGuidance = asStringArray(
     input.sourceSnapshot.rooms_guidance,
   );
+
+  const prompt = buildSleepResolutionPrompt({
+    hasRoomsGuidance: sourceRoomsGuidance.length > 0,
+  });
   const sourceContext: Record<string, unknown> = {
     description_expanded: asString(input.sourceSnapshot.description_expanded),
     bedrooms: asNumber(input.sourceSnapshot.bedrooms),
@@ -845,14 +866,24 @@ function deriveRollupsFromSleepingSummary(input: {
   const bedCounts = asObject(input.summary.bed_counts);
   const bunkConfigurations = asObject(input.summary.bunk_configurations);
 
+  const configuredBunkUnits =
+    normalizeCount(bunkConfigurations.default_twin_over_twin) +
+    normalizeCount(bunkConfigurations.twin_over_full) +
+    normalizeCount(bunkConfigurations.full_over_full) +
+    normalizeCount(bunkConfigurations.queen_over_queen) +
+    normalizeCount(bunkConfigurations.twin_over_queen) +
+    normalizeCount(bunkConfigurations.twin_over_king) +
+    normalizeCount(bunkConfigurations.other);
+  const declaredBunkUnits = normalizeCount(bedCounts.bunk_beds);
+
   const rollups: Record<string, number> = {
     bed_count_king: normalizeCount(bedCounts.king),
     bed_count_queen: normalizeCount(bedCounts.queen),
     bed_count_full: normalizeCount(bedCounts.full),
     bed_count_twin: normalizeCount(bedCounts.twin_standalone),
+    bed_count_trundle: normalizeCount(bedCounts.trundles),
     bed_count_sofa_bed: 0,
     bed_count_daybed: 0,
-    bed_count_trundle: 0,
     bed_count_murphy: 0,
     bed_count_air_mattress: 0,
     bed_count_futon: 0,
@@ -876,15 +907,11 @@ function deriveRollupsFromSleepingSummary(input: {
     ),
   };
 
-  rollups.bed_count_bunk_total =
-    rollups.bed_count_twin_over_twin_bunk +
-    rollups.bed_count_twin_over_full_bunk +
-    rollups.bed_count_full_over_full_bunk +
-    rollups.bed_count_queen_over_queen_bunk +
-    rollups.bed_count_twin_over_queen_bunk +
-    rollups.bed_count_twin_over_king_bunk +
-    normalizeCount(bedCounts.bunk_beds) +
-    normalizeCount(bunkConfigurations.other);
+  // Prevent overlap when both bunk_beds and bunk_configurations are present.
+  rollups.bed_count_bunk_total = Math.max(
+    declaredBunkUnits,
+    configuredBunkUnits,
+  );
 
   return normalizeSleepingRollups(rollups, input.expectedSleeps);
 }
@@ -968,18 +995,37 @@ async function repairSleepForRow(input: {
     // fall through to secondary/deterministic
   }
 
-  if (resolvedBy === "none" && input.options.secondaryModel) {
+  const additionalModels: Array<{
+    model: string;
+    stage: "secondary" | "tertiary";
+  }> = [];
+  if (input.options.secondaryModel) {
+    additionalModels.push({
+      model: input.options.secondaryModel,
+      stage: "secondary",
+    });
+  }
+  if (input.options.tertiaryModel) {
+    additionalModels.push({
+      model: input.options.tertiaryModel,
+      stage: "tertiary",
+    });
+  }
+
+  for (const additionalModel of additionalModels) {
+    if (resolvedBy !== "none") {
+      break;
+    }
+
     try {
-      const secondaryResolved = await attemptModel(
-        input.options.secondaryModel,
-      );
-      if (secondaryResolved) {
-        resolvedBy = "secondary";
-        modelUsed = input.options.secondaryModel;
+      const resolved = await attemptModel(additionalModel.model);
+      if (resolved) {
+        resolvedBy = additionalModel.stage;
+        modelUsed = additionalModel.model;
       }
     } catch (error: unknown) {
       attemptErrors.push(
-        `secondary:${error instanceof Error ? error.message : String(error)}`,
+        `${additionalModel.stage}:${error instanceof Error ? error.message : String(error)}`,
       );
       // deterministic fallback will decide final state
     }
@@ -1028,11 +1074,17 @@ async function repairSleepForRow(input: {
     deterministic_sleep_environment_present:
       hasMeaningfulSleepEnvironment(currentRollups),
     deterministic_sleep_capacity_tolerance_pass: tolerancePass,
+    deterministic_fallback_used: resolvedBy === "deterministic",
+    audit_passed_via_deterministic_fallback:
+      repaired && resolvedBy === "deterministic",
     audit_passed: repaired,
     sleep_repair: {
       attempted_models: attempts,
       attempt_errors: attemptErrors,
       resolved_by: resolvedBy,
+      deterministic_fallback_used: resolvedBy === "deterministic",
+      audit_passed_via_deterministic_fallback:
+        repaired && resolvedBy === "deterministic",
       repaired,
       repaired_at: new Date().toISOString(),
     },
@@ -1146,7 +1198,7 @@ async function run(): Promise<number> {
     .limit(options.limit);
 
   progress.phase(
-    `starting sleep repair selected=${rows.length} concurrency=${options.concurrency} primary_model=${options.primaryModel} secondary_model=${options.secondaryModel ?? "none"} deterministic_fallback=${options.deterministicFallback} dry_run=${options.dryRun} include_audit_passed=${options.includeAuditPassed}`,
+    `starting sleep repair selected=${rows.length} concurrency=${options.concurrency} primary_model=${options.primaryModel} secondary_model=${options.secondaryModel ?? "none"} tertiary_model=${options.tertiaryModel ?? "none"} deterministic_fallback=${options.deterministicFallback} dry_run=${options.dryRun} include_audit_passed=${options.includeAuditPassed}`,
   );
 
   let processed = 0;
@@ -1154,6 +1206,7 @@ async function run(): Promise<number> {
   let unresolved = 0;
   let resolvedPrimary = 0;
   let resolvedSecondary = 0;
+  let resolvedTertiary = 0;
   let resolvedDeterministic = 0;
 
   await runWithConcurrency(rows, options.concurrency, async (row) => {
@@ -1170,6 +1223,8 @@ async function run(): Promise<number> {
         resolvedPrimary += 1;
       } else if (result.resolvedBy === "secondary") {
         resolvedSecondary += 1;
+      } else if (result.resolvedBy === "tertiary") {
+        resolvedTertiary += 1;
       } else if (result.resolvedBy === "deterministic") {
         resolvedDeterministic += 1;
       }
@@ -1181,13 +1236,13 @@ async function run(): Promise<number> {
       processed % options.progressEvery === 0 || processed === rows.length;
     if (shouldEmit) {
       progress.progress(
-        `processed=${processed}/${rows.length} repaired=${repaired} unresolved=${unresolved} primary=${resolvedPrimary} secondary=${resolvedSecondary} deterministic=${resolvedDeterministic}`,
+        `processed=${processed}/${rows.length} repaired=${repaired} unresolved=${unresolved} primary=${resolvedPrimary} secondary=${resolvedSecondary} tertiary=${resolvedTertiary} deterministic=${resolvedDeterministic}`,
       );
     }
   });
 
   progress.success(
-    `sleep repair complete selected=${rows.length} processed=${processed} repaired=${repaired} unresolved=${unresolved} primary=${resolvedPrimary} secondary=${resolvedSecondary} deterministic=${resolvedDeterministic} dry_run=${options.dryRun}`,
+    `sleep repair complete selected=${rows.length} processed=${processed} repaired=${repaired} unresolved=${unresolved} primary=${resolvedPrimary} secondary=${resolvedSecondary} tertiary=${resolvedTertiary} deterministic=${resolvedDeterministic} dry_run=${options.dryRun}`,
   );
 
   console.log("listing_ai_enrichment_sleep_repair_complete");
@@ -1197,6 +1252,7 @@ async function run(): Promise<number> {
   console.log(`- unresolved: ${unresolved}`);
   console.log(`- resolved_primary_model: ${resolvedPrimary}`);
   console.log(`- resolved_secondary_model: ${resolvedSecondary}`);
+  console.log(`- resolved_tertiary_model: ${resolvedTertiary}`);
   console.log(`- resolved_deterministic: ${resolvedDeterministic}`);
   if (!options.includeAuditPassed) {
     const remaining = await pgDb

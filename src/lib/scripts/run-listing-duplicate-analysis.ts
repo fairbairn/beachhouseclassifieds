@@ -1187,6 +1187,13 @@ async function run(): Promise<number> {
       }
     }
 
+    const desiredExcludedListingIds = scopedLinks
+      .map((link) => link.listing_id)
+      .filter((listingId) => qualifyingListingIds.has(listingId));
+    const desiredIncludedListingIds = scopedLinks
+      .map((link) => link.listing_id)
+      .filter((listingId) => !qualifyingListingIds.has(listingId));
+
     if (options.applyExclusions) {
       if (setTrueIds.length > 0) {
         await pgDb
@@ -1222,6 +1229,26 @@ async function run(): Promise<number> {
               inArray(listing_source_link.listing_id, setFalseIds),
             ),
           );
+      }
+
+      if (desiredExcludedListingIds.length > 0) {
+        await pgDb
+          .update(listing)
+          .set({
+            status: "inactive",
+            updated_at: sql`now()`,
+          })
+          .where(inArray(listing.id, desiredExcludedListingIds));
+      }
+
+      if (desiredIncludedListingIds.length > 0) {
+        await pgDb
+          .update(listing)
+          .set({
+            status: "active",
+            updated_at: sql`now()`,
+          })
+          .where(inArray(listing.id, desiredIncludedListingIds));
       }
     }
 
