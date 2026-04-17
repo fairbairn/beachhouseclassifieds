@@ -27,6 +27,21 @@ Workarounds used:
 - Targeted remediation scripts for failed windows instead of full reruns.
 - Strict sequencing: quote refresh, quote validate, handoff validate, then cache/docs.
 
+## LocalVR (Guesty/Next) Availability Extraction
+
+Observed:
+
+- Availability data is present in Next flight payloads as escaped `availabilityInfo` arrays, not always as plain inline JSON.
+- Calendar UI data is rendered only after activating check-in controls, and DOM-only traversal is more fragile across UI changes.
+- Residual empty-availability cases correlated with `Oops` detail shells during fetch windows.
+
+Workarounds used:
+
+- Treat `availabilityInfo` payload parsing as primary extraction path (`date`, `status`, `minNights`, `cta`, `ctd`).
+- Keep fallback chain: legacy inline parsing, then interactive DOM calendar sweep as last resort.
+- Re-run targeted direct-detail pulls for non-`Oops` empty-day outliers before treating as parser failures.
+- Maintain live progress output for verification and adapter-wide refresh runs to surface stalled or slow listings quickly.
+
 ## exclusive30a Checkout Cookie Gate
 
 Observed:

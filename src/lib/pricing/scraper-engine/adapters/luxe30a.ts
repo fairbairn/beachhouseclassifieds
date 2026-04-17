@@ -474,6 +474,50 @@ async function expandDetailSections(page: Page): Promise<void> {
   await page.waitForTimeout(400);
 }
 
+async function fetchCalendarFromApi(params: {
+  page: Page;
+  detailUrl: string;
+  externalListingId: string;
+  availabilityHorizonDays: number;
+}): Promise<Array<Record<string, unknown>>> {
+  const { page, detailUrl, externalListingId, availabilityHorizonDays } =
+    params;
+  const fromDate = new Date();
+  const toDate = new Date(fromDate);
+  toDate.setUTCDate(toDate.getUTCDate() + Math.max(1, availabilityHorizonDays));
+
+  const from = fromDate.toISOString().slice(0, 10);
+  const to = toDate.toISOString().slice(0, 10);
+  const endpoint = `https://app.guesty.com/api/pm-websites-backend/listings/${externalListingId}/calendar?from=${from}&to=${to}`;
+
+  try {
+    const response = await page.request.get(endpoint, {
+      headers: {
+        accept: "application/json",
+        origin: "https://luxe30a.guestybookings.com",
+        referer: detailUrl,
+      },
+      timeout: 30000,
+    });
+
+    if (!response.ok()) {
+      return [];
+    }
+
+    const payload = await response.json();
+    if (!Array.isArray(payload)) {
+      return [];
+    }
+
+    return payload.filter(
+      (entry): entry is Record<string, unknown> =>
+        Boolean(entry) && typeof entry === "object",
+    );
+  } catch {
+    return [];
+  }
+}
+
 async function fetchDetail(
   browser: Parameters<
     ScraperAdapter<LuxeDetailRecord>["fetchDetail"]
@@ -491,9 +535,10 @@ async function fetchDetail(
   const externalListingId = extractPropertyId(normalizedDetailUrl);
   let listingApiData: Record<string, unknown> | null = null;
   const calendarApiDataByDate = new Map<string, Record<string, unknown>>();
+  const pendingResponseParses: Promise<void>[] = [];
 
   page.on("response", (response) => {
-    void (async () => {
+    const parseTask = (async () => {
       try {
         if (!response.ok()) {
           return;
@@ -554,6 +599,15 @@ async function fetchDetail(
         // Ignore response parsing errors.
       }
     })();
+
+    pendingResponseParses.push(parseTask);
+
+    void parseTask.finally(() => {
+      const index = pendingResponseParses.indexOf(parseTask);
+      if (index >= 0) {
+        pendingResponseParses.splice(index, 1);
+      }
+    });
   });
 
   try {
@@ -564,6 +618,27 @@ async function fetchDetail(
     await page.waitForTimeout(1400);
 
     await expandDetailSections(page);
+
+    // The site-triggered calendar call can land a moment after opening the date picker.
+    // Give response listeners time to finish so we do not finalize before payload parse.
+    await page.waitForTimeout(1200);
+    if (pendingResponseParses.length > 0) {
+      await Promise.allSettled([...pendingResponseParses]);
+    }
+
+    const directCalendarPayload = await fetchCalendarFromApi({
+      page,
+      detailUrl: normalizedDetailUrl,
+      externalListingId,
+      availabilityHorizonDays,
+    });
+    for (const entry of directCalendarPayload) {
+      const date = typeof entry.date === "string" ? entry.date : "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        continue;
+      }
+      calendarApiDataByDate.set(date, entry);
+    }
 
     for (
       let monthStep = 0;
@@ -616,6 +691,10 @@ async function fetchDetail(
     }
 
     await page.waitForTimeout(800);
+
+    if (pendingResponseParses.length > 0) {
+      await Promise.allSettled([...pendingResponseParses]);
+    }
 
     const extracted = await page.evaluate((horizonDays: number) => {
       const title = document.title || "";

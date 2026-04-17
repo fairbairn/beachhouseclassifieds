@@ -147,6 +147,15 @@ Use this table to pick the nearest adapter template before starting a new manage
 - For custom/hybrid stacks, submit-time booking XHR is often more informative than passive page-load traffic; capture requests after selecting valid dates and firing the booking CTA.
 - When rate payload semantics are unclear, classify output explicitly as: exact daily, aggregated window quote, or inferred/approximated daily proxy.
 
+### Guesty/Next Availability Payload Pattern
+
+- For Guesty-style detail pages that ship Next flight payloads (`self.__next_f.push(...)`), treat `availabilityInfo` as the primary availability source.
+- The payload commonly appears escaped in HTML (`\\"availabilityInfo\\":[...]`) rather than plain JSON; parsers should normalize escaped quotes before scanning.
+- Parse and map `availabilityInfo` fields directly: `date`, `status`, `minNights`, `cta`, `ctd`.
+- Keep fallback order explicit for resilience: `availabilityInfo` payload -> legacy inline pattern parsing -> DOM calendar traversal.
+- DOM traversal should remain a last resort for cases where the payload is missing or malformed, since UI structure is more brittle than embedded data payloads.
+- Operational signal from localvr30a validation (2026-04-16/17): payload presence detected on all 37/37 live listing pages; residual empty-availability cases were tied to `Oops` detail shells, not payload absence.
+
 ## Guardrails and Reliability Rules
 
 - Set hard caps on scroll steps, click cycles, and calendar month advances.

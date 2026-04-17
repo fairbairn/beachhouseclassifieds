@@ -382,6 +382,138 @@ function extractAvailabilityFromHtml(
   >();
   const observedStatusLabels = new Set<string>();
 
+  const normalizedHtml = html.replace(/\\"/g, '"');
+  const payloadKey = '"availabilityInfo":[';
+
+  const parseAvailabilityArrayAt = (source: string, startIndex: number) => {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = startIndex; index < source.length; index += 1) {
+      const ch = source[index];
+      if (!ch) {
+        break;
+      }
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (ch === "\\") {
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (ch === "[") {
+        depth += 1;
+        continue;
+      }
+
+      if (ch === "]") {
+        depth -= 1;
+        if (depth === 0) {
+          return source.slice(startIndex, index + 1);
+        }
+      }
+    }
+
+    return "";
+  };
+
+  let payloadCursor = 0;
+  while (payloadCursor < normalizedHtml.length) {
+    const keyIndex = normalizedHtml.indexOf(payloadKey, payloadCursor);
+    if (keyIndex === -1) {
+      break;
+    }
+
+    const arrayStart = keyIndex + payloadKey.length - 1;
+    const arrayJson = parseAvailabilityArrayAt(normalizedHtml, arrayStart);
+    payloadCursor = keyIndex + payloadKey.length;
+    if (!arrayJson) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(arrayJson) as unknown;
+      if (!Array.isArray(parsed)) {
+        continue;
+      }
+
+      for (const entry of parsed) {
+        if (!entry || typeof entry !== "object") {
+          continue;
+        }
+
+        const record = entry as {
+          date?: unknown;
+          minNights?: unknown;
+          status?: unknown;
+          cta?: unknown;
+          ctd?: unknown;
+        };
+
+        const dateIso = typeof record.date === "string" ? record.date : "";
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+          continue;
+        }
+
+        const date = new Date(`${dateIso}T00:00:00.000Z`);
+        if (
+          Number.isNaN(date.getTime()) ||
+          date < todayUtc ||
+          date > horizonUtc ||
+          dayByDate.has(dateIso)
+        ) {
+          continue;
+        }
+
+        const statusRaw =
+          typeof record.status === "string" ? record.status : "unknown";
+        const cta = record.cta === true;
+        const ctd = record.ctd === true;
+        const minNightsRaw =
+          typeof record.minNights === "number" &&
+          Number.isFinite(record.minNights)
+            ? record.minNights
+            : typeof record.minNights === "string"
+              ? Number(record.minNights)
+              : NaN;
+        const code = mapAvailabilityStatus(statusRaw, cta, ctd);
+        const bookingDayState: "bookable" | "blocked" | "unknown" =
+          code === "A" ? "bookable" : code === "U" ? "blocked" : "unknown";
+
+        dayByDate.set(dateIso, {
+          date: dateIso,
+          status_code: code,
+          is_available: code === "A",
+          is_available_for_checkin: code === "A" || code === "I",
+          is_available_for_checkout: code === "A" || code === "O",
+          booking_day_state: bookingDayState,
+          min_nights_required:
+            Number.isFinite(minNightsRaw) && minNightsRaw > 0
+              ? minNightsRaw
+              : null,
+        });
+        observedStatusLabels.add(statusRaw.toLowerCase());
+      }
+    } catch {
+      // Keep scanning; malformed payload fragments should not fail extraction.
+    }
+  }
+
   const dayPattern =
     /\\"date\\":\\"(\d{4}-\d{2}-\d{2})\\"[\s\S]*?\\"minNights\\":(\d+)[\s\S]*?\\"status\\":\\"([^\\"]+)\\"[\s\S]*?\\"cta\\":(true|false)[\s\S]*?\\"ctd\\":(true|false)/g;
 
@@ -419,6 +551,272 @@ function extractAvailabilityFromHtml(
     }
 
     match = dayPattern.exec(html);
+  }
+
+  const days = Array.from(dayByDate.values()).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+
+  return {
+    days,
+    dayCodes: days.map((day) => day.status_code).join(""),
+    observedStatusLabels: Array.from(observedStatusLabels).sort((a, b) =>
+      a.localeCompare(b),
+    ),
+  };
+}
+
+function parseCalendarAriaLabelToIso(label: string): string | null {
+  const normalized = label.replace(/^today,\s*/i, "").trim();
+  const match = normalized.match(
+    /(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),\s+([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?,\s*(\d{4})/i,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const monthName = match[1] || "";
+  const dayRaw = Number(match[2] || "0");
+  const yearRaw = Number(match[3] || "0");
+  if (!Number.isFinite(dayRaw) || !Number.isFinite(yearRaw)) {
+    return null;
+  }
+
+  const monthIndex = new Date(`${monthName} 1, 2000`).getMonth();
+  if (!Number.isFinite(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+    return null;
+  }
+
+  const iso = new Date(Date.UTC(yearRaw, monthIndex, dayRaw));
+  if (Number.isNaN(iso.getTime())) {
+    return null;
+  }
+
+  return iso.toISOString().slice(0, 10);
+}
+
+async function extractAvailabilityFromCalendarDom(
+  page: Parameters<
+    ScraperAdapter<LocalVrDetailRecord>["discoverListings"]
+  >[0]["page"],
+  availabilityHorizonDays: number,
+  maxCalendarAdvanceMonths: number,
+): Promise<{
+  days: LocalVrDetailRecord["normalized_availability"]["days"];
+  dayCodes: string;
+  observedStatusLabels: string[];
+}> {
+  const now = new Date();
+  const todayUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const horizonUtc = new Date(todayUtc);
+  horizonUtc.setUTCDate(horizonUtc.getUTCDate() + availabilityHorizonDays);
+
+  const openSelectors = [
+    "label[for='check-in']",
+    "button:has-text('Open Date Picker')",
+    "button:has-text('Select Date')",
+    "[role='button']:has-text('Select Date')",
+  ];
+
+  let opened = false;
+  for (const selector of openSelectors) {
+    const control = page.locator(selector).first();
+    if ((await control.count()) === 0) {
+      continue;
+    }
+    try {
+      await control.click({ timeout: 2000 });
+      opened = true;
+      break;
+    } catch {
+      // Try alternate selectors.
+    }
+  }
+
+  if (!opened) {
+    return {
+      days: [],
+      dayCodes: "",
+      observedStatusLabels: [],
+    };
+  }
+
+  try {
+    await page
+      .locator(".rdp-day_button,[role='gridcell'] button[aria-label]")
+      .first()
+      .waitFor({ timeout: 3500 });
+  } catch {
+    return {
+      days: [],
+      dayCodes: "",
+      observedStatusLabels: [],
+    };
+  }
+
+  const dayByDate = new Map<
+    string,
+    LocalVrDetailRecord["normalized_availability"]["days"][number]
+  >();
+  const observedStatusLabels = new Set<string>();
+  let maxSeenDate = "";
+
+  for (
+    let monthStep = 0;
+    monthStep < maxCalendarAdvanceMonths;
+    monthStep += 1
+  ) {
+    const snapshot = await page.evaluate(() => {
+      const rows = Array.from(document.querySelectorAll(".rdp-day"));
+      const entries = rows
+        .map((row) => {
+          const button = row.querySelector("button[aria-label]");
+          if (!(button instanceof HTMLButtonElement)) {
+            return null;
+          }
+
+          const className = row.getAttribute("class") || "";
+          if (
+            className.includes("rdp-hidden") ||
+            className.includes("rdp-outside")
+          ) {
+            return null;
+          }
+
+          return {
+            ariaLabel: button.getAttribute("aria-label") || "",
+            disabled: button.disabled,
+            className,
+          };
+        })
+        .filter(
+          (
+            entry,
+          ): entry is {
+            ariaLabel: string;
+            disabled: boolean;
+            className: string;
+          } => Boolean(entry),
+        );
+
+      return {
+        entries,
+        signature: entries
+          .map((entry) => entry.ariaLabel)
+          .slice(0, 6)
+          .join("|"),
+      };
+    });
+
+    for (const entry of snapshot.entries) {
+      const dateIso = parseCalendarAriaLabelToIso(entry.ariaLabel);
+      if (!dateIso) {
+        continue;
+      }
+
+      const date = new Date(`${dateIso}T00:00:00.000Z`);
+      if (
+        Number.isNaN(date.getTime()) ||
+        date < todayUtc ||
+        date > horizonUtc ||
+        dayByDate.has(dateIso)
+      ) {
+        continue;
+      }
+
+      const className = entry.className.toLowerCase();
+      const checkoutOnly = className.includes("checkout-only");
+      const checkinOnly = className.includes("checkin-only");
+      const disabled = entry.disabled || className.includes("rdp-disabled");
+      const code: LocalVrDayCode = checkoutOnly
+        ? "O"
+        : checkinOnly
+          ? "I"
+          : disabled
+            ? "U"
+            : "A";
+
+      const bookingDayState: "bookable" | "blocked" | "unknown" =
+        code === "A" ? "bookable" : code === "U" ? "blocked" : "unknown";
+
+      dayByDate.set(dateIso, {
+        date: dateIso,
+        status_code: code,
+        is_available: code === "A",
+        is_available_for_checkin: code === "A" || code === "I",
+        is_available_for_checkout: code === "A" || code === "O",
+        booking_day_state: bookingDayState,
+        min_nights_required: null,
+      });
+
+      if (checkoutOnly) {
+        observedStatusLabels.add("checkout-only");
+      } else if (checkinOnly) {
+        observedStatusLabels.add("checkin-only");
+      } else if (disabled) {
+        observedStatusLabels.add("disabled");
+      } else {
+        observedStatusLabels.add("available");
+      }
+
+      if (!maxSeenDate || dateIso > maxSeenDate) {
+        maxSeenDate = dateIso;
+      }
+    }
+
+    if (maxSeenDate) {
+      const maxSeen = new Date(`${maxSeenDate}T00:00:00.000Z`);
+      if (!Number.isNaN(maxSeen.getTime()) && maxSeen >= horizonUtc) {
+        break;
+      }
+    }
+
+    const nextMonth = page
+      .locator("button[aria-label*='Go to the Next Month']")
+      .first();
+    if ((await nextMonth.count()) === 0) {
+      break;
+    }
+    if (!(await nextMonth.isEnabled().catch(() => false))) {
+      break;
+    }
+
+    const previousSignature = snapshot.signature;
+    await nextMonth.click({ timeout: 2500 });
+    await page.waitForTimeout(180);
+
+    const signatureChanged = await page
+      .evaluate((priorSignature) => {
+        const rows = Array.from(document.querySelectorAll(".rdp-day"));
+        const labels = rows
+          .map((row) => {
+            const className = row.getAttribute("class") || "";
+            if (
+              className.includes("rdp-hidden") ||
+              className.includes("rdp-outside")
+            ) {
+              return "";
+            }
+
+            const button = row.querySelector("button[aria-label]");
+            if (!(button instanceof HTMLButtonElement)) {
+              return "";
+            }
+            return button.getAttribute("aria-label") || "";
+          })
+          .filter(Boolean)
+          .slice(0, 6)
+          .join("|");
+
+        return labels !== priorSignature;
+      }, previousSignature)
+      .catch(() => true);
+
+    if (!signatureChanged) {
+      break;
+    }
   }
 
   const days = Array.from(dayByDate.values()).sort((a, b) =>
@@ -681,6 +1079,7 @@ async function fetchDetail(
   >[0]["browser"],
   detailUrl: string,
   availabilityHorizonDays: number,
+  maxCalendarAdvanceMonths: number,
 ): Promise<LocalVrDetailRecord | null> {
   const normalizedDetailUrl = normalizeDetailUrl(detailUrl);
   if (!normalizedDetailUrl) {
@@ -809,10 +1208,22 @@ async function fetchDetail(
     const schemaObjects = parseJsonLdObjects(htmlForParsing);
     const hotelSchema = pickHotelSchema(schemaObjects);
 
-    const availability = extractAvailabilityFromHtml(
+    let availability = extractAvailabilityFromHtml(
       htmlForParsing,
       availabilityHorizonDays,
     );
+
+    if (availability.days.length === 0) {
+      const domAvailability = await extractAvailabilityFromCalendarDom(
+        page,
+        availabilityHorizonDays,
+        maxCalendarAdvanceMonths,
+      );
+
+      if (domAvailability.days.length > 0) {
+        availability = domAvailability;
+      }
+    }
 
     const descriptionExpanded =
       stripHtml(summaryText).slice(0, 20000) ||
@@ -1092,6 +1503,7 @@ export function createLocalVR30AAdapter(): ScraperAdapter<LocalVrDetailRecord> {
         context.browser,
         context.detailUrl,
         context.availabilityHorizonDays,
+        context.maxCalendarAdvanceMonths,
       );
     },
     async runQuoteCapture(argv, progress) {
