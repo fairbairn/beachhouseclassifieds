@@ -19,6 +19,7 @@ type OceanReefDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -713,6 +714,73 @@ function extractAvailabilityFromHtml(
   };
 }
 
+function extractRoomsGuidance(html: string): string[] {
+  const beddingTabMatch = html.match(
+    /<div[^>]*id=["']bedding["'][^>]*>([\s\S]*?)<div[^>]*id=["']location-map["']/i,
+  );
+  if (!beddingTabMatch) {
+    return [];
+  }
+
+  const tabHtml = beddingTabMatch[1] || "";
+  const rowStarts = Array.from(
+    tabHtml.matchAll(/<div[^>]*class=["'][^"']*bedroom-row[^"']*["'][^>]*>/gi),
+  )
+    .map((match) => match.index)
+    .filter((index): index is number => typeof index === "number");
+
+  const rowBlocks = rowStarts.map((startIndex, index) => {
+    const nextStart = rowStarts[index + 1] ?? tabHtml.length;
+    return tabHtml.slice(startIndex, nextStart);
+  });
+  const entries: string[] = [];
+
+  for (const rowHtml of rowBlocks) {
+    const floorRaw =
+      extractFirst(
+        /<div[^>]*class=["'][^"']*bedroom-type-title[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+        rowHtml,
+      ) || "";
+
+    const floorName = stripHtml(floorRaw)
+      .replace(/\s+/g, " ")
+      .replace(/:\s*$/, "")
+      .trim();
+
+    const bedItems = [
+      ...rowHtml.matchAll(
+        /<div[^>]*class=["'][^"']*bedroom-type-name[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
+      ),
+    ]
+      .map((match) =>
+        stripHtml(match[1] || "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      )
+      .filter((value) => value.length > 0);
+
+    if (!bedItems.length) {
+      continue;
+    }
+
+    if (floorName.length > 0) {
+      entries.push(`${floorName}: ${bedItems.join(", ")}`);
+    } else {
+      entries.push(bedItems.join(", "));
+    }
+  }
+
+  const totalSummary =
+    extractFirst(/<b>\s*Total:\s*<\/b>\s*([\s\S]*?)<\/div>/i, tabHtml) || "";
+  const normalizedTotal = stripHtml(totalSummary).replace(/\s+/g, " ").trim();
+
+  if (normalizedTotal.length > 0) {
+    entries.push(`Total: ${normalizedTotal}`);
+  }
+
+  return Array.from(new Set(entries));
+}
+
 async function fetchDetail(
   detailUrl: string,
   availabilityHorizonDays: number,
@@ -781,6 +849,7 @@ async function fetchDetail(
       0,
       50000,
     );
+    const roomsGuidance = extractRoomsGuidance(html);
 
     const amenitiesAll = extractAmenities(html);
 
@@ -864,6 +933,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomsGuidance,
       amenities: {
         categories: {
           General: amenitiesAll,

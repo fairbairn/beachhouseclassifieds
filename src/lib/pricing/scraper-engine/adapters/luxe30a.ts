@@ -16,6 +16,7 @@ type LuxeDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: false;
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -1118,6 +1119,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,
+      rooms_guidance: false,
       amenities: {
         categories: amenitiesCategories,
         all: amenitiesAll,

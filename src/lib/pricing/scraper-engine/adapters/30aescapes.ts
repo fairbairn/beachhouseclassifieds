@@ -24,7 +24,7 @@ type EscapeDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
-  rooms_guidance: string[];
+  rooms_guidance: false;
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -2991,7 +2991,7 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
-      rooms_guidance: extracted.roomsGuidance,
+      rooms_guidance: false,
       amenities,
       location,
       media_gallery: mediaGallery,

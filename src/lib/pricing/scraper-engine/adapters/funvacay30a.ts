@@ -12,6 +12,7 @@ type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
+  rooms_guidance: false;
   h1: string;
   canonical_url: string;
   meta_description: string;
@@ -2707,6 +2708,7 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: false,
       amenities,
       location,
       media_gallery: mediaGallery,

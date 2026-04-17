@@ -12,6 +12,7 @@ type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
+  rooms_guidance: string[];
   quote_context?: {
     unit_id: string;
     detail_url: string;
@@ -1666,6 +1667,40 @@ async function fetchDetail(
       };
 
       return {
+        roomsGuidance: (() => {
+          const normalizeText = (value: string): string =>
+            value.replace(/\s+/g, " ").trim();
+
+          const lines: string[] = [];
+          const cards = Array.from(
+            document.querySelectorAll("#roomcards .roomcard"),
+          );
+
+          for (const card of cards) {
+            const content =
+              (card.querySelector(
+                ":scope > div:nth-child(2)",
+              ) as HTMLElement | null) ?? (card as HTMLElement);
+            const heading = normalizeText(
+              content.querySelector("h3")?.textContent ?? "",
+            );
+            if (!heading) {
+              continue;
+            }
+
+            const detailLines = Array.from(content.querySelectorAll("div"))
+              .map((node) => normalizeText(node.textContent ?? ""))
+              .filter(Boolean);
+
+            lines.push(
+              detailLines.length > 0
+                ? `${heading}: ${detailLines.join(", ")}`
+                : heading,
+            );
+          }
+
+          return lines.slice(0, 80);
+        })(),
         title: document.title ?? "",
         h1: (() => {
           const heading = document.querySelector("h1");
@@ -2344,6 +2379,11 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: dedupePreserveOrder(
+        extracted.roomsGuidance
+          .map((line) => stripHtml(line).slice(0, 220))
+          .filter(Boolean),
+      ).slice(0, 80),
       amenities,
       location,
       media_gallery: mediaGallery,

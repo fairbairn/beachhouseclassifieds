@@ -22,6 +22,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -801,6 +802,25 @@ async function fetchDetail(
       };
 
       return {
+        roomsGuidance: (() => {
+          const normalizeText = (value: string): string =>
+            value.replace(/\s+/g, " ").trim();
+          const lines = Array.from(
+            document.querySelectorAll(".rc-core-cat-evrn_beds .item-list li"),
+          )
+            .map((li) => normalizeText(li.textContent ?? ""))
+            .filter(Boolean)
+            .map((line) => {
+              const match = line.match(/^(.*?)(\d+)$/);
+              if (!match) {
+                return line;
+              }
+              const bedType = normalizeText(match[1] ?? "");
+              const count = normalizeText(match[2] ?? "");
+              return bedType && count ? `${bedType} x${count}` : line;
+            });
+          return lines.slice(0, 40);
+        })(),
         title: document.title ?? "",
         h1: document.querySelector("h1")?.textContent ?? "",
         canonical:
@@ -1179,6 +1199,11 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: dedupePreserveOrder(
+        extracted.roomsGuidance
+          .map((line) => stripHtml(line).slice(0, 120))
+          .filter(Boolean),
+      ).slice(0, 40),
       amenities,
       location,
       media_gallery: mediaGallery,
