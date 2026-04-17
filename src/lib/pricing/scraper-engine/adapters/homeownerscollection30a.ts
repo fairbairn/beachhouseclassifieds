@@ -925,6 +925,13 @@ async function buildWeeklyRateArtifacts(input: {
     currency = quote.currency || currency;
 
     if (!quote.quote_available) {
+      const unavailableBuyUrl = buildBuyUrlFromQuote(
+        input.entityId,
+        startDate,
+        endDate,
+        quote.quote_node,
+      );
+
       availabilityDay.status_code = "U";
       availabilityDay.is_available = false;
       availabilityDay.is_available_for_checkin = false;
@@ -937,7 +944,7 @@ async function buildWeeklyRateArtifacts(input: {
         nights: quoteNights,
         quote_available: false,
         quoted_total: null,
-        buy_url: null,
+        buy_url: unavailableBuyUrl,
         base_total: null,
         taxes_total: null,
         fees_total_excl_taxes: null,
