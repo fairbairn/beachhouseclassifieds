@@ -278,6 +278,43 @@ function isLikelyDetailPath(pathname: string): boolean {
   return true;
 }
 
+function isNoLongerInInventoryPage(params: {
+  detailUrl: string;
+  canonicalUrl: string;
+  h1: string;
+  html: string;
+  propertyId: string;
+}): boolean {
+  const { detailUrl, canonicalUrl, h1, html, propertyId } = params;
+  const htmlLower = html.toLowerCase();
+  const h1Lower = h1.toLowerCase().trim();
+  const canonicalLower = canonicalUrl.toLowerCase().trim();
+
+  const hasExplicitInventoryMessage =
+    htmlLower.includes("this property is no longer in our inventory") ||
+    htmlLower.includes("no longer in our inventory");
+
+  if (hasExplicitInventoryMessage) {
+    return true;
+  }
+
+  const landsOnRentalRoot =
+    canonicalLower.endsWith("/rentals") ||
+    canonicalLower.endsWith("/rentals/") ||
+    canonicalLower === "https://www.30aescapes.com/rentals" ||
+    canonicalLower === "https://www.30aescapes.com/rentals/";
+
+  const normalizedDetail = normalizeLink(detailUrl.toLowerCase());
+  const normalizedCanonical = normalizeLink(canonicalLower);
+
+  return (
+    normalizedCanonical !== normalizedDetail &&
+    landsOnRentalRoot &&
+    h1Lower === "all properties" &&
+    !propertyId
+  );
+}
+
 function normalizeForMatch(value: string): string {
   return value
     .toLowerCase()
@@ -2242,6 +2279,21 @@ async function fetchDetail(
           html,
         };
       });
+
+      if (
+        isNoLongerInInventoryPage({
+          detailUrl,
+          canonicalUrl: extracted.canonical,
+          h1: extracted.h1,
+          html: extracted.html,
+          propertyId: extracted.propertyId,
+        })
+      ) {
+        reportDetailProgress?.(
+          `detail ${externalListingId} [refresh=${refreshMode} run=${mode}] detected inventory-removed listing page; skipping`,
+        );
+        return null;
+      }
 
       normalizedAvailability = buildEscapesAvailabilityFromHtml({
         html: extracted.html,
