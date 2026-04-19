@@ -8,7 +8,86 @@ import type { Page } from "playwright";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
-type LuxeDayCode = "A" | "U" | "X";
+type LuxeDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(status: LuxeDayCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: LuxeDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
+
+function applyDerivedStatus(
+  day: LuxeDetailRecord["normalized_availability"]["days"][number],
+  statusCode: LuxeDayCode,
+): void {
+  day.status_code = statusCode;
+  day.day_code = toDayCodeFromStatus(statusCode);
+  day.changeover_code = toChangeoverCodeFromStatus(statusCode);
+  day.is_available = statusCode === "A";
+  day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+  day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+  day.booking_day_state =
+    statusCode === "A"
+      ? "bookable"
+      : statusCode === "U"
+        ? "blocked"
+        : "unknown";
+}
+
+function normalizeAvailabilityDays(
+  days: LuxeDetailRecord["normalized_availability"]["days"],
+): LuxeDetailRecord["normalized_availability"]["days"] {
+  const normalizedDays = [...days]
+    .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  for (let index = 0; index < normalizedDays.length; index += 1) {
+    const day = normalizedDays[index];
+    if (!day || day.status_code !== "A") {
+      continue;
+    }
+
+    const previousDay = index > 0 ? normalizedDays[index - 1] : null;
+    const nextDay =
+      index + 1 < normalizedDays.length ? normalizedDays[index + 1] : null;
+    const previousUnavailable =
+      previousDay !== null &&
+      (previousDay.status_code === "U" || previousDay.status_code === "X");
+    const nextUnavailable =
+      nextDay !== null &&
+      (nextDay.status_code === "U" || nextDay.status_code === "X");
+
+    if (!previousUnavailable && !nextUnavailable) {
+      continue;
+    }
+
+    if (previousUnavailable && !nextUnavailable) {
+      applyDerivedStatus(day, "I");
+      continue;
+    }
+
+    if (!previousUnavailable && nextUnavailable) {
+      applyDerivedStatus(day, "O");
+      continue;
+    }
+
+    applyDerivedStatus(day, "I");
+  }
+
+  return normalizedDays;
+}
 
 type LuxeDetailRecord = DetailRecordBase & {
   title: string;
@@ -66,12 +145,16 @@ type LuxeDetailRecord = DetailRecordBase & {
     code_legend: {
       A: "available";
       U: "unavailable";
+      I: "checkin_only";
+      O: "checkout_only";
       X: "other";
     };
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: LuxeDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -906,7 +989,9 @@ async function fetchDetail(
 
       const dayRows: Array<{
         date: string;
+        day_code: CanonicalDayCode;
         status_code: LuxeDayCode;
+        changeover_code: CanonicalChangeoverCode;
         is_available: boolean;
         is_available_for_checkin: boolean;
         is_available_for_checkout: boolean;
@@ -956,7 +1041,9 @@ async function fetchDetail(
         const statusCode: LuxeDayCode = disabled ? "U" : "A";
         dayRows.push({
           date: isoDate,
+          day_code: toDayCodeFromStatus(statusCode),
           status_code: statusCode,
+          changeover_code: toChangeoverCodeFromStatus(statusCode),
           is_available: statusCode === "A",
           is_available_for_checkin: statusCode === "A",
           is_available_for_checkout: statusCode === "A",
@@ -1147,7 +1234,9 @@ async function fetchDetail(
 
             return {
               date,
+              day_code: toDayCodeFromStatus(statusCode),
               status_code: statusCode,
+              changeover_code: toChangeoverCodeFromStatus(statusCode),
               is_available: statusCode === "A",
               is_available_for_checkin: cta,
               is_available_for_checkout: ctd,
@@ -1165,7 +1254,9 @@ async function fetchDetail(
               day,
             ): day is {
               date: string;
+              day_code: CanonicalDayCode;
               status_code: LuxeDayCode;
+              changeover_code: CanonicalChangeoverCode;
               is_available: boolean;
               is_available_for_checkin: boolean;
               is_available_for_checkout: boolean;
@@ -1175,10 +1266,18 @@ async function fetchDetail(
           )
       : [];
 
-    const availabilityDays =
+    const availabilityDaysRaw =
       apiAvailabilityDays.length > 0
         ? apiAvailabilityDays
         : domAvailabilityDays;
+
+    const availabilityDays = normalizeAvailabilityDays(availabilityDaysRaw);
+    if (availabilityDays.length === 0) {
+      console.warn(
+        `luxe30a availability extraction failed (no days) for ${normalizedDetailUrl}`,
+      );
+      return null;
+    }
 
     const available = availabilityDays.filter(
       (day) => day.status_code === "A",
@@ -1267,6 +1366,8 @@ async function fetchDetail(
         code_legend: {
           A: "available",
           U: "unavailable",
+          I: "checkin_only",
+          O: "checkout_only",
           X: "other",
         },
         day_codes: availabilityDays.map((day) => day.status_code).join(""),

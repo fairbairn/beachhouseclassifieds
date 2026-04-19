@@ -8,6 +8,8 @@ import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 import { runBeachBlueQuoteCli } from "./quotes/beachblue";
 
 type BeachBlueDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type BookingRange = {
   start: string;
@@ -81,7 +83,9 @@ type BeachBlueDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: BeachBlueDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -321,6 +325,25 @@ function resolveMinNightsForDate(
   }
 
   return result;
+}
+
+function toDayCodeFromStatus(statusCode: BeachBlueDayCode): CanonicalDayCode {
+  return statusCode === "A" || statusCode === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  statusCode: BeachBlueDayCode,
+): CanonicalChangeoverCode {
+  if (statusCode === "I") {
+    return "I";
+  }
+  if (statusCode === "O") {
+    return "O";
+  }
+  if (statusCode === "U" || statusCode === "X") {
+    return "X";
+  }
+  return "C";
 }
 
 function toParsedRules(rules: MinDayRule[]): ParsedRule[] {
@@ -651,7 +674,9 @@ async function fetchDetail(
 
       normalizedDays.push({
         date: isoDate,
+        day_code: toDayCodeFromStatus(statusCode),
         status_code: statusCode,
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
         is_available: statusCode === "A",
         is_available_for_checkin: statusCode === "A" || statusCode === "O",
         is_available_for_checkout: statusCode === "A" || statusCode === "I",

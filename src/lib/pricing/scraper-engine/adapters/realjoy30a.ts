@@ -8,6 +8,24 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type RealJoyDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(status: RealJoyDayCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: RealJoyDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
 
 type RealJoyDetailRecord = DetailRecordBase & {
   quote_context: {
@@ -79,7 +97,9 @@ type RealJoyDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: RealJoyDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -425,6 +445,60 @@ function parseMonthHeader(
   }
 
   return { year, month };
+}
+
+function applyDerivedStatus(
+  day: RealJoyDetailRecord["normalized_availability"]["days"][number],
+  statusCode: RealJoyDayCode,
+): void {
+  day.status_code = statusCode;
+  day.day_code = toDayCodeFromStatus(statusCode);
+  day.changeover_code = toChangeoverCodeFromStatus(statusCode);
+  day.is_available = statusCode === "A" || statusCode === "O";
+  day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+  day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+  day.booking_day_state =
+    statusCode === "A" || statusCode === "O"
+      ? "bookable"
+      : statusCode === "U" || statusCode === "I"
+        ? "blocked"
+        : "unknown";
+}
+
+function deriveTurnDayStatuses(
+  days: RealJoyDetailRecord["normalized_availability"]["days"],
+): void {
+  for (let index = 0; index < days.length; index += 1) {
+    const day = days[index];
+    if (!day || day.status_code !== "A") {
+      continue;
+    }
+
+    const previousDay = index > 0 ? days[index - 1] : null;
+    const nextDay = index + 1 < days.length ? days[index + 1] : null;
+    const previousUnavailable =
+      previousDay !== null &&
+      (previousDay.status_code === "U" || previousDay.status_code === "X");
+    const nextUnavailable =
+      nextDay !== null &&
+      (nextDay.status_code === "U" || nextDay.status_code === "X");
+
+    if (!previousUnavailable && !nextUnavailable) {
+      continue;
+    }
+
+    if (previousUnavailable && !nextUnavailable) {
+      applyDerivedStatus(day, "I");
+      continue;
+    }
+
+    if (!previousUnavailable && nextUnavailable) {
+      applyDerivedStatus(day, "O");
+      continue;
+    }
+
+    applyDerivedStatus(day, "I");
+  }
 }
 
 async function collectListingSnapshot(
@@ -1074,12 +1148,18 @@ async function fetchDetail(
                   : "X";
 
           const bookingDayState: "bookable" | "blocked" | "unknown" =
-            code === "A" ? "bookable" : code === "U" ? "blocked" : "unknown";
+            code === "A" || code === "O"
+              ? "bookable"
+              : code === "U" || code === "I"
+                ? "blocked"
+                : "unknown";
 
           byDate.set(iso, {
             date: iso,
+            day_code: toDayCodeFromStatus(code),
             status_code: code,
-            is_available: code === "A",
+            changeover_code: toChangeoverCodeFromStatus(code),
+            is_available: code === "A" || code === "O",
             is_available_for_checkin: code === "A" || code === "I",
             is_available_for_checkout: code === "A" || code === "O",
             booking_day_state: bookingDayState,
@@ -1109,15 +1189,13 @@ async function fetchDetail(
       days: Array.from(byDate.values()).sort((a, b) =>
         a.date.localeCompare(b.date),
       ),
-      dayCodes: Array.from(byDate.values())
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map((day) => day.status_code)
-        .join(""),
       observedCount: byDate.size,
       observedStatusClasses: Array.from(observedStatusClassSet).sort((a, b) =>
         a.localeCompare(b),
       ),
     };
+    deriveTurnDayStatuses(calendar.days);
+    const dayCodes = calendar.days.map((day) => day.status_code).join("");
 
     const descriptionExpanded =
       stripHtml(extractedFromDom.descriptionText).slice(0, 20000) ||
@@ -1263,7 +1341,7 @@ async function fetchDetail(
           O: "checkout_only",
           X: "other",
         },
-        day_codes: calendar.dayCodes,
+        day_codes: dayCodes,
         days: calendar.days,
         counts: {
           available,

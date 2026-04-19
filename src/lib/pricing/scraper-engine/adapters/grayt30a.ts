@@ -9,6 +9,24 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(status: LuxuryDayCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: LuxuryDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
@@ -87,7 +105,9 @@ type LuxuryDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: LuxuryDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -1579,7 +1599,9 @@ async function fetchDetail(
 
         return {
           date,
+          day_code: toDayCodeFromStatus(code),
           status_code: code,
+          changeover_code: toChangeoverCodeFromStatus(code),
           is_available: code === "A" || code === "O",
           is_available_for_checkin: code === "A" || code === "I",
           is_available_for_checkout: code === "A" || code === "O",
@@ -1611,7 +1633,9 @@ async function fetchDetail(
       completeWindowDays.push(
         existing ?? {
           date: isoDate,
+          day_code: "N",
           status_code: "X",
+          changeover_code: "X",
           is_available: false,
           is_available_for_checkin: false,
           is_available_for_checkout: false,

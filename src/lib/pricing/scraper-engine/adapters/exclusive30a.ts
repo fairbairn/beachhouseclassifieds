@@ -12,6 +12,8 @@ type ExclusiveBookedDay = {
   departure_okay?: number;
 };
 
+type ExclusiveStatusCode = "A" | "U" | "I" | "O" | "X";
+
 type ExclusiveDetailRecord = DetailRecordBase & {
   quote_context: {
     property_id: string;
@@ -75,8 +77,10 @@ type ExclusiveDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: "Y" | "N";
+      changeover_code: "C" | "I" | "O" | "X";
       is_available: boolean;
-      status_code: string;
+      status_code: ExclusiveStatusCode;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
       booking_day_state: "bookable" | "blocked" | "unknown";
@@ -278,6 +282,25 @@ function normalizeForMatch(value: string): string {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function toDayCodeFromStatus(statusCode: ExclusiveStatusCode): "Y" | "N" {
+  return statusCode === "A" || statusCode === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  statusCode: ExclusiveStatusCode,
+): "C" | "I" | "O" | "X" {
+  if (statusCode === "I") {
+    return "I";
+  }
+  if (statusCode === "O") {
+    return "O";
+  }
+  if (statusCode === "U" || statusCode === "X") {
+    return "X";
+  }
+  return "C";
 }
 
 function hashSha256(value: string): string {
@@ -800,6 +823,8 @@ async function fetchDetail(
         const checkoutOk = Number(booked.departure_okay) === 1;
         normalizedDays.push({
           date,
+          day_code: checkoutOk ? "Y" : "N",
+          changeover_code: checkoutOk ? "O" : "X",
           is_available: false,
           is_available_for_checkin: false,
           is_available_for_checkout: checkoutOk,
@@ -809,6 +834,8 @@ async function fetchDetail(
       } else {
         normalizedDays.push({
           date,
+          day_code: "Y",
+          changeover_code: "C",
           is_available: true,
           is_available_for_checkin: true,
           is_available_for_checkout: true,
@@ -820,9 +847,13 @@ async function fetchDetail(
 
     const applyDerivedStatus = (
       day: (typeof normalizedDays)[number],
-      statusCode: "A" | "U" | "I" | "O" | "X",
+      statusCode: ExclusiveStatusCode,
     ): void => {
       day.status_code = statusCode;
+      day.day_code = toDayCodeFromStatus(statusCode);
+      day.changeover_code = toChangeoverCodeFromStatus(statusCode);
+      day.is_available =
+        statusCode === "A" || statusCode === "I" || statusCode === "O";
       day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
       day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
     };

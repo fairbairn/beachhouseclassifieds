@@ -9,6 +9,8 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type BenchmarkDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type BenchmarkMinNightRule = {
   start_date: string;
@@ -111,7 +113,9 @@ type BenchmarkDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: BenchmarkDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -197,6 +201,25 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function toDayCodeFromStatus(statusCode: BenchmarkDayCode): CanonicalDayCode {
+  return statusCode === "A" || statusCode === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  statusCode: BenchmarkDayCode,
+): CanonicalChangeoverCode {
+  if (statusCode === "I") {
+    return "I";
+  }
+  if (statusCode === "O") {
+    return "O";
+  }
+  if (statusCode === "U" || statusCode === "X") {
+    return "X";
+  }
+  return "C";
 }
 
 function extractLatLngFromHtml(html: string): {
@@ -530,7 +553,9 @@ function buildAvailabilityFromEmbeddedForm(
 
     return {
       date,
+      day_code: toDayCodeFromStatus(statusCode),
       status_code: statusCode,
+      changeover_code: toChangeoverCodeFromStatus(statusCode),
       is_available: statusCode === "A",
       is_available_for_checkin: statusCode === "A" || statusCode === "I",
       is_available_for_checkout: statusCode === "A" || statusCode === "O",
@@ -1530,7 +1555,9 @@ async function fetchDetail(
 
           return {
             date,
+            day_code: toDayCodeFromStatus(code),
             status_code: code,
+            changeover_code: toChangeoverCodeFromStatus(code),
             is_available: code === "A",
             is_available_for_checkin: code === "A" || code === "I",
             is_available_for_checkout: code === "A" || code === "O",

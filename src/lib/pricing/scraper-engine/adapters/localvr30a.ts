@@ -8,6 +8,85 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LocalVrDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(status: LocalVrDayCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: LocalVrDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
+
+function applyDerivedStatus(
+  day: LocalVrDetailRecord["normalized_availability"]["days"][number],
+  statusCode: LocalVrDayCode,
+): void {
+  day.status_code = statusCode;
+  day.day_code = toDayCodeFromStatus(statusCode);
+  day.changeover_code = toChangeoverCodeFromStatus(statusCode);
+  day.is_available = statusCode === "A";
+  day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+  day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+  day.booking_day_state =
+    statusCode === "A"
+      ? "bookable"
+      : statusCode === "U"
+        ? "blocked"
+        : "unknown";
+}
+
+function normalizeAvailabilityDays(
+  days: LocalVrDetailRecord["normalized_availability"]["days"],
+): LocalVrDetailRecord["normalized_availability"]["days"] {
+  const normalizedDays = [...days]
+    .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  for (let index = 0; index < normalizedDays.length; index += 1) {
+    const day = normalizedDays[index];
+    if (!day || day.status_code !== "A") {
+      continue;
+    }
+
+    const previousDay = index > 0 ? normalizedDays[index - 1] : null;
+    const nextDay =
+      index + 1 < normalizedDays.length ? normalizedDays[index + 1] : null;
+    const previousUnavailable =
+      previousDay !== null &&
+      (previousDay.status_code === "U" || previousDay.status_code === "X");
+    const nextUnavailable =
+      nextDay !== null &&
+      (nextDay.status_code === "U" || nextDay.status_code === "X");
+
+    if (!previousUnavailable && !nextUnavailable) {
+      continue;
+    }
+
+    if (previousUnavailable && !nextUnavailable) {
+      applyDerivedStatus(day, "I");
+      continue;
+    }
+
+    if (!previousUnavailable && nextUnavailable) {
+      applyDerivedStatus(day, "O");
+      continue;
+    }
+
+    applyDerivedStatus(day, "I");
+  }
+
+  return normalizedDays;
+}
 
 type LocalVrDetailRecord = DetailRecordBase & {
   title: string;
@@ -76,7 +155,9 @@ type LocalVrDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: LocalVrDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -497,7 +578,9 @@ function extractAvailabilityFromHtml(
 
         dayByDate.set(dateIso, {
           date: dateIso,
+          day_code: toDayCodeFromStatus(code),
           status_code: code,
+          changeover_code: toChangeoverCodeFromStatus(code),
           is_available: code === "A",
           is_available_for_checkin: code === "A" || code === "I",
           is_available_for_checkout: code === "A" || code === "O",
@@ -537,7 +620,9 @@ function extractAvailabilityFromHtml(
 
       dayByDate.set(dateIso, {
         date: dateIso,
+        day_code: toDayCodeFromStatus(code),
         status_code: code,
+        changeover_code: toChangeoverCodeFromStatus(code),
         is_available: code === "A",
         is_available_for_checkin: code === "A" || code === "I",
         is_available_for_checkout: code === "A" || code === "O",
@@ -743,7 +828,9 @@ async function extractAvailabilityFromCalendarDom(
 
       dayByDate.set(dateIso, {
         date: dateIso,
+        day_code: toDayCodeFromStatus(code),
         status_code: code,
+        changeover_code: toChangeoverCodeFromStatus(code),
         is_available: code === "A",
         is_available_for_checkin: code === "A" || code === "I",
         is_available_for_checkout: code === "A" || code === "O",
@@ -1336,6 +1423,17 @@ async function fetchDetail(
           | undefined
       )?.value ?? null,
     );
+
+    availability.days = normalizeAvailabilityDays(availability.days);
+    if (availability.days.length === 0) {
+      console.warn(
+        `localvr30a availability extraction failed (no days) for ${normalizedDetailUrl}`,
+      );
+      return null;
+    }
+    availability.dayCodes = availability.days
+      .map((day) => day.status_code)
+      .join("");
 
     const available = availability.days.filter(
       (day) => day.status_code === "A",

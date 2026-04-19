@@ -9,6 +9,8 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type LuxuryDetailRecord = DetailRecordBase & {
   quote_context: {
@@ -86,7 +88,9 @@ type LuxuryDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: LuxuryDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -177,6 +181,25 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function toDayCodeFromStatus(code: LuxuryDayCode): CanonicalDayCode {
+  return code === "A" || code === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  code: LuxuryDayCode,
+): CanonicalChangeoverCode {
+  if (code === "I") {
+    return "I";
+  }
+  if (code === "O") {
+    return "O";
+  }
+  if (code === "U" || code === "X") {
+    return "X";
+  }
+  return "C";
 }
 
 function dedupePreserveOrder(values: string[]): string[] {
@@ -1051,7 +1074,9 @@ async function fetchDetail(
 
         return {
           date,
+          day_code: toDayCodeFromStatus(code),
           status_code: code,
+          changeover_code: toChangeoverCodeFromStatus(code),
           is_available: code === "A" || code === "O",
           is_available_for_checkin: code === "A" || code === "I",
           is_available_for_checkout: code === "A" || code === "O",

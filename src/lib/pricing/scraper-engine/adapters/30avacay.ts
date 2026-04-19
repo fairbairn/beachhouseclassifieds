@@ -9,6 +9,8 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
@@ -85,7 +87,9 @@ type LuxuryDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: LuxuryDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -191,6 +195,25 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function toDayCodeFromStatus(code: LuxuryDayCode): CanonicalDayCode {
+  return code === "A" || code === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  code: LuxuryDayCode,
+): CanonicalChangeoverCode {
+  if (code === "I") {
+    return "I";
+  }
+  if (code === "O") {
+    return "O";
+  }
+  if (code === "U" || code === "X") {
+    return "X";
+  }
+  return "C";
 }
 
 function normalizeListingName(value: string): string {
@@ -2152,7 +2175,9 @@ async function fetchDetail(
 
         return {
           date,
+          day_code: toDayCodeFromStatus(code),
           status_code: code,
+          changeover_code: toChangeoverCodeFromStatus(code),
           is_available: code === "A" || code === "O",
           is_available_for_checkin: code === "A" || code === "I",
           is_available_for_checkout: code === "A" || code === "O",
@@ -2184,7 +2209,9 @@ async function fetchDetail(
       completeWindowDays.push(
         existing ?? {
           date: isoDate,
+          day_code: "N",
           status_code: "X",
+          changeover_code: "X",
           is_available: false,
           is_available_for_checkin: false,
           is_available_for_checkout: false,

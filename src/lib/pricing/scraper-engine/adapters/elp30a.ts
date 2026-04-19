@@ -8,6 +8,8 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type ElpDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type ElpRateEntry = {
   start_date?: unknown;
@@ -127,7 +129,9 @@ type ElpDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: ElpDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -291,6 +295,25 @@ function normalizeForMatch(value: string): string {
 
 function hashSha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function toDayCodeFromStatus(status: ElpDayCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: ElpDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  if (status === "U" || status === "X") {
+    return "X";
+  }
+  return "C";
 }
 
 function decodeBasicHtmlEntities(value: string): string {
@@ -1316,7 +1339,9 @@ async function fetchDetail(
         );
         days.push({
           date: day.date,
+          day_code: toDayCodeFromStatus(day.status_code),
           status_code: day.status_code,
+          changeover_code: toChangeoverCodeFromStatus(day.status_code),
           is_available: day.is_available,
           is_available_for_checkin: day.is_available_for_checkin,
           is_available_for_checkout: day.is_available_for_checkout,
@@ -1328,7 +1353,7 @@ async function fetchDetail(
           nightly_rate: ratesByDate.get(day.date) ?? null,
           min_nights: minNights,
           is_booked: day.booking_day_state === "blocked",
-          changeover_code: day.status_code,
+          changeover_code: toChangeoverCodeFromStatus(day.status_code),
           season_name: "",
         });
       }
@@ -1348,7 +1373,9 @@ async function fetchDetail(
 
         days.push({
           date: isoDate,
+          day_code: available ? "Y" : "N",
           status_code: available ? "A" : "U",
+          changeover_code: available ? "C" : "X",
           is_available: available,
           is_available_for_checkin: available,
           is_available_for_checkout: available,
@@ -1361,7 +1388,7 @@ async function fetchDetail(
           nightly_rate: ratesByDate.get(isoDate) ?? null,
           min_nights: minNights,
           is_booked: available ? false : true,
-          changeover_code: available ? "A" : "U",
+          changeover_code: available ? "C" : "X",
           season_name: "",
         });
 

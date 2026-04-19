@@ -32,6 +32,24 @@ type Rosemary30ADayCode = "Y" | "N" | "X";
 type Rosemary30AChangeOverCode = "C" | "I" | "O" | "X";
 type Rosemary30ANormalizedStatusCode = "A" | "U" | "I" | "O" | "X";
 
+function toDayCodeFromStatus(
+  status: Rosemary30ANormalizedStatusCode,
+): Rosemary30ADayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: Rosemary30ANormalizedStatusCode,
+): Rosemary30AChangeOverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
+
 type Rosemary30ADetailRecord = DetailRecordBase & {
   quote_context: {
     listing_id: string;
@@ -1713,8 +1731,8 @@ async function fetchDetail(
 
       return {
         date: day.date,
-        day_code: day.code,
-        changeover_code: day.changeOverCode,
+        day_code: toDayCodeFromStatus(statusCode),
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
         is_available: isAvailable,
         status_code: statusCode,
         is_available_for_checkin: isCheckInAllowed,
@@ -1729,8 +1747,18 @@ async function fetchDetail(
       statusCode: Rosemary30ANormalizedStatusCode,
     ): void => {
       day.status_code = statusCode;
+      day.day_code = toDayCodeFromStatus(statusCode);
+      day.changeover_code = toChangeoverCodeFromStatus(statusCode);
+      day.is_available =
+        statusCode === "A" || statusCode === "I" || statusCode === "O";
       day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
       day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+      day.booking_day_state =
+        statusCode === "A" || statusCode === "O"
+          ? "bookable"
+          : statusCode === "U" || statusCode === "I"
+            ? "blocked"
+            : "unknown";
     };
 
     for (let index = 0; index < normalizedDays.length; index += 1) {

@@ -8,6 +8,8 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type OverseeDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type MinNightRule = {
   start: string;
@@ -101,7 +103,9 @@ type OverseeDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: OverseeDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -748,6 +752,15 @@ function applyStatusCode(
   statusCode: OverseeDayCode,
 ): void {
   day.status_code = statusCode;
+  day.day_code = statusCode === "A" || statusCode === "O" ? "Y" : "N";
+  day.changeover_code =
+    statusCode === "I"
+      ? "I"
+      : statusCode === "O"
+        ? "O"
+        : statusCode === "A"
+          ? "C"
+          : "X";
   day.is_available = statusCode === "A";
   day.is_available_for_checkin = statusCode === "A" || statusCode === "O";
   day.is_available_for_checkout = statusCode === "A" || statusCode === "I";
@@ -1142,7 +1155,16 @@ async function fetchDetail(
       const dayRecord: OverseeDetailRecord["normalized_availability"]["days"][number] =
         {
           date: isoDate,
+          day_code: statusCode === "A" || statusCode === "O" ? "Y" : "N",
           status_code: statusCode,
+          changeover_code:
+            statusCode === "I"
+              ? "I"
+              : statusCode === "O"
+                ? "O"
+                : statusCode === "A"
+                  ? "C"
+                  : "X",
           is_available: statusCode === "A",
           is_available_for_checkin: statusCode === "A" || statusCode === "O",
           is_available_for_checkout: statusCode === "A" || statusCode === "I",

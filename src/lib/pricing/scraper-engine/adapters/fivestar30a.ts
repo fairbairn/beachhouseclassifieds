@@ -9,6 +9,8 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type FiveStarDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type BookingRange = {
   start: string;
@@ -98,7 +100,9 @@ type FiveStarDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: FiveStarDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -223,6 +227,25 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function toDayCodeFromStatus(statusCode: FiveStarDayCode): CanonicalDayCode {
+  return statusCode === "A" || statusCode === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  statusCode: FiveStarDayCode,
+): CanonicalChangeoverCode {
+  if (statusCode === "I") {
+    return "I";
+  }
+  if (statusCode === "O") {
+    return "O";
+  }
+  if (statusCode === "U" || statusCode === "X") {
+    return "X";
+  }
+  return "C";
 }
 
 function normalizeForMatch(value: string): string {
@@ -1111,7 +1134,9 @@ async function fetchDetail(
 
       normalizedDays.push({
         date: isoDate,
+        day_code: toDayCodeFromStatus(statusCode),
         status_code: statusCode,
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
         is_available: statusCode === "A",
         is_available_for_checkin: statusCode === "A" || statusCode === "O",
         is_available_for_checkout: statusCode === "A" || statusCode === "I",

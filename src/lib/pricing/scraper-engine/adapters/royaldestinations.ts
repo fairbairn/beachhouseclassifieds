@@ -8,6 +8,26 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type RoyalDestinationsDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(
+  status: RoyalDestinationsDayCode,
+): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: RoyalDestinationsDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
 
 type BookingRange = {
   start: string;
@@ -90,7 +110,9 @@ type RoyalDestinationsDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: RoyalDestinationsDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -1426,16 +1448,18 @@ async function fetchDetail(
           parsedRules,
         );
         const bookingDayState: "bookable" | "blocked" | "unknown" =
-          statusCode === "A"
+          statusCode === "A" || statusCode === "O"
             ? "bookable"
-            : statusCode === "U"
+            : statusCode === "U" || statusCode === "I"
               ? "blocked"
               : "unknown";
 
         normalizedDays.push({
           date: calendarDay.date,
+          day_code: toDayCodeFromStatus(statusCode),
           status_code: statusCode,
-          is_available: statusCode === "A",
+          changeover_code: toChangeoverCodeFromStatus(statusCode),
+          is_available: statusCode === "A" || statusCode === "O",
           is_available_for_checkin: statusCode === "A" || statusCode === "I",
           is_available_for_checkout: statusCode === "A" || statusCode === "O",
           booking_day_state: bookingDayState,
@@ -1461,16 +1485,18 @@ async function fetchDetail(
 
         const minNights = resolveMinNightsForDate(isoDate, parsedRules);
         const bookingDayState: "bookable" | "blocked" | "unknown" =
-          statusCode === "A"
+          statusCode === "A" || statusCode === "O"
             ? "bookable"
-            : statusCode === "U"
+            : statusCode === "U" || statusCode === "I"
               ? "blocked"
               : "unknown";
 
         normalizedDays.push({
           date: isoDate,
+          day_code: toDayCodeFromStatus(statusCode),
           status_code: statusCode,
-          is_available: statusCode === "A",
+          changeover_code: toChangeoverCodeFromStatus(statusCode),
+          is_available: statusCode === "A" || statusCode === "O",
           is_available_for_checkin: statusCode === "A" || statusCode === "I",
           is_available_for_checkout: statusCode === "A" || statusCode === "O",
           booking_day_state: bookingDayState,

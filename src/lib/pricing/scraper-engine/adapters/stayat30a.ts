@@ -9,6 +9,78 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(status: LuxuryDayCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: LuxuryDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
+
+function applyDerivedStatus(
+  day: StayAt30ADetailRecord["normalized_availability"]["days"][number],
+  statusCode: LuxuryDayCode,
+): void {
+  day.status_code = statusCode;
+  day.day_code = toDayCodeFromStatus(statusCode);
+  day.changeover_code = toChangeoverCodeFromStatus(statusCode);
+  day.is_available = statusCode === "A" || statusCode === "O";
+  day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+  day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+  day.booking_day_state =
+    statusCode === "A" || statusCode === "O"
+      ? "bookable"
+      : statusCode === "U" || statusCode === "I"
+        ? "blocked"
+        : "unknown";
+}
+
+function deriveTurnDayStatuses(
+  days: StayAt30ADetailRecord["normalized_availability"]["days"],
+): void {
+  for (let index = 0; index < days.length; index += 1) {
+    const day = days[index];
+    if (!day || day.status_code !== "A") {
+      continue;
+    }
+
+    const previousDay = index > 0 ? days[index - 1] : null;
+    const nextDay = index + 1 < days.length ? days[index + 1] : null;
+    const previousUnavailable =
+      previousDay !== null &&
+      (previousDay.status_code === "U" || previousDay.status_code === "X");
+    const nextUnavailable =
+      nextDay !== null &&
+      (nextDay.status_code === "U" || nextDay.status_code === "X");
+
+    if (!previousUnavailable && !nextUnavailable) {
+      continue;
+    }
+
+    if (previousUnavailable && !nextUnavailable) {
+      applyDerivedStatus(day, "I");
+      continue;
+    }
+
+    if (!previousUnavailable && nextUnavailable) {
+      applyDerivedStatus(day, "O");
+      continue;
+    }
+
+    applyDerivedStatus(day, "I");
+  }
+}
 
 type StayAt30ADetailRecord = DetailRecordBase & {
   title: string;
@@ -86,7 +158,9 @@ type StayAt30ADetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: LuxuryDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -2308,7 +2382,9 @@ async function fetchDetail(
 
         return {
           date,
+          day_code: toDayCodeFromStatus(code),
           status_code: code,
+          changeover_code: toChangeoverCodeFromStatus(code),
           is_available: code === "A" || code === "O",
           is_available_for_checkin: code === "A" || code === "I",
           is_available_for_checkout: code === "A" || code === "O",
@@ -2340,7 +2416,9 @@ async function fetchDetail(
       completeWindowDays.push(
         existing ?? {
           date: isoDate,
+          day_code: "N",
           status_code: "X",
+          changeover_code: "X",
           is_available: false,
           is_available_for_checkin: false,
           is_available_for_checkout: false,
@@ -2350,6 +2428,8 @@ async function fetchDetail(
       );
       windowCursor.setUTCDate(windowCursor.getUTCDate() + 1);
     }
+
+    deriveTurnDayStatuses(completeWindowDays);
 
     const jsonLdSignals = parseJsonLdSignals(html);
     const locationPayload = extractFieldLocationFromHtml(html);

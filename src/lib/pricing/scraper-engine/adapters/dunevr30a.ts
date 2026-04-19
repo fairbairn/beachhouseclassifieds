@@ -372,6 +372,25 @@ function decodeAvailabilityDays(
   return days;
 }
 
+function toDayCodeFromStatus(statusCode: DuneNormalizedStatusCode): "Y" | "N" {
+  return statusCode === "A" || statusCode === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  statusCode: DuneNormalizedStatusCode,
+): DuneChangeOverCode {
+  if (statusCode === "I") {
+    return "I";
+  }
+  if (statusCode === "O") {
+    return "O";
+  }
+  if (statusCode === "U" || statusCode === "X") {
+    return "X";
+  }
+  return "C";
+}
+
 function extractFirst(regex: RegExp, value: string): string {
   const match = value.match(regex);
   if (!match?.[1]) {
@@ -1450,8 +1469,6 @@ async function fetchDetail(
       const rateForDay = normalizedRateDays.find(
         (rate) => rate.date === day.date,
       );
-
-      const isAvailable = day.code === "Y";
       const isCheckInAllowed =
         day.code === "Y" &&
         day.changeOverCode !== "X" &&
@@ -1475,13 +1492,19 @@ async function fetchDetail(
 
       return {
         date: day.date,
-        day_code: day.code,
-        changeover_code: day.changeOverCode,
-        is_available: isAvailable,
+        day_code: toDayCodeFromStatus(statusCode),
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
+        is_available:
+          statusCode === "A" || statusCode === "I" || statusCode === "O",
         status_code: statusCode,
-        is_available_for_checkin: isCheckInAllowed,
-        is_available_for_checkout: isCheckOutAllowed,
-        booking_day_state: bookingDayState,
+        is_available_for_checkin: statusCode === "A" || statusCode === "I",
+        is_available_for_checkout: statusCode === "A" || statusCode === "O",
+        booking_day_state:
+          statusCode === "U"
+            ? "blocked"
+            : statusCode === "X"
+              ? "unknown"
+              : "bookable",
         min_nights_required: rateForDay?.min_nights ?? null,
       };
     });
@@ -1491,6 +1514,8 @@ async function fetchDetail(
       statusCode: DuneNormalizedStatusCode,
     ): void => {
       day.status_code = statusCode;
+      day.day_code = toDayCodeFromStatus(statusCode);
+      day.changeover_code = toChangeoverCodeFromStatus(statusCode);
       day.is_available =
         statusCode === "A" || statusCode === "I" || statusCode === "O";
       day.is_available_for_checkin = statusCode === "A" || statusCode === "I";

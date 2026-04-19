@@ -14,6 +14,8 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type BookingDayState = "bookable" | "blocked" | "unknown";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type MinNightRule = {
   start_date: string;
@@ -120,7 +122,9 @@ type DetailRecord360Blue = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: "A" | "U" | "I" | "O" | "X";
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -290,6 +294,11 @@ function toTurnDayChangeoverCode(statusCode: string): string {
     return "X";
   }
   return "";
+}
+
+function toDayCodeFromStatus(statusCode: string): CanonicalDayCode {
+  const code = statusCode.trim().toUpperCase();
+  return code === "A" || code === "O" ? "Y" : "N";
 }
 
 function hashSha256(value: string): string {
@@ -1529,7 +1538,11 @@ async function fetchDetail(
 
               return {
                 date: row.date,
+                day_code: toDayCodeFromStatus(statusCode),
                 status_code: statusCode,
+                changeover_code: toTurnDayChangeoverCode(
+                  statusCode,
+                ) as CanonicalChangeoverCode,
                 is_available: row.available,
                 is_available_for_checkin:
                   row.available && row.dateAllowsCheckIn,
@@ -1554,7 +1567,11 @@ async function fetchDetail(
 
               return {
                 date,
+                day_code: toDayCodeFromStatus(code),
                 status_code: code,
+                changeover_code: toTurnDayChangeoverCode(
+                  code,
+                ) as CanonicalChangeoverCode,
                 is_available: code === "A" || code === "O",
                 is_available_for_checkin: code === "A" || code === "O",
                 is_available_for_checkout: code === "A" || code === "O",
@@ -1581,12 +1598,16 @@ async function fetchDetail(
 
       if (prevUnavailable && !nextUnavailable) {
         current.status_code = "I";
+        current.day_code = toDayCodeFromStatus("I");
+        current.changeover_code = "I";
         current.is_available = true;
         current.is_available_for_checkin = true;
         current.is_available_for_checkout = false;
         current.booking_day_state = "bookable";
       } else if (!prevUnavailable && nextUnavailable) {
         current.status_code = "O";
+        current.day_code = toDayCodeFromStatus("O");
+        current.changeover_code = "O";
         current.is_available = true;
         current.is_available_for_checkin = false;
         current.is_available_for_checkout = true;
@@ -1600,7 +1621,9 @@ async function fetchDetail(
         const date = cursor.toISOString().slice(0, 10);
         normalizedDays.push({
           date,
+          day_code: "N",
           status_code: "X",
+          changeover_code: "X",
           is_available: false,
           is_available_for_checkin: false,
           is_available_for_checkout: false,

@@ -37,6 +37,7 @@ type DetailRecord = {
 type ValidationIssueCode =
   | "invalid_json"
   | "missing_normalized_availability_days"
+  | "missing_required_availability_data"
   | "missing_day_code"
   | "non_canonical_day_code"
   | "inconsistent_day_code"
@@ -266,10 +267,28 @@ async function validateAdapterAvailabilityStatusCodes(
     if (!Array.isArray(days) || days.length === 0) {
       pushIssue(
         issues,
+        "missing_required_availability_data",
+        `${fileName}: listing MUST include non-empty normalized_availability.days`,
+      );
+      pushIssue(
+        issues,
         "missing_normalized_availability_days",
         `${fileName}: normalized_availability.days is missing or empty`,
       );
       continue;
+    }
+
+    const hasUsableAvailabilityDay = days.some((day) => {
+      const date = typeof day?.date === "string" ? day.date.trim() : "";
+      const status = toCanonicalStatusCode(day?.status_code);
+      return /^\d{4}-\d{2}-\d{2}$/.test(date) && status !== null;
+    });
+    if (!hasUsableAvailabilityDay) {
+      pushIssue(
+        issues,
+        "missing_required_availability_data",
+        `${fileName}: listing MUST include at least one valid availability day with date + status_code`,
+      );
     }
 
     filesWithAvailability += 1;

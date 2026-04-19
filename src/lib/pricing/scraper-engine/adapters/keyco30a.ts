@@ -12,7 +12,94 @@ import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-a
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
-type KeycoDayCode = "A" | "U" | "X";
+type KeycoDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(status: KeycoDayCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: KeycoDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
+
+function applyDerivedStatus(
+  day: {
+    status_code: KeycoDayCode;
+    day_code: CanonicalDayCode;
+    changeover_code: CanonicalChangeoverCode;
+    is_available: boolean;
+    is_available_for_checkin: boolean;
+    is_available_for_checkout: boolean;
+    booking_day_state: "bookable" | "blocked" | "unknown";
+  },
+  status: KeycoDayCode,
+): void {
+  day.status_code = status;
+  day.day_code = toDayCodeFromStatus(status);
+  day.changeover_code = toChangeoverCodeFromStatus(status);
+  day.is_available = status === "A" || status === "O";
+  day.is_available_for_checkin = status === "A" || status === "I";
+  day.is_available_for_checkout = status === "A" || status === "O";
+  day.booking_day_state =
+    status === "A" || status === "O"
+      ? "bookable"
+      : status === "U" || status === "I"
+        ? "blocked"
+        : "unknown";
+}
+
+function deriveTurnDayStatuses(
+  days: Array<{
+    status_code: KeycoDayCode;
+    day_code: CanonicalDayCode;
+    changeover_code: CanonicalChangeoverCode;
+    is_available: boolean;
+    is_available_for_checkin: boolean;
+    is_available_for_checkout: boolean;
+    booking_day_state: "bookable" | "blocked" | "unknown";
+  }>,
+): void {
+  for (let index = 0; index < days.length; index += 1) {
+    const day = days[index];
+    if (!day || day.status_code !== "A") {
+      continue;
+    }
+
+    const previous = index > 0 ? days[index - 1] : null;
+    const next = index + 1 < days.length ? days[index + 1] : null;
+    const previousUnavailable =
+      previous !== null &&
+      (previous.status_code === "U" || previous.status_code === "X");
+    const nextUnavailable =
+      next !== null && (next.status_code === "U" || next.status_code === "X");
+
+    if (!previousUnavailable && !nextUnavailable) {
+      continue;
+    }
+
+    if (previousUnavailable && !nextUnavailable) {
+      applyDerivedStatus(day, "I");
+      continue;
+    }
+
+    if (!previousUnavailable && nextUnavailable) {
+      applyDerivedStatus(day, "O");
+      continue;
+    }
+
+    applyDerivedStatus(day, "I");
+  }
+}
 
 type KeycoRawAvailabilityKey = "A" | "U" | "M" | "X";
 
@@ -147,7 +234,9 @@ type KeycoDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: KeycoDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -1731,7 +1820,9 @@ async function fetchDetail(
 
         availabilityDays.push({
           date: isoDate,
+          day_code: toDayCodeFromStatus(statusCode),
           status_code: statusCode,
+          changeover_code: toChangeoverCodeFromStatus(statusCode),
           is_available: statusCode === "A",
           is_available_for_checkin: statusCode === "A",
           is_available_for_checkout: statusCode === "A",
@@ -1958,11 +2049,13 @@ async function fetchDetail(
               : hasRate;
 
         day.status_code = isAvailable ? "A" : "U";
+        day.day_code = toDayCodeFromStatus(day.status_code);
+        day.changeover_code = toChangeoverCodeFromStatus(day.status_code);
         day.is_available = isAvailable;
         day.is_available_for_checkin = isAvailable;
         day.is_available_for_checkout = isAvailable;
         day.booking_day_state = isAvailable ? "bookable" : "blocked";
-        sampleDay.changeover_code = day.status_code;
+        sampleDay.changeover_code = toChangeoverCodeFromStatus(day.status_code);
         sampleDay.is_booked = !isAvailable;
 
         const taxesTotalRaw = Number(pricingNode?.taxes);
@@ -2217,14 +2310,18 @@ async function fetchDetail(
           ) / 100
         : null;
 
+      deriveTurnDayStatuses(availabilityDays);
+
       const dayCodes = availabilityDays.map((day) => day.status_code).join("");
       const counts = {
         available: availabilityDays.filter((day) => day.status_code === "A")
           .length,
         unavailable: availabilityDays.filter((day) => day.status_code === "U")
           .length,
-        checkin_only: 0,
-        checkout_only: 0,
+        checkin_only: availabilityDays.filter((day) => day.status_code === "I")
+          .length,
+        checkout_only: availabilityDays.filter((day) => day.status_code === "O")
+          .length,
         other: availabilityDays.filter((day) => day.status_code === "X").length,
         booking_available: availabilityDays.filter(
           (day) => day.booking_day_state === "bookable",
@@ -2785,7 +2882,9 @@ async function fetchDetail(
 
       availabilityDays.push({
         date: isoDate,
+        day_code: toDayCodeFromStatus(statusCode),
         status_code: statusCode,
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
         is_available: statusCode === "A",
         is_available_for_checkin: statusCode === "A",
         is_available_for_checkout: statusCode === "A",
@@ -3183,6 +3282,8 @@ async function fetchDetail(
 
       const inferredStatus: KeycoDayCode = observation.is_available ? "A" : "U";
       day.status_code = inferredStatus;
+      day.day_code = toDayCodeFromStatus(inferredStatus);
+      day.changeover_code = toChangeoverCodeFromStatus(inferredStatus);
       day.is_available = inferredStatus === "A";
       day.is_available_for_checkin = inferredStatus === "A";
       day.is_available_for_checkout = inferredStatus === "A";
@@ -3265,6 +3366,8 @@ async function fetchDetail(
         ) / 100
       : null;
 
+    deriveTurnDayStatuses(availabilityDays);
+
     const dayCodes = availabilityDays.map((day) => day.status_code).join("");
 
     const counts = {
@@ -3272,8 +3375,10 @@ async function fetchDetail(
         .length,
       unavailable: availabilityDays.filter((day) => day.status_code === "U")
         .length,
-      checkin_only: 0,
-      checkout_only: 0,
+      checkin_only: availabilityDays.filter((day) => day.status_code === "I")
+        .length,
+      checkout_only: availabilityDays.filter((day) => day.status_code === "O")
+        .length,
       other: availabilityDays.filter((day) => day.status_code === "X").length,
       booking_available: availabilityDays.filter(
         (day) => day.booking_day_state === "bookable",

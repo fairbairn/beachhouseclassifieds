@@ -8,6 +8,78 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type OverseeDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(status: OverseeDayCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: OverseeDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
+
+function applyDerivedStatus(
+  day: OverseeDetailRecord["normalized_availability"]["days"][number],
+  statusCode: OverseeDayCode,
+): void {
+  day.status_code = statusCode;
+  day.day_code = toDayCodeFromStatus(statusCode);
+  day.changeover_code = toChangeoverCodeFromStatus(statusCode);
+  day.is_available = statusCode === "A";
+  day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+  day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+  day.booking_day_state =
+    statusCode === "A"
+      ? "bookable"
+      : statusCode === "U"
+        ? "blocked"
+        : "unknown";
+}
+
+function deriveTurnDayStatuses(
+  days: OverseeDetailRecord["normalized_availability"]["days"],
+): void {
+  for (let index = 0; index < days.length; index += 1) {
+    const day = days[index];
+    if (!day || day.status_code !== "A") {
+      continue;
+    }
+
+    const previousDay = index > 0 ? days[index - 1] : null;
+    const nextDay = index + 1 < days.length ? days[index + 1] : null;
+    const previousUnavailable =
+      previousDay !== null &&
+      (previousDay.status_code === "U" || previousDay.status_code === "X");
+    const nextUnavailable =
+      nextDay !== null &&
+      (nextDay.status_code === "U" || nextDay.status_code === "X");
+
+    if (!previousUnavailable && !nextUnavailable) {
+      continue;
+    }
+
+    if (previousUnavailable && !nextUnavailable) {
+      applyDerivedStatus(day, "I");
+      continue;
+    }
+
+    if (!previousUnavailable && nextUnavailable) {
+      applyDerivedStatus(day, "O");
+      continue;
+    }
+
+    applyDerivedStatus(day, "I");
+  }
+}
 
 type MinNightRule = {
   start: string;
@@ -94,14 +166,16 @@ type OverseeDetailRecord = DetailRecordBase & {
     code_legend: {
       A: "available";
       U: "unavailable";
-      I: "checkout_only";
-      O: "checkin_only";
+      I: "checkin_only";
+      O: "checkout_only";
       X: "other";
     };
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: OverseeDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -992,11 +1066,11 @@ async function fetchDetail(
       } else if (allowArrival === false && allowDeparture === false) {
         statusCode = "U";
       } else if (allowArrival === false && allowDeparture !== false) {
-        statusCode = "I";
-      } else if (allowArrival !== false && allowDeparture === false) {
         statusCode = "O";
-      } else if (noCheckinSet.has(isoDate)) {
+      } else if (allowArrival !== false && allowDeparture === false) {
         statusCode = "I";
+      } else if (noCheckinSet.has(isoDate)) {
+        statusCode = "O";
       }
 
       const minNightsRequired =
@@ -1012,16 +1086,20 @@ async function fetchDetail(
 
       normalizedDays.push({
         date: isoDate,
+        day_code: toDayCodeFromStatus(statusCode),
         status_code: statusCode,
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
         is_available: statusCode === "A",
-        is_available_for_checkin: statusCode === "A" || statusCode === "O",
-        is_available_for_checkout: statusCode === "A" || statusCode === "I",
+        is_available_for_checkin: statusCode === "A" || statusCode === "I",
+        is_available_for_checkout: statusCode === "A" || statusCode === "O",
         booking_day_state: bookingDayState,
         min_nights_required: minNightsRequired,
       });
 
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
+
+    deriveTurnDayStatuses(normalizedDays);
 
     const counts = {
       available: normalizedDays.filter((day) => day.status_code === "A").length,
@@ -1114,8 +1192,8 @@ async function fetchDetail(
         code_legend: {
           A: "available",
           U: "unavailable",
-          I: "checkout_only",
-          O: "checkin_only",
+          I: "checkin_only",
+          O: "checkout_only",
           X: "other",
         },
         day_codes: normalizedDays.map((day) => day.status_code).join(""),

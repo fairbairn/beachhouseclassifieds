@@ -8,6 +8,24 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type OceanReefDayCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(status: OceanReefDayCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: OceanReefDayCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
 
 type OceanReefDetailRecord = DetailRecordBase & {
   quote_context?: {
@@ -75,7 +93,9 @@ type OceanReefDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
       status_code: OceanReefDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -655,7 +675,9 @@ function extractAvailabilityFromHtml(
     string,
     {
       date: string;
+      day_code: CanonicalDayCode;
       status_code: OceanReefDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -688,7 +710,9 @@ function extractAvailabilityFromHtml(
 
         dayByDate.set(iso, {
           date: iso,
+          day_code: toDayCodeFromStatus(statusCode),
           status_code: statusCode,
+          changeover_code: toChangeoverCodeFromStatus(statusCode),
           is_available: statusCode === "A",
           is_available_for_checkin: statusCode === "A" || statusCode === "I",
           is_available_for_checkout: statusCode === "A" || statusCode === "O",

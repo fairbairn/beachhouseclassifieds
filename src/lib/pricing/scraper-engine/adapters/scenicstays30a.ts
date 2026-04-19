@@ -8,6 +8,26 @@ import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-a
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
+type ScenicStatusCode = "A" | "U" | "I" | "O" | "X";
+type CanonicalDayCode = "Y" | "N";
+type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
+
+function toDayCodeFromStatus(status: ScenicStatusCode): CanonicalDayCode {
+  return status === "A" || status === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  status: ScenicStatusCode,
+): CanonicalChangeoverCode {
+  if (status === "I") {
+    return "I";
+  }
+  if (status === "O") {
+    return "O";
+  }
+  return status === "A" ? "C" : "X";
+}
+
 type ScenicStaysDetailRecord = DetailRecordBase & {
   quote_context: {
     listing_id: string;
@@ -77,8 +97,10 @@ type ScenicStaysDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: CanonicalDayCode;
+      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
-      status_code: string;
+      status_code: ScenicStatusCode;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
       booking_day_state: "bookable" | "blocked" | "unknown";

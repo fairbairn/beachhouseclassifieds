@@ -72,7 +72,7 @@ type CoastDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
-      day_code: "Y" | "N" | "X";
+      day_code: "Y" | "N";
       changeover_code: "C" | "I" | "O" | "X";
       is_available: boolean;
       status_code: "A" | "U" | "I" | "O" | "X";
@@ -414,6 +414,27 @@ function addUtcDaysFromIso(isoDate: string, days: number): string {
   return formatDateIso(date);
 }
 
+function toDayCodeFromStatus(
+  statusCode: "A" | "U" | "I" | "O" | "X",
+): "Y" | "N" {
+  return statusCode === "A" || statusCode === "O" ? "Y" : "N";
+}
+
+function toChangeoverCodeFromStatus(
+  statusCode: "A" | "U" | "I" | "O" | "X",
+): "C" | "I" | "O" | "X" {
+  if (statusCode === "I") {
+    return "I";
+  }
+  if (statusCode === "O") {
+    return "O";
+  }
+  if (statusCode === "U" || statusCode === "X") {
+    return "X";
+  }
+  return "C";
+}
+
 function ensureMinimumAvailabilityDays(
   days: CoastDetailRecord["normalized_availability"]["days"],
   minimumDays: number,
@@ -438,7 +459,7 @@ function ensureMinimumAvailabilityDays(
     if (!byDate.has(cursor)) {
       byDate.set(cursor, {
         date: cursor,
-        day_code: "X",
+        day_code: "N",
         changeover_code: "X",
         is_available: false,
         status_code: "X",
@@ -1209,8 +1230,8 @@ async function fetchDetail(
 
       return {
         date: day.date,
-        day_code: day.code,
-        changeover_code: day.changeOverCode,
+        day_code: toDayCodeFromStatus(statusCode),
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
         is_available: isAvailable,
         is_available_for_checkin: isCheckInAllowed,
         is_available_for_checkout: isCheckOutAllowed,
