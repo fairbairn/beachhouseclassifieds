@@ -29,6 +29,8 @@ type Rosemary30AListingRow = {
 };
 
 type Rosemary30ADayCode = "Y" | "N" | "X";
+type Rosemary30AChangeOverCode = "C" | "I" | "O" | "X";
+type Rosemary30ANormalizedStatusCode = "A" | "U" | "I" | "O" | "X";
 
 type Rosemary30ADetailRecord = DetailRecordBase & {
   quote_context: {
@@ -95,8 +97,10 @@ type Rosemary30ADetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: Rosemary30ADayCode;
+      changeover_code: Rosemary30AChangeOverCode;
       is_available: boolean;
-      status_code: Rosemary30ADayCode;
+      status_code: Rosemary30ANormalizedStatusCode;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
       booking_day_state: "bookable" | "blocked" | "unknown";
@@ -115,6 +119,7 @@ type Rosemary30ADetailRecord = DetailRecordBase & {
     begin_date: string;
     end_date: string;
     day_codes: string;
+    changeover_codes: string;
   };
   normalized_rates: {
     source: "pm_rosemary30a";
@@ -374,22 +379,41 @@ function normalizeDateLikeToIso(value: unknown): string {
 function decodeAvailabilityDays(
   beginDateRaw: string,
   availabilityRaw: string,
-): Array<{ date: string; code: Rosemary30ADayCode }> {
+  changeOverRaw: string,
+): Array<{
+  date: string;
+  code: Rosemary30ADayCode;
+  changeOverCode: Rosemary30AChangeOverCode;
+}> {
   const beginDate = parseUsDateToUtc(beginDateRaw);
   if (!beginDate) {
     return [];
   }
 
-  const days: Array<{ date: string; code: Rosemary30ADayCode }> = [];
+  const days: Array<{
+    date: string;
+    code: Rosemary30ADayCode;
+    changeOverCode: Rosemary30AChangeOverCode;
+  }> = [];
   for (let index = 0; index < availabilityRaw.length; index += 1) {
     const current = new Date(beginDate);
     current.setUTCDate(beginDate.getUTCDate() + index);
     const rawCode = availabilityRaw[index] ?? "";
+    const rawChangeOverCode = changeOverRaw[index] ?? "";
     const code: Rosemary30ADayCode =
       rawCode === "Y" ? "Y" : rawCode === "N" ? "N" : "X";
+    const changeOverCode: Rosemary30AChangeOverCode =
+      rawChangeOverCode === "C"
+        ? "C"
+        : rawChangeOverCode === "I"
+          ? "I"
+          : rawChangeOverCode === "O"
+            ? "O"
+            : "X";
     days.push({
       date: formatDateIso(current),
       code,
+      changeOverCode,
     });
   }
 
@@ -1552,6 +1576,7 @@ async function fetchDetail(
       data?: {
         range?: { beginDate?: string; endDate?: string };
         availability?: string;
+        changeOver?: string;
       };
     }>(origin, "GetPropertyAvailabilityRawData", {
       unit_id: Number(unitId),
@@ -1562,10 +1587,12 @@ async function fetchDetail(
     const rawBeginDate = availabilityPayload?.data?.range?.beginDate ?? "";
     const rawEndDate = availabilityPayload?.data?.range?.endDate ?? "";
     const rawAvailabilityCodes = availabilityPayload?.data?.availability ?? "";
+    const rawChangeOverCodes = availabilityPayload?.data?.changeOver ?? "";
 
     const allAvailabilityDays = decodeAvailabilityDays(
       rawBeginDate,
       rawAvailabilityCodes,
+      rawChangeOverCodes,
     );
 
     const now = new Date();
@@ -1592,6 +1619,7 @@ async function fetchDetail(
         availabilityDays.push({
           date: formatDateIso(cursor),
           code: "X",
+          changeOverCode: "X",
         });
         cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
@@ -1601,14 +1629,17 @@ async function fetchDetail(
         availabilityDays.push({
           date: formatDateIso(cursor),
           code: "X",
+          changeOverCode: "X",
         });
         cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
     }
 
     const availabilityByDate = new Map<string, Rosemary30ADayCode>();
+    const changeOverByDate = new Map<string, Rosemary30AChangeOverCode>();
     for (const day of availabilityDays) {
       availabilityByDate.set(day.date, day.code);
+      changeOverByDate.set(day.date, day.changeOverCode);
     }
 
     const ratesStartIso = filteredDays[0]?.date ?? formatDateIso(today);
@@ -1645,7 +1676,8 @@ async function fetchDetail(
           )
         : null;
 
-    const normalizedDays = availabilityDays.map((day) => {
+    const normalizedDays = availabilityDays.map((day, index) => {
+      const previousDay = index > 0 ? availabilityDays[index - 1] : undefined;
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         day.code === "Y"
           ? "bookable"
@@ -1657,22 +1689,44 @@ async function fetchDetail(
         (rate) => rate.date === day.date,
       );
 
+      const isAvailable = day.code === "Y";
+      const isCheckInAllowed =
+        day.code === "Y" &&
+        day.changeOverCode !== "X" &&
+        day.changeOverCode !== "O";
+      const isCheckOutAllowed =
+        (day.code === "Y" &&
+          day.changeOverCode !== "X" &&
+          day.changeOverCode !== "I") ||
+        (day.code === "N" && previousDay?.code === "Y");
+
+      const statusCode: Rosemary30ANormalizedStatusCode =
+        day.code === "X"
+          ? "X"
+          : isCheckInAllowed && isCheckOutAllowed
+            ? "A"
+            : isCheckInAllowed
+              ? "I"
+              : isCheckOutAllowed
+                ? "O"
+                : "U";
+
       return {
         date: day.date,
-        is_available: day.code === "Y",
-        status_code: day.code,
-        is_available_for_checkin: day.code === "Y",
-        is_available_for_checkout: day.code === "Y",
+        day_code: day.code,
+        changeover_code: day.changeOverCode,
+        is_available: isAvailable,
+        status_code: statusCode,
+        is_available_for_checkin: isCheckInAllowed,
+        is_available_for_checkout: isCheckOutAllowed,
         booking_day_state: bookingDayState,
         min_nights_required: rateForDay?.min_nights ?? null,
       };
     });
 
-    const available = normalizedDays.filter(
-      (day) => day.status_code === "Y",
-    ).length;
-    const notAvailable = normalizedDays.filter(
-      (day) => day.status_code === "N",
+    const available = availabilityDays.filter((day) => day.code === "Y").length;
+    const notAvailable = availabilityDays.filter(
+      (day) => day.code === "N",
     ).length;
     const other = normalizedDays.length - available - notAvailable;
 
@@ -1789,6 +1843,7 @@ async function fetchDetail(
         begin_date: rawBeginDate,
         end_date: rawEndDate,
         day_codes: rawAvailabilityCodes,
+        changeover_codes: rawChangeOverCodes,
       },
       normalized_rates: {
         source: "pm_rosemary30a",
@@ -1798,7 +1853,10 @@ async function fetchDetail(
         window_start: normalizedRateDays[0]?.date ?? "",
         window_end:
           normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
-        days: normalizedRateDays,
+        days: normalizedRateDays.map((rateDay) => ({
+          ...rateDay,
+          changeover_code: changeOverByDate.get(rateDay.date) ?? "",
+        })),
         stats: {
           days_with_rate: rateValues.length,
           min_nightly_rate: minRate,

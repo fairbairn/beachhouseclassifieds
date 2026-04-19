@@ -469,7 +469,7 @@ export async function buildListingPricingCacheForAdapter(
             ? true
             : rateDay?.is_booked === false;
 
-      const statusCode =
+      const normalizedStatusCode =
         availability?.status_code === "A" ||
         availability?.status_code === "U" ||
         availability?.status_code === "I" ||
@@ -478,20 +478,49 @@ export async function buildListingPricingCacheForAdapter(
           ? availability.status_code
           : undefined;
 
-      const isCheckInAllowed =
+      const observedCheckInAllowed =
         typeof availability?.is_available_for_checkin === "boolean"
           ? availability.is_available_for_checkin
-          : statusCode === "A" || statusCode === "I";
+          : undefined;
 
-      const isCheckOutAllowed =
+      const observedCheckOutAllowed =
         typeof availability?.is_available_for_checkout === "boolean"
           ? availability.is_available_for_checkout
-          : statusCode === "A" || statusCode === "O";
+          : undefined;
+
+      const isCheckInAllowed =
+        observedCheckInAllowed ??
+        (normalizedStatusCode === "A" || normalizedStatusCode === "I"
+          ? true
+          : normalizedStatusCode === "U" || normalizedStatusCode === "O"
+            ? false
+            : undefined);
+
+      const isCheckOutAllowed =
+        observedCheckOutAllowed ??
+        (normalizedStatusCode === "A" || normalizedStatusCode === "O"
+          ? true
+          : normalizedStatusCode === "U" || normalizedStatusCode === "I"
+            ? false
+            : undefined);
+
+      const inferredStatusCode =
+        normalizedStatusCode ??
+        (typeof observedCheckInAllowed === "boolean" &&
+        typeof observedCheckOutAllowed === "boolean"
+          ? observedCheckInAllowed && observedCheckOutAllowed
+            ? "A"
+            : observedCheckInAllowed
+              ? "I"
+              : observedCheckOutAllowed
+                ? "O"
+                : "U"
+          : undefined);
 
       return {
         date,
         is_available: isAvailable,
-        availability_status_code: statusCode,
+        availability_status_code: inferredStatusCode,
         is_available_for_checkin: isCheckInAllowed,
         is_available_for_checkout: isCheckOutAllowed,
         min_nights:
