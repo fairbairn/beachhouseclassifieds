@@ -10,6 +10,9 @@ export type ListingPricingFeeComponent = {
 export type ListingPricingDayRecord = {
   date: string;
   is_available: boolean;
+  availability_status_code?: "A" | "U" | "I" | "O" | "X";
+  is_available_for_checkin?: boolean;
+  is_available_for_checkout?: boolean;
   min_nights: number | null;
   base_nightly: number;
   all_in_nightly: number;

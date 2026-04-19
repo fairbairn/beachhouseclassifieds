@@ -373,14 +373,41 @@ function extractCheckTimes(policyItems: unknown): {
   };
 }
 
-function extractAvailabilityCalendar(raw: RawListing): Record<string, number> {
+function extractAvailabilityCalendarStatus(raw: RawListing): Record<
+  string,
+  {
+    dayType: "available" | "checkin_only" | "checkout_only" | "unavailable";
+    isNightAvailable: boolean;
+    isCheckInAllowed: boolean;
+    isCheckOutAllowed: boolean;
+    minNights: number | null;
+    allInNightly: number | null;
+    statusConfidence: "derived";
+  }
+> {
   const rates = raw.calendarRates;
   if (!rates || typeof rates !== "object") {
     return {};
   }
 
-  const out: Record<string, number> = {};
-  for (const [dateIso, value] of Object.entries(rates)) {
+  const out: Record<
+    string,
+    {
+      dayType: "available" | "checkin_only" | "checkout_only" | "unavailable";
+      isNightAvailable: boolean;
+      isCheckInAllowed: boolean;
+      isCheckOutAllowed: boolean;
+      minNights: number | null;
+      allInNightly: number | null;
+      statusConfidence: "derived";
+    }
+  > = {};
+
+  const sortedEntries = Object.entries(rates)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  for (const [index, [dateIso, value]] of sortedEntries.entries()) {
     if (typeof value !== "string") {
       continue;
     }
@@ -388,7 +415,17 @@ function extractAvailabilityCalendar(raw: RawListing): Record<string, number> {
     if (!Number.isFinite(parsed) || parsed <= 0) {
       continue;
     }
-    out[dateIso] = Math.round(parsed);
+
+    const isCheckOutAllowed = index > 0;
+    out[dateIso] = {
+      dayType: isCheckOutAllowed ? "available" : "checkin_only",
+      isNightAvailable: true,
+      isCheckInAllowed: true,
+      isCheckOutAllowed,
+      minNights: null,
+      allInNightly: Math.round(parsed),
+      statusConfidence: "derived",
+    };
   }
 
   return out;
@@ -515,7 +552,7 @@ function mapListing(raw: RawListing): DiscoverListing | null {
     policyText,
   );
   const nightlyPricing = inferTypicalNightly(raw);
-  const availabilityCalendar = extractAvailabilityCalendar(raw);
+  const availabilityCalendarStatus = extractAvailabilityCalendarStatus(raw);
 
   return {
     id,
@@ -549,7 +586,7 @@ function mapListing(raw: RawListing): DiscoverListing | null {
     checkInTime: checkTimes.checkInTime,
     checkOutTime: checkTimes.checkOutTime,
     imageGallery: gallery.slice(0, 24),
-    availabilityCalendar,
+    availabilityCalendarStatus,
     lat,
     lng,
   };

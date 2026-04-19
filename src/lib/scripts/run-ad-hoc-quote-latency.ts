@@ -426,6 +426,26 @@ function readDetailUrlFromQuoteContext(
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function canonicalizeDetailUrlForAdapter(
+  adapterKey: string,
+  detailUrl: string,
+): string {
+  if (adapterKey !== "360blue") {
+    return detailUrl;
+  }
+
+  try {
+    const parsed = new URL(detailUrl);
+    if (parsed.hostname.endsWith("callistavacations.com")) {
+      parsed.hostname = "www.360blue.com";
+      parsed.protocol = "https:";
+    }
+    return parsed.toString();
+  } catch {
+    return detailUrl;
+  }
+}
+
 function pad(value: string, width: number): string {
   const visibleLength = measureDisplayWidth(value);
   if (visibleLength >= width) {
@@ -577,7 +597,8 @@ async function collectListingSamplesForAdapter(
     }
 
     const listingId = sidecar.external_listing_id?.trim() ?? "";
-    const detailUrl = sidecar.detail_url?.trim() ?? "";
+    const detailUrlRaw = sidecar.detail_url?.trim() ?? "";
+    const detailUrl = canonicalizeDetailUrlForAdapter(adapterKey, detailUrlRaw);
     const observations = sidecar.observations ?? [];
 
     if (!listingId || !detailUrl) {
@@ -718,10 +739,12 @@ async function buildExplicitSingleSample(input: {
   return {
     adapterKey: input.adapterKey,
     listingId: input.listingId,
-    detailUrl:
+    detailUrl: canonicalizeDetailUrlForAdapter(
+      input.adapterKey,
       sidecar?.detail_url?.trim() ||
-      readDetailUrlFromQuoteContext(quoteContext) ||
-      "n/a",
+        readDetailUrlFromQuoteContext(quoteContext) ||
+        "n/a",
+    ),
     quoteContext,
     startDate: input.startDate,
     endDate: input.endDate,

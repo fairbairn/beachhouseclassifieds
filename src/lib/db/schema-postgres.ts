@@ -256,6 +256,138 @@ export const listing_source_image = pgTable(
   }),
 );
 
+export const listing_source_pricing = pgTable(
+  "listing_source_pricing",
+  {
+    id: text("id").primaryKey(),
+    listing_id: text("listing_id")
+      .notNull()
+      .references(() => listing.id, { onDelete: "cascade" }),
+    source_link_id: text("source_link_id")
+      .notNull()
+      .references(() => listing_source_link.id, { onDelete: "cascade" }),
+    stay_date: text("stay_date").notNull(),
+    is_available: boolean("is_available").notNull(),
+    availability_status_code: text("availability_status_code"),
+    is_available_for_checkin: boolean("is_available_for_checkin"),
+    is_available_for_checkout: boolean("is_available_for_checkout"),
+    min_nights: integer("min_nights"),
+    base_nightly: numeric("base_nightly", { precision: 12, scale: 2 }),
+    estimated_fees_nightly: numeric("estimated_fees_nightly", {
+      precision: 12,
+      scale: 2,
+    }),
+    estimated_taxes_nightly: numeric("estimated_taxes_nightly", {
+      precision: 12,
+      scale: 2,
+    }),
+    all_in_nightly: numeric("all_in_nightly", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    currency: text("currency").notNull().default("USD"),
+    price_source: text("price_source").notNull(),
+    confidence: text("confidence"),
+    scrape_observed_at: timestamp("scrape_observed_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    window_start_date: text("window_start_date"),
+    window_end_date: text("window_end_date"),
+    ingest_run_id: text("ingest_run_id"),
+    is_current: boolean("is_current").notNull().default(true),
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    source_link_stay_date_unique_idx: uniqueIndex(
+      "listing_source_pricing_source_link_stay_date_unique_idx",
+    ).on(table.source_link_id, table.stay_date),
+    listing_date_idx: index(
+      "listing_source_pricing_listing_id_stay_date_idx",
+    ).on(table.listing_id, table.stay_date),
+    stay_date_source_link_idx: index(
+      "listing_source_pricing_stay_date_source_link_id_idx",
+    ).on(table.stay_date, table.source_link_id),
+  }),
+);
+
+export const listing_pricing_summary = pgTable(
+  "listing_pricing_summary",
+  {
+    id: text("id").primaryKey(),
+    listing_id: text("listing_id")
+      .notNull()
+      .references(() => listing.id, { onDelete: "cascade" }),
+    source_link_id: text("source_link_id")
+      .notNull()
+      .references(() => listing_source_link.id, { onDelete: "cascade" }),
+    anchor_date: text("anchor_date").notNull(),
+    nights: integer("nights").notNull().default(7),
+    horizon_days: integer("horizon_days").notNull().default(45),
+    method: text("method").notNull(),
+    month_start_date: text("month_start_date").notNull(),
+    month_end_date: text("month_end_date").notNull(),
+    sample_nights_total: integer("sample_nights_total").notNull(),
+    sample_nights_available: integer("sample_nights_available").notNull(),
+    avg_all_in_nightly: numeric("avg_all_in_nightly", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    avg_all_in_nightly_available: numeric("avg_all_in_nightly_available", {
+      precision: 12,
+      scale: 2,
+    }),
+    recommended_all_in_nightly: numeric("recommended_all_in_nightly", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    estimated_total_for_nights: numeric("estimated_total_for_nights", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    pricing_max_updated_at: timestamp("pricing_max_updated_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    freshness_status: text("freshness_status").notNull().default("fresh"),
+    run_id: text("run_id"),
+    computed_at: timestamp("computed_at", {
+      mode: "string",
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    listing_anchor_method_unique_idx: uniqueIndex(
+      "listing_pricing_summary_listing_anchor_nights_method_unique_idx",
+    ).on(
+      table.listing_id,
+      table.anchor_date,
+      table.nights,
+      table.method,
+      table.month_start_date,
+    ),
+    source_link_anchor_idx: index(
+      "listing_pricing_summary_source_link_anchor_idx",
+    ).on(table.source_link_id, table.anchor_date),
+    freshness_idx: index("listing_pricing_summary_freshness_idx").on(
+      table.freshness_status,
+    ),
+  }),
+);
+
 export const listing_geocode_cache = pgTable(
   "listing_geocode_cache",
   {

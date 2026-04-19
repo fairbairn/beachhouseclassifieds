@@ -10,7 +10,10 @@ import { selectCanonicalListings } from "@/lib/pricing/shared/canonical-index-li
 
 type AvailabilityDay = {
   date: string;
+  status_code?: "A" | "U" | "I" | "O" | "X";
   is_available: boolean;
+  is_available_for_checkin?: boolean;
+  is_available_for_checkout?: boolean;
   min_nights_required?: number | null;
 };
 
@@ -466,9 +469,31 @@ export async function buildListingPricingCacheForAdapter(
             ? true
             : rateDay?.is_booked === false;
 
+      const statusCode =
+        availability?.status_code === "A" ||
+        availability?.status_code === "U" ||
+        availability?.status_code === "I" ||
+        availability?.status_code === "O" ||
+        availability?.status_code === "X"
+          ? availability.status_code
+          : undefined;
+
+      const isCheckInAllowed =
+        typeof availability?.is_available_for_checkin === "boolean"
+          ? availability.is_available_for_checkin
+          : statusCode === "A" || statusCode === "I";
+
+      const isCheckOutAllowed =
+        typeof availability?.is_available_for_checkout === "boolean"
+          ? availability.is_available_for_checkout
+          : statusCode === "A" || statusCode === "O";
+
       return {
         date,
         is_available: isAvailable,
+        availability_status_code: statusCode,
+        is_available_for_checkin: isCheckInAllowed,
+        is_available_for_checkout: isCheckOutAllowed,
         min_nights:
           rateDay?.min_nights ??
           (typeof availability?.min_nights_required === "number"

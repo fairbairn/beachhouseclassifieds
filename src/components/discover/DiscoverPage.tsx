@@ -1209,6 +1209,22 @@ export function DiscoverPage({
     return Math.ceil(overlayListing.typicalAllInNightly * nights);
   }, [nights, overlayListing]);
 
+  const overlayUpcomingMonthlyTotals = useMemo(() => {
+    if (!overlayListing?.upcomingTypicalPricingMonths?.length) {
+      return [] as Array<{
+        monthLabel: string;
+        total: number;
+      }>;
+    }
+
+    return overlayListing.upcomingTypicalPricingMonths
+      .slice(0, 3)
+      .map((item) => ({
+        monthLabel: item.monthLabel,
+        total: Math.ceil(item.typicalAllInNightly * nights),
+      }));
+  }, [nights, overlayListing]);
+
   const overlayEmotionalHeadline = useMemo(() => {
     if (!overlayListing) {
       return null;
@@ -1307,6 +1323,8 @@ export function DiscoverPage({
       }
 
       const clampedIndex = Math.max(0, Math.min(index, imageCount - 1));
+      setLoadedLightboxThumbUrls(new Set());
+      setLightboxThumbRetryCounts({});
       setOverlayLightboxImageIndex(clampedIndex);
       setIsOverlayImageLightboxOpen(true);
     },
@@ -1315,6 +1333,8 @@ export function DiscoverPage({
 
   const closeOverlayImageLightbox = useCallback(() => {
     setIsOverlayImageLightboxOpen(false);
+    setLoadedLightboxThumbUrls(new Set());
+    setLightboxThumbRetryCounts({});
   }, []);
 
   const showPreviousOverlayLightboxImage = useCallback(() => {
@@ -1332,9 +1352,22 @@ export function DiscoverPage({
     );
   }, [overlayImageCards.images.length]);
 
-  const isOverlayLightboxAtFirstImage = overlayLightboxImageIndex <= 0;
+  const overlayLightboxImageCount = overlayImageCards.images.length;
+  const overlayLightboxImageIndexClamped = Math.max(
+    0,
+    Math.min(
+      overlayLightboxImageIndex,
+      Math.max(0, overlayLightboxImageCount - 1),
+    ),
+  );
+  const isOverlayImageLightboxVisible =
+    isOverlayImageLightboxOpen &&
+    isDetailOverlayOpen &&
+    overlayLightboxImageCount > 0;
+
+  const isOverlayLightboxAtFirstImage = overlayLightboxImageIndexClamped <= 0;
   const isOverlayLightboxAtLastImage =
-    overlayLightboxImageIndex >= overlayImageCards.images.length - 1;
+    overlayLightboxImageIndexClamped >= overlayLightboxImageCount - 1;
 
   const goToFirstOverlayLightboxImage = useCallback(() => {
     setOverlayLightboxImageIndex(0);
@@ -1349,26 +1382,7 @@ export function DiscoverPage({
   }, [overlayImageCards.images.length]);
 
   useEffect(() => {
-    if (!isDetailOverlayOpen) {
-      setIsOverlayImageLightboxOpen(false);
-    }
-  }, [isDetailOverlayOpen]);
-
-  useEffect(() => {
-    const imageCount = overlayImageCards.images.length;
-    if (imageCount === 0) {
-      setOverlayLightboxImageIndex(0);
-      setIsOverlayImageLightboxOpen(false);
-      return;
-    }
-
-    setOverlayLightboxImageIndex((current) =>
-      Math.max(0, Math.min(current, imageCount - 1)),
-    );
-  }, [overlayImageCards.images.length]);
-
-  useEffect(() => {
-    if (!isOverlayImageLightboxOpen) {
+    if (!isOverlayImageLightboxVisible) {
       return;
     }
 
@@ -1411,15 +1425,13 @@ export function DiscoverPage({
     closeOverlayImageLightbox,
     goToFirstOverlayLightboxImage,
     goToLastOverlayLightboxImage,
-    isOverlayImageLightboxOpen,
+    isOverlayImageLightboxVisible,
     showNextOverlayLightboxImage,
     showPreviousOverlayLightboxImage,
   ]);
 
   useEffect(() => {
-    if (!isOverlayImageLightboxOpen) {
-      setLoadedLightboxThumbUrls(new Set());
-      setLightboxThumbRetryCounts({});
+    if (!isOverlayImageLightboxVisible) {
       return;
     }
 
@@ -1479,15 +1491,15 @@ export function DiscoverPage({
       };
     }
   }, [
-    isOverlayImageLightboxOpen,
+    isOverlayImageLightboxVisible,
     lightboxThumbRetryCounts,
     loadedLightboxThumbUrls,
     overlayImageCards.images,
-    overlayLightboxImageIndex,
+    overlayLightboxImageIndexClamped,
   ]);
 
   useEffect(() => {
-    if (!isOverlayImageLightboxOpen) {
+    if (!isOverlayImageLightboxVisible) {
       return;
     }
 
@@ -1497,7 +1509,7 @@ export function DiscoverPage({
     }
 
     const activeThumb = thumbRail.querySelector<HTMLButtonElement>(
-      `[data-lightbox-thumb-index="${overlayLightboxImageIndex}"]`,
+      `[data-lightbox-thumb-index="${overlayLightboxImageIndexClamped}"]`,
     );
 
     if (!activeThumb) {
@@ -1552,9 +1564,9 @@ export function DiscoverPage({
       behavior: "smooth",
     });
   }, [
-    isOverlayImageLightboxOpen,
-    overlayImageCards.images.length,
-    overlayLightboxImageIndex,
+    isOverlayImageLightboxVisible,
+    overlayLightboxImageCount,
+    overlayLightboxImageIndexClamped,
   ]);
 
   const overlayBedStats = useMemo(() => {
@@ -2285,6 +2297,31 @@ export function DiscoverPage({
                                   availability and dates are confirmed, we will
                                   provide an accurate live quote for this stay.
                                 </p>
+                                {overlayUpcomingMonthlyTotals.length > 0 ? (
+                                  <div className="mt-3 rounded-xl border border-cyan-200/70 bg-white/70 p-3">
+                                    <p className="text-[11px] font-semibold tracking-[0.04em] text-cyan-900 uppercase">
+                                      Next 3 Months
+                                    </p>
+                                    <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
+                                      {overlayUpcomingMonthlyTotals.map(
+                                        (item) => (
+                                          <li
+                                            key={item.monthLabel}
+                                            className="flex items-center justify-between gap-3"
+                                          >
+                                            <span>{item.monthLabel}</span>
+                                            <span className="font-semibold text-slate-900">
+                                              $
+                                              {item.total.toLocaleString(
+                                                "en-US",
+                                              )}
+                                            </span>
+                                          </li>
+                                        ),
+                                      )}
+                                    </ul>
+                                  </div>
+                                ) : null}
                               </section>
 
                               <section className="rounded-2xl border border-slate-200 bg-slate-50/75 p-4 md:p-5">
@@ -2391,12 +2428,12 @@ export function DiscoverPage({
                               <img
                                 src={
                                   overlayImageCards.images[
-                                    overlayLightboxImageIndex
+                                    overlayLightboxImageIndexClamped
                                   ]?.url
                                 }
                                 alt={
                                   overlayImageCards.images[
-                                    overlayLightboxImageIndex
+                                    overlayLightboxImageIndexClamped
                                   ]?.label ?? "Listing image"
                                 }
                                 className="max-h-full max-w-full rounded-xl object-contain shadow-[0_24px_60px_-36px_rgba(15,23,42,0.95)]"
@@ -2441,7 +2478,7 @@ export function DiscoverPage({
 
                               {overlayImageCards.images.map((image, index) => {
                                 const isActive =
-                                  index === overlayLightboxImageIndex;
+                                  index === overlayLightboxImageIndexClamped;
                                 const isThumbLoaded =
                                   loadedLightboxThumbUrls.has(image.url);
                                 const retryCount =

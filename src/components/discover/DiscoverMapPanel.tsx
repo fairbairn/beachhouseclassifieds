@@ -345,17 +345,6 @@ export function DiscoverMapPanel({
   const syncSelectedListingCardRef = useRef(onSyncSelectedListingCard);
   const [isMapInResetState, setIsMapInResetState] = useState(true);
   const [mapReadyRevision, setMapReadyRevision] = useState(0);
-  const listingsGeometryKey = useMemo(
-    () =>
-      [...listings]
-        .sort((a, b) => a.id.localeCompare(b.id))
-        .map(
-          (listing) =>
-            `${listing.id}:${listing.lat.toFixed(6)}:${listing.lng.toFixed(6)}`,
-        )
-        .join("|"),
-    [listings],
-  );
   const listingsGeometry = useMemo(
     () =>
       listings.map((listing) => ({
@@ -364,7 +353,7 @@ export function DiscoverMapPanel({
         lat: listing.lat,
         lng: listing.lng,
       })),
-    [listingsGeometryKey],
+    [listings],
   );
 
   const mapEmbedSrc = `https://maps.google.com/maps?q=${encodeURIComponent(`${mapTarget.lat},${mapTarget.lng}`)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
@@ -921,7 +910,13 @@ export function DiscoverMapPanel({
     }
 
     applySecondaryMarkerIcons(map.getZoom());
-  }, [listingsGeometry, mapTarget.id, onSelectListing, mapReadyRevision]);
+  }, [
+    listings,
+    listingsGeometry,
+    mapTarget.id,
+    onSelectListing,
+    mapReadyRevision,
+  ]);
 
   useEffect(() => {
     const map = googleMapRef.current;

@@ -14,10 +14,27 @@ type ReservationQuoteApiResponse = {
 
 const ADAPTER_KEY = "360blue" as const;
 const DEFAULT_RESERVATION_QUOTES_ENDPOINT =
-  "https://www.callistavacations.com/api/nrbe/reservation-quotes.json";
+  "https://www.360blue.com/api/nrbe/reservation-quotes.json";
 const DEFAULT_CART_CREATE_ENDPOINT =
-  "https://www.callistavacations.com/api/nrbe/carts/create.json";
+  "https://www.360blue.com/api/nrbe/carts/create.json";
 const DEFAULT_TIMEOUT_MS = 12000;
+const REQUEST_REFERER = "https://www.360blue.com/";
+const REQUEST_ORIGIN = "https://www.360blue.com";
+const REQUEST_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+function canonicalize360BlueHost(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.endsWith("callistavacations.com")) {
+      parsed.hostname = "www.360blue.com";
+      parsed.protocol = "https:";
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
 
 function normalizeTimeoutMs(raw: number | undefined): number {
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
@@ -71,7 +88,7 @@ function extractQuoteContext(
       ? context.endpoint_path.trim()
       : "";
   const reservationQuotesEndpoint = endpointPathRaw.startsWith("/")
-    ? `https://www.callistavacations.com${endpointPathRaw}`
+    ? `https://www.360blue.com${endpointPathRaw}`
     : DEFAULT_RESERVATION_QUOTES_ENDPOINT;
 
   const cartCreateEndpointRaw =
@@ -79,10 +96,14 @@ function extractQuoteContext(
       ? context.cart_create_endpoint.trim()
       : "";
 
+  const cartCreateEndpoint = canonicalize360BlueHost(
+    cartCreateEndpointRaw || DEFAULT_CART_CREATE_ENDPOINT,
+  );
+
   return {
     unitId,
     reservationQuotesEndpoint,
-    cartCreateEndpoint: cartCreateEndpointRaw || DEFAULT_CART_CREATE_ENDPOINT,
+    cartCreateEndpoint,
   };
 }
 
@@ -164,6 +185,15 @@ export async function execute360BlueSingleQuote(
   query.set("adults", String(toPositiveInt(input.adults, 1)));
   query.set("children", String(toNonNegativeInt(input.children, 0)));
 
+  const handoffUrl = buildHandoffUrl({
+    cartCreateEndpoint: quoteContext.cartCreateEndpoint,
+    unitId: quoteContext.unitId,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+    adults: input.adults,
+    children: input.children,
+  });
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -174,6 +204,10 @@ export async function execute360BlueSingleQuote(
         method: "GET",
         headers: {
           accept: "application/json, text/plain, */*",
+          "accept-language": "en-US,en;q=0.9",
+          origin: REQUEST_ORIGIN,
+          referer: REQUEST_REFERER,
+          "user-agent": REQUEST_USER_AGENT,
         },
         signal: controller.signal,
       },
@@ -190,7 +224,7 @@ export async function execute360BlueSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
-          details: { status: response.status },
+          details: { status: response.status, handoffUrl },
         }),
       };
     }
@@ -209,6 +243,7 @@ export async function execute360BlueSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          details: { handoffUrl },
         }),
       };
     }
@@ -232,6 +267,7 @@ export async function execute360BlueSingleQuote(
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
+          details: { handoffUrl },
         }),
       };
     }
@@ -250,19 +286,11 @@ export async function execute360BlueSingleQuote(
           details: {
             subTotal: baseTotal,
             total: grandTotal,
+            handoffUrl,
           },
         }),
       };
     }
-
-    const handoffUrl = buildHandoffUrl({
-      cartCreateEndpoint: quoteContext.cartCreateEndpoint,
-      unitId: quoteContext.unitId,
-      checkInIso: input.checkInIso,
-      checkOutIso: input.checkOutIso,
-      adults: input.adults,
-      children: input.children,
-    });
 
     return {
       success: true,
@@ -296,6 +324,7 @@ export async function execute360BlueSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: { handoffUrl },
       }),
     };
   } finally {

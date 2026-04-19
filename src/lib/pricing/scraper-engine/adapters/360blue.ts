@@ -211,7 +211,7 @@ const OUTPUT_ROOT = resolve(
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
 const BLUE360_CART_CREATE_ENDPOINT =
-  "https://www.callistavacations.com/api/nrbe/carts/create.json";
+  "https://www.360blue.com/api/nrbe/carts/create.json";
 
 type BlueQuoteSidecar = CanonicalQuotesSidecarRecord;
 
@@ -256,6 +256,10 @@ function toValidDetailUrl(value: string): string | null {
     if (!isPropertyPath || !isSupportedHost) {
       return null;
     }
+
+    // Canonicalize all accepted 360blue detail URLs onto the public 360blue host.
+    parsed.hostname = "www.360blue.com";
+    parsed.protocol = "https:";
     return normalizeLink(parsed.toString());
   } catch {
     return null;

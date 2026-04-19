@@ -9,7 +9,14 @@ import {
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { DiscoverListing } from "@/components/discover/discover-data";
 import {
@@ -30,34 +37,9 @@ function DiscoverImageSlot({
   alt: string;
   containerClassName: string;
 }) {
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(() => !src);
   const [retryCount, setRetryCount] = useState(0);
   const imageRef = useRef<HTMLImageElement | null>(null);
-
-  useEffect(() => {
-    setIsLoaded(false);
-  }, [retryCount, src]);
-
-  useEffect(() => {
-    setRetryCount(0);
-  }, [src]);
-
-  useEffect(() => {
-    if (!src) {
-      setIsLoaded(true);
-      return;
-    }
-
-    const image = imageRef.current;
-    if (!image) {
-      return;
-    }
-
-    // Browsers may serve from cache without firing onLoad on remount.
-    if (image.complete && image.naturalWidth > 0) {
-      setIsLoaded(true);
-    }
-  }, [retryCount, src]);
 
   useEffect(() => {
     if (!src || isLoaded) {
@@ -96,7 +78,7 @@ function DiscoverImageSlot({
     >
       <div
         aria-hidden="true"
-        className={`pointer-events-none absolute inset-0 bg-linear-to-br from-slate-200/80 via-slate-200/55 to-slate-300/65 transition-opacity duration-200 ${isLoaded ? "opacity-0" : "opacity-100"}`}
+        className={`pointer-events-none absolute inset-0 bg-linear-to-br from-slate-200/80 via-slate-200/55 to-slate-300/65 transition-opacity duration-200 ${!src || isLoaded ? "opacity-0" : "opacity-100"}`}
       />
       <img
         key={`${src ?? ""}-${retryCount}`}
@@ -116,7 +98,7 @@ function DiscoverImageSlot({
           });
         }}
         style={{ display: src ? "block" : "none" }}
-        className={`h-full w-full object-cover transition-opacity duration-200 ${isLoaded ? "opacity-100" : "opacity-0"}`}
+        className={`h-full w-full object-cover transition-opacity duration-200 ${!src || isLoaded ? "opacity-100" : "opacity-0"}`}
       />
     </div>
   );
@@ -455,10 +437,13 @@ export function DiscoverListingsPanel({
           ? "xl:grid-cols-2 2xl:grid-cols-3"
           : "xl:grid-cols-3 2xl:grid-cols-4";
 
-  const formatApproximateTotal = (allInNightly: number) => {
-    const roundedTotal = Math.ceil(allInNightly * nights);
-    return `$${roundedTotal.toLocaleString("en-US")}`;
-  };
+  const formatApproximateTotal = useCallback(
+    (allInNightly: number) => {
+      const roundedTotal = Math.ceil(allInNightly * nights);
+      return `$${roundedTotal.toLocaleString("en-US")}`;
+    },
+    [nights],
+  );
 
   const isSingleColumnCardLayout = cardsPerRow === 1;
   const isFourUpCardLayout =
@@ -527,7 +512,7 @@ export function DiscoverListingsPanel({
                 <div className="grid aspect-square grid-cols-2 grid-rows-2 gap-2">
                   {rightQuadPreviewImages.map((img, i) => (
                     <DiscoverImageSlot
-                      key={`${listing.id}-two-up-${i}`}
+                      key={`${listing.id}-two-up-${i}-${img ?? "none"}`}
                       src={img}
                       alt={`${listing.name} preview ${i + 2}`}
                       containerClassName="h-full w-full rounded-lg"
@@ -547,7 +532,7 @@ export function DiscoverListingsPanel({
                 </div>
                 {previewImages.map((img, i) => (
                   <DiscoverImageSlot
-                    key={`${listing.id}-${i}`}
+                    key={`${listing.id}-${i}-${img ?? "none"}`}
                     src={img}
                     alt={`${listing.name} preview ${i + 1}`}
                     containerClassName={`${isFourUpCardLayout ? "aspect-video w-full" : "aspect-square"} rounded-lg`}
@@ -673,12 +658,14 @@ export function DiscoverListingsPanel({
       listings,
       favoriteIdSet,
       activeListingId,
-      cardsPerRow,
-      singleColumnCardVariant,
       fadingInListingIds,
       onOpenDetailOverlay,
       onFocusMap,
       onToggleFavorite,
+      formatApproximateTotal,
+      isFourUpCardLayout,
+      isTwoUpCardLayout,
+      threeUpCardMinHeightClass,
       nights,
     ],
   );

@@ -3,12 +3,29 @@ import {
   type DiscoverListing,
 } from "@/components/discover/discover-data";
 import { pgDb } from "@/core/server/db";
-import { listing, site } from "@/lib/db/schema-postgres";
+import {
+  listing,
+  listing_pricing_summary,
+  listing_source_link,
+  listing_source_pricing,
+  site,
+} from "@/lib/db/schema-postgres";
 import { getDiscoverDemoListings } from "@/lib/discover/discover-demo-listings.server";
-import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+} from "drizzle-orm";
 
 const TARGET_LISTING_COUNT = 96;
 const DISCOVER_SITE_SLUG = "30acollections";
+const DISCOVER_PRICING_SUMMARY_METHOD = "monthly_forward_avg_v1";
 
 let cachedDiscoverSiteId: string | null | undefined;
 
@@ -236,101 +253,443 @@ function buildSleepingArrangementLines(raw: {
   return fallbackLines.slice(0, 10);
 }
 
-function derivePricing(
-  listingNumber: number,
-  sleeps: number,
-): {
-  typicalBaseNightly: number;
-  typicalAllInNightly: number;
-  typicalPricingMonth: string;
-} {
-  const seed = Math.abs(listingNumber) % 500;
-  const allInNightly = Math.max(325, 350 + seed + sleeps * 22);
-  const baseNightly = Math.ceil(allInNightly * 0.88);
-  const month45 = new Date();
-  month45.setDate(month45.getDate() + 45);
-
-  return {
-    typicalBaseNightly: baseNightly,
-    typicalAllInNightly: allInNightly,
-    typicalPricingMonth: month45.toLocaleString("en-US", {
-      month: "long",
-    }),
-  };
+function toIsoDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
 }
 
-function buildAvailabilityCalendar(input: {
-  nightlyBase: number;
-  listingSeed: number;
-}): Record<string, number> {
-  const out: Record<string, number> = {};
-  const seed = Math.abs(input.listingSeed % 17);
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
+function buildNextMonthStartDate(): Date {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const nextMonthStart = new Date(now);
+  nextMonthStart.setDate(1);
+  nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+  return nextMonthStart;
+}
 
-  for (let offset = 0; offset < 330; offset += 1) {
-    const day = new Date(start);
-    day.setDate(start.getDate() + offset);
-    const iso = day.toISOString().slice(0, 10);
+function buildMonthStartDateList(input: {
+  startDate: Date;
+  count: number;
+}): Date[] {
+  return Array.from({ length: input.count }, (_, index) => {
+    const monthStart = new Date(input.startDate);
+    monthStart.setMonth(monthStart.getMonth() + index);
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    return monthStart;
+  });
+}
 
-    // Keep occasional gaps to mimic unavailable nights.
-    if ((offset + seed) % 19 === 0) {
+type SourcePricingContext = {
+  typicalPricingMonth: string;
+  typicalBaseNightly: number;
+  typicalAllInNightly: number;
+  upcomingTypicalPricingMonths: Array<{
+    monthLabel: string;
+    monthStartDate: string;
+    typicalAllInNightly: number;
+  }>;
+  availabilityCalendarStatus: Record<
+    string,
+    {
+      dayType: "available" | "checkin_only" | "checkout_only" | "unavailable";
+      isNightAvailable: boolean;
+      isCheckInAllowed: boolean;
+      isCheckOutAllowed: boolean;
+      minNights: number | null;
+      allInNightly: number | null;
+      statusConfidence: "observed" | "derived";
+    }
+  >;
+};
+
+function dayTypeFromAvailabilityStatusCode(
+  code: "A" | "U" | "I" | "O" | "X",
+): "available" | "checkin_only" | "checkout_only" | "unavailable" {
+  if (code === "A") {
+    return "available";
+  }
+  if (code === "I") {
+    return "checkin_only";
+  }
+  if (code === "O") {
+    return "checkout_only";
+  }
+  return "unavailable";
+}
+
+function deriveCalendarDayType(input: {
+  isNightAvailable: boolean;
+  isCheckInAllowed: boolean;
+  isCheckOutAllowed: boolean;
+}): "available" | "checkin_only" | "checkout_only" | "unavailable" {
+  if (!input.isNightAvailable && !input.isCheckOutAllowed) {
+    return "unavailable";
+  }
+  if (!input.isNightAvailable && input.isCheckOutAllowed) {
+    return "checkout_only";
+  }
+  if (input.isCheckInAllowed && input.isCheckOutAllowed) {
+    return "available";
+  }
+  if (input.isCheckInAllowed) {
+    return "checkin_only";
+  }
+  if (input.isCheckOutAllowed) {
+    return "checkout_only";
+  }
+  return "unavailable";
+}
+
+async function loadPricingContextByListingSlug(input: {
+  listingRows: Array<{
+    slug: string;
+    listing_id: string;
+    listing_number: number;
+  }>;
+}): Promise<Map<string, SourcePricingContext>> {
+  const out = new Map<string, SourcePricingContext>();
+
+  if (!pgDb || input.listingRows.length === 0) {
+    return out;
+  }
+
+  const listingIds = input.listingRows.map((row) => row.listing_id);
+  const sourceLinkRows = await pgDb
+    .select({
+      id: listing_source_link.id,
+      listing_id: listing_source_link.listing_id,
+      is_primary_source: listing_source_link.is_primary_source,
+    })
+    .from(listing_source_link)
+    .where(
+      and(
+        inArray(listing_source_link.listing_id, listingIds),
+        eq(listing_source_link.source_status, "active"),
+        isNull(listing_source_link.active_to),
+      ),
+    );
+
+  const sourceLinkIdByListingId = new Map<string, string>();
+  for (const row of sourceLinkRows) {
+    if (!sourceLinkIdByListingId.has(row.listing_id) || row.is_primary_source) {
+      sourceLinkIdByListingId.set(row.listing_id, row.id);
+    }
+  }
+
+  const pickedSourceLinkIds = Array.from(
+    new Set(sourceLinkIdByListingId.values()),
+  );
+  if (pickedSourceLinkIds.length === 0) {
+    return out;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const horizonEnd = new Date(today);
+  horizonEnd.setDate(horizonEnd.getDate() + 330);
+  const nextMonthStartDate = buildNextMonthStartDate();
+  const monthStartDates = buildMonthStartDateList({
+    startDate: nextMonthStartDate,
+    count: 3,
+  });
+  const monthStartDateIsoList = monthStartDates.map((value) =>
+    toIsoDate(value),
+  );
+  const targetMonthStartDateIso =
+    monthStartDateIsoList[0] ?? toIsoDate(nextMonthStartDate);
+
+  const summaryRows = await pgDb
+    .select({
+      listing_id: listing_pricing_summary.listing_id,
+      month_start_date: listing_pricing_summary.month_start_date,
+      recommended_all_in_nightly:
+        listing_pricing_summary.recommended_all_in_nightly,
+      computed_at: listing_pricing_summary.computed_at,
+      anchor_date: listing_pricing_summary.anchor_date,
+    })
+    .from(listing_pricing_summary)
+    .where(
+      and(
+        inArray(listing_pricing_summary.listing_id, listingIds),
+        eq(listing_pricing_summary.nights, 7),
+        eq(listing_pricing_summary.method, DISCOVER_PRICING_SUMMARY_METHOD),
+        inArray(
+          listing_pricing_summary.month_start_date,
+          monthStartDateIsoList,
+        ),
+      ),
+    )
+    .orderBy(
+      listing_pricing_summary.listing_id,
+      listing_pricing_summary.month_start_date,
+      desc(listing_pricing_summary.computed_at),
+      desc(listing_pricing_summary.anchor_date),
+    );
+
+  const summaryNightlyByListingId = new Map<string, Map<string, number>>();
+  for (const row of summaryRows) {
+    const nightly = asNumber(row.recommended_all_in_nightly);
+    if (nightly === null) {
       continue;
     }
 
-    const dayOfWeek = day.getDay();
-    const weekendMultiplier = dayOfWeek === 5 || dayOfWeek === 6 ? 1.18 : 1;
-    const seasonalMultiplier = 1 + ((offset % 29) - 14) * 0.004;
-    const computed = Math.round(
-      input.nightlyBase * weekendMultiplier * seasonalMultiplier,
+    const listingSummary =
+      summaryNightlyByListingId.get(row.listing_id) ??
+      new Map<string, number>();
+    if (!listingSummary.has(row.month_start_date)) {
+      listingSummary.set(row.month_start_date, nightly);
+    }
+    summaryNightlyByListingId.set(row.listing_id, listingSummary);
+  }
+
+  const pricingRows = await pgDb
+    .select({
+      source_link_id: listing_source_pricing.source_link_id,
+      stay_date: listing_source_pricing.stay_date,
+      is_available: listing_source_pricing.is_available,
+      availability_status_code: listing_source_pricing.availability_status_code,
+      is_available_for_checkin: listing_source_pricing.is_available_for_checkin,
+      is_available_for_checkout:
+        listing_source_pricing.is_available_for_checkout,
+      min_nights: listing_source_pricing.min_nights,
+      base_nightly: listing_source_pricing.base_nightly,
+      all_in_nightly: listing_source_pricing.all_in_nightly,
+    })
+    .from(listing_source_pricing)
+    .where(
+      and(
+        inArray(listing_source_pricing.source_link_id, pickedSourceLinkIds),
+        gte(listing_source_pricing.stay_date, toIsoDate(today)),
+        lte(listing_source_pricing.stay_date, toIsoDate(horizonEnd)),
+      ),
     );
 
-    out[iso] = Math.max(175, computed);
+  const pricingBySourceLinkId = new Map<
+    string,
+    Array<{
+      stay_date: string;
+      is_available: boolean;
+      availability_status_code: string | null;
+      is_available_for_checkin: boolean | null;
+      is_available_for_checkout: boolean | null;
+      min_nights: number | null;
+      base_nightly: string | null;
+      all_in_nightly: string;
+    }>
+  >();
+
+  for (const row of pricingRows) {
+    const entries = pricingBySourceLinkId.get(row.source_link_id) ?? [];
+    entries.push({
+      stay_date: row.stay_date,
+      is_available: row.is_available,
+      availability_status_code: row.availability_status_code,
+      is_available_for_checkin: row.is_available_for_checkin,
+      is_available_for_checkout: row.is_available_for_checkout,
+      min_nights: row.min_nights,
+      base_nightly: row.base_nightly,
+      all_in_nightly: row.all_in_nightly,
+    });
+    pricingBySourceLinkId.set(row.source_link_id, entries);
+  }
+
+  for (const listingRow of input.listingRows) {
+    const sourceLinkId = sourceLinkIdByListingId.get(listingRow.listing_id);
+    if (!sourceLinkId) {
+      continue;
+    }
+
+    const entries = (pricingBySourceLinkId.get(sourceLinkId) ?? []).sort(
+      (a, b) => a.stay_date.localeCompare(b.stay_date),
+    );
+    if (entries.length === 0) {
+      continue;
+    }
+
+    const availabilityCalendarStatus: Record<
+      string,
+      {
+        dayType: "available" | "checkin_only" | "checkout_only" | "unavailable";
+        isNightAvailable: boolean;
+        isCheckInAllowed: boolean;
+        isCheckOutAllowed: boolean;
+        minNights: number | null;
+        allInNightly: number | null;
+        statusConfidence: "observed" | "derived";
+      }
+    > = {};
+    for (const [index, entry] of entries.entries()) {
+      const allIn = asNumber(entry.all_in_nightly);
+
+      const availabilityStatusCode =
+        entry.availability_status_code === "A" ||
+        entry.availability_status_code === "U" ||
+        entry.availability_status_code === "I" ||
+        entry.availability_status_code === "O" ||
+        entry.availability_status_code === "X"
+          ? entry.availability_status_code
+          : null;
+
+      const hasObservedAvailabilitySignals =
+        availabilityStatusCode !== null ||
+        typeof entry.is_available_for_checkin === "boolean" ||
+        typeof entry.is_available_for_checkout === "boolean";
+
+      const minNights = Math.max(1, entry.min_nights ?? 1);
+      let contiguousAvailableNights = 0;
+      for (let cursor = index; cursor < entries.length; cursor += 1) {
+        if (!entries[cursor]?.is_available) {
+          break;
+        }
+        contiguousAvailableNights += 1;
+      }
+
+      const isNightAvailable = entry.is_available;
+      const derivedIsCheckInAllowed =
+        isNightAvailable && contiguousAvailableNights >= minNights;
+      const derivedIsCheckOutAllowed =
+        (entries[index - 1]?.is_available ?? false) === true;
+
+      const isCheckInAllowed =
+        entry.is_available_for_checkin ??
+        (availabilityStatusCode === "A" || availabilityStatusCode === "I"
+          ? true
+          : availabilityStatusCode === "U" || availabilityStatusCode === "O"
+            ? false
+            : derivedIsCheckInAllowed);
+
+      const isCheckOutAllowed =
+        entry.is_available_for_checkout ??
+        (availabilityStatusCode === "A" || availabilityStatusCode === "O"
+          ? true
+          : availabilityStatusCode === "U" || availabilityStatusCode === "I"
+            ? false
+            : derivedIsCheckOutAllowed);
+
+      availabilityCalendarStatus[entry.stay_date] = {
+        dayType:
+          availabilityStatusCode !== null
+            ? dayTypeFromAvailabilityStatusCode(availabilityStatusCode)
+            : deriveCalendarDayType({
+                isNightAvailable,
+                isCheckInAllowed,
+                isCheckOutAllowed,
+              }),
+        isNightAvailable,
+        isCheckInAllowed,
+        isCheckOutAllowed,
+        minNights: entry.min_nights,
+        allInNightly:
+          isNightAvailable && allIn !== null
+            ? Math.max(1, Math.round(allIn))
+            : null,
+        statusConfidence: hasObservedAvailabilitySignals
+          ? "observed"
+          : "derived",
+      };
+    }
+
+    const summaryByMonth =
+      summaryNightlyByListingId.get(listingRow.listing_id) ??
+      new Map<string, number>();
+
+    const monthFallbackAverages = new Map<string, number>();
+    for (const monthStartIso of monthStartDateIsoList) {
+      const values = entries
+        .filter((entry) =>
+          entry.stay_date.startsWith(monthStartIso.slice(0, 7)),
+        )
+        .map((entry) => asNumber(entry.all_in_nightly))
+        .filter((value): value is number => value !== null);
+      if (values.length === 0) {
+        continue;
+      }
+      const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+      monthFallbackAverages.set(monthStartIso, avg);
+    }
+
+    const upcomingTypicalPricingMonths = monthStartDateIsoList
+      .map((monthStartIso, index) => {
+        const monthlyNightly =
+          summaryByMonth.get(monthStartIso) ??
+          monthFallbackAverages.get(monthStartIso);
+        if (monthlyNightly === undefined) {
+          return null;
+        }
+
+        const monthDate = monthStartDates[index] ?? nextMonthStartDate;
+        return {
+          monthLabel: monthDate.toLocaleString("en-US", { month: "long" }),
+          monthStartDate: monthStartIso,
+          typicalAllInNightly: Math.max(1, Math.round(monthlyNightly)),
+        };
+      })
+      .filter(
+        (
+          value,
+        ): value is {
+          monthLabel: string;
+          monthStartDate: string;
+          typicalAllInNightly: number;
+        } => value !== null,
+      );
+
+    const primaryMonthNightly =
+      summaryByMonth.get(targetMonthStartDateIso) ??
+      monthFallbackAverages.get(targetMonthStartDateIso);
+
+    if (primaryMonthNightly !== undefined) {
+      out.set(listingRow.slug, {
+        typicalPricingMonth: nextMonthStartDate.toLocaleString("en-US", {
+          month: "long",
+        }),
+        typicalBaseNightly: Math.max(1, Math.round(primaryMonthNightly * 0.88)),
+        typicalAllInNightly: Math.max(1, Math.round(primaryMonthNightly)),
+        upcomingTypicalPricingMonths,
+        availabilityCalendarStatus,
+      });
+      continue;
+    }
+
+    const allInValues = entries
+      .filter((entry) =>
+        entry.stay_date.startsWith(targetMonthStartDateIso.slice(0, 7)),
+      )
+      .map((entry) => asNumber(entry.all_in_nightly))
+      .filter((value): value is number => value !== null);
+    const baseValues = entries
+      .filter((entry) =>
+        entry.stay_date.startsWith(targetMonthStartDateIso.slice(0, 7)),
+      )
+      .map((entry) => asNumber(entry.base_nightly))
+      .filter((value): value is number => value !== null);
+
+    const typicalAllIn =
+      allInValues.length > 0
+        ? allInValues.reduce((sum, value) => sum + value, 0) /
+          allInValues.length
+        : null;
+    if (typicalAllIn === null) {
+      continue;
+    }
+
+    const typicalBase =
+      baseValues.length > 0
+        ? baseValues.reduce((sum, value) => sum + value, 0) / baseValues.length
+        : Math.ceil(typicalAllIn * 0.88);
+
+    out.set(listingRow.slug, {
+      typicalPricingMonth: nextMonthStartDate.toLocaleString("en-US", {
+        month: "long",
+      }),
+      typicalBaseNightly: Math.max(1, Math.round(typicalBase)),
+      typicalAllInNightly: Math.max(1, Math.round(typicalAllIn)),
+      upcomingTypicalPricingMonths,
+      availabilityCalendarStatus,
+    });
   }
 
   return out;
-}
-
-function extractImageUrlsFromListingImages(
-  imagesRaw: unknown,
-  maxImages?: number,
-): string[] {
-  if (!Array.isArray(imagesRaw)) {
-    return [];
-  }
-
-  if (maxImages !== undefined && maxImages <= 0) {
-    return [];
-  }
-
-  const bySortOrder = [...imagesRaw]
-    .map((entry) => {
-      const image = asObject(entry);
-      const src = asString(image.src);
-      const sortOrder = asNumber(image.sort_order);
-      return {
-        src,
-        sortOrder: sortOrder ?? Number.MAX_SAFE_INTEGER,
-      };
-    })
-    .filter((entry) => entry.src.length > 0)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-
-  const uniqueUrls: string[] = [];
-  const seen = new Set<string>();
-  for (const image of bySortOrder) {
-    const key = image.src.trim().toLowerCase();
-    if (!key || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    uniqueUrls.push(image.src);
-    if (maxImages !== undefined && uniqueUrls.length >= maxImages) {
-      break;
-    }
-  }
-
-  return uniqueUrls;
 }
 
 function extractImageGalleryFromListingImages(
@@ -389,6 +748,7 @@ async function loadFromListingTable(input?: {
   }
 
   const selectFields = {
+    id: listing.id,
     slug: listing.slug,
     canonical_name: listing.canonical_name,
     listing_number: listing.listing_number,
@@ -477,7 +837,15 @@ async function loadFromListingTable(input?: {
 
   const previewSeeds = sampleListings.length > 0 ? sampleListings : [];
 
-  return rows.map((row, index) => {
+  const pricingContextBySlug = await loadPricingContextByListingSlug({
+    listingRows: rows.map((row) => ({
+      slug: row.slug,
+      listing_id: row.id,
+      listing_number: row.listing_number ?? 0,
+    })),
+  });
+
+  const mappedRows = rows.map((row, index) => {
     const amenities = asStringArray(row.amenities_normalized);
     const traits = row.traits;
     const sleeps = Math.max(1, Math.round(row.sleeps ?? 0) || 6);
@@ -492,8 +860,6 @@ async function loadFromListingTable(input?: {
     const bedCounts = asObject(summary.bed_counts);
     const kingBeds = Math.max(0, Math.round(asNumber(bedCounts.king) ?? 0));
     const queenBeds = Math.max(0, Math.round(asNumber(bedCounts.queen) ?? 0));
-
-    const pricing = derivePricing(row.listing_number ?? index + 1, sleeps);
 
     const area =
       asString(row.beach_area_name) ||
@@ -529,10 +895,13 @@ async function loadFromListingTable(input?: {
       .map((entry) => normalizeHintTone(entry))
       .map((entry) => ensureTerminalPeriod(entry))
       .filter(Boolean);
-    const availabilityCalendar = buildAvailabilityCalendar({
-      nightlyBase: pricing.typicalAllInNightly,
-      listingSeed: row.listing_number ?? index + 1,
-    });
+    const sourcePricing = pricingContextBySlug.get(row.slug);
+    if (
+      !sourcePricing ||
+      Object.keys(sourcePricing.availabilityCalendarStatus).length === 0
+    ) {
+      return null;
+    }
 
     return {
       id: row.slug,
@@ -580,9 +949,10 @@ async function loadFromListingTable(input?: {
               name: `Photo ${imageIndex + 1}`,
               url,
             })),
-      typicalPricingMonth: pricing.typicalPricingMonth,
-      typicalBaseNightly: pricing.typicalBaseNightly,
-      typicalAllInNightly: pricing.typicalAllInNightly,
+      typicalPricingMonth: sourcePricing.typicalPricingMonth,
+      typicalBaseNightly: sourcePricing.typicalBaseNightly,
+      typicalAllInNightly: sourcePricing.typicalAllInNightly,
+      upcomingTypicalPricingMonths: sourcePricing.upcomingTypicalPricingMonths,
       descriptionHeadline: descriptionHeadline || undefined,
       descriptionMarkdown: description || undefined,
       description: description || undefined,
@@ -593,10 +963,12 @@ async function loadFromListingTable(input?: {
         summary: row.sleeping_summary,
       }),
       amenitiesList: amenities,
-      availabilityCalendar,
+      availabilityCalendarStatus: sourcePricing.availabilityCalendarStatus,
       sleepingSummary: summary,
     };
   });
+
+  return mappedRows.filter((row): row is DiscoverListing => row !== null);
 }
 
 export async function getDiscoverListings(input?: {

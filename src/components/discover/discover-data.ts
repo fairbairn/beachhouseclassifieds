@@ -28,6 +28,11 @@ export type DiscoverListing = {
   typicalPricingMonth: string;
   typicalBaseNightly: number;
   typicalAllInNightly: number;
+  upcomingTypicalPricingMonths?: Array<{
+    monthLabel: string;
+    monthStartDate: string;
+    typicalAllInNightly: number;
+  }>;
   descriptionHeadline?: string;
   descriptionMarkdown?: string;
   description?: string;
@@ -42,7 +47,18 @@ export type DiscoverListing = {
     name: string;
     url: string;
   }>;
-  availabilityCalendar?: Record<string, number>;
+  availabilityCalendarStatus?: Record<
+    string,
+    {
+      dayType: "available" | "checkin_only" | "checkout_only" | "unavailable";
+      isNightAvailable: boolean;
+      isCheckInAllowed: boolean;
+      isCheckOutAllowed: boolean;
+      minNights: number | null;
+      allInNightly: number | null;
+      statusConfidence: "observed" | "derived";
+    }
+  >;
   sleepingSummary?: {
     bed_counts?: {
       king?: number;
