@@ -9,6 +9,25 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
+type AvailabilityDayCode = "Y" | "N";
+type DayChangeoverCode = "I" | "O" | "C" | "X";
+
+function toDayCode(statusCode: LuxuryDayCode): AvailabilityDayCode {
+  return statusCode === "A" || statusCode === "O" ? "Y" : "N";
+}
+
+function toDayChangeoverCode(statusCode: LuxuryDayCode): DayChangeoverCode {
+  if (statusCode === "I") {
+    return "I";
+  }
+  if (statusCode === "O") {
+    return "O";
+  }
+  if (statusCode === "A") {
+    return "C";
+  }
+  return "X";
+}
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
@@ -87,7 +106,9 @@ type LuxuryDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: AvailabilityDayCode;
       status_code: LuxuryDayCode;
+      changeover_code: DayChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -1271,21 +1292,34 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
         .toISOString()
         .slice(0, 10);
 
-      const classBlob = String(
-        (cell as HTMLElement).className || "",
-      ).toLowerCase();
+      const classTokens = new Set(
+        String((cell as HTMLElement).className || "")
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(Boolean),
+      );
+      const hasTokenFragment = (fragment: string): boolean =>
+        Array.from(classTokens).some((token) => token.includes(fragment));
       let code: LuxuryDayCode = "X";
-      if (classBlob.includes("check-in")) {
+      if (
+        classTokens.has("av-in") ||
+        hasTokenFragment("check-in") ||
+        classTokens.has("checkin")
+      ) {
         code = "I";
-      } else if (classBlob.includes("check-out")) {
-        code = "O";
-      } else if (classBlob.includes("available")) {
-        code = "A";
       } else if (
-        classBlob.includes("booked") ||
-        classBlob.includes("unavailable")
+        classTokens.has("av-out") ||
+        hasTokenFragment("check-out") ||
+        classTokens.has("checkout")
+      ) {
+        code = "O";
+      } else if (
+        hasTokenFragment("booked") ||
+        hasTokenFragment("unavailable")
       ) {
         code = "U";
+      } else if (hasTokenFragment("available")) {
+        code = "A";
       }
 
       items.push({ date: isoDate, code });
@@ -1332,16 +1366,18 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
           .toISOString()
           .slice(0, 10);
 
-        const classBlob = dayCell.className.toLowerCase();
+        const classTokens = new Set(
+          dayCell.className.toLowerCase().split(/\s+/).filter(Boolean),
+        );
         let code: LuxuryDayCode = "X";
-        if (classBlob.includes("av-a") || classBlob.includes("av-o")) {
-          code = "A";
-        } else if (classBlob.includes("av-in")) {
+        if (classTokens.has("av-in")) {
           code = "I";
-        } else if (classBlob.includes("av-out")) {
+        } else if (classTokens.has("av-out")) {
           code = "O";
-        } else if (classBlob.includes("av-x") || classBlob.includes("av-u")) {
+        } else if (classTokens.has("av-x") || classTokens.has("av-u")) {
           code = "U";
+        } else if (classTokens.has("av-a") || classTokens.has("av-o")) {
+          code = "A";
         }
 
         items.push({ date: isoDate, code });
@@ -1825,7 +1861,9 @@ async function fetchDetail(
 
         return {
           date,
+          day_code: toDayCode(code),
           status_code: code,
+          changeover_code: toDayChangeoverCode(code),
           is_available: code === "A" || code === "O",
           is_available_for_checkin: code === "A" || code === "I",
           is_available_for_checkout: code === "A" || code === "O",
@@ -1857,7 +1895,9 @@ async function fetchDetail(
       completeWindowDays.push(
         existing ?? {
           date: isoDate,
+          day_code: "N",
           status_code: "X",
+          changeover_code: "X",
           is_available: false,
           is_available_for_checkin: false,
           is_available_for_checkout: false,

@@ -57,15 +57,16 @@ function runAdapterValidation(root: string, adapter: string): AdapterResult {
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
   const pass =
     /Availability status validator passed/.test(output) && result.status === 0;
-  const summaryLine =
-    output
-      .split("\n")
-      .find(
-        (line) =>
-          line.startsWith("files=") ||
-          line.includes("Availability status validator passed") ||
-          line.includes("Availability status validator failed"),
-      ) ?? `exit=${result.status ?? 1}`;
+  const lines = output.split("\n");
+  const statusLine =
+    lines.find(
+      (line) =>
+        line.includes("Availability status validator passed") ||
+        line.includes("Availability status validator failed"),
+    ) ?? "status=unknown";
+  const metricsLine =
+    lines.find((line) => line.startsWith("files=")) ?? "metrics=unavailable";
+  const summaryLine = `${statusLine} ${metricsLine}`;
 
   return {
     adapter,

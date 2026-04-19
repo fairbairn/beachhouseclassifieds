@@ -15,6 +15,25 @@ import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
+type AvailabilityDayCode = "Y" | "N";
+type DayChangeoverCode = "I" | "O" | "C" | "X";
+
+function toDayChangeoverCode(statusCode: LuxuryDayCode): DayChangeoverCode {
+  if (statusCode === "I") {
+    return "I";
+  }
+  if (statusCode === "O") {
+    return "O";
+  }
+  if (statusCode === "A") {
+    return "C";
+  }
+  return "X";
+}
+
+function toDayCode(statusCode: LuxuryDayCode): AvailabilityDayCode {
+  return statusCode === "A" || statusCode === "O" ? "Y" : "N";
+}
 
 type HomeownersFeeLine = {
   name: string;
@@ -118,7 +137,9 @@ type LuxuryDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: AvailabilityDayCode;
       status_code: LuxuryDayCode;
+      changeover_code: DayChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -148,7 +169,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
       nightly_rate: number | null;
       min_nights: number | null;
       is_booked: boolean | null;
-      changeover_code: LuxuryDayCode;
+      changeover_code: DayChangeoverCode | "";
       season_name: string;
     }>;
     stats: {
@@ -854,7 +875,18 @@ async function buildWeeklyRateArtifacts(input: {
     LuxuryDetailRecord["normalized_availability"]["days"][number]
   >();
   for (const day of input.availabilityDays) {
-    availabilityByDate.set(day.date, { ...day });
+    const statusCode = day.status_code;
+    availabilityByDate.set(day.date, {
+      ...day,
+      day_code:
+        day.day_code === "Y" || day.day_code === "N"
+          ? day.day_code
+          : toDayCode(statusCode),
+      changeover_code:
+        typeof day.changeover_code === "string" && day.changeover_code.trim()
+          ? (day.changeover_code.trim().toUpperCase() as DayChangeoverCode)
+          : toDayChangeoverCode(statusCode),
+    });
   }
   for (const date of windowDates) {
     if (availabilityByDate.has(date)) {
@@ -862,7 +894,9 @@ async function buildWeeklyRateArtifacts(input: {
     }
     availabilityByDate.set(date, {
       date,
+      day_code: "N",
       status_code: "X",
+      changeover_code: "X",
       is_available: false,
       is_available_for_checkin: false,
       is_available_for_checkout: false,
@@ -887,7 +921,16 @@ async function buildWeeklyRateArtifacts(input: {
         nightly_rate: null,
         min_nights: day?.min_nights_required ?? null,
         is_booked: isBooked,
-        changeover_code: statusCode,
+        changeover_code:
+          statusCode === "I"
+            ? "I"
+            : statusCode === "O"
+              ? "O"
+              : statusCode === "A"
+                ? "C"
+                : statusCode === "U" || statusCode === "X"
+                  ? "X"
+                  : "",
         season_name:
           statusCode === "U" || statusCode === "I"
             ? "not_available"
@@ -932,12 +975,6 @@ async function buildWeeklyRateArtifacts(input: {
         quote.quote_node,
       );
 
-      availabilityDay.status_code = "U";
-      availabilityDay.is_available = false;
-      availabilityDay.is_available_for_checkin = false;
-      availabilityDay.is_available_for_checkout = false;
-      availabilityDay.booking_day_state = "blocked";
-
       observations.push({
         start_date: startDate,
         end_date: endDate,
@@ -978,11 +1015,6 @@ async function buildWeeklyRateArtifacts(input: {
 
     if (nightlyRateProxy !== null) {
       sampledRatesByDate.set(startDate, nightlyRateProxy);
-      availabilityDay.status_code = "A";
-      availabilityDay.is_available = true;
-      availabilityDay.is_available_for_checkin = true;
-      availabilityDay.is_available_for_checkout = true;
-      availabilityDay.booking_day_state = "bookable";
     }
 
     observations.push({
@@ -1033,7 +1065,18 @@ async function buildWeeklyRateArtifacts(input: {
     const availability = availabilityByDate.get(day.date);
     const isAvailable = availability ? availability.is_available : false;
     const isUnknownAvailability = (availability?.status_code ?? "X") === "X";
-    day.changeover_code = availability?.status_code ?? day.changeover_code;
+    day.changeover_code = availability
+      ? availability.status_code === "I"
+        ? "I"
+        : availability.status_code === "O"
+          ? "O"
+          : availability.status_code === "A"
+            ? "C"
+            : availability.status_code === "U" ||
+                availability.status_code === "X"
+              ? "X"
+              : day.changeover_code
+      : day.changeover_code;
     day.min_nights = availability?.min_nights_required ?? day.min_nights;
     day.is_booked =
       availability?.status_code === "A" || availability?.status_code === "O"
@@ -1440,6 +1483,88 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
       return { year, monthIndex };
     };
 
+    const codePriority: Record<LuxuryDayCode, number> = {
+      X: 0,
+      A: 1,
+      U: 1,
+      I: 2,
+      O: 2,
+    };
+
+    const addRangeToMap = (
+      map: Map<string, LuxuryDayCode>,
+      beginIso: string,
+      endIso: string,
+      code: LuxuryDayCode,
+    ): void => {
+      const begin = new Date(`${beginIso}T00:00:00Z`);
+      const end = new Date(`${endIso}T00:00:00Z`);
+      if (Number.isNaN(begin.getTime()) || Number.isNaN(end.getTime())) {
+        return;
+      }
+      if (end.getTime() < begin.getTime()) {
+        return;
+      }
+
+      for (
+        let cursor = new Date(begin);
+        cursor.getTime() <= end.getTime();
+        cursor.setUTCDate(cursor.getUTCDate() + 1)
+      ) {
+        const date = cursor.toISOString().slice(0, 10);
+        const previous = map.get(date);
+        if (!previous || codePriority[code] > codePriority[previous]) {
+          map.set(date, code);
+        }
+      }
+    };
+
+    const structuredCodes = new Map<string, LuxuryDayCode>();
+    const drupalSettings = (window as { Drupal?: { settings?: unknown } })
+      .Drupal?.settings as
+      | {
+          rcItemAvailForm?: Array<{
+            avail?: Array<{ b?: string; e?: string; a?: string }>;
+            turn?: Array<{ b?: string; e?: string; t?: string }>;
+          }>;
+        }
+      | undefined;
+
+    const availForms = Array.isArray(drupalSettings?.rcItemAvailForm)
+      ? drupalSettings.rcItemAvailForm
+      : [];
+
+    for (const form of availForms) {
+      const availRanges = Array.isArray(form.avail) ? form.avail : [];
+      for (const range of availRanges) {
+        const begin = (range.b ?? "").trim();
+        const end = (range.e ?? "").trim();
+        const isAvailable = (range.a ?? "").trim() === "1";
+        if (!begin || !end) {
+          continue;
+        }
+
+        addRangeToMap(structuredCodes, begin, end, isAvailable ? "A" : "U");
+      }
+
+      const turnRanges = Array.isArray(form.turn) ? form.turn : [];
+      for (const range of turnRanges) {
+        const begin = (range.b ?? "").trim();
+        const end = (range.e ?? "").trim();
+        const turnCode = (range.t ?? "").trim().toUpperCase();
+        if (!begin || !end) {
+          continue;
+        }
+
+        if (turnCode === "I" || turnCode === "O") {
+          addRangeToMap(structuredCodes, begin, end, turnCode);
+        } else if (turnCode === "X") {
+          // Provider marks these as unavailable turn-restricted days.
+          addRangeToMap(structuredCodes, begin, end, "U");
+        }
+      }
+    }
+
     const items: Array<{ date: string; code: LuxuryDayCode }> = [];
     const monthHeaders: string[] = [];
 
@@ -1550,12 +1675,27 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
         ),
       );
 
+    const mergedByDate = new Map<string, LuxuryDayCode>();
+    for (const [date, code] of structuredCodes.entries()) {
+      mergedByDate.set(date, code);
+    }
+    for (const item of items) {
+      const previous = mergedByDate.get(item.date);
+      if (!previous || codePriority[item.code] > codePriority[previous]) {
+        mergedByDate.set(item.date, item.code);
+      }
+    }
+
+    const mergedItems = Array.from(mergedByDate.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, code]) => ({ date, code }));
+
     return {
       hasCalendarWidget: !!document.querySelector(
         ".group-availability .rc-calendar.rcav-month, .rc-calendar.rcav-month, .ui-datepicker, .ui-datepicker-inline, .rcav-key",
       ),
       months: Array.from(new Set(monthHeaders)),
-      items,
+      items: mergedItems,
       bookingRestrictions: Array.from(new Set(keyText)).slice(0, 40),
     };
   });
@@ -2035,26 +2175,55 @@ async function fetchDetail(
       await page.waitForTimeout(750);
     }
 
-    const normalizedDays = Array.from(dayCodeByDate.entries())
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([date, code]) => {
-        const bookingDayState: "bookable" | "blocked" | "unknown" =
-          code === "A" || code === "O"
-            ? "bookable"
-            : code === "U" || code === "I"
-              ? "blocked"
-              : "unknown";
+    const normalizedEntries = Array.from(dayCodeByDate.entries()).sort(
+      ([left], [right]) => left.localeCompare(right),
+    );
 
-        return {
-          date,
-          status_code: code,
-          is_available: code === "A" || code === "O",
-          is_available_for_checkin: code === "A" || code === "I",
-          is_available_for_checkout: code === "A" || code === "O",
-          booking_day_state: bookingDayState,
-          min_nights_required: null,
-        };
-      });
+    for (let index = 0; index < normalizedEntries.length; index += 1) {
+      const [, code] = normalizedEntries[index];
+      if (code !== "A") {
+        continue;
+      }
+
+      const previousCode = index > 0 ? normalizedEntries[index - 1]?.[1] : null;
+      const nextCode =
+        index + 1 < normalizedEntries.length
+          ? normalizedEntries[index + 1]?.[1]
+          : null;
+      const blockedOrUnknownBefore =
+        previousCode === "U" || previousCode === "X";
+      const blockedOrUnknownAfter = nextCode === "U" || nextCode === "X";
+
+      if (blockedOrUnknownBefore && !blockedOrUnknownAfter) {
+        normalizedEntries[index][1] = "I";
+        continue;
+      }
+
+      if (blockedOrUnknownAfter) {
+        normalizedEntries[index][1] = "O";
+      }
+    }
+
+    const normalizedDays = normalizedEntries.map(([date, code]) => {
+      const bookingDayState: "bookable" | "blocked" | "unknown" =
+        code === "A" || code === "O"
+          ? "bookable"
+          : code === "U" || code === "I"
+            ? "blocked"
+            : "unknown";
+
+      return {
+        date,
+        day_code: toDayCode(code),
+        status_code: code,
+        changeover_code: toDayChangeoverCode(code),
+        is_available: code === "A" || code === "O",
+        is_available_for_checkin: code === "A" || code === "I",
+        is_available_for_checkout: code === "A" || code === "O",
+        booking_day_state: bookingDayState,
+        min_nights_required: null,
+      };
+    });
 
     const externalListingId = extractExternalListingId(detailUrl);
     const htmlPath = resolve(

@@ -12,12 +12,14 @@ import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-a
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
-type KeycoDayCode = "A" | "U" | "M" | "X";
+type KeycoDayCode = "A" | "U" | "X";
+
+type KeycoRawAvailabilityKey = "A" | "U" | "M" | "X";
 
 type KeycoAvailabilityCalendarDay = {
   date: string;
   minStay: number | null;
-  availabilityKey: KeycoDayCode;
+  availabilityKey: KeycoRawAvailabilityKey;
 };
 
 type KeycoPricingContextResponse = {
@@ -140,7 +142,6 @@ type KeycoDetailRecord = DetailRecordBase & {
     code_legend: {
       A: "available";
       U: "unavailable";
-      M: "restricted_or_rule_constrained";
       X: "unknown";
     };
     day_codes: string;
@@ -1178,7 +1179,7 @@ function parseAvailabilityCalendarFromHtml(
     )
       .trim()
       .toUpperCase();
-    const availabilityKey: KeycoDayCode =
+    const availabilityKey: KeycoRawAvailabilityKey =
       rawKey === "A" || rawKey === "E"
         ? "A"
         : rawKey === "U"
@@ -1724,9 +1725,7 @@ async function fetchDetail(
         const isoDate = formatDateIso(cursor);
         const baseline = baselineAvailabilityByDate.get(isoDate);
         const statusCode: KeycoDayCode =
-          baseline?.status_code === "A" ||
-          baseline?.status_code === "U" ||
-          baseline?.status_code === "M"
+          baseline?.status_code === "A" || baseline?.status_code === "U"
             ? baseline.status_code
             : "X";
 
@@ -1800,7 +1799,16 @@ async function fetchDetail(
             nightly_rate: null,
             min_nights: day.min_nights_required ?? null,
             is_booked: day.is_available ? false : true,
-            changeover_code: day.status_code,
+            changeover_code:
+              day.status_code === "I"
+                ? "I"
+                : day.status_code === "O"
+                  ? "O"
+                  : day.status_code === "A"
+                    ? "C"
+                    : day.status_code === "U" || day.status_code === "X"
+                      ? "X"
+                      : "",
             season_name: day.is_available ? "quote_pending" : "not_available",
           }));
 
@@ -2217,9 +2225,7 @@ async function fetchDetail(
           .length,
         checkin_only: 0,
         checkout_only: 0,
-        other: availabilityDays.filter(
-          (day) => day.status_code === "M" || day.status_code === "X",
-        ).length,
+        other: availabilityDays.filter((day) => day.status_code === "X").length,
         booking_available: availabilityDays.filter(
           (day) => day.booking_day_state === "bookable",
         ).length,
@@ -2273,7 +2279,6 @@ async function fetchDetail(
           code_legend: {
             A: "available",
             U: "unavailable",
-            M: "restricted_or_rule_constrained",
             X: "unknown",
           },
           day_codes: dayCodes,
@@ -2765,7 +2770,12 @@ async function fetchDetail(
       const isoDate = formatDateIso(cursor);
       const calendarDay = calendarByDate.get(isoDate);
 
-      const statusCode: KeycoDayCode = calendarDay?.availabilityKey ?? "X";
+      const statusCode: KeycoDayCode =
+        calendarDay?.availabilityKey === "A"
+          ? "A"
+          : calendarDay?.availabilityKey === "U"
+            ? "U"
+            : "X";
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         statusCode === "A"
           ? "bookable"
@@ -2830,7 +2840,16 @@ async function fetchDetail(
           nightly_rate: null,
           min_nights: day.min_nights_required ?? null,
           is_booked: day.is_available ? false : true,
-          changeover_code: day.status_code,
+          changeover_code:
+            day.status_code === "I"
+              ? "I"
+              : day.status_code === "O"
+                ? "O"
+                : day.status_code === "A"
+                  ? "C"
+                  : day.status_code === "U" || day.status_code === "X"
+                    ? "X"
+                    : "",
           season_name: day.is_available ? "quote_pending" : "not_available",
         }));
 
@@ -3255,9 +3274,7 @@ async function fetchDetail(
         .length,
       checkin_only: 0,
       checkout_only: 0,
-      other: availabilityDays.filter(
-        (day) => day.status_code === "M" || day.status_code === "X",
-      ).length,
+      other: availabilityDays.filter((day) => day.status_code === "X").length,
       booking_available: availabilityDays.filter(
         (day) => day.booking_day_state === "bookable",
       ).length,
@@ -3352,7 +3369,6 @@ async function fetchDetail(
         code_legend: {
           A: "available",
           U: "unavailable",
-          M: "restricted_or_rule_constrained",
           X: "unknown",
         },
         day_codes: dayCodes,

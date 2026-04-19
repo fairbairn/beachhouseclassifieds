@@ -95,6 +95,8 @@ type EscapeDetailRecord = DetailRecordBase & {
     days: Array<{
       date: string;
       status_code: EscapeDayCode;
+      day_code: string;
+      changeover_code: string;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -1129,6 +1131,34 @@ function resolveMinNightsForDate(
   return matched;
 }
 
+function toAvailabilityChangeoverCode(statusCode: string): string {
+  const code = statusCode.trim().toUpperCase();
+  if (code === "I") {
+    return "I";
+  }
+  if (code === "O") {
+    return "O";
+  }
+  if (code === "A") {
+    return "C";
+  }
+  if (code === "U" || code === "X") {
+    return "X";
+  }
+  return "";
+}
+
+function toAvailabilityDayCode(statusCode: string): string {
+  const code = statusCode.trim().toUpperCase();
+  if (code === "A" || code === "O") {
+    return "Y";
+  }
+  if (code === "U" || code === "I" || code === "X") {
+    return "N";
+  }
+  return "";
+}
+
 const ESCAPE_MONTH_BY_NAME: Record<string, number> = {
   jan: 0,
   january: 0,
@@ -1322,14 +1352,14 @@ export function buildEscapesAvailabilityFromHtml(params: {
     Array.from(new Set(bookingRestrictionMatches)).slice(0, 60),
   );
 
-  const normalizedDays = Array.from(dayCodeByDate.entries())
+  let normalizedDays = Array.from(dayCodeByDate.entries())
     .filter(([date]) => date >= todayIso && date <= horizonIso)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([date, code]) => {
       const bookingDayState: "bookable" | "blocked" | "unknown" =
-        code === "A" || code === "O"
+        code === "A" || code === "I" || code === "O"
           ? "bookable"
-          : code === "U" || code === "I"
+          : code === "U"
             ? "blocked"
             : "unknown";
 
@@ -1340,6 +1370,8 @@ export function buildEscapesAvailabilityFromHtml(params: {
       return {
         date,
         status_code: code,
+        day_code: toAvailabilityDayCode(code),
+        changeover_code: toAvailabilityChangeoverCode(code),
         is_available: isAvailable,
         is_available_for_checkin: isAvailableForCheckin,
         is_available_for_checkout: isAvailableForCheckout,
@@ -1347,6 +1379,94 @@ export function buildEscapesAvailabilityFromHtml(params: {
         min_nights_required: resolveMinNightsForDate(date, minNightRules),
       };
     });
+
+  const dayHasAvailability = (statusCode: string): boolean =>
+    statusCode === "A" || statusCode === "I" || statusCode === "O";
+  const applyStatusCode = (
+    day: (typeof normalizedDays)[number],
+    statusCode: EscapeDayCode,
+  ): void => {
+    day.status_code = statusCode;
+    day.day_code = toAvailabilityDayCode(statusCode);
+    day.changeover_code = toAvailabilityChangeoverCode(statusCode);
+    day.is_available =
+      statusCode === "A" || statusCode === "I" || statusCode === "O";
+    day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+    day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+    day.booking_day_state =
+      statusCode === "U"
+        ? "blocked"
+        : statusCode === "X"
+          ? "unknown"
+          : "bookable";
+  };
+
+  for (let index = 0; index < normalizedDays.length; index += 1) {
+    const day = normalizedDays[index]!;
+    if (!dayHasAvailability(day.status_code)) {
+      continue;
+    }
+
+    const prev = index > 0 ? normalizedDays[index - 1] : undefined;
+    const next =
+      index + 1 < normalizedDays.length ? normalizedDays[index + 1] : undefined;
+    const prevAvailable = prev ? dayHasAvailability(prev.status_code) : true;
+    const nextAvailable = next ? dayHasAvailability(next.status_code) : true;
+
+    let statusCode: EscapeDayCode = "A";
+    if (!prevAvailable && nextAvailable) {
+      statusCode = "I";
+    } else if (prevAvailable && !nextAvailable) {
+      statusCode = "O";
+    }
+
+    applyStatusCode(day, statusCode);
+  }
+
+  // Fallback inference for source calendars that omit explicit turn boundaries:
+  // - A->X implies checkout on A day (O)
+  // - X->A implies checkin on A day (I)
+  // Leave U<->X untouched because those boundaries are semantically ambiguous.
+  for (let index = 0; index < normalizedDays.length; index += 1) {
+    const day = normalizedDays[index]!;
+    if (day.status_code !== "A") {
+      continue;
+    }
+
+    const prev = index > 0 ? normalizedDays[index - 1] : undefined;
+    const next =
+      index + 1 < normalizedDays.length ? normalizedDays[index + 1] : undefined;
+
+    const prevIsX = prev?.status_code === "X";
+    const nextIsX = next?.status_code === "X";
+
+    if (prevIsX && !nextIsX) {
+      applyStatusCode(day, "I");
+      continue;
+    }
+    if (!prevIsX && nextIsX) {
+      applyStatusCode(day, "O");
+    }
+  }
+
+  if (normalizedDays.length === 0) {
+    const cursor = new Date(`${todayIso}T00:00:00.000Z`);
+    while (cursor.toISOString().slice(0, 10) <= horizonIso) {
+      const date = cursor.toISOString().slice(0, 10);
+      normalizedDays.push({
+        date,
+        status_code: "X",
+        day_code: "N",
+        changeover_code: "X",
+        is_available: false,
+        is_available_for_checkin: false,
+        is_available_for_checkout: false,
+        booking_day_state: "unknown",
+        min_nights_required: null,
+      });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
 
   return {
     source: "pm_30aescapes",
@@ -2683,12 +2803,6 @@ async function fetchDetail(
             throw new Error("observation retries exhausted");
           }
 
-          day.is_available = quote.quoteAvailable;
-          day.is_available_for_checkin = quote.quoteAvailable;
-          day.is_available_for_checkout = quote.quoteAvailable;
-          day.booking_day_state = quote.quoteAvailable ? "bookable" : "blocked";
-          day.status_code = quote.quoteAvailable ? "A" : "U";
-
           const quoteBaseTotal =
             Number.isFinite(quote.baseTotal) && (quote.baseTotal ?? 0) > 0
               ? roundCurrency(quote.baseTotal ?? 0)
@@ -2802,7 +2916,16 @@ async function fetchDetail(
           nightly_rate: nightly,
           min_nights: day.min_nights_required ?? null,
           is_booked: day.is_available ? false : true,
-          changeover_code: day.status_code,
+          changeover_code:
+            day.status_code === "I"
+              ? "I"
+              : day.status_code === "O"
+                ? "O"
+                : day.status_code === "A"
+                  ? "C"
+                  : day.status_code === "U" || day.status_code === "X"
+                    ? "X"
+                    : "",
           season_name: sampled
             ? "quote_api"
             : day.is_available

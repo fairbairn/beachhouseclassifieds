@@ -13,7 +13,9 @@ type CliOptions = {
 
 type AvailabilityDayRecord = {
   date?: unknown;
+  day_code?: unknown;
   status_code?: unknown;
+  changeover_code?: unknown;
   is_available_for_checkin?: unknown;
   is_available_for_checkout?: unknown;
   is_checkin_allowed?: unknown;
@@ -35,13 +37,38 @@ type DetailRecord = {
 type ValidationIssueCode =
   | "invalid_json"
   | "missing_normalized_availability_days"
+  | "missing_day_code"
+  | "non_canonical_day_code"
+  | "inconsistent_day_code"
+  | "missing_day_changeover_code"
+  | "non_canonical_day_changeover_code"
+  | "inconsistent_day_changeover_code"
   | "missing_status_code"
   | "non_canonical_status_code"
   | "missing_checkin_boolean"
   | "missing_checkout_boolean"
-  | "missing_turn_day_status";
+  | "missing_turn_day_status"
+  | "missing_checkout_turn_day_boundary"
+  | "missing_checkin_turn_day_boundary"
+  | "non_turn_changeover_code";
+const TURN_DAY_CHANGEOVER_CODES = new Set(["", "I", "O", "C", "X"]);
+const CANONICAL_DAY_CODES = new Set(["Y", "N"]);
+
+function expectedDayChangeoverCode(statusCode: string): string {
+  if (statusCode === "I") {
+    return "I";
+  }
+  if (statusCode === "O") {
+    return "O";
+  }
+  if (statusCode === "A") {
+    return "C";
+  }
+  return "X";
+}
 
 type ValidationIssue = {
+  severity: "error" | "warning";
   code: ValidationIssueCode;
   message: string;
 };
@@ -123,18 +150,73 @@ function normalizeChangeoverCode(value: unknown): string {
   return value.trim().toUpperCase();
 }
 
+function parseIsoDate(value: unknown): Date | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = new Date(`${trimmed}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isDec31ToJan1Boundary(
+  previousDay: AvailabilityDayRecord,
+  currentDay: AvailabilityDayRecord,
+): boolean {
+  const previousDate = parseIsoDate(previousDay.date);
+  const currentDate = parseIsoDate(currentDay.date);
+  if (!previousDate || !currentDate) {
+    return false;
+  }
+
+  const previousYear = previousDate.getUTCFullYear();
+  const currentYear = currentDate.getUTCFullYear();
+
+  return (
+    previousDate.getUTCMonth() === 11 &&
+    previousDate.getUTCDate() === 31 &&
+    currentDate.getUTCMonth() === 0 &&
+    currentDate.getUTCDate() === 1 &&
+    currentYear === previousYear + 1
+  );
+}
+
+function nextNonXStatus(
+  days: AvailabilityDayRecord[],
+  startIndex: number,
+): { status: string; index: number } | null {
+  for (let index = startIndex; index < days.length; index += 1) {
+    const status = toCanonicalStatusCode(days[index]?.status_code);
+    if (!status || status === "X") {
+      continue;
+    }
+    return { status, index };
+  }
+  return null;
+}
+
 function pushIssue(
   issues: ValidationIssue[],
   code: ValidationIssueCode,
   message: string,
+  severity: "error" | "warning" = "error",
 ): void {
-  issues.push({ code, message });
+  issues.push({ severity, code, message });
 }
 
 function printIssues(issues: ValidationIssue[]): void {
   for (const issue of issues.slice(0, 80)) {
+    const severityLabel =
+      issue.severity === "warning"
+        ? chalk.yellow("[warning]")
+        : chalk.red("[error]");
     console.error(
-      `${chalk.red("-")} ${chalk.yellow(`[${issue.code}]`)} ${issue.message}`,
+      `${chalk.red("-")} ${severityLabel} ${chalk.yellow(`[${issue.code}]`)} ${issue.message}`,
     );
   }
 
@@ -193,11 +275,34 @@ async function validateAdapterAvailabilityStatusCodes(
     filesWithAvailability += 1;
     let hasTurnDayHint = false;
     let hasTurnDayStatus = false;
+    let missingDayCodeCount = 0;
+    let nonCanonicalDayCodeCount = 0;
+    let inconsistentDayCodeCount = 0;
+    let missingDayChangeoverCount = 0;
+    let nonCanonicalDayChangeoverCount = 0;
+    let inconsistentDayChangeoverCount = 0;
 
     for (let index = 0; index < days.length; index += 1) {
       const day = days[index] ?? {};
       const label = `${fileName} day#${index + 1}`;
       const canonicalStatus = toCanonicalStatusCode(day.status_code);
+      const dayCode =
+        typeof day.day_code === "string"
+          ? day.day_code.trim().toUpperCase()
+          : "";
+      const dayChangeoverCode = normalizeChangeoverCode(day.changeover_code);
+
+      if (typeof day.day_code !== "string") {
+        missingDayCodeCount += 1;
+      } else if (!CANONICAL_DAY_CODES.has(dayCode)) {
+        nonCanonicalDayCodeCount += 1;
+      }
+
+      if (typeof day.changeover_code !== "string") {
+        missingDayChangeoverCount += 1;
+      } else if (!TURN_DAY_CHANGEOVER_CODES.has(dayChangeoverCode)) {
+        nonCanonicalDayChangeoverCount += 1;
+      }
 
       if (canonicalStatus === null) {
         pushIssue(
@@ -213,6 +318,30 @@ async function validateAdapterAvailabilityStatusCodes(
         );
       } else if (canonicalStatus === "I" || canonicalStatus === "O") {
         hasTurnDayStatus = true;
+      }
+
+      if (
+        CANONICAL_STATUS_CODES.has(canonicalStatus ?? "") &&
+        typeof day.day_code === "string" &&
+        CANONICAL_DAY_CODES.has(dayCode)
+      ) {
+        const expectedDayCode =
+          canonicalStatus === "A" || canonicalStatus === "O" ? "Y" : "N";
+        if (dayCode !== expectedDayCode) {
+          inconsistentDayCodeCount += 1;
+        }
+      }
+
+      if (
+        CANONICAL_STATUS_CODES.has(canonicalStatus ?? "") &&
+        typeof day.changeover_code === "string" &&
+        dayChangeoverCode.length > 0 &&
+        TURN_DAY_CHANGEOVER_CODES.has(dayChangeoverCode)
+      ) {
+        const expected = expectedDayChangeoverCode(canonicalStatus ?? "X");
+        if (dayChangeoverCode !== expected) {
+          inconsistentDayChangeoverCount += 1;
+        }
       }
 
       if (typeof resolveCheckinBoolean(day) !== "boolean") {
@@ -234,10 +363,71 @@ async function validateAdapterAvailabilityStatusCodes(
       daysChecked += 1;
     }
 
+    if (missingDayCodeCount > 0) {
+      pushIssue(
+        issues,
+        "missing_day_code",
+        `${fileName}: normalized_availability.days missing day_code on ${missingDayCodeCount} day(s)`,
+        "error",
+      );
+    }
+
+    if (nonCanonicalDayCodeCount > 0) {
+      pushIssue(
+        issues,
+        "non_canonical_day_code",
+        `${fileName}: normalized_availability.days has non-canonical day_code on ${nonCanonicalDayCodeCount} day(s) (expected Y/N)`,
+        "warning",
+      );
+    }
+
+    if (inconsistentDayCodeCount > 0) {
+      pushIssue(
+        issues,
+        "inconsistent_day_code",
+        `${fileName}: normalized_availability.days has ${inconsistentDayCodeCount} day(s) where day_code does not match status_code availability mapping`,
+        "warning",
+      );
+    }
+
+    if (missingDayChangeoverCount > 0) {
+      pushIssue(
+        issues,
+        "missing_day_changeover_code",
+        `${fileName}: normalized_availability.days missing changeover_code on ${missingDayChangeoverCount} day(s)`,
+        "error",
+      );
+    }
+
+    if (nonCanonicalDayChangeoverCount > 0) {
+      pushIssue(
+        issues,
+        "non_canonical_day_changeover_code",
+        `${fileName}: normalized_availability.days has non-canonical changeover_code on ${nonCanonicalDayChangeoverCount} day(s) (expected I/O/C/X or empty)`,
+        "warning",
+      );
+    }
+
+    if (inconsistentDayChangeoverCount > 0) {
+      pushIssue(
+        issues,
+        "inconsistent_day_changeover_code",
+        `${fileName}: normalized_availability.days has ${inconsistentDayChangeoverCount} day(s) where changeover_code does not match status_code mapping`,
+        "warning",
+      );
+    }
+
     const ratesDays = parsed.normalized_rates?.days;
     if (Array.isArray(ratesDays)) {
       for (const rateDay of ratesDays) {
         const code = normalizeChangeoverCode(rateDay?.changeover_code);
+        if (!TURN_DAY_CHANGEOVER_CODES.has(code)) {
+          pushIssue(
+            issues,
+            "non_turn_changeover_code",
+            `${fileName}: normalized_rates.days changeover_code='${code}' is not a turn-day code (expected I/O/C/X or empty)`,
+          );
+        }
         if (code === "I" || code === "O") {
           hasTurnDayHint = true;
           break;
@@ -251,6 +441,62 @@ async function validateAdapterAvailabilityStatusCodes(
         "missing_turn_day_status",
         `${fileName}: changeover hints include I/O but normalized_availability.days has no I/O status_code`,
       );
+    }
+
+    for (let index = 1; index < days.length; index += 1) {
+      const previous = toCanonicalStatusCode(days[index - 1]?.status_code);
+      const current = toCanonicalStatusCode(days[index]?.status_code);
+      if (!previous || !current) {
+        continue;
+      }
+
+      if (previous === "U" && current === "A") {
+        pushIssue(
+          issues,
+          "missing_checkin_turn_day_boundary",
+          `${fileName}: direct transition U->A at day#${index}->day#${index + 1} is missing explicit checkin boundary I`,
+          "warning",
+        );
+        continue;
+      }
+
+      if (previous === "A" && current === "U") {
+        if (isDec31ToJan1Boundary(days[index - 1] ?? {}, days[index] ?? {})) {
+          continue;
+        }
+        pushIssue(
+          issues,
+          "missing_checkout_turn_day_boundary",
+          `${fileName}: direct transition A->U at day#${index}->day#${index + 1} is missing explicit checkout boundary O`,
+          "warning",
+        );
+        continue;
+      }
+
+      if (previous === "U" && current === "X") {
+        const next = nextNonXStatus(days, index + 1);
+        if (next?.status === "A") {
+          pushIssue(
+            issues,
+            "missing_checkin_turn_day_boundary",
+            `${fileName}: transition U->X...->A at day#${index}->day#${next.index + 1} is missing explicit checkin boundary I`,
+            "warning",
+          );
+        }
+        continue;
+      }
+
+      if (previous === "A" && current === "X") {
+        const next = nextNonXStatus(days, index + 1);
+        if (next?.status === "U") {
+          pushIssue(
+            issues,
+            "missing_checkout_turn_day_boundary",
+            `${fileName}: transition A->X...->U at day#${index}->day#${next.index + 1} is missing explicit checkout boundary O`,
+            "warning",
+          );
+        }
+      }
     }
   }
 
@@ -285,12 +531,27 @@ export async function runValidateAvailabilityStatusCodesCli(
   }
 
   const summary = await validateAdapterAvailabilityStatusCodes(options);
+  const errorIssues = summary.issues.filter(
+    (issue) => issue.severity === "error",
+  );
+  const warningIssues = summary.issues.filter(
+    (issue) => issue.severity === "warning",
+  );
 
-  if (summary.issues.length > 0) {
+  if (errorIssues.length > 0) {
     console.error(chalk.red("Availability status validator failed."));
     console.error(formatSummaryLine(summary));
-    printIssues(summary.issues);
+    printIssues([...errorIssues, ...warningIssues]);
     return 1;
+  }
+
+  if (warningIssues.length > 0) {
+    console.log(
+      chalk.yellow("Availability status validator passed with warnings."),
+    );
+    console.log(formatSummaryLine(summary));
+    printIssues(warningIssues);
+    return 0;
   }
 
   console.log(chalk.green("Availability status validator passed."));

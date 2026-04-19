@@ -1393,6 +1393,7 @@ function parseRateRows(payload: unknown): Array<Record<string, unknown>> {
 function expandRateDays(
   rateRows: Array<Record<string, unknown>>,
   availabilityByDate: Map<string, ThirtyABeachDayCode>,
+  changeoverByDate: Map<string, ThirtyABeachChangeOverCode>,
 ): Array<{
   date: string;
   nightly_rate: number | null;
@@ -1436,6 +1437,7 @@ function expandRateDays(
     ) {
       const date = formatDateIso(cursor);
       const availabilityCode = availabilityByDate.get(date);
+      const changeoverCode = changeoverByDate.get(date) ?? "";
 
       out.push({
         date,
@@ -1447,7 +1449,7 @@ function expandRateDays(
             : availabilityCode === "N"
               ? true
               : null,
-        changeover_code: availabilityCode ?? "",
+        changeover_code: changeoverCode,
         season_name: seasonName,
       });
     }
@@ -1672,8 +1674,10 @@ async function fetchDetail(
     }
 
     const availabilityByDate = new Map<string, ThirtyABeachDayCode>();
+    const changeoverByDate = new Map<string, ThirtyABeachChangeOverCode>();
     for (const day of availabilityDays) {
       availabilityByDate.set(day.date, day.code);
+      changeoverByDate.set(day.date, day.changeOverCode);
     }
 
     const ratesStartIso = filteredDays[0]?.date ?? formatDateIso(today);
@@ -1693,7 +1697,11 @@ async function fetchDetail(
         : null;
 
     const ratesRowsRaw = parseRateRows(ratesPayload);
-    const normalizedRateDays = expandRateDays(ratesRowsRaw, availabilityByDate);
+    const normalizedRateDays = expandRateDays(
+      ratesRowsRaw,
+      availabilityByDate,
+      changeoverByDate,
+    );
 
     const rateValues = normalizedRateDays
       .map((row) => row.nightly_rate)
@@ -1712,18 +1720,9 @@ async function fetchDetail(
 
     const normalizedDays = availabilityDays.map((day, index) => {
       const previousDay = index > 0 ? availabilityDays[index - 1] : undefined;
-      const bookingDayState: "bookable" | "blocked" | "unknown" =
-        day.code === "Y"
-          ? "bookable"
-          : day.code === "N"
-            ? "blocked"
-            : "unknown";
-
       const rateForDay = normalizedRateDays.find(
         (rate) => rate.date === day.date,
       );
-
-      const isAvailable = day.code === "Y";
       const isCheckInAllowed =
         day.code === "Y" &&
         day.changeOverCode !== "X" &&
@@ -1745,10 +1744,28 @@ async function fetchDetail(
                 ? "O"
                 : "U";
 
+      const normalizedDayCode: "Y" | "N" =
+        statusCode === "A" || statusCode === "O" ? "Y" : "N";
+      const normalizedChangeoverCode: ThirtyABeachChangeOverCode =
+        statusCode === "I"
+          ? "I"
+          : statusCode === "O"
+            ? "O"
+            : statusCode === "A"
+              ? "C"
+              : "X";
+      const bookingDayState: "bookable" | "blocked" | "unknown" =
+        statusCode === "A" || statusCode === "O"
+          ? "bookable"
+          : statusCode === "U" || statusCode === "I"
+            ? "blocked"
+            : "unknown";
+      const isAvailable = statusCode === "A" || statusCode === "O";
+
       return {
         date: day.date,
-        day_code: day.code,
-        changeover_code: day.changeOverCode,
+        day_code: normalizedDayCode,
+        changeover_code: normalizedChangeoverCode,
         is_available: isAvailable,
         status_code: statusCode,
         is_available_for_checkin: isCheckInAllowed,
@@ -1758,11 +1775,15 @@ async function fetchDetail(
       };
     });
 
-    const available = availabilityDays.filter((day) => day.code === "Y").length;
-    const notAvailable = availabilityDays.filter(
-      (day) => day.code === "N",
+    const available = normalizedDays.filter(
+      (day) => day.status_code === "A" || day.status_code === "O",
     ).length;
-    const other = normalizedDays.length - available - notAvailable;
+    const notAvailable = normalizedDays.filter(
+      (day) => day.status_code === "U" || day.status_code === "I",
+    ).length;
+    const other = normalizedDays.filter(
+      (day) => day.status_code === "X",
+    ).length;
 
     const description =
       descriptionExpanded || listingRow?.description || metaDescription;

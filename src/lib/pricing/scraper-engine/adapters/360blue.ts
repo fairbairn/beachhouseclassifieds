@@ -275,6 +275,23 @@ function normalizeForMatch(value: string): string {
     .trim();
 }
 
+function toTurnDayChangeoverCode(statusCode: string): string {
+  const code = statusCode.trim().toUpperCase();
+  if (code === "I") {
+    return "I";
+  }
+  if (code === "O") {
+    return "O";
+  }
+  if (code === "A") {
+    return "C";
+  }
+  if (code === "U" || code === "X") {
+    return "X";
+  }
+  return "";
+}
+
 function hashSha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -1486,7 +1503,7 @@ async function fetchDetail(
       Array.from(new Set(bookingRestrictionMatches)).slice(0, 60),
     );
 
-    const normalizedDays =
+    let normalizedDays =
       bookingAvailabilityRows.length > 0
         ? bookingAvailabilityRows
             .filter((row) => row.date >= todayIso && row.date <= horizonIso)
@@ -1548,6 +1565,51 @@ async function fetchDetail(
                 ),
               };
             });
+
+    // Fallback: when provider rows leave direct A<->U boundaries without turn markers,
+    // infer check-in/check-out-only days from adjacency.
+    for (let i = 0; i < normalizedDays.length; i += 1) {
+      const current = normalizedDays[i];
+      if (!current || current.status_code !== "A") {
+        continue;
+      }
+
+      const prev = i > 0 ? normalizedDays[i - 1] : null;
+      const next = i + 1 < normalizedDays.length ? normalizedDays[i + 1] : null;
+      const prevUnavailable = prev?.status_code === "U";
+      const nextUnavailable = next?.status_code === "U";
+
+      if (prevUnavailable && !nextUnavailable) {
+        current.status_code = "I";
+        current.is_available = true;
+        current.is_available_for_checkin = true;
+        current.is_available_for_checkout = false;
+        current.booking_day_state = "bookable";
+      } else if (!prevUnavailable && nextUnavailable) {
+        current.status_code = "O";
+        current.is_available = true;
+        current.is_available_for_checkin = false;
+        current.is_available_for_checkout = true;
+        current.booking_day_state = "bookable";
+      }
+    }
+
+    if (normalizedDays.length === 0) {
+      const cursor = new Date(`${todayIso}T00:00:00.000Z`);
+      while (cursor.toISOString().slice(0, 10) <= horizonIso) {
+        const date = cursor.toISOString().slice(0, 10);
+        normalizedDays.push({
+          date,
+          status_code: "X",
+          is_available: false,
+          is_available_for_checkin: false,
+          is_available_for_checkout: false,
+          booking_day_state: "unknown",
+          min_nights_required: null,
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
 
     const normalizedAvailability: DetailRecord360Blue["normalized_availability"] =
       {
@@ -1675,7 +1737,7 @@ async function fetchDetail(
           nightly_rate: null,
           min_nights: day.min_nights_required,
           is_booked: day.is_available ? false : true,
-          changeover_code: day.status_code,
+          changeover_code: toTurnDayChangeoverCode(day.status_code),
           season_name: day.is_available ? "quote_pending" : "not_available",
         }));
 
@@ -1987,7 +2049,9 @@ async function fetchDetail(
         nightly_rate: advertisedNightlyRate,
         min_nights: normalizedDays[0]!.min_nights_required,
         is_booked: false,
-        changeover_code: normalizedDays[0]!.status_code,
+        changeover_code: toTurnDayChangeoverCode(
+          normalizedDays[0]!.status_code,
+        ),
         season_name: "displayed_from_rate_fallback",
       };
     }

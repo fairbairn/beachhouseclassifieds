@@ -1246,26 +1246,80 @@ function extractAvailabilityFromRightWidgetHtml(
   }
 
   if (legacyAvail.length > 0) {
-    for (const range of legacyAvail) {
-      const start = parseSlashDateToIso(String(range.b ?? ""));
-      const end = parseSlashDateToIso(String(range.e ?? ""));
-      if (!start || !end || end < start) {
+    const normalizedLegacyRanges = legacyAvail
+      .map((range) => {
+        const start = parseSlashDateToIso(String(range.b ?? ""));
+        const end = parseSlashDateToIso(String(range.e ?? ""));
+        if (!start || !end || end < start) {
+          return null;
+        }
+
+        return {
+          start,
+          end,
+          arrivalAllowed: Number(range.a ?? 0) === 1,
+          departureAllowed: Number(range.q ?? 0) === 1,
+          stayAllowed: Number(range.s ?? 0) === 1,
+        };
+      })
+      .filter((range): range is NonNullable<typeof range> => !!range)
+      .sort((left, right) => left.start.localeCompare(right.start));
+
+    for (let index = 0; index < normalizedLegacyRanges.length; index += 1) {
+      const range = normalizedLegacyRanges[index];
+      if (!range) {
         continue;
       }
 
-      const arrivalAllowed = Number(range.a ?? 0) === 1;
-      const departureAllowed = Number(range.q ?? 0) === 1;
-      const stayAllowed = Number(range.s ?? 0) === 1;
+      const previousRange =
+        index > 0 ? normalizedLegacyRanges[index - 1] : null;
+      const nextRange =
+        index + 1 < normalizedLegacyRanges.length
+          ? normalizedLegacyRanges[index + 1]
+          : null;
 
-      let cursor = start;
-      while (cursor <= end) {
+      const previousTouchesStart =
+        previousRange !== null &&
+        addUtcDays(previousRange.end, 1) === range.start;
+      const nextTouchesEnd =
+        nextRange !== null && addUtcDays(range.end, 1) === nextRange.start;
+
+      const previousBlocksCheckin =
+        previousTouchesStart &&
+        previousRange !== null &&
+        !(previousRange.stayAllowed || previousRange.departureAllowed);
+      const nextBlocksCheckout =
+        nextTouchesEnd &&
+        nextRange !== null &&
+        !(nextRange.stayAllowed || nextRange.arrivalAllowed);
+
+      let cursor = range.start;
+      while (cursor <= range.end) {
         if (cursor >= todayIso && cursor <= horizonIso) {
           let code: LuxuryDayCode = "U";
-          if (stayAllowed || (arrivalAllowed && departureAllowed)) {
+
+          if (
+            range.stayAllowed ||
+            (range.arrivalAllowed && range.departureAllowed)
+          ) {
             code = "A";
-          } else if (arrivalAllowed) {
+            if (cursor === range.start && previousBlocksCheckin) {
+              code = "I";
+            }
+            if (cursor === range.end && nextBlocksCheckout) {
+              code = "O";
+            }
+            if (
+              cursor === range.start &&
+              cursor === range.end &&
+              previousBlocksCheckin &&
+              nextBlocksCheckout
+            ) {
+              code = "I";
+            }
+          } else if (range.arrivalAllowed) {
             code = "I";
-          } else if (departureAllowed) {
+          } else if (range.departureAllowed) {
             code = "O";
           }
 
@@ -2479,6 +2533,58 @@ async function fetchDetail(
         },
       );
       windowCursor.setUTCDate(windowCursor.getUTCDate() + 1);
+    }
+
+    const applyDerivedStatus = (
+      day: (typeof completeWindowDays)[number],
+      statusCode: LuxuryDayCode,
+    ): void => {
+      day.status_code = statusCode;
+      day.is_available = statusCode === "A" || statusCode === "O";
+      day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+      day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+      day.booking_day_state =
+        statusCode === "A" || statusCode === "O"
+          ? "bookable"
+          : statusCode === "U" || statusCode === "I"
+            ? "blocked"
+            : "unknown";
+    };
+
+    for (let index = 0; index < completeWindowDays.length; index += 1) {
+      const day = completeWindowDays[index];
+      if (!day || day.status_code !== "A") {
+        continue;
+      }
+
+      const previousDay = index > 0 ? completeWindowDays[index - 1] : null;
+      const nextDay =
+        index + 1 < completeWindowDays.length
+          ? completeWindowDays[index + 1]
+          : null;
+
+      const previousUnavailable =
+        previousDay !== null &&
+        (previousDay.status_code === "U" || previousDay.status_code === "X");
+      const nextUnavailable =
+        nextDay !== null &&
+        (nextDay.status_code === "U" || nextDay.status_code === "X");
+
+      if (!previousUnavailable && !nextUnavailable) {
+        continue;
+      }
+
+      if (previousUnavailable && !nextUnavailable) {
+        applyDerivedStatus(day, "I");
+        continue;
+      }
+
+      if (!previousUnavailable && nextUnavailable) {
+        applyDerivedStatus(day, "O");
+        continue;
+      }
+
+      applyDerivedStatus(day, "I");
     }
 
     const jsonLdSignals = parseJsonLdSignals(html);

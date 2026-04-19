@@ -1724,6 +1724,50 @@ async function fetchDetail(
       };
     });
 
+    const applyDerivedStatus = (
+      day: (typeof normalizedDays)[number],
+      statusCode: Rosemary30ANormalizedStatusCode,
+    ): void => {
+      day.status_code = statusCode;
+      day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+      day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+    };
+
+    for (let index = 0; index < normalizedDays.length; index += 1) {
+      const day = normalizedDays[index];
+      if (!day || day.status_code !== "A") {
+        continue;
+      }
+
+      const previousDay = index > 0 ? normalizedDays[index - 1] : null;
+      const nextDay =
+        index + 1 < normalizedDays.length ? normalizedDays[index + 1] : null;
+
+      const previousUnavailable =
+        previousDay !== null &&
+        (previousDay.status_code === "U" || previousDay.status_code === "X");
+      const nextUnavailable =
+        nextDay !== null &&
+        (nextDay.status_code === "U" || nextDay.status_code === "X");
+
+      if (!previousUnavailable && !nextUnavailable) {
+        continue;
+      }
+
+      if (previousUnavailable && !nextUnavailable) {
+        applyDerivedStatus(day, "I");
+        continue;
+      }
+
+      if (!previousUnavailable && nextUnavailable) {
+        applyDerivedStatus(day, "O");
+        continue;
+      }
+
+      // Single-day turn islands should be explicit turn-in days rather than A.
+      applyDerivedStatus(day, "I");
+    }
+
     const available = availabilityDays.filter((day) => day.code === "Y").length;
     const notAvailable = availabilityDays.filter(
       (day) => day.code === "N",

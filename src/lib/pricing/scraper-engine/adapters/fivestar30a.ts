@@ -1250,7 +1250,16 @@ async function fetchDetail(
           nightly_rate: derived?.nightly_rate ?? null,
           min_nights: derived?.min_nights ?? day.min_nights_required,
           is_booked: day.status_code === "U",
-          changeover_code: day.status_code,
+          changeover_code:
+            day.status_code === "I"
+              ? "I"
+              : day.status_code === "O"
+                ? "O"
+                : day.status_code === "A"
+                  ? "C"
+                  : day.status_code === "U" || day.status_code === "X"
+                    ? "X"
+                    : "",
           season_name: derived?.season_name ?? "default",
         };
       });

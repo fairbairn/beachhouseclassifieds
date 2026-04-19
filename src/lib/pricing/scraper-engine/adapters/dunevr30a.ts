@@ -1140,6 +1140,7 @@ function parseRateRows(payload: unknown): Array<Record<string, unknown>> {
 function expandRateDays(
   rateRows: Array<Record<string, unknown>>,
   availabilityByDate: Map<string, DuneDayCode>,
+  changeoverByDate: Map<string, DuneChangeOverCode>,
 ): Array<{
   date: string;
   nightly_rate: number | null;
@@ -1183,6 +1184,7 @@ function expandRateDays(
     ) {
       const date = formatDateIso(cursor);
       const availabilityCode = availabilityByDate.get(date);
+      const changeoverCode = changeoverByDate.get(date) ?? "";
 
       out.push({
         date,
@@ -1194,7 +1196,7 @@ function expandRateDays(
             : availabilityCode === "N"
               ? true
               : null,
-        changeover_code: availabilityCode ?? "",
+        changeover_code: changeoverCode,
         season_name: seasonName,
       });
     }
@@ -1392,8 +1394,10 @@ async function fetchDetail(
     });
 
     const availabilityByDate = new Map<string, DuneDayCode>();
+    const changeoverByDate = new Map<string, DuneChangeOverCode>();
     for (const day of filteredDays) {
       availabilityByDate.set(day.date, day.code);
+      changeoverByDate.set(day.date, day.changeOverCode);
     }
 
     const ratesStartIso = filteredDays[0]?.date ?? formatDateIso(today);
@@ -1413,7 +1417,11 @@ async function fetchDetail(
         : null;
 
     const ratesRowsRaw = parseRateRows(ratesPayload);
-    const normalizedRateDays = expandRateDays(ratesRowsRaw, availabilityByDate);
+    const normalizedRateDays = expandRateDays(
+      ratesRowsRaw,
+      availabilityByDate,
+      changeoverByDate,
+    );
 
     const rateValues = normalizedRateDays
       .map((row) => row.nightly_rate)
@@ -1477,6 +1485,56 @@ async function fetchDetail(
         min_nights_required: rateForDay?.min_nights ?? null,
       };
     });
+
+    const applyStatusCode = (
+      day: (typeof normalizedDays)[number],
+      statusCode: DuneNormalizedStatusCode,
+    ): void => {
+      day.status_code = statusCode;
+      day.is_available =
+        statusCode === "A" || statusCode === "I" || statusCode === "O";
+      day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+      day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+      day.booking_day_state =
+        statusCode === "U"
+          ? "blocked"
+          : statusCode === "X"
+            ? "unknown"
+            : "bookable";
+    };
+
+    // Fallback boundary inference: if provider emits an available day without
+    // explicit I/O but adjacent days are unavailable, promote boundary A days to I/O.
+    // This preserves source-provided explicit turn markers and only refines ambiguous A days.
+    for (let index = 0; index < normalizedDays.length; index += 1) {
+      const day = normalizedDays[index]!;
+      if (day.status_code !== "A") {
+        continue;
+      }
+
+      const previousDay = index > 0 ? normalizedDays[index - 1] : undefined;
+      const nextDay =
+        index + 1 < normalizedDays.length
+          ? normalizedDays[index + 1]
+          : undefined;
+
+      const previousUnavailable =
+        previousDay !== undefined &&
+        (previousDay.status_code === "U" || previousDay.status_code === "X");
+      const nextUnavailable =
+        nextDay !== undefined &&
+        (nextDay.status_code === "U" || nextDay.status_code === "X");
+
+      if (previousUnavailable && !nextUnavailable) {
+        applyStatusCode(day, "I");
+      } else if (!previousUnavailable && nextUnavailable) {
+        applyStatusCode(day, "O");
+      } else if (previousUnavailable && nextUnavailable) {
+        // Single-day available islands are semantically boundary starts/ends;
+        // prefer check-in classification to avoid ambiguous plain-A at U/X edges.
+        applyStatusCode(day, "I");
+      }
+    }
 
     const available = filteredDays.filter((day) => day.code === "Y").length;
     const notAvailable = filteredDays.filter((day) => day.code === "N").length;

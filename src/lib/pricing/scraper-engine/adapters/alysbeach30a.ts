@@ -743,6 +743,22 @@ function resolveMinNightsForDate(
   return result;
 }
 
+function applyStatusCode(
+  day: OverseeDetailRecord["normalized_availability"]["days"][number],
+  statusCode: OverseeDayCode,
+): void {
+  day.status_code = statusCode;
+  day.is_available = statusCode === "A";
+  day.is_available_for_checkin = statusCode === "A" || statusCode === "O";
+  day.is_available_for_checkout = statusCode === "A" || statusCode === "I";
+  day.booking_day_state =
+    statusCode === "A"
+      ? "bookable"
+      : statusCode === "U"
+        ? "blocked"
+        : "unknown";
+}
+
 function inferMaxPageFromHtml(html: string): number {
   let maxPage = 1;
 
@@ -1123,24 +1139,44 @@ async function fetchDetail(
         resolveMinNightsForDate(isoDate, minNightRules, bookingWindowDay) ??
         minLOS;
 
-      const bookingDayState: "bookable" | "blocked" | "unknown" =
-        statusCode === "A"
-          ? "bookable"
-          : statusCode === "U"
-            ? "blocked"
-            : "unknown";
+      const dayRecord: OverseeDetailRecord["normalized_availability"]["days"][number] =
+        {
+          date: isoDate,
+          status_code: statusCode,
+          is_available: statusCode === "A",
+          is_available_for_checkin: statusCode === "A" || statusCode === "O",
+          is_available_for_checkout: statusCode === "A" || statusCode === "I",
+          booking_day_state:
+            statusCode === "A"
+              ? "bookable"
+              : statusCode === "U"
+                ? "blocked"
+                : "unknown",
+          min_nights_required: minNightsRequired,
+        };
 
-      normalizedDays.push({
-        date: isoDate,
-        status_code: statusCode,
-        is_available: statusCode === "A",
-        is_available_for_checkin: statusCode === "A" || statusCode === "O",
-        is_available_for_checkout: statusCode === "A" || statusCode === "I",
-        booking_day_state: bookingDayState,
-        min_nights_required: minNightsRequired,
-      });
+      normalizedDays.push(dayRecord);
 
       cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    // Fallback when upstream payload omits explicit turn-day markers.
+    for (let i = 0; i < normalizedDays.length; i += 1) {
+      const current = normalizedDays[i];
+      if (!current || current.status_code !== "A") {
+        continue;
+      }
+
+      const prev = i > 0 ? normalizedDays[i - 1] : null;
+      const next = i + 1 < normalizedDays.length ? normalizedDays[i + 1] : null;
+      const prevUnavailable = prev?.status_code === "U";
+      const nextUnavailable = next?.status_code === "U";
+
+      if (prevUnavailable && !nextUnavailable) {
+        applyStatusCode(current, "I");
+      } else if (!prevUnavailable && nextUnavailable) {
+        applyStatusCode(current, "O");
+      }
     }
 
     const counts = {

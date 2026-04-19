@@ -5,7 +5,7 @@
     "property_id": "157",
     "detail_url": "https://www.exclusive30a.com/vacation-rentals/casa-al-mare"
   },
-  "fetched_at": "2026-04-19T04:45:23.291Z",
+  "fetched_at": "2026-04-19T14:28:40.531Z",
   "title": "Casa Al Mare | Loaded Designer Home| Exclusive 30A",
   "h1": "Casa Al Mare",
   "canonical_url": "https://www.exclusive30a.com/vacation-rentals/casa-al-mare",
@@ -147,17 +147,17 @@
       ],
       "Highlights": [
         "Wifi",
-        "Dryer",
-        "Shampoo",
-        "Keurig",
-        "Living Room",
-        "Hair Dryer",
-        "Cable",
-        "Private Living Room",
-        "Washer",
+        "Heating",
         "Parking",
-        "Towels",
-        "Iron & Ironing Board"
+        "Private Living Room",
+        "Shampoo",
+        "Living Room",
+        "Washer",
+        "Wifi Fiber Optic",
+        "Hair Dryer",
+        "Iron & Ironing Board",
+        "Private Entrance",
+        "Essentials"
       ],
       "Property Amenities": [
         "Air Conditioning",
@@ -454,22 +454,22 @@
   "normalized_availability": {
     "source": "pm_exclusive30a",
     "external_listing_id": "casa-al-mare",
-    "captured_at": "2026-04-19T04:45:23.291Z",
+    "captured_at": "2026-04-19T14:28:40.531Z",
     "window_start": "2026-04-19",
     "window_end": "2028-04-18",
     "code_legend": {
       "Y": "available",
       "N": "not_available"
     },
-    "day_codes": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNYYYYNNNNNNNNYYYYYYYYNNNNNNNYYYYYYYYYYYYYNNNNNNNYYYYYYYYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
+    "day_codes": "YNNNNNNNNNNNNNNNNNNNNNNNNNNNYYYYNNNNNNNNYYYYYYYYNNNNNNNYYYYYYYYYYYYYNNNNNNNYYYYYYYYYNNNNNNNYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
     "days": [
       {
         "date": "2026-04-19",
-        "is_available": false,
+        "is_available": true,
         "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "status_code": "U",
-        "booking_day_state": "blocked"
+        "is_available_for_checkout": true,
+        "status_code": "O",
+        "booking_day_state": "bookable"
       },
       {
         "date": "2026-04-20",
@@ -691,8 +691,8 @@
         "date": "2026-05-17",
         "is_available": true,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "A",
+        "is_available_for_checkout": false,
+        "status_code": "I",
         "booking_day_state": "bookable"
       },
       {
@@ -787,8 +787,8 @@
         "date": "2026-05-29",
         "is_available": true,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "A",
+        "is_available_for_checkout": false,
+        "status_code": "I",
         "booking_day_state": "bookable"
       },
       {
@@ -907,8 +907,8 @@
         "date": "2026-06-13",
         "is_available": true,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "A",
+        "is_available_for_checkout": false,
+        "status_code": "I",
         "booking_day_state": "bookable"
       },
       {
@@ -1067,8 +1067,8 @@
         "date": "2026-07-03",
         "is_available": true,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "A",
+        "is_available_for_checkout": false,
+        "status_code": "I",
         "booking_day_state": "bookable"
       },
       {
@@ -1195,8 +1195,8 @@
         "date": "2026-07-19",
         "is_available": true,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "status_code": "A",
+        "is_available_for_checkout": false,
+        "status_code": "I",
         "booking_day_state": "bookable"
       },
       {
@@ -6313,20 +6313,16 @@
       }
     ],
     "counts": {
-      "available": 674,
-      "not_available": 57,
+      "available": 675,
+      "not_available": 56,
       "other": 0,
-      "booking_available": 674,
-      "booking_unavailable": 57,
+      "booking_available": 675,
+      "booking_unavailable": 56,
       "booking_unknown": 0
     }
   },
   "availability_raw": {
     "booked_days": [
-      {
-        "departure_okay": 0,
-        "d": "20260419"
-      },
       {
         "departure_okay": 0,
         "d": "20260420"
