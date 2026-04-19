@@ -28,6 +28,60 @@ function toChangeoverCodeFromStatus(
   return status === "A" ? "C" : "X";
 }
 
+function applyDerivedStatus(
+  day: ScenicStaysDetailRecord["normalized_availability"]["days"][number],
+  statusCode: ScenicStatusCode,
+): void {
+  day.status_code = statusCode;
+  day.day_code = toDayCodeFromStatus(statusCode);
+  day.changeover_code = toChangeoverCodeFromStatus(statusCode);
+  day.is_available = statusCode === "A" || statusCode === "O";
+  day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+  day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+  day.booking_day_state =
+    statusCode === "A" || statusCode === "O"
+      ? "bookable"
+      : statusCode === "U" || statusCode === "I"
+        ? "blocked"
+        : "unknown";
+}
+
+function deriveTurnDayStatuses(
+  days: ScenicStaysDetailRecord["normalized_availability"]["days"],
+): void {
+  for (let index = 0; index < days.length; index += 1) {
+    const day = days[index];
+    if (!day || day.status_code !== "A") {
+      continue;
+    }
+
+    const previousDay = index > 0 ? days[index - 1] : null;
+    const nextDay = index + 1 < days.length ? days[index + 1] : null;
+    const previousUnavailable =
+      previousDay !== null &&
+      (previousDay.status_code === "U" || previousDay.status_code === "X");
+    const nextUnavailable =
+      nextDay !== null &&
+      (nextDay.status_code === "U" || nextDay.status_code === "X");
+
+    if (!previousUnavailable && !nextUnavailable) {
+      continue;
+    }
+
+    if (previousUnavailable && !nextUnavailable) {
+      applyDerivedStatus(day, "I");
+      continue;
+    }
+
+    if (!previousUnavailable && nextUnavailable) {
+      applyDerivedStatus(day, "O");
+      continue;
+    }
+
+    applyDerivedStatus(day, "I");
+  }
+}
+
 type ScenicStaysDetailRecord = DetailRecordBase & {
   quote_context: {
     listing_id: string;
@@ -2074,6 +2128,8 @@ async function fetchDetail(
 
       return {
         date: day.date,
+        day_code: toDayCodeFromStatus(statusCode),
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
         is_available: day.code === "Y",
         is_available_for_checkin: isCheckInAllowed,
         is_available_for_checkout: isCheckOutAllowed,
@@ -2081,6 +2137,8 @@ async function fetchDetail(
         booking_day_state: bookingDayState,
       };
     });
+
+    deriveTurnDayStatuses(normalizedDays);
 
     const available = completeWindowDays.filter(
       (day) => day.code === "Y",

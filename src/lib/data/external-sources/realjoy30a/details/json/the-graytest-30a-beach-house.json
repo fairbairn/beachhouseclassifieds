@@ -1,7 +1,7 @@
 {
   "external_listing_id": "the-graytest-30a-beach-house",
   "detail_url": "https://www.realjoy.com/beach-rentals/the-graytest-30a-beach-house",
-  "fetched_at": "2026-04-19T17:16:14.101Z",
+  "fetched_at": "2026-04-19T17:43:04.382Z",
   "quote_context": {
     "source": "detail_html",
     "property_id": "1241",
@@ -190,7 +190,7 @@
   "normalized_availability": {
     "source": "pm_realjoy30a",
     "external_listing_id": "the-graytest-30a-beach-house",
-    "captured_at": "2026-04-19T17:16:14.101Z",
+    "captured_at": "2026-04-19T17:43:04.383Z",
     "window_start": "2026-04-19",
     "window_end": "2027-05-31",
     "code_legend": {
@@ -200,7 +200,7 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUIOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUIAAAAAA",
+    "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAOUUUIAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAOUUUIOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUIAAAAAA",
     "days": [
       {
         "date": "2026-04-19",
@@ -795,52 +795,52 @@
       {
         "date": "2026-06-17",
         "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
+        "status_code": "O",
+        "changeover_code": "O",
         "is_available": true,
-        "is_available_for_checkin": true,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable"
       },
       {
         "date": "2026-06-18",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "day_code": "N",
+        "status_code": "U",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-06-19",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "day_code": "N",
+        "status_code": "U",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-06-20",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "day_code": "N",
+        "status_code": "U",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-06-21",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-06-22",
@@ -4284,13 +4284,13 @@
       }
     ],
     "counts": {
-      "available": 333,
-      "unavailable": 62,
-      "checkin_only": 7,
-      "checkout_only": 6,
+      "available": 328,
+      "unavailable": 65,
+      "checkin_only": 8,
+      "checkout_only": 7,
       "other": 0,
-      "booking_available": 339,
-      "booking_unavailable": 69,
+      "booking_available": 335,
+      "booking_unavailable": 73,
       "booking_unknown": 0
     }
   },

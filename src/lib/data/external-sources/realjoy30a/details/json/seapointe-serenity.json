@@ -1,7 +1,7 @@
 {
   "external_listing_id": "seapointe-serenity",
   "detail_url": "https://www.realjoy.com/beach-rentals/seapointe-serenity",
-  "fetched_at": "2026-04-19T17:15:39.158Z",
+  "fetched_at": "2026-04-19T17:42:29.892Z",
   "quote_context": {
     "source": "detail_html",
     "property_id": "1872",
@@ -223,7 +223,7 @@
   "normalized_availability": {
     "source": "pm_realjoy30a",
     "external_listing_id": "seapointe-serenity",
-    "captured_at": "2026-04-19T17:15:39.158Z",
+    "captured_at": "2026-04-19T17:42:29.892Z",
     "window_start": "2026-04-19",
     "window_end": "2027-05-31",
     "code_legend": {
@@ -233,7 +233,7 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUIAAAAAA",
+    "day_codes": "UUUUUIAAAAAOUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUIAAAAAA",
     "days": [
       {
         "date": "2026-04-19",
@@ -348,42 +348,42 @@
       {
         "date": "2026-04-30",
         "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
+        "status_code": "O",
+        "changeover_code": "O",
         "is_available": true,
-        "is_available_for_checkin": true,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable"
       },
       {
         "date": "2026-05-01",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "day_code": "N",
+        "status_code": "U",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-05-02",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "day_code": "N",
+        "status_code": "U",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-05-03",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable"
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked"
       },
       {
         "date": "2026-05-04",
@@ -4317,13 +4317,13 @@
       }
     ],
     "counts": {
-      "available": 393,
-      "unavailable": 10,
-      "checkin_only": 3,
-      "checkout_only": 2,
+      "available": 389,
+      "unavailable": 12,
+      "checkin_only": 4,
+      "checkout_only": 3,
       "other": 0,
-      "booking_available": 395,
-      "booking_unavailable": 13,
+      "booking_available": 392,
+      "booking_unavailable": 16,
       "booking_unknown": 0
     }
   },
@@ -4338,6 +4338,7 @@
       "ui-datepicker-unselectable ui-state-disabled check-out",
       "ui-datepicker-unselectable ui-state-disabled unavailable",
       "ui-datepicker-week-end available",
+      "ui-datepicker-week-end check-in",
       "ui-datepicker-week-end ui-datepicker-days-cell-over ui-datepicker-unselectable ui-state-disabled unavailable ui-datepicker-current-day ui-datepicker-today",
       "ui-datepicker-week-end ui-datepicker-other-month ui-datepicker-unselectable ui-state-disabled",
       "ui-datepicker-week-end ui-datepicker-unselectable ui-state-disabled available",
