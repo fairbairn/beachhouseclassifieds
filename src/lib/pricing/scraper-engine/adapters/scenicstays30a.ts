@@ -1998,6 +1998,19 @@ async function fetchDetail(
       .map((day) => day.nightly_rate)
       .filter((value): value is number => typeof value === "number");
 
+    const changeoverByDate = new Map<string, "I" | "O" | "C">();
+    for (const day of normalizedRateDays) {
+      const normalizedCode = day.changeover_code.trim().toUpperCase();
+      if (
+        (normalizedCode === "I" ||
+          normalizedCode === "O" ||
+          normalizedCode === "C") &&
+        !changeoverByDate.has(day.date)
+      ) {
+        changeoverByDate.set(day.date, normalizedCode);
+      }
+    }
+
     const daysWithRate = nightlyRates.length;
     const sumRates = nightlyRates.reduce((sum, value) => sum + value, 0);
     const minNightlyRate = daysWithRate > 0 ? Math.min(...nightlyRates) : null;
@@ -2005,7 +2018,8 @@ async function fetchDetail(
     const avgNightlyRate =
       daysWithRate > 0 ? Number((sumRates / daysWithRate).toFixed(2)) : null;
 
-    const normalizedDays = completeWindowDays.map((day) => {
+    const normalizedDays = completeWindowDays.map((day, index) => {
+      const previousDay = index > 0 ? completeWindowDays[index - 1] : undefined;
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         day.code === "Y"
           ? "bookable"
@@ -2013,21 +2027,44 @@ async function fetchDetail(
             ? "blocked"
             : "unknown";
 
+      const changeoverHint = changeoverByDate.get(day.date) ?? null;
+      const isCheckInAllowed =
+        changeoverHint === "I" ||
+        changeoverHint === "C" ||
+        (changeoverHint === null && day.code === "Y");
+      const isCheckOutAllowed =
+        changeoverHint === "O" ||
+        changeoverHint === "C" ||
+        (changeoverHint === null &&
+          (day.code === "Y" ||
+            (day.code === "N" && previousDay?.code === "Y")));
+
+      const statusCode: "A" | "U" | "I" | "O" | "X" =
+        day.code !== "Y" && day.code !== "N"
+          ? "X"
+          : isCheckInAllowed && isCheckOutAllowed
+            ? "A"
+            : isCheckInAllowed
+              ? "I"
+              : isCheckOutAllowed
+                ? "O"
+                : "U";
+
       return {
         date: day.date,
         is_available: day.code === "Y",
-        is_available_for_checkin: day.code === "Y",
-        is_available_for_checkout: day.code === "Y",
-        status_code: day.code,
+        is_available_for_checkin: isCheckInAllowed,
+        is_available_for_checkout: isCheckOutAllowed,
+        status_code: statusCode,
         booking_day_state: bookingDayState,
       };
     });
 
-    const available = normalizedDays.filter(
-      (day) => day.status_code === "Y",
+    const available = completeWindowDays.filter(
+      (day) => day.code === "Y",
     ).length;
-    const notAvailable = normalizedDays.filter(
-      (day) => day.status_code === "N",
+    const notAvailable = completeWindowDays.filter(
+      (day) => day.code === "N",
     ).length;
     const other = normalizedDays.length - available - notAvailable;
 

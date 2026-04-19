@@ -1112,22 +1112,21 @@ async function fetchDetail(
             ? "blocked"
             : "unknown";
 
+      const statusCode: "A" | "U" | "X" =
+        day.code === "Y" ? "A" : day.code === "N" ? "U" : "X";
+
       return {
         date: day.date,
         is_available: day.code === "Y",
         is_available_for_checkin: day.code === "Y",
         is_available_for_checkout: day.code === "Y",
-        status_code: day.code,
+        status_code: statusCode,
         booking_day_state: bookingDayState,
       };
     });
 
-    const available = normalizedDays.filter(
-      (day) => day.status_code === "Y",
-    ).length;
-    const notAvailable = normalizedDays.filter(
-      (day) => day.status_code === "N",
-    ).length;
+    const available = filteredDays.filter((day) => day.code === "Y").length;
+    const notAvailable = filteredDays.filter((day) => day.code === "N").length;
     const other = normalizedDays.length - available - notAvailable;
 
     const description =

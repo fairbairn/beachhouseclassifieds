@@ -803,7 +803,7 @@ async function fetchDetail(
           is_available: false,
           is_available_for_checkin: false,
           is_available_for_checkout: checkoutOk,
-          status_code: "N",
+          status_code: checkoutOk ? "O" : "U",
           booking_day_state: "blocked",
         });
       } else {
@@ -812,18 +812,14 @@ async function fetchDetail(
           is_available: true,
           is_available_for_checkin: true,
           is_available_for_checkout: true,
-          status_code: "Y",
+          status_code: "A",
           booking_day_state: "bookable",
         });
       }
     }
 
-    const available = normalizedDays.filter(
-      (day) => day.status_code === "Y",
-    ).length;
-    const notAvailable = normalizedDays.filter(
-      (day) => day.status_code === "N",
-    ).length;
+    const available = normalizedDays.filter((day) => day.is_available).length;
+    const notAvailable = normalizedDays.length - available;
     const other = normalizedDays.length - available - notAvailable;
 
     const name = stripHtmlFragment(h1 || title).slice(0, 240);
@@ -1068,7 +1064,9 @@ async function fetchDetail(
           Y: "available",
           N: "not_available",
         },
-        day_codes: normalizedDays.map((day) => day.status_code).join(""),
+        day_codes: normalizedDays
+          .map((day) => (day.is_available ? "Y" : "N"))
+          .join(""),
         days: normalizedDays,
         counts: {
           available,

@@ -26,6 +26,10 @@ type DuneListingRow = {
 
 type DuneDayCode = "Y" | "N" | "X";
 
+type DuneChangeOverCode = "C" | "I" | "O" | "X";
+
+type DuneNormalizedStatusCode = "A" | "U" | "I" | "O" | "X";
+
 type DuneDetailRecord = DetailRecordBase & {
   quote_context: {
     listing_id: string;
@@ -90,8 +94,10 @@ type DuneDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: DuneDayCode;
+      changeover_code: DuneChangeOverCode;
       is_available: boolean;
-      status_code: DuneDayCode;
+      status_code: DuneNormalizedStatusCode;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
       booking_day_state: "bookable" | "blocked" | "unknown";
@@ -110,6 +116,7 @@ type DuneDetailRecord = DetailRecordBase & {
     begin_date: string;
     end_date: string;
     day_codes: string;
+    changeover_codes: string;
   };
   normalized_rates: {
     source: "pm_dunevr30a";
@@ -324,22 +331,41 @@ function normalizeDateLikeToIso(value: unknown): string {
 function decodeAvailabilityDays(
   beginDateRaw: string,
   availabilityRaw: string,
-): Array<{ date: string; code: DuneDayCode }> {
+  changeOverRaw: string,
+): Array<{
+  date: string;
+  code: DuneDayCode;
+  changeOverCode: DuneChangeOverCode;
+}> {
   const beginDate = parseUsDateToUtc(beginDateRaw);
   if (!beginDate) {
     return [];
   }
 
-  const days: Array<{ date: string; code: DuneDayCode }> = [];
+  const days: Array<{
+    date: string;
+    code: DuneDayCode;
+    changeOverCode: DuneChangeOverCode;
+  }> = [];
   for (let index = 0; index < availabilityRaw.length; index += 1) {
     const current = new Date(beginDate);
     current.setUTCDate(beginDate.getUTCDate() + index);
     const rawCode = availabilityRaw[index] ?? "";
+    const rawChangeOverCode = changeOverRaw[index] ?? "";
     const code: DuneDayCode =
       rawCode === "Y" ? "Y" : rawCode === "N" ? "N" : "X";
+    const changeOverCode: DuneChangeOverCode =
+      rawChangeOverCode === "C"
+        ? "C"
+        : rawChangeOverCode === "I"
+          ? "I"
+          : rawChangeOverCode === "O"
+            ? "O"
+            : "X";
     days.push({
       date: formatDateIso(current),
       code,
+      changeOverCode,
     });
   }
 
@@ -1334,6 +1360,7 @@ async function fetchDetail(
       data?: {
         range?: { beginDate?: string; endDate?: string };
         availability?: string;
+        changeOver?: string;
       };
     }>(origin, "GetPropertyAvailabilityRawData", {
       unit_id: Number(rentalId),
@@ -1344,10 +1371,12 @@ async function fetchDetail(
     const rawBeginDate = availabilityPayload?.data?.range?.beginDate ?? "";
     const rawEndDate = availabilityPayload?.data?.range?.endDate ?? "";
     const rawAvailabilityCodes = availabilityPayload?.data?.availability ?? "";
+    const rawChangeoverCodes = availabilityPayload?.data?.changeOver ?? "";
 
     const allAvailabilityDays = decodeAvailabilityDays(
       rawBeginDate,
       rawAvailabilityCodes,
+      rawChangeoverCodes,
     );
 
     const now = new Date();
@@ -1401,7 +1430,8 @@ async function fetchDetail(
           )
         : null;
 
-    const normalizedDays = filteredDays.map((day) => {
+    const normalizedDays = filteredDays.map((day, index) => {
+      const previousDay = index > 0 ? filteredDays[index - 1] : undefined;
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         day.code === "Y"
           ? "bookable"
@@ -1413,23 +1443,43 @@ async function fetchDetail(
         (rate) => rate.date === day.date,
       );
 
+      const isAvailable = day.code === "Y";
+      const isCheckInAllowed =
+        day.code === "Y" &&
+        day.changeOverCode !== "X" &&
+        day.changeOverCode !== "O";
+      const isCheckOutAllowed =
+        (day.code === "Y" &&
+          day.changeOverCode !== "X" &&
+          day.changeOverCode !== "I") ||
+        (day.code === "N" && previousDay?.code === "Y");
+
+      const statusCode: DuneNormalizedStatusCode =
+        day.code === "X"
+          ? "X"
+          : isCheckInAllowed && isCheckOutAllowed
+            ? "A"
+            : isCheckInAllowed
+              ? "I"
+              : isCheckOutAllowed
+                ? "O"
+                : "U";
+
       return {
         date: day.date,
-        is_available: day.code === "Y",
-        status_code: day.code,
-        is_available_for_checkin: day.code === "Y",
-        is_available_for_checkout: day.code === "Y",
+        day_code: day.code,
+        changeover_code: day.changeOverCode,
+        is_available: isAvailable,
+        status_code: statusCode,
+        is_available_for_checkin: isCheckInAllowed,
+        is_available_for_checkout: isCheckOutAllowed,
         booking_day_state: bookingDayState,
         min_nights_required: rateForDay?.min_nights ?? null,
       };
     });
 
-    const available = normalizedDays.filter(
-      (day) => day.status_code === "Y",
-    ).length;
-    const notAvailable = normalizedDays.filter(
-      (day) => day.status_code === "N",
-    ).length;
+    const available = filteredDays.filter((day) => day.code === "Y").length;
+    const notAvailable = filteredDays.filter((day) => day.code === "N").length;
     const other = normalizedDays.length - available - notAvailable;
 
     const description =
@@ -1550,6 +1600,7 @@ async function fetchDetail(
         begin_date: rawBeginDate,
         end_date: rawEndDate,
         day_codes: rawAvailabilityCodes,
+        changeover_codes: rawChangeoverCodes,
       },
       normalized_rates: {
         source: "pm_dunevr30a",

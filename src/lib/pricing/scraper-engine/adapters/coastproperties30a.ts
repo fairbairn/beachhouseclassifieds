@@ -67,12 +67,15 @@ type CoastDetailRecord = DetailRecordBase & {
     code_legend: {
       Y: "available";
       N: "not_available";
+      X: "other";
     };
     day_codes: string;
     days: Array<{
       date: string;
+      day_code: "Y" | "N" | "X";
+      changeover_code: "C" | "I" | "O" | "X";
       is_available: boolean;
-      status_code: string;
+      status_code: "A" | "U" | "I" | "O" | "X";
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
       booking_day_state: "bookable" | "blocked" | "unknown";
@@ -90,6 +93,7 @@ type CoastDetailRecord = DetailRecordBase & {
     begin_date: string;
     end_date: string;
     day_codes: string;
+    changeover_codes: string;
   };
   normalized_rates: {
     source: "pm_coastproperties30a";
@@ -360,19 +364,41 @@ function parseUsDateToUtc(value: string): Date | null {
 function decodeAvailabilityDays(
   beginDateRaw: string,
   availabilityRaw: string,
-): Array<{ date: string; code: string }> {
+  changeOverRaw: string,
+): Array<{
+  date: string;
+  code: "Y" | "N" | "X";
+  changeOverCode: "C" | "I" | "O" | "X";
+}> {
   const beginDate = parseUsDateToUtc(beginDateRaw);
   if (!beginDate) {
     return [];
   }
 
-  const days: Array<{ date: string; code: string }> = [];
+  const days: Array<{
+    date: string;
+    code: "Y" | "N" | "X";
+    changeOverCode: "C" | "I" | "O" | "X";
+  }> = [];
   for (let index = 0; index < availabilityRaw.length; index += 1) {
     const current = new Date(beginDate);
     current.setUTCDate(beginDate.getUTCDate() + index);
+    const rawCode = availabilityRaw[index] ?? "";
+    const rawChangeOverCode = changeOverRaw[index] ?? "";
+    const code: "Y" | "N" | "X" =
+      rawCode === "Y" ? "Y" : rawCode === "N" ? "N" : "X";
+    const changeOverCode: "C" | "I" | "O" | "X" =
+      rawChangeOverCode === "C"
+        ? "C"
+        : rawChangeOverCode === "I"
+          ? "I"
+          : rawChangeOverCode === "O"
+            ? "O"
+            : "X";
     days.push({
       date: formatDateIso(current),
-      code: availabilityRaw[index] ?? "",
+      code,
+      changeOverCode,
     });
   }
 
@@ -412,6 +438,8 @@ function ensureMinimumAvailabilityDays(
     if (!byDate.has(cursor)) {
       byDate.set(cursor, {
         date: cursor,
+        day_code: "X",
+        changeover_code: "X",
         is_available: false,
         status_code: "X",
         is_available_for_checkin: false,
@@ -1009,6 +1037,7 @@ async function fetchDetail(
     let rawBeginDate = "";
     let rawEndDate = "";
     let rawAvailabilityCodes = "";
+    let rawChangeoverCodes = "";
 
     if (availabilityResponse.status === 200) {
       const raw = await availabilityResponse.text();
@@ -1017,11 +1046,13 @@ async function fetchDetail(
           data?: {
             range?: { beginDate?: string; endDate?: string };
             availability?: string;
+            changeOver?: string;
           };
         };
         rawBeginDate = parsed.data?.range?.beginDate ?? "";
         rawEndDate = parsed.data?.range?.endDate ?? "";
         rawAvailabilityCodes = parsed.data?.availability ?? "";
+        rawChangeoverCodes = parsed.data?.changeOver ?? "";
       } catch {
         // Ignore malformed availability payload.
       }
@@ -1030,6 +1061,7 @@ async function fetchDetail(
     const allAvailabilityDays = decodeAvailabilityDays(
       rawBeginDate,
       rawAvailabilityCodes,
+      rawChangeoverCodes,
     );
 
     const now = new Date();
@@ -1144,7 +1176,8 @@ async function fetchDetail(
           )
         : null;
 
-    const normalizedDays = filteredDays.map((day) => {
+    const normalizedDays = filteredDays.map((day, index) => {
+      const previousDay = index > 0 ? filteredDays[index - 1] : undefined;
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         day.code === "Y"
           ? "bookable"
@@ -1152,12 +1185,36 @@ async function fetchDetail(
             ? "blocked"
             : "unknown";
 
+      const isAvailable = day.code === "Y";
+      const isCheckInAllowed =
+        day.code === "Y" &&
+        day.changeOverCode !== "X" &&
+        day.changeOverCode !== "O";
+      const isCheckOutAllowed =
+        (day.code === "Y" &&
+          day.changeOverCode !== "X" &&
+          day.changeOverCode !== "I") ||
+        (day.code === "N" && previousDay?.code === "Y");
+
+      const statusCode: "A" | "U" | "I" | "O" | "X" =
+        day.code === "X"
+          ? "X"
+          : isCheckInAllowed && isCheckOutAllowed
+            ? "A"
+            : isCheckInAllowed
+              ? "I"
+              : isCheckOutAllowed
+                ? "O"
+                : "U";
+
       return {
         date: day.date,
-        is_available: day.code === "Y",
-        is_available_for_checkin: day.code === "Y",
-        is_available_for_checkout: day.code === "Y",
-        status_code: day.code,
+        day_code: day.code,
+        changeover_code: day.changeOverCode,
+        is_available: isAvailable,
+        is_available_for_checkin: isCheckInAllowed,
+        is_available_for_checkout: isCheckOutAllowed,
+        status_code: statusCode,
         booking_day_state: bookingDayState,
       };
     });
@@ -1165,10 +1222,10 @@ async function fetchDetail(
     const conformanceDays = ensureMinimumAvailabilityDays(normalizedDays, 365);
 
     const available = conformanceDays.filter(
-      (day) => day.status_code === "Y",
+      (day) => day.day_code === "Y",
     ).length;
     const notAvailable = conformanceDays.filter(
-      (day) => day.status_code === "N",
+      (day) => day.day_code === "N",
     ).length;
     const other = conformanceDays.length - available - notAvailable;
 
@@ -1256,6 +1313,7 @@ async function fetchDetail(
         code_legend: {
           Y: "available",
           N: "not_available",
+          X: "other",
         },
         day_codes: conformanceDays.map((day) => day.status_code).join(""),
         days: conformanceDays,
@@ -1278,6 +1336,7 @@ async function fetchDetail(
         begin_date: rawBeginDate,
         end_date: rawEndDate,
         day_codes: rawAvailabilityCodes,
+        changeover_codes: rawChangeoverCodes,
       },
       normalized_rates: {
         source: "pm_coastproperties30a",
