@@ -25,18 +25,21 @@ function DiscoverImageSlot({
   src,
   alt,
   containerClassName,
-  eager = false,
 }: {
   src?: string;
   alt: string;
   containerClassName: string;
-  eager?: boolean;
 }) {
   const [isLoaded, setIsLoaded] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const imageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
     setIsLoaded(false);
+  }, [retryCount, src]);
+
+  useEffect(() => {
+    setRetryCount(0);
   }, [src]);
 
   useEffect(() => {
@@ -54,7 +57,38 @@ function DiscoverImageSlot({
     if (image.complete && image.naturalWidth > 0) {
       setIsLoaded(true);
     }
-  }, [src]);
+  }, [retryCount, src]);
+
+  useEffect(() => {
+    if (!src || isLoaded) {
+      return;
+    }
+
+    // Recover from occasional stalled lazy-load states after rapid scrolling.
+    const timeoutId = window.setTimeout(() => {
+      const image = imageRef.current;
+      const loadedFromCache = Boolean(
+        image && image.complete && image.naturalWidth > 0,
+      );
+      if (loadedFromCache) {
+        setIsLoaded(true);
+        return;
+      }
+
+      setRetryCount((current) => {
+        if (current >= 2) {
+          // Avoid permanent placeholder even if browser swallowed load/error.
+          setIsLoaded(true);
+          return current;
+        }
+        return current + 1;
+      });
+    }, 2200);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isLoaded, retryCount, src]);
 
   return (
     <div
@@ -65,13 +99,22 @@ function DiscoverImageSlot({
         className={`pointer-events-none absolute inset-0 bg-linear-to-br from-slate-200/80 via-slate-200/55 to-slate-300/65 transition-opacity duration-200 ${isLoaded ? "opacity-0" : "opacity-100"}`}
       />
       <img
+        key={`${src ?? ""}-${retryCount}`}
         ref={imageRef}
         src={src}
         alt={alt}
-        loading={eager ? "eager" : "lazy"}
+        loading="eager"
         decoding="async"
         onLoad={() => setIsLoaded(true)}
-        onError={() => setIsLoaded(true)}
+        onError={() => {
+          setRetryCount((current) => {
+            if (current >= 2) {
+              setIsLoaded(true);
+              return current;
+            }
+            return current + 1;
+          });
+        }}
         style={{ display: src ? "block" : "none" }}
         className={`h-full w-full object-cover transition-opacity duration-200 ${isLoaded ? "opacity-100" : "opacity-0"}`}
       />

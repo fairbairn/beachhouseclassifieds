@@ -287,17 +287,6 @@ export function DiscoverPage({
     Record<string, number>
   >({});
   const didBackgroundFillRef = useRef(false);
-  const buildLightboxThumbRequestUrl = useCallback(
-    (url: string, retryCount: number) => {
-      if (retryCount <= 0) {
-        return url;
-      }
-
-      const separator = url.includes("?") ? "&" : "?";
-      return `${url}${separator}thumb_retry=${retryCount}`;
-    },
-    [],
-  );
   const [isBackgroundFillLoading, setIsBackgroundFillLoading] = useState(() => {
     if (isOverlayRoute || !initialListingsPage?._stats?.hasMore) {
       return false;
@@ -1454,12 +1443,9 @@ export function DiscoverPage({
         continue;
       }
 
-      const retryCount = lightboxThumbRetryCounts[url] ?? 0;
-      const requestUrl = buildLightboxThumbRequestUrl(url, retryCount);
-
       const img = new Image();
       img.decoding = "async";
-      img.src = requestUrl;
+      img.src = url;
       img.onload = () => {
         setLoadedLightboxThumbUrls((current) => {
           if (current.has(url)) {
@@ -1493,7 +1479,6 @@ export function DiscoverPage({
       };
     }
   }, [
-    buildLightboxThumbRequestUrl,
     isOverlayImageLightboxOpen,
     lightboxThumbRetryCounts,
     loadedLightboxThumbUrls,
@@ -2483,10 +2468,7 @@ export function DiscoverPage({
                                     />
                                     <img
                                       key={`${image.url}-retry-${retryCount}`}
-                                      src={buildLightboxThumbRequestUrl(
-                                        image.url,
-                                        retryCount,
-                                      )}
+                                      src={image.url}
                                       alt={image.label}
                                       loading="eager"
                                       decoding="async"
