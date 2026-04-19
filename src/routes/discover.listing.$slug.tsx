@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { DiscoverPage } from "@/components/discover/DiscoverPage";
-import { fetchDiscoverListingDetailWithCache } from "@/lib/discover/discover-listings-client-cache";
+import { fetchDiscoverListingDetailPayloadWithCache } from "@/lib/discover/discover-listings-client-cache";
 import { hasDiscoverModalIntentForSlug } from "@/lib/discover/discover-modal-intent";
 
 export const Route = createFileRoute("/discover/listing/$slug")({
@@ -12,31 +12,30 @@ export const Route = createFileRoute("/discover/listing/$slug")({
       typeof window !== "undefined" &&
       hasDiscoverModalIntentForSlug(params.slug)
     ) {
-      return { initialOverlayListing: null };
+      return { initialOverlayDetailPayload: { listing: null } };
     }
 
-    const initialOverlayListing =
+    const initialOverlayDetailPayload =
       typeof window === "undefined"
         ? await (async () => {
             const { buildDiscoverListingDetailPayload } =
               await import("@/lib/discover/discover-listings-api.server");
-            const payload = await buildDiscoverListingDetailPayload({
+            return await buildDiscoverListingDetailPayload({
               slug: params.slug,
             });
-            return payload.listing;
           })()
-        : await fetchDiscoverListingDetailWithCache({
+        : await fetchDiscoverListingDetailPayloadWithCache({
             slug: params.slug,
           });
 
-    return { initialOverlayListing };
+    return { initialOverlayDetailPayload };
   },
   component: DiscoverListingOverlayRoute,
 });
 
 function DiscoverListingOverlayRoute() {
   const { slug } = Route.useParams();
-  const { initialOverlayListing } = Route.useLoaderData();
+  const { initialOverlayDetailPayload } = Route.useLoaderData();
   const isModalIntentRoute = hasDiscoverModalIntentForSlug(slug);
 
   if (isModalIntentRoute) {
@@ -60,7 +59,9 @@ function DiscoverListingOverlayRoute() {
       </div>
       <DiscoverPage
         overlayListingId={slug}
-        initialOverlayListing={initialOverlayListing ?? undefined}
+        initialOverlayListing={
+          initialOverlayDetailPayload?.listing ?? undefined
+        }
         overlayOnlyMode={true}
       />
     </>

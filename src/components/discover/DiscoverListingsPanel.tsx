@@ -21,6 +21,64 @@ import {
 const discoverAnimatedListingIdsCache = new Set<string>();
 let discoverBackfillFadeCompleted = false;
 
+function DiscoverImageSlot({
+  src,
+  alt,
+  containerClassName,
+  eager = false,
+}: {
+  src?: string;
+  alt: string;
+  containerClassName: string;
+  eager?: boolean;
+}) {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    setIsLoaded(false);
+  }, [src]);
+
+  useEffect(() => {
+    if (!src) {
+      setIsLoaded(true);
+      return;
+    }
+
+    const image = imageRef.current;
+    if (!image) {
+      return;
+    }
+
+    // Browsers may serve from cache without firing onLoad on remount.
+    if (image.complete && image.naturalWidth > 0) {
+      setIsLoaded(true);
+    }
+  }, [src]);
+
+  return (
+    <div
+      className={`relative overflow-hidden bg-slate-200/70 ${containerClassName}`}
+    >
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-0 bg-linear-to-br from-slate-200/80 via-slate-200/55 to-slate-300/65 transition-opacity duration-200 ${isLoaded ? "opacity-0" : "opacity-100"}`}
+      />
+      <img
+        ref={imageRef}
+        src={src}
+        alt={alt}
+        loading={eager ? "eager" : "lazy"}
+        decoding="async"
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setIsLoaded(true)}
+        style={{ display: src ? "block" : "none" }}
+        className={`h-full w-full object-cover transition-opacity duration-200 ${isLoaded ? "opacity-100" : "opacity-0"}`}
+      />
+    </div>
+  );
+}
+
 export function DiscoverListingsPanel({
   listings,
   isLoading = false,
@@ -385,15 +443,15 @@ export function DiscoverListingsPanel({
         const previewImages = isFourUpCardLayout
           ? listing.previewImages.slice(0, 1)
           : listing.previewImages.slice(0, 2);
-        const twoUpPreviewImages = listing.previewImages.slice(0, 4);
+        const twoUpPreviewImages = listing.previewImages.slice(0, 5);
         const leftPreviewImage =
           twoUpPreviewImages[0] ?? listing.previewImages[0];
         const rightQuadPreviewImages = [
-          twoUpPreviewImages[1] ?? leftPreviewImage,
-          twoUpPreviewImages[2] ?? leftPreviewImage,
-          twoUpPreviewImages[3] ?? twoUpPreviewImages[1] ?? leftPreviewImage,
-          twoUpPreviewImages[2] ?? twoUpPreviewImages[1] ?? leftPreviewImage,
-        ];
+          twoUpPreviewImages[1],
+          twoUpPreviewImages[2],
+          twoUpPreviewImages[3],
+          twoUpPreviewImages[4],
+        ].map((imageUrl) => imageUrl ?? leftPreviewImage);
 
         return (
           <article
@@ -408,7 +466,7 @@ export function DiscoverListingsPanel({
                 onOpenDetailOverlay?.(listing.id);
               }
             }}
-            className={`group relative flex h-full cursor-pointer flex-col rounded-2xl border bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_-22px_rgba(15,23,42,0.7)] focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:outline-none ${isFadingIn ? "discover-card-fade-in" : ""} ${threeUpCardMinHeightClass} ${listing.beachfront ? "border-amber-300 shadow-[0_0_24px_7px_rgba(251,191,36,0.5),0_32px_60px_-20px_rgba(180,83,9,0.82)] ring-2 ring-amber-300/65 drop-shadow-[0_0_16px_rgba(251,191,36,0.6)]" : "border-slate-200"}`}
+            className={`discover-listing-card group relative flex h-full cursor-pointer flex-col rounded-2xl border bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.65)] transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_-22px_rgba(15,23,42,0.7)] focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:outline-none ${isFadingIn ? "discover-card-fade-in" : ""} ${threeUpCardMinHeightClass} ${listing.beachfront ? "border-amber-300 shadow-[0_0_24px_7px_rgba(251,191,36,0.5),0_32px_60px_-20px_rgba(180,83,9,0.82)] ring-2 ring-amber-300/65 drop-shadow-[0_0_16px_rgba(251,191,36,0.6)]" : "border-slate-200"}`}
           >
             {isTwoUpCardLayout ? (
               <div className="relative mb-3 grid grid-cols-2 gap-2">
@@ -418,18 +476,18 @@ export function DiscoverListingsPanel({
                     Click to View Property
                   </span>
                 </div>
-                <img
+                <DiscoverImageSlot
                   src={leftPreviewImage}
                   alt={`${listing.name} preview 1`}
-                  className="aspect-square w-full rounded-lg object-cover"
+                  containerClassName="aspect-square w-full rounded-lg"
                 />
                 <div className="grid aspect-square grid-cols-2 grid-rows-2 gap-2">
                   {rightQuadPreviewImages.map((img, i) => (
-                    <img
+                    <DiscoverImageSlot
                       key={`${listing.id}-two-up-${i}`}
                       src={img}
                       alt={`${listing.name} preview ${i + 2}`}
-                      className="h-full w-full rounded-lg object-cover"
+                      containerClassName="h-full w-full rounded-lg"
                     />
                   ))}
                 </div>
@@ -445,11 +503,11 @@ export function DiscoverListingsPanel({
                   </span>
                 </div>
                 {previewImages.map((img, i) => (
-                  <img
+                  <DiscoverImageSlot
                     key={`${listing.id}-${i}`}
                     src={img}
                     alt={`${listing.name} preview ${i + 1}`}
-                    className={`${isFourUpCardLayout ? "aspect-video w-full" : "aspect-square"} rounded-lg object-cover`}
+                    containerClassName={`${isFourUpCardLayout ? "aspect-video w-full" : "aspect-square"} rounded-lg`}
                   />
                 ))}
               </div>
@@ -651,7 +709,7 @@ export function DiscoverListingsPanel({
 
   return (
     <div className="relative z-0 min-h-0 xl:h-full">
-      <div className="pointer-events-none absolute -top-4 -right-1 -bottom-1 -left-1 z-0 rounded-2xl border border-white/35 bg-white/18 backdrop-blur-md xl:-top-24 xl:-right-2 xl:-left-2" />
+      <div className="pointer-events-none absolute -top-4 -right-1 -bottom-1 -left-1 z-0 rounded-2xl border border-white/35 bg-white/18 xl:-top-24 xl:-right-2 xl:-left-2" />
       <div
         ref={cardsScrollRef}
         className="discover-cards-scroll relative z-10 h-full overflow-y-auto px-2 pb-6 xl:-mt-6 xl:h-[calc(100%+1.5rem)] xl:pt-6"

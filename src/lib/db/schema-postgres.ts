@@ -103,6 +103,11 @@ export const listing = pgTable(
     amenities_normalized: jsonb("amenities_normalized")
       .notNull()
       .default(sql`'[]'::jsonb`),
+    images: jsonb("images")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    image_count: integer("image_count").notNull().default(0),
+    images_version: integer("images_version").notNull().default(1),
     created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -176,6 +181,15 @@ export const listing_source_link = pgTable(
     match_evidence: jsonb("match_evidence")
       .notNull()
       .default(sql`'{}'::jsonb`),
+    source_image_count_expected: integer("source_image_count_expected"),
+    source_image_count_ingested: integer("source_image_count_ingested"),
+    source_image_count_verified_at: timestamp(
+      "source_image_count_verified_at",
+      {
+        mode: "string",
+        withTimezone: true,
+      },
+    ),
     created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -199,6 +213,45 @@ export const listing_source_link = pgTable(
       ),
     source_status_idx: index("listing_source_link_source_status_idx").on(
       table.source_status,
+    ),
+  }),
+);
+
+export const listing_source_image = pgTable(
+  "listing_source_image",
+  {
+    id: text("id").primaryKey(),
+    source_link_id: text("source_link_id")
+      .notNull()
+      .references(() => listing_source_link.id, { onDelete: "cascade" }),
+    source_image_url: text("source_image_url").notNull(),
+    source_content_hash: text("source_content_hash"),
+    source_order: integer("source_order").notNull(),
+    site_image: text("site_image"),
+    status: text("status").notNull().default("pending"),
+    error_payload: jsonb("error_payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    source_link_idx: index("listing_source_image_source_link_id_idx").on(
+      table.source_link_id,
+    ),
+    status_idx: index("listing_source_image_status_idx").on(table.status),
+    source_order_unique_idx: uniqueIndex(
+      "listing_source_image_source_link_order_unique_idx",
+    ).on(table.source_link_id, table.source_order),
+    source_url_unique_idx: uniqueIndex(
+      "listing_source_image_source_link_url_unique_idx",
+    ).on(table.source_link_id, table.source_image_url),
+    source_hash_idx: index("listing_source_image_source_content_hash_idx").on(
+      table.source_content_hash,
     ),
   }),
 );

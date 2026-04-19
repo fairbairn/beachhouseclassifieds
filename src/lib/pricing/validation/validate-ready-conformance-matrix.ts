@@ -14,7 +14,6 @@ export type MatrixRow = {
   pricingRecords: number;
   imageUrls: number;
   avgImgList: number;
-  apiQuote: string;
   quoteRuntime: string;
   ready: string;
 };
@@ -33,6 +32,20 @@ type AdapterValidationResult = {
   suggestedQuoteRuntime: string;
   mismatchCount: number;
   mismatches: Mismatch[];
+};
+
+type MatrixTotalsRow = {
+  files: number;
+  core: number;
+  profile: number;
+  availability: number;
+  descriptionPlus: number;
+  amenitiesPlus: number;
+  locationPlus: number;
+  mediaPlus: number;
+  pricingRecords: number;
+  imageUrls: number;
+  avgImgList: number;
 };
 
 export type ReadyConformanceValidationSummary = {
@@ -86,13 +99,28 @@ type AdapterMetrics = {
 
 const EXCLUDED_ADAPTERS = new Set(["beachblue"]);
 
+function parseNumericCell(cell: string): number {
+  const plain = cell
+    .replace(/<[^>]*>/g, "")
+    .replace(/\*\*/g, "")
+    .replace(/,/g, "")
+    .trim();
+
+  const match = plain.match(/-?\d+(?:\.\d+)?/);
+  if (!match) {
+    return Number.NaN;
+  }
+
+  return Number(match[0]);
+}
+
 function parseMatrixRow(line: string): MatrixRow | null {
   const cells = line
     .split("|")
     .map((cell) => cell.trim())
     .filter((cell) => cell.length > 0);
 
-  if (cells.length < 15) {
+  if (cells.length < 14) {
     return null;
   }
 
@@ -104,27 +132,55 @@ function parseMatrixRow(line: string): MatrixRow | null {
     return null;
   }
 
-  const files = Number(cells[1]);
-  if (!Number.isFinite(files)) {
+  const files = parseNumericCell(cells[1]);
+  if (!Number.isFinite(files) || !/[a-zA-Z]/.test(cells[0])) {
     return null;
   }
 
   return {
     adapter: cells[0],
-    files: Number(cells[1]),
-    core: Number(cells[2]),
-    profile: Number(cells[3]),
-    availability: Number(cells[4]),
-    descriptionPlus: Number(cells[5]),
-    amenitiesPlus: Number(cells[6]),
-    locationPlus: Number(cells[7]),
-    mediaPlus: Number(cells[8]),
-    pricingRecords: Number(cells[9]),
-    imageUrls: Number(cells[10]),
-    avgImgList: Number(cells[11]),
-    apiQuote: cells[12],
-    quoteRuntime: cells[13],
-    ready: cells[14],
+    files: parseNumericCell(cells[1]),
+    core: parseNumericCell(cells[2]),
+    profile: parseNumericCell(cells[3]),
+    availability: parseNumericCell(cells[4]),
+    descriptionPlus: parseNumericCell(cells[5]),
+    amenitiesPlus: parseNumericCell(cells[6]),
+    locationPlus: parseNumericCell(cells[7]),
+    mediaPlus: parseNumericCell(cells[8]),
+    pricingRecords: parseNumericCell(cells[9]),
+    imageUrls: parseNumericCell(cells[10]),
+    avgImgList: parseNumericCell(cells[11]),
+    quoteRuntime: cells[12],
+    ready: cells[13],
+  };
+}
+
+function parseTotalsRow(line: string): MatrixTotalsRow | null {
+  if (!line.startsWith("|")) {
+    return null;
+  }
+
+  const cells = line
+    .split("|")
+    .map((cell) => cell.trim())
+    .filter((cell) => cell.length > 0);
+
+  if (cells.length < 14 || cells[0] !== "**TOTAL**") {
+    return null;
+  }
+
+  return {
+    files: parseNumericCell(cells[1]),
+    core: parseNumericCell(cells[2]),
+    profile: parseNumericCell(cells[3]),
+    availability: parseNumericCell(cells[4]),
+    descriptionPlus: parseNumericCell(cells[5]),
+    amenitiesPlus: parseNumericCell(cells[6]),
+    locationPlus: parseNumericCell(cells[7]),
+    mediaPlus: parseNumericCell(cells[8]),
+    pricingRecords: parseNumericCell(cells[9]),
+    imageUrls: parseNumericCell(cells[10]),
+    avgImgList: parseNumericCell(cells[11]),
   };
 }
 
@@ -277,6 +333,11 @@ export async function validateReadyConformanceMatrix(
   );
 
   const doc = await fs.readFile(docPath, "utf8");
+  const totalsRow = doc
+    .split(/\r?\n/)
+    .map(parseTotalsRow)
+    .find((row): row is MatrixTotalsRow => row !== null);
+
   const allRows = doc
     .split(/\r?\n/)
     .map(parseMatrixRow)
@@ -368,14 +429,6 @@ export async function validateReadyConformanceMatrix(
       }
     }
 
-    if (row.apiQuote !== "✅" && row.apiQuote !== "❌") {
-      mismatches.push({
-        column: "apiQuote",
-        expected: "✅ or ❌",
-        actual: row.apiQuote,
-      });
-    }
-
     if (row.quoteRuntime !== "✅" && row.quoteRuntime !== "❌") {
       mismatches.push({
         column: "quoteRuntime",
@@ -404,12 +457,9 @@ export async function validateReadyConformanceMatrix(
       actual.files === actual.locationPlus &&
       actual.files === actual.mediaPlus;
     const hasPricingParity = actual.pricingRecords === actual.files;
-    const hasQuoteApi = row.apiQuote === "✅";
     const hasQuoteRuntime = expectedRuntimeSymbol === "✅";
     const suggestedReady =
-      hasCoverageParity && hasPricingParity && hasQuoteApi && hasQuoteRuntime
-        ? "✅"
-        : "❌";
+      hasCoverageParity && hasPricingParity && hasQuoteRuntime ? "✅" : "❌";
 
     if (suggestedReady === "✅") {
       readyAdaptersSuggested += 1;
@@ -442,6 +492,45 @@ export async function validateReadyConformanceMatrix(
     actualTotals.files > 0
       ? Number((actualTotals.imageUrls / actualTotals.files).toFixed(2))
       : 0;
+
+  if (totalsRow) {
+    const totalPairs: Array<[keyof MatrixTotalsRow, number, number]> = [
+      ["files", totalsRow.files, actualTotals.files],
+      ["core", totalsRow.core, actualTotals.core],
+      ["profile", totalsRow.profile, actualTotals.profile],
+      ["availability", totalsRow.availability, actualTotals.availability],
+      [
+        "descriptionPlus",
+        totalsRow.descriptionPlus,
+        actualTotals.descriptionPlus,
+      ],
+      ["amenitiesPlus", totalsRow.amenitiesPlus, actualTotals.amenitiesPlus],
+      ["locationPlus", totalsRow.locationPlus, actualTotals.locationPlus],
+      ["mediaPlus", totalsRow.mediaPlus, actualTotals.mediaPlus],
+      ["pricingRecords", totalsRow.pricingRecords, actualTotals.pricingRecords],
+      ["imageUrls", totalsRow.imageUrls, actualTotals.imageUrls],
+      ["avgImgList", totalsRow.avgImgList, actualTotals.avgImgList],
+    ];
+
+    const totalMismatches: Mismatch[] = [];
+    for (const [column, expected, actual] of totalPairs) {
+      if (expected !== actual) {
+        totalMismatches.push({ column: `TOTAL.${column}`, expected, actual });
+      }
+    }
+
+    if (totalMismatches.length > 0) {
+      results.push({
+        adapter: "__TOTAL__",
+        docReady: "—",
+        suggestedReady: "—",
+        docQuoteRuntime: "—",
+        suggestedQuoteRuntime: "—",
+        mismatchCount: totalMismatches.length,
+        mismatches: totalMismatches,
+      });
+    }
+  }
 
   return {
     adaptersChecked: results.length,

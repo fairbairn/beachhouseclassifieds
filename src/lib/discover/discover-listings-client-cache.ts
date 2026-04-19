@@ -1,12 +1,22 @@
 import type { DiscoverListing } from "@/components/discover/discover-data";
 
+export type DiscoverListingDetailPayload = {
+  listing: DiscoverListing | null;
+  _stats?: {
+    images: {
+      imageCount: number;
+      previewImageCount: number;
+    };
+  };
+};
+
 type CacheEntry = {
   listings: DiscoverListing[];
   expiresAt: number;
 };
 
 type DetailCacheEntry = {
-  listing: DiscoverListing;
+  payload: DiscoverListingDetailPayload;
   expiresAt: number;
 };
 
@@ -17,8 +27,24 @@ const listingDetailCache = new Map<string, DetailCacheEntry>();
 const inFlightRequests = new Map<string, Promise<DiscoverListing[]>>();
 const inFlightDetailRequests = new Map<
   string,
-  Promise<DiscoverListing | null>
+  Promise<DiscoverListingDetailPayload>
 >();
+
+function buildDetailImageStats(listing: DiscoverListing) {
+  const imageCount = Math.max(
+    0,
+    Math.round(listing.imageCount ?? listing.imageGallery?.length ?? 0),
+  );
+  const previewImageCount = Math.max(
+    0,
+    Math.round(listing.previewImages.length),
+  );
+
+  return {
+    imageCount,
+    previewImageCount,
+  };
+}
 
 function getCacheKey(includeSlug?: string) {
   return includeSlug?.trim() || ALL_LISTINGS_KEY;
@@ -66,16 +92,49 @@ async function fetchDiscoverListingDetailFromApi(slug: string) {
 
   const response = await fetch(endpoint);
   if (!response.ok) {
-    return null;
+    return { listing: null } as DiscoverListingDetailPayload;
   }
 
   const payload = (await response.json().catch(() => null)) as {
     listing?: unknown;
+    _stats?: {
+      images?: {
+        imageCount?: unknown;
+        previewImageCount?: unknown;
+      };
+    };
   } | null;
 
-  return payload?.listing && typeof payload.listing === "object"
-    ? (payload.listing as DiscoverListing)
-    : null;
+  if (!payload?.listing || typeof payload.listing !== "object") {
+    return {
+      listing: null,
+    } as DiscoverListingDetailPayload;
+  }
+
+  const listing = payload.listing as DiscoverListing;
+  const fallbackStats = buildDetailImageStats(listing);
+  const rawImageCount = payload._stats?.images?.imageCount;
+  const rawPreviewImageCount = payload._stats?.images?.previewImageCount;
+
+  const imageCount =
+    typeof rawImageCount === "number" && Number.isFinite(rawImageCount)
+      ? Math.max(0, Math.round(rawImageCount))
+      : fallbackStats.imageCount;
+  const previewImageCount =
+    typeof rawPreviewImageCount === "number" &&
+    Number.isFinite(rawPreviewImageCount)
+      ? Math.max(0, Math.round(rawPreviewImageCount))
+      : fallbackStats.previewImageCount;
+
+  return {
+    listing,
+    _stats: {
+      images: {
+        imageCount,
+        previewImageCount,
+      },
+    },
+  } as DiscoverListingDetailPayload;
 }
 
 export function primeDiscoverListingsCache(input: {
@@ -102,6 +161,7 @@ export function primeDiscoverListingsCache(input: {
 export function primeDiscoverListingDetailCache(input: {
   slug: string;
   listing: DiscoverListing;
+  _stats?: DiscoverListingDetailPayload["_stats"];
   ttlMs?: number;
 }) {
   if (!isBrowserRuntime()) {
@@ -114,8 +174,15 @@ export function primeDiscoverListingDetailCache(input: {
   }
 
   const ttlMs = input.ttlMs ?? DEFAULT_TTL_MS;
+  const stats = input._stats ?? {
+    images: buildDetailImageStats(input.listing),
+  };
+
   listingDetailCache.set(slug, {
-    listing: input.listing,
+    payload: {
+      listing: input.listing,
+      _stats: stats,
+    },
     expiresAt: Date.now() + ttlMs,
   });
 }
@@ -166,9 +233,19 @@ export async function fetchDiscoverListingDetailWithCache(input: {
   slug: string;
   ttlMs?: number;
 }) {
+  const payload = await fetchDiscoverListingDetailPayloadWithCache(input);
+  return payload.listing;
+}
+
+export async function fetchDiscoverListingDetailPayloadWithCache(input: {
+  slug: string;
+  ttlMs?: number;
+}) {
   const slug = input.slug.trim();
   if (!slug) {
-    return null;
+    return {
+      listing: null,
+    } as DiscoverListingDetailPayload;
   }
 
   const ttlMs = input.ttlMs ?? DEFAULT_TTL_MS;
@@ -179,7 +256,7 @@ export async function fetchDiscoverListingDetailWithCache(input: {
 
   const cached = listingDetailCache.get(slug);
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.listing;
+    return cached.payload;
   }
 
   const existingRequest = inFlightDetailRequests.get(slug);
@@ -188,19 +265,21 @@ export async function fetchDiscoverListingDetailWithCache(input: {
   }
 
   const request = fetchDiscoverListingDetailFromApi(slug)
-    .then((listing) => {
-      if (listing) {
+    .then((payload) => {
+      if (payload.listing) {
         listingDetailCache.set(slug, {
-          listing,
+          payload,
           expiresAt: Date.now() + ttlMs,
         });
       }
       inFlightDetailRequests.delete(slug);
-      return listing;
+      return payload;
     })
     .catch(() => {
       inFlightDetailRequests.delete(slug);
-      return null;
+      return {
+        listing: null,
+      } as DiscoverListingDetailPayload;
     });
 
   inFlightDetailRequests.set(slug, request);

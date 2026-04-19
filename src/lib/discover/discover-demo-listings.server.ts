@@ -373,33 +373,6 @@ function extractCheckTimes(policyItems: unknown): {
   };
 }
 
-function inferTypicalPriceLabel(raw: RawListing): string {
-  const rates = raw.calendarRates;
-  const values: number[] = [];
-
-  if (rates && typeof rates === "object") {
-    for (const value of Object.values(rates)) {
-      if (typeof value !== "string") {
-        continue;
-      }
-      const normalized = Number(value.replace(/[^\d.]/g, ""));
-      if (Number.isFinite(normalized) && normalized > 0) {
-        values.push(normalized);
-      }
-    }
-  }
-
-  if (values.length > 0) {
-    const nightlyLow = Math.min(...values);
-    const nightlyHigh = Math.max(...values);
-    const weeklyLow = (nightlyLow * 7) / 1000;
-    const weeklyHigh = (nightlyHigh * 7) / 1000;
-    return `$${weeklyLow.toFixed(1)}k - $${weeklyHigh.toFixed(1)}k`;
-  }
-
-  return "$5.0k - $8.0k";
-}
-
 function extractAvailabilityCalendar(raw: RawListing): Record<string, number> {
   const rates = raw.calendarRates;
   if (!rates || typeof rates !== "object") {
@@ -564,7 +537,6 @@ function mapListing(raw: RawListing): DiscoverListing | null {
     accessible: /wheelchair|accessible|step[-\s]?free|mobility/i.test(allText),
     elevator: /\belevator\b|\blift\b/i.test(allText),
     previewImages: imageUrls,
-    typicalPrice: inferTypicalPriceLabel(raw),
     typicalPricingMonth: nightlyPricing.typicalPricingMonth,
     typicalBaseNightly: nightlyPricing.typicalBaseNightly,
     typicalAllInNightly: nightlyPricing.typicalAllInNightly,

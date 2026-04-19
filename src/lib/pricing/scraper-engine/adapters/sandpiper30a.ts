@@ -362,7 +362,7 @@ function buildGalleryImageSignature(url: string): string {
     const decodedPath = decodeURIComponent(parsed.pathname);
 
     const directEscapiaMatch = decodedPath.match(
-      /\/pictures\.escapia\.com\/[^?#]+\/(\d+)\.(?:jpe?g|png|webp|gif)$/i,
+      /\/(\d+)\.(?:jpe?g|png|webp|gif)$/i,
     );
     if (directEscapiaMatch?.[1]) {
       const numericId = directEscapiaMatch[1];
@@ -394,6 +394,78 @@ function dedupeGalleryUrls(urls: string[]): string[] {
   }
 
   return Array.from(bySignature.values());
+}
+
+function isLikelyPropertyGalleryImageUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    if (host.includes("pictures.escapia.com")) {
+      return /\/(?:[0-9]{3,}|[^/]+)\.(?:jpe?g|png|webp|gif)$/.test(path);
+    }
+
+    if (host.includes("images.rezfusion.com")) {
+      return (
+        path.includes("pictures.escapia.com") || /\/cdn-cgi\/image\//.test(path)
+      );
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function extractGalleryUrlsFromHtmlMarkup(
+  html: string,
+  detailUrl: string,
+): string[] {
+  const urls: string[] = [];
+
+  const collectRaw = (raw: string): void => {
+    const cleaned = raw.trim().replace(/&amp;/gi, "&");
+    if (!cleaned) {
+      return;
+    }
+
+    const srcsetParts = cleaned
+      .split(",")
+      .map((part) => part.trim().split(/\s+/)[0] ?? "")
+      .filter(Boolean);
+    const candidates = srcsetParts.length > 0 ? srcsetParts : [cleaned];
+
+    for (const candidate of candidates) {
+      try {
+        const absolute = new URL(candidate, detailUrl).toString();
+        if (/(?:jpe?g|png|webp|gif)(?:\?|$)/i.test(absolute)) {
+          urls.push(absolute);
+        }
+      } catch {
+        // Ignore malformed URL candidates in markup.
+      }
+    }
+  };
+
+  const attrPattern = /(src|data-src|srcset)=["']([^"']+)["']/gi;
+  for (const match of html.matchAll(attrPattern)) {
+    const raw = match[2]?.trim() ?? "";
+    if (raw) {
+      collectRaw(raw);
+    }
+  }
+
+  const directUrlPattern =
+    /https?:\/\/[^\s"'<>]+\.(?:jpe?g|png|webp|gif)(?:\?[^\s"'<>]*)?/gi;
+  for (const match of html.matchAll(directUrlPattern)) {
+    const raw = match[0]?.trim() ?? "";
+    if (raw) {
+      collectRaw(raw);
+    }
+  }
+
+  return dedupePreserveOrder(urls);
 }
 
 async function extractLightboxGalleryUrls(page: Page): Promise<string[]> {
@@ -436,6 +508,50 @@ async function extractLightboxGalleryUrls(page: Page): Promise<string[]> {
 
     return Array.from(new Set(urls));
   });
+}
+
+function extractEscapiaSuffix(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const decodedPath = decodeURIComponent(parsed.pathname);
+    const directEscapiaMatch = decodedPath.match(
+      /\/(\d+)\.(?:jpe?g|png|webp|gif)$/i,
+    );
+    if (directEscapiaMatch?.[1]) {
+      return directEscapiaMatch[1].slice(-4);
+    }
+
+    const embeddedEscapiaMatch = decodedPath.match(
+      /https?:\/\/pictures\.escapia\.com\/[^?#]+\/(\d+)\.(?:jpe?g|png|webp|gif)$/i,
+    );
+    if (embeddedEscapiaMatch?.[1]) {
+      return embeddedEscapiaMatch[1].slice(-4);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function dedupeResolvedGalleryUrls(urls: string[]): string[] {
+  const byKey = new Map<string, string>();
+
+  for (const rawUrl of urls) {
+    const normalized = normalizeGalleryUrl(rawUrl);
+    if (!normalized || !isLikelyPropertyGalleryImageUrl(normalized)) {
+      continue;
+    }
+
+    const escapiaSuffix = extractEscapiaSuffix(normalized);
+    const key = escapiaSuffix ? `escapia:${escapiaSuffix}` : normalized;
+
+    if (!byKey.has(key)) {
+      byKey.set(key, normalized);
+    }
+  }
+
+  return dedupeGalleryUrls(Array.from(byKey.values()));
 }
 
 function extractFieldLocationFromHtml(html: string): {
@@ -1776,14 +1892,15 @@ async function fetchDetail(
             document.querySelector('[id="media"]') ??
             document.querySelector("#pdpHiddenGallery") ??
             document.querySelector(".pdp-property-widget-img-area") ??
-            document;
+            document.querySelector(".image-gallery") ??
+            document.querySelector(".image-gallery-slides");
           if (!mediaRoot) {
             return urls;
           }
 
           const attrValues = Array.from(
             mediaRoot.querySelectorAll(
-              "a[href], a[data-srcset], a[data-thumb], img[src], img[srcset], img[data-src], img[data-rstmb], [data-rsbigimg], [data-image]",
+              "a[href], img[src], img[data-src], img[data-rstmb], [data-rsbigimg], [data-image]",
             ),
           );
 
@@ -1791,12 +1908,9 @@ async function fetchDetail(
             const attrs = [
               node.getAttribute("href"),
               node.getAttribute("src"),
-              node.getAttribute("srcset"),
               node.getAttribute("data-src"),
               node.getAttribute("data-rstmb"),
               node.getAttribute("data-rsbigimg"),
-              node.getAttribute("data-srcset"),
-              node.getAttribute("data-thumb"),
               node.getAttribute("data-image"),
             ];
             for (const raw of attrs) {
@@ -1804,8 +1918,7 @@ async function fetchDetail(
                 continue;
               }
               try {
-                const candidate =
-                  raw.split(",")[0]?.trim().split(/\s+/)[0] ?? "";
+                const candidate = raw.trim().split(/\s+/)[0] ?? "";
                 const absolute = new URL(
                   candidate,
                   window.location.origin,
@@ -2138,12 +2251,13 @@ async function fetchDetail(
       all: amenitiesAll,
     };
 
-    const mediaUrls = dedupeGalleryUrls(
-      dedupePreserveOrder(
-        lightboxGalleryUrls
-          .map((url) => normalizeGalleryUrl(url))
-          .filter(Boolean),
-      ),
+    const htmlGalleryUrls = extractGalleryUrlsFromHtmlMarkup(html, detailUrl);
+    const mediaUrls = dedupeResolvedGalleryUrls(
+      dedupePreserveOrder([
+        ...lightboxGalleryUrls,
+        ...extracted.galleryUrls,
+        ...htmlGalleryUrls,
+      ]),
     );
     const mediaGallery: LuxuryDetailRecord["media_gallery"] = {
       image_count: mediaUrls.length,

@@ -18,13 +18,19 @@ export type DiscoverListingsPagePayload = {
     nextCursor: string | null;
     hasMore: boolean;
     totalCount: number;
-    metadata: DiscoverListingsMetadata;
+    metadata?: DiscoverListingsMetadata;
   };
   listings: DiscoverListing[];
 };
 
 export type DiscoverListingDetailPayload = {
   listing: DiscoverListing | null;
+  _stats?: {
+    images: {
+      imageCount: number;
+      previewImageCount: number;
+    };
+  };
 };
 
 export type DiscoverListingsMetadata = {
@@ -93,7 +99,6 @@ function toSummaryListing(listing: DiscoverListing): DiscoverListing {
     accessible: listing.accessible,
     elevator: listing.elevator,
     previewImages: listing.previewImages,
-    typicalPrice: listing.typicalPrice,
     typicalPricingMonth: listing.typicalPricingMonth,
     typicalBaseNightly: listing.typicalBaseNightly,
     typicalAllInNightly: listing.typicalAllInNightly,
@@ -211,7 +216,10 @@ export async function buildDiscoverListingsPagePayload(input?: {
 }): Promise<DiscoverListingsPagePayload> {
   const allListings = await buildDiscoverListingsPayload();
   const totalCount = allListings.length;
-  const metadata = buildDiscoverListingsMetadata(allListings);
+  const includeMetadata = !input?.cursor;
+  const metadata = includeMetadata
+    ? buildDiscoverListingsMetadata(allListings)
+    : undefined;
 
   const pageSize = resolvePageSize(input?.limit);
   const parsedCursor = parseCursor(input?.cursor);
@@ -240,7 +248,7 @@ export async function buildDiscoverListingsPagePayload(input?: {
       nextCursor,
       hasMore,
       totalCount,
-      metadata,
+      ...(metadata ? { metadata } : {}),
     },
     listings: pageItems.map(toSummaryListing),
   };
@@ -277,5 +285,17 @@ export async function buildDiscoverListingDetailPayload(input: {
   const listings = await buildDiscoverListingsPayload({ includeSlug: slug });
   const listing = listings.find((candidate) => candidate.id === slug) ?? null;
 
-  return { listing };
+  if (!listing) {
+    return { listing: null };
+  }
+
+  return {
+    listing,
+    _stats: {
+      images: {
+        imageCount: Math.max(0, Math.round(listing.imageCount ?? 0)),
+        previewImageCount: listing.previewImages.length,
+      },
+    },
+  };
 }

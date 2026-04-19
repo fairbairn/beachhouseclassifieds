@@ -28,6 +28,7 @@ type DetailRecord = {
     sleeps?: unknown;
   };
   media_gallery?: {
+    image_count?: unknown;
     image_urls?: unknown;
   };
   normalized_availability?: {
@@ -68,7 +69,13 @@ type ValidationIssueCode =
   | "external_id_not_from_detail_url"
   | "json_filename_mismatch"
   | "artifact_filename_not_lowercase"
-  | "duplicate_primary_external_id";
+  | "duplicate_primary_external_id"
+  | "missing_media_gallery"
+  | "missing_media_gallery_image_urls"
+  | "empty_media_gallery_image_urls"
+  | "invalid_media_gallery_image_count"
+  | "media_gallery_count_mismatch"
+  | "duplicate_media_gallery_image_urls";
 
 type ValidationIssue = {
   code: ValidationIssueCode;
@@ -831,12 +838,62 @@ export async function runValidateScrapeFilenameAlignmentCli(
       });
     }
 
-    const imageUrlsRaw = parsed.media_gallery?.image_urls;
-    if (Array.isArray(imageUrlsRaw)) {
-      const imageUrls = imageUrlsRaw
-        .filter((value): value is string => typeof value === "string")
-        .map((value) => value.trim())
-        .filter(Boolean);
+    const mediaGallery = parsed.media_gallery;
+    if (!mediaGallery || typeof mediaGallery !== "object") {
+      issues.push({
+        code: "missing_media_gallery",
+        message: `details/json/${fileName} is missing media_gallery object`,
+      });
+    } else {
+      const imageUrlsRaw = mediaGallery.image_urls;
+      if (!Array.isArray(imageUrlsRaw)) {
+        issues.push({
+          code: "missing_media_gallery_image_urls",
+          message: `details/json/${fileName} must include media_gallery.image_urls as an array`,
+        });
+      }
+
+      const imageUrls = Array.isArray(imageUrlsRaw)
+        ? imageUrlsRaw
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => value.trim())
+            .filter(Boolean)
+        : [];
+
+      if (imageUrls.length === 0) {
+        issues.push({
+          code: "empty_media_gallery_image_urls",
+          message: `details/json/${fileName} has empty media_gallery.image_urls; expected one or more images`,
+        });
+      }
+
+      const imageCount = toFiniteNumber(mediaGallery.image_count);
+      if (imageCount === null || imageCount <= 0) {
+        issues.push({
+          code: "invalid_media_gallery_image_count",
+          message: `details/json/${fileName} must include media_gallery.image_count > 0`,
+        });
+      }
+
+      if (imageCount !== null && imageCount !== imageUrls.length) {
+        issues.push({
+          code: "media_gallery_count_mismatch",
+          message: `details/json/${fileName} has media_gallery.image_count=${imageCount} but normalized image_urls length=${imageUrls.length}`,
+        });
+      }
+
+      if (imageUrls.length > 0) {
+        const uniqueImageUrls = new Set(imageUrls);
+        const duplicateCount = imageUrls.length - uniqueImageUrls.size;
+        if (duplicateCount > 0) {
+          issues.push({
+            code: "duplicate_media_gallery_image_urls",
+            message:
+              `details/json/${fileName} has ${duplicateCount} duplicate media_gallery.image_urls entries ` +
+              `(unique=${uniqueImageUrls.size}, total=${imageUrls.length})`,
+          });
+        }
+      }
 
       const doubleHttpsUrls = imageUrls.filter((url) =>
         hasDoubleHttpsSegment(url),

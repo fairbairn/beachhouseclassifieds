@@ -23,7 +23,8 @@ export type DiscoverListing = {
   accessible: boolean;
   elevator: boolean;
   previewImages: string[];
-  typicalPrice: string;
+  imageCount?: number;
+  typicalPrice?: string;
   typicalPricingMonth: string;
   typicalBaseNightly: number;
   typicalAllInNightly: number;

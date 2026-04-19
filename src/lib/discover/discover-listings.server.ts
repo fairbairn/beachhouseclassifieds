@@ -5,7 +5,7 @@ import {
 import { pgDb } from "@/core/server/db";
 import { listing, site } from "@/lib/db/schema-postgres";
 import { getDiscoverDemoListings } from "@/lib/discover/discover-demo-listings.server";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
 
 const TARGET_LISTING_COUNT = 96;
 const DISCOVER_SITE_SLUG = "30acollections";
@@ -242,21 +242,17 @@ function derivePricing(
 ): {
   typicalBaseNightly: number;
   typicalAllInNightly: number;
-  typicalPrice: string;
   typicalPricingMonth: string;
 } {
   const seed = Math.abs(listingNumber) % 500;
   const allInNightly = Math.max(325, 350 + seed + sleeps * 22);
   const baseNightly = Math.ceil(allInNightly * 0.88);
-  const lowWeekly = (allInNightly * 7) / 1000;
-  const highWeekly = (allInNightly * 7 * 1.2) / 1000;
   const month45 = new Date();
   month45.setDate(month45.getDate() + 45);
 
   return {
     typicalBaseNightly: baseNightly,
     typicalAllInNightly: allInNightly,
-    typicalPrice: `$${lowWeekly.toFixed(1)}k - $${highWeekly.toFixed(1)}k`,
     typicalPricingMonth: month45.toLocaleString("en-US", {
       month: "long",
     }),
@@ -293,6 +289,90 @@ function buildAvailabilityCalendar(input: {
   }
 
   return out;
+}
+
+function extractImageUrlsFromListingImages(
+  imagesRaw: unknown,
+  maxImages?: number,
+): string[] {
+  if (!Array.isArray(imagesRaw)) {
+    return [];
+  }
+
+  if (maxImages !== undefined && maxImages <= 0) {
+    return [];
+  }
+
+  const bySortOrder = [...imagesRaw]
+    .map((entry) => {
+      const image = asObject(entry);
+      const src = asString(image.src);
+      const sortOrder = asNumber(image.sort_order);
+      return {
+        src,
+        sortOrder: sortOrder ?? Number.MAX_SAFE_INTEGER,
+      };
+    })
+    .filter((entry) => entry.src.length > 0)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const uniqueUrls: string[] = [];
+  const seen = new Set<string>();
+  for (const image of bySortOrder) {
+    const key = image.src.trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    uniqueUrls.push(image.src);
+    if (maxImages !== undefined && uniqueUrls.length >= maxImages) {
+      break;
+    }
+  }
+
+  return uniqueUrls;
+}
+
+function extractImageGalleryFromListingImages(
+  imagesRaw: unknown,
+): Array<{ name: string; url: string }> {
+  if (!Array.isArray(imagesRaw)) {
+    return [];
+  }
+
+  const bySortOrder = [...imagesRaw]
+    .map((entry) => {
+      const image = asObject(entry);
+      const src = asString(image.src);
+      const sortOrder = asNumber(image.sort_order);
+      const caption = asString(image.caption);
+      const name = asString(image.name);
+      return {
+        src,
+        sortOrder: sortOrder ?? Number.MAX_SAFE_INTEGER,
+        label: caption || name,
+      };
+    })
+    .filter((entry) => entry.src.length > 0)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const gallery: Array<{ name: string; url: string }> = [];
+  const seen = new Set<string>();
+
+  for (const image of bySortOrder) {
+    const key = image.src.trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    gallery.push({
+      name: image.label || `Photo ${gallery.length + 1}`,
+      url: image.src,
+    });
+  }
+
+  return gallery;
 }
 
 async function loadFromListingTable(input?: {
@@ -332,6 +412,7 @@ async function loadFromListingTable(input?: {
     sleeping_summary: listing.sleeping_summary,
     amenities_normalized: listing.amenities_normalized,
     traits: listing.traits,
+    images: listing.images,
   } as const;
 
   const includeSlug = input?.includeSlug?.trim();
@@ -347,7 +428,7 @@ async function loadFromListingTable(input?: {
           and(
             eq(listing.site_id, discoverSiteId),
             eq(listing.status, "active"),
-            eq(listing.state, "FL"),
+            or(eq(listing.state, "FL"), isNull(listing.state)),
             isNotNull(listing.area_name),
             eq(listing.slug, includeSlug as string),
           ),
@@ -362,7 +443,7 @@ async function loadFromListingTable(input?: {
           and(
             eq(listing.site_id, discoverSiteId),
             eq(listing.status, "active"),
-            eq(listing.state, "FL"),
+            or(eq(listing.state, "FL"), isNull(listing.state)),
             isNotNull(listing.area_name),
           ),
         )
@@ -382,7 +463,7 @@ async function loadFromListingTable(input?: {
         and(
           eq(listing.site_id, discoverSiteId),
           eq(listing.status, "active"),
-          eq(listing.state, "FL"),
+          or(eq(listing.state, "FL"), isNull(listing.state)),
           isNotNull(listing.area_name),
           eq(listing.slug, includeSlug),
         ),
@@ -422,10 +503,20 @@ async function loadFromListingTable(input?: {
       "30A";
     const community = asString(row.community_name) || area;
 
+    const imageGalleryFromListing = extractImageGalleryFromListingImages(
+      row.images,
+    );
+    const imageUrlsFromListing = imageGalleryFromListing.map(
+      (image) => image.url,
+    );
+    const previewFromListing = imageUrlsFromListing.slice(0, 5);
+    const imageCountFromListing = imageUrlsFromListing.length;
     const preview =
-      previewSeeds.length > 0
-        ? (previewSeeds[index % previewSeeds.length]?.previewImages ?? [])
-        : [];
+      previewFromListing.length > 0
+        ? previewFromListing
+        : previewSeeds.length > 0
+          ? (previewSeeds[index % previewSeeds.length]?.previewImages ?? [])
+          : [];
 
     const description = asString(row.description_markdown);
     const descriptionHeadline =
@@ -480,7 +571,15 @@ async function loadFromListingTable(input?: {
         amenities.includes("elevator") ||
         readTraitFlag(traits, "feature.elevator"),
       previewImages: preview,
-      typicalPrice: pricing.typicalPrice,
+      imageCount:
+        imageCountFromListing > 0 ? imageCountFromListing : preview.length,
+      imageGallery:
+        imageGalleryFromListing.length > 0
+          ? imageGalleryFromListing
+          : preview.map((url, imageIndex) => ({
+              name: `Photo ${imageIndex + 1}`,
+              url,
+            })),
       typicalPricingMonth: pricing.typicalPricingMonth,
       typicalBaseNightly: pricing.typicalBaseNightly,
       typicalAllInNightly: pricing.typicalAllInNightly,

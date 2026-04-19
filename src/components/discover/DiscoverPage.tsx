@@ -8,10 +8,14 @@ import {
   CalendarDays,
   CarFront,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Dog,
   Droplets,
   Heart,
+  House,
   Mouse,
+  Search,
   SlidersHorizontal,
   Waves,
   X,
@@ -63,7 +67,7 @@ import {
 } from "@/components/home/homeButtonStyles";
 import { HomeMarketingShell } from "@/components/home/HomeMarketingShell";
 import {
-  fetchDiscoverListingDetailWithCache,
+  fetchDiscoverListingDetailPayloadWithCache,
   primeDiscoverListingDetailCache,
   primeDiscoverListingsCache,
 } from "@/lib/discover/discover-listings-client-cache";
@@ -264,6 +268,7 @@ export function DiscoverPage({
   const [isPinnedCardVisible, setIsPinnedCardVisible] = useState(true);
   const overlayContainerRef = useRef<HTMLDivElement | null>(null);
   const overlayDetailScrollRef = useRef<HTMLElement | null>(null);
+  const overlayLightboxThumbRailRef = useRef<HTMLDivElement | null>(null);
   const deferredCloseTimeoutRef = useRef<number | null>(null);
   const closeNavigateFrameRef = useRef<number | null>(null);
   const closeTriggeredByPointerRef = useRef(false);
@@ -272,7 +277,27 @@ export function DiscoverPage({
   const [showOverlayScrollIndicator, setShowOverlayScrollIndicator] =
     useState(false);
   const [showOverlayScrollFade, setShowOverlayScrollFade] = useState(false);
+  const [isOverlayImageLightboxOpen, setIsOverlayImageLightboxOpen] =
+    useState(false);
+  const [overlayLightboxImageIndex, setOverlayLightboxImageIndex] = useState(0);
+  const [loadedLightboxThumbUrls, setLoadedLightboxThumbUrls] = useState<
+    Set<string>
+  >(() => new Set());
+  const [lightboxThumbRetryCounts, setLightboxThumbRetryCounts] = useState<
+    Record<string, number>
+  >({});
   const didBackgroundFillRef = useRef(false);
+  const buildLightboxThumbRequestUrl = useCallback(
+    (url: string, retryCount: number) => {
+      if (retryCount <= 0) {
+        return url;
+      }
+
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}thumb_retry=${retryCount}`;
+    },
+    [],
+  );
   const [isBackgroundFillLoading, setIsBackgroundFillLoading] = useState(() => {
     if (isOverlayRoute || !initialListingsPage?._stats?.hasMore) {
       return false;
@@ -411,6 +436,7 @@ export function DiscoverPage({
     }
 
     const seedCount = Math.max(
+      seedPage.listings.length,
       initialDiscoverListingsSeed.length,
       fetchedListingsRef.current.length,
     );
@@ -578,14 +604,15 @@ export function DiscoverPage({
       let isCancelled = false;
       setIsOverlayDetailLoading(true);
 
-      void fetchDiscoverListingDetailWithCache({
+      void fetchDiscoverListingDetailPayloadWithCache({
         slug: requestedOverlayListingId,
       })
-        .then((listing) => {
+        .then((payload) => {
           if (isCancelled) {
             return;
           }
 
+          const listing = payload.listing;
           if (listing) {
             setOverlayDetailListing(listing);
           }
@@ -1084,25 +1111,6 @@ export function DiscoverPage({
     };
   }, []);
 
-  useEffect(() => {
-    if (!isDetailOverlayOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      event.preventDefault();
-      closeDetailOverlay();
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeDetailOverlay, isDetailOverlayOpen]);
-
   const updateOverlayScrollIndicator = useCallback(() => {
     const node = overlayDetailScrollRef.current;
     if (!node) {
@@ -1247,45 +1255,322 @@ export function DiscoverPage({
     return value && value.length > 0 ? value : null;
   }, [overlayLocation?.locationChip]);
 
-  const overlayAvailabilityByMonth = useMemo(() => {
-    const availability = overlayListing?.availabilityCalendar;
-    if (!availability || Object.keys(availability).length === 0) {
-      return [] as Array<{
-        key: string;
-        label: string;
-        count: number;
-        min: number;
-        max: number;
-      }>;
+  const overlayImageCards = useMemo(() => {
+    if (!overlayListing) {
+      return {
+        images: [] as Array<{ key: string; url: string; label: string }>,
+        totalImageCount: 0,
+      };
     }
 
-    const grouped = new Map<string, number[]>();
-    for (const [iso, nightly] of Object.entries(availability)) {
-      const date = parseISO(iso);
-      if (!isValid(date)) {
+    const combined: Array<{ url: string; label: string }> = [];
+    const pushImage = (
+      urlRaw: unknown,
+      labelRaw: unknown,
+      fallback: string,
+    ) => {
+      const url = typeof urlRaw === "string" ? urlRaw.trim() : "";
+      if (!url) {
+        return;
+      }
+
+      const label = typeof labelRaw === "string" ? labelRaw.trim() : "";
+      combined.push({
+        url,
+        label: label || fallback,
+      });
+    };
+
+    for (const image of overlayListing.imageGallery ?? []) {
+      pushImage(image.url, image.name, `${overlayListing.name} photo`);
+    }
+
+    for (const previewImage of overlayListing.previewImages) {
+      pushImage(previewImage, "", `${overlayListing.name} preview`);
+    }
+
+    const deduped: Array<{ key: string; url: string; label: string }> = [];
+    const seen = new Set<string>();
+    for (const image of combined) {
+      const key = image.url.toLowerCase();
+      if (seen.has(key)) {
         continue;
       }
-      const key = format(date, "yyyy-MM");
-      const values = grouped.get(key) ?? [];
-      values.push(Math.max(0, Math.round(nightly)));
-      grouped.set(key, values);
+      seen.add(key);
+      deduped.push({
+        key,
+        url: image.url,
+        label: image.label,
+      });
     }
 
-    return Array.from(grouped.entries())
-      .sort(([left], [right]) => left.localeCompare(right))
-      .slice(0, 12)
-      .map(([key, values]) => {
-        const sample = values.length > 0 ? values : [0];
-        const monthDate = parseISO(`${key}-01`);
-        return {
-          key,
-          label: isValid(monthDate) ? format(monthDate, "MMM yyyy") : key,
-          count: values.length,
-          min: Math.min(...sample),
-          max: Math.max(...sample),
-        };
+    return {
+      images: deduped,
+      totalImageCount: Math.max(overlayListing.imageCount ?? 0, seen.size),
+    };
+  }, [overlayListing]);
+
+  const openOverlayImageLightbox = useCallback(
+    (index: number) => {
+      const imageCount = overlayImageCards.images.length;
+      if (imageCount === 0) {
+        return;
+      }
+
+      const clampedIndex = Math.max(0, Math.min(index, imageCount - 1));
+      setOverlayLightboxImageIndex(clampedIndex);
+      setIsOverlayImageLightboxOpen(true);
+    },
+    [overlayImageCards.images.length],
+  );
+
+  const closeOverlayImageLightbox = useCallback(() => {
+    setIsOverlayImageLightboxOpen(false);
+  }, []);
+
+  const showPreviousOverlayLightboxImage = useCallback(() => {
+    setOverlayLightboxImageIndex((current) => Math.max(0, current - 1));
+  }, []);
+
+  const showNextOverlayLightboxImage = useCallback(() => {
+    const imageCount = overlayImageCards.images.length;
+    if (imageCount <= 1) {
+      return;
+    }
+
+    setOverlayLightboxImageIndex((current) =>
+      Math.min(imageCount - 1, current + 1),
+    );
+  }, [overlayImageCards.images.length]);
+
+  const isOverlayLightboxAtFirstImage = overlayLightboxImageIndex <= 0;
+  const isOverlayLightboxAtLastImage =
+    overlayLightboxImageIndex >= overlayImageCards.images.length - 1;
+
+  const goToFirstOverlayLightboxImage = useCallback(() => {
+    setOverlayLightboxImageIndex(0);
+  }, []);
+
+  const goToLastOverlayLightboxImage = useCallback(() => {
+    const imageCount = overlayImageCards.images.length;
+    if (imageCount <= 0) {
+      return;
+    }
+    setOverlayLightboxImageIndex(imageCount - 1);
+  }, [overlayImageCards.images.length]);
+
+  useEffect(() => {
+    if (!isDetailOverlayOpen) {
+      setIsOverlayImageLightboxOpen(false);
+    }
+  }, [isDetailOverlayOpen]);
+
+  useEffect(() => {
+    const imageCount = overlayImageCards.images.length;
+    if (imageCount === 0) {
+      setOverlayLightboxImageIndex(0);
+      setIsOverlayImageLightboxOpen(false);
+      return;
+    }
+
+    setOverlayLightboxImageIndex((current) =>
+      Math.max(0, Math.min(current, imageCount - 1)),
+    );
+  }, [overlayImageCards.images.length]);
+
+  useEffect(() => {
+    if (!isOverlayImageLightboxOpen) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeOverlayImageLightbox();
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        showPreviousOverlayLightboxImage();
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        showNextOverlayLightboxImage();
+        return;
+      }
+
+      if (event.key === "Home") {
+        event.preventDefault();
+        goToFirstOverlayLightboxImage();
+        return;
+      }
+
+      if (event.key === "End") {
+        event.preventDefault();
+        goToLastOverlayLightboxImage();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [
+    closeOverlayImageLightbox,
+    goToFirstOverlayLightboxImage,
+    goToLastOverlayLightboxImage,
+    isOverlayImageLightboxOpen,
+    showNextOverlayLightboxImage,
+    showPreviousOverlayLightboxImage,
+  ]);
+
+  useEffect(() => {
+    if (!isOverlayImageLightboxOpen) {
+      setLoadedLightboxThumbUrls(new Set());
+      setLightboxThumbRetryCounts({});
+      return;
+    }
+
+    const imageCount = overlayImageCards.images.length;
+    if (imageCount === 0) {
+      return;
+    }
+
+    const preloadIndexes = new Set<number>();
+    for (let index = 0; index < imageCount; index += 1) {
+      preloadIndexes.add(index);
+    }
+
+    for (const index of preloadIndexes) {
+      const url = overlayImageCards.images[index]?.url;
+      if (!url) {
+        continue;
+      }
+
+      if (loadedLightboxThumbUrls.has(url)) {
+        continue;
+      }
+
+      const retryCount = lightboxThumbRetryCounts[url] ?? 0;
+      const requestUrl = buildLightboxThumbRequestUrl(url, retryCount);
+
+      const img = new Image();
+      img.decoding = "async";
+      img.src = requestUrl;
+      img.onload = () => {
+        setLoadedLightboxThumbUrls((current) => {
+          if (current.has(url)) {
+            return current;
+          }
+          const next = new Set(current);
+          next.add(url);
+          return next;
+        });
+      };
+      img.onerror = () => {
+        const retryCount = lightboxThumbRetryCounts[url] ?? 0;
+        if (retryCount >= 3) {
+          return;
+        }
+
+        const retryDelayMs = 220 * (retryCount + 1);
+        window.setTimeout(() => {
+          setLightboxThumbRetryCounts((current) => {
+            const currentCount = current[url] ?? 0;
+            if (currentCount > retryCount) {
+              return current;
+            }
+
+            return {
+              ...current,
+              [url]: currentCount + 1,
+            };
+          });
+        }, retryDelayMs);
+      };
+    }
+  }, [
+    buildLightboxThumbRequestUrl,
+    isOverlayImageLightboxOpen,
+    lightboxThumbRetryCounts,
+    loadedLightboxThumbUrls,
+    overlayImageCards.images,
+    overlayLightboxImageIndex,
+  ]);
+
+  useEffect(() => {
+    if (!isOverlayImageLightboxOpen) {
+      return;
+    }
+
+    const thumbRail = overlayLightboxThumbRailRef.current;
+    if (!thumbRail) {
+      return;
+    }
+
+    const activeThumb = thumbRail.querySelector<HTMLButtonElement>(
+      `[data-lightbox-thumb-index="${overlayLightboxImageIndex}"]`,
+    );
+
+    if (!activeThumb) {
+      return;
+    }
+
+    const railRect = thumbRail.getBoundingClientRect();
+    const thumbRect = activeThumb.getBoundingClientRect();
+    const edgeBuffer = 24;
+    const isOutsideVisibleRail =
+      thumbRect.left < railRect.left + edgeBuffer ||
+      thumbRect.right > railRect.right - edgeBuffer;
+
+    if (!isOutsideVisibleRail) {
+      return;
+    }
+
+    const targetScrollLeft =
+      activeThumb.offsetLeft -
+      thumbRail.clientWidth / 2 +
+      activeThumb.clientWidth / 2;
+
+    const clampedTargetScrollLeft = Math.max(0, targetScrollLeft);
+    const distance = Math.abs(clampedTargetScrollLeft - thumbRail.scrollLeft);
+
+    // For long jumps (for example Home/End), avoid animating across the
+    // entire strip: snap near target, then do a short smooth settle.
+    if (distance > thumbRail.clientWidth * 1.25) {
+      const jumpOffset = Math.max(thumbRail.clientWidth * 0.28, 120);
+      const nearTarget =
+        clampedTargetScrollLeft > thumbRail.scrollLeft
+          ? clampedTargetScrollLeft - jumpOffset
+          : clampedTargetScrollLeft + jumpOffset;
+
+      thumbRail.scrollTo({
+        left: Math.max(0, nearTarget),
+        behavior: "auto",
       });
-  }, [overlayListing?.availabilityCalendar]);
+
+      window.requestAnimationFrame(() => {
+        thumbRail.scrollTo({
+          left: clampedTargetScrollLeft,
+          behavior: "smooth",
+        });
+      });
+
+      return;
+    }
+
+    thumbRail.scrollTo({
+      left: clampedTargetScrollLeft,
+      behavior: "smooth",
+    });
+  }, [
+    isOverlayImageLightboxOpen,
+    overlayImageCards.images.length,
+    overlayLightboxImageIndex,
+  ]);
 
   const overlayBedStats = useMemo(() => {
     if (!overlayListing) {
@@ -1689,7 +1974,7 @@ export function DiscoverPage({
             className={`${overlayOnlyMode ? "relative h-[calc(100dvh-6rem)] md:h-[calc(100dvh-5.5rem)] xl:h-[calc(100dvh-2rem)]" : "absolute inset-0"} z-40 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_32px_80px_-42px_rgba(15,23,42,0.9)] transition-opacity duration-75 ${isDetailOverlayOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}
           >
             {!isDetailOverlayOpen ? null : overlayListing ? (
-              <div className="grid h-full min-h-0 gap-x-4 gap-y-3 overflow-x-hidden p-3 md:gap-y-4 md:p-4 xl:grid-cols-[290px_minmax(0,1fr)_290px] xl:grid-rows-[auto_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]">
+              <div className="relative grid h-full min-h-0 gap-x-4 gap-y-3 overflow-x-hidden p-3 md:gap-y-4 md:p-4 xl:grid-cols-[290px_minmax(0,1fr)_290px] xl:grid-rows-[auto_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]">
                 <section className="relative col-span-full h-[clamp(15rem,34vh,20rem)] overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-[0_24px_48px_-34px_rgba(15,23,42,0.85)] md:h-[clamp(17rem,40vh,24rem)] xl:h-[clamp(19rem,46vh,28rem)]">
                   <img
                     src={
@@ -1811,33 +2096,51 @@ export function DiscoverPage({
                   <>
                     <aside className="hidden min-h-0 rounded-2xl border border-white/75 bg-white/92 p-4 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)] xl:flex xl:flex-col">
                       <p className="text-[10px] font-bold tracking-[0.16em] text-slate-500 uppercase">
-                        Availability Calendar
+                        Scroll to Browse Gallery
                       </p>
-                      <p className="mt-2 text-sm text-slate-700">
-                        Month-by-month price and night availability.
-                      </p>
-                      <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
-                        {overlayAvailabilityByMonth.length > 0 ? (
+                      <div className="discover-cards-scroll mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+                        {overlayImageCards.images.length > 0 ? (
                           <ul className="space-y-2">
-                            {overlayAvailabilityByMonth.map((month) => (
+                            {overlayImageCards.images.map((image, index) => (
                               <li
-                                key={month.key}
-                                className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+                                key={`${image.key}-${index}`}
+                                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
                               >
-                                <p className="text-xs font-semibold text-slate-900">
-                                  {month.label}
-                                </p>
-                                <p className="text-[11px] text-slate-600">
-                                  {month.count} nights • $
-                                  {month.min.toLocaleString("en-US")} - $
-                                  {month.max.toLocaleString("en-US")}
-                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openOverlayImageLightbox(index)
+                                  }
+                                  className="relative block w-full cursor-zoom-in text-left"
+                                  aria-label={`Open image ${index + 1} in lightbox`}
+                                  title="Open image"
+                                >
+                                  <img
+                                    src={image.url}
+                                    alt={image.label}
+                                    loading="lazy"
+                                    decoding="async"
+                                    style={{ aspectRatio: "16 / 9" }}
+                                    className="block w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                                  />
+                                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-slate-900/45 text-white opacity-0 shadow-[0_12px_24px_-18px_rgba(15,23,42,0.9)] backdrop-blur-sm transition duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
+                                      <Search className="h-5 w-5" />
+                                    </span>
+                                  </div>
+                                </button>
+                                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-slate-950/65 via-slate-900/20 to-transparent px-2 py-1.5">
+                                  <p className="text-[11px] font-semibold text-white">
+                                    {index + 1}
+                                  </p>
+                                </div>
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                            Availability data is loading.
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                            Photo cards will appear here once the gallery is
+                            available.
                           </div>
                         )}
                       </div>
@@ -2068,6 +2371,164 @@ export function DiscoverPage({
                         mapViewportClassName="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
                       />
                     </aside>
+
+                    {isOverlayImageLightboxOpen &&
+                    overlayImageCards.images.length > 0 ? (
+                      <div className="absolute inset-0 z-60 bg-slate-950/95">
+                        <button
+                          type="button"
+                          onClick={closeOverlayImageLightbox}
+                          className="absolute top-4 right-4 z-30 inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950/35 text-white shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] backdrop-blur-md transition hover:bg-white/85 hover:text-slate-900"
+                          aria-label="Close image lightbox"
+                          title="Close lightbox"
+                        >
+                          <X className="h-6 w-6" />
+                        </button>
+
+                        <div className="flex h-full min-h-0 flex-col">
+                          <div className="relative min-h-0 flex-1 px-14 py-5 md:px-18 md:py-7">
+                            <button
+                              type="button"
+                              onClick={showPreviousOverlayLightboxImage}
+                              disabled={isOverlayLightboxAtFirstImage}
+                              className={`absolute top-1/2 left-4 z-20 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border text-white backdrop-blur-sm transition ${
+                                isOverlayLightboxAtFirstImage
+                                  ? "cursor-not-allowed border-white/25 bg-slate-900/20 text-white/35"
+                                  : "border-white/65 bg-slate-900/45 hover:bg-slate-900/65"
+                              }`}
+                              aria-label="Previous image"
+                              title="Previous image"
+                            >
+                              <ChevronLeft className="h-6 w-6" />
+                            </button>
+
+                            <div className="flex h-full items-center justify-center">
+                              <img
+                                src={
+                                  overlayImageCards.images[
+                                    overlayLightboxImageIndex
+                                  ]?.url
+                                }
+                                alt={
+                                  overlayImageCards.images[
+                                    overlayLightboxImageIndex
+                                  ]?.label ?? "Listing image"
+                                }
+                                className="max-h-full max-w-full rounded-xl object-contain shadow-[0_24px_60px_-36px_rgba(15,23,42,0.95)]"
+                              />
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={showNextOverlayLightboxImage}
+                              disabled={isOverlayLightboxAtLastImage}
+                              className={`absolute top-1/2 right-4 z-20 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border text-white backdrop-blur-sm transition ${
+                                isOverlayLightboxAtLastImage
+                                  ? "cursor-not-allowed border-white/25 bg-slate-900/20 text-white/35"
+                                  : "border-white/65 bg-slate-900/45 hover:bg-slate-900/65"
+                              }`}
+                              aria-label="Next image"
+                              title="Next image"
+                            >
+                              <ChevronRight className="h-6 w-6" />
+                            </button>
+                          </div>
+
+                          <div className="border-t border-white/20 bg-slate-950/70 px-3 py-3 backdrop-blur-sm">
+                            <div
+                              ref={overlayLightboxThumbRailRef}
+                              className="discover-cards-scroll mx-auto flex max-w-[92%] items-center gap-2 overflow-x-auto pb-1"
+                            >
+                              <button
+                                type="button"
+                                onClick={goToFirstOverlayLightboxImage}
+                                disabled={isOverlayLightboxAtFirstImage}
+                                className={`inline-flex h-16 w-12 shrink-0 items-center justify-center rounded-lg border transition ${
+                                  isOverlayLightboxAtFirstImage
+                                    ? "cursor-not-allowed border-white/25 bg-slate-900/20 text-white/35"
+                                    : "border-white/45 bg-slate-900/45 text-white hover:border-white/80 hover:bg-slate-900/65"
+                                }`}
+                                aria-label="Go to first image"
+                                title="First image (Home)"
+                              >
+                                <House className="h-5 w-5" />
+                              </button>
+
+                              {overlayImageCards.images.map((image, index) => {
+                                const isActive =
+                                  index === overlayLightboxImageIndex;
+                                const isThumbLoaded =
+                                  loadedLightboxThumbUrls.has(image.url);
+                                const retryCount =
+                                  lightboxThumbRetryCounts[image.url] ?? 0;
+                                return (
+                                  <button
+                                    key={`${image.key}-thumb-${index}`}
+                                    type="button"
+                                    onClick={() =>
+                                      setOverlayLightboxImageIndex(index)
+                                    }
+                                    data-lightbox-thumb-index={index}
+                                    className={`relative shrink-0 overflow-hidden rounded-lg border transition ${
+                                      isActive
+                                        ? "border-cyan-300 ring-2 ring-cyan-300/70"
+                                        : "border-white/35 hover:border-cyan-300/80"
+                                    } focus:outline-none`}
+                                    aria-label={`View image ${index + 1}`}
+                                    title={`Image ${index + 1}`}
+                                  >
+                                    <div
+                                      aria-hidden="true"
+                                      className={`pointer-events-none absolute inset-0 bg-linear-to-br from-slate-700/55 to-slate-800/65 transition-opacity duration-150 ${isThumbLoaded ? "opacity-0" : "opacity-100"}`}
+                                    />
+                                    <img
+                                      key={`${image.url}-retry-${retryCount}`}
+                                      src={buildLightboxThumbRequestUrl(
+                                        image.url,
+                                        retryCount,
+                                      )}
+                                      alt={image.label}
+                                      loading="eager"
+                                      decoding="async"
+                                      onLoad={() => {
+                                        setLoadedLightboxThumbUrls(
+                                          (current) => {
+                                            if (current.has(image.url)) {
+                                              return current;
+                                            }
+                                            const next = new Set(current);
+                                            next.add(image.url);
+                                            return next;
+                                          },
+                                        );
+                                      }}
+                                      onError={() => {
+                                        setLightboxThumbRetryCounts(
+                                          (current) => {
+                                            const currentCount =
+                                              current[image.url] ?? 0;
+                                            if (currentCount >= 3) {
+                                              return current;
+                                            }
+
+                                            return {
+                                              ...current,
+                                              [image.url]: currentCount + 1,
+                                            };
+                                          },
+                                        );
+                                      }}
+                                      style={{ aspectRatio: "16 / 9" }}
+                                      className={`block h-16 w-28 object-cover transition-opacity duration-150 ${isThumbLoaded ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
@@ -2090,13 +2551,12 @@ export function DiscoverPage({
                 </section>
 
                 <aside className="hidden min-h-0 rounded-2xl border border-white/75 bg-white/92 p-4 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.7)] xl:block">
-                  <div className="h-3 w-36 animate-pulse rounded-full bg-slate-200/75" />
-                  <div className="mt-2 h-4 w-52 animate-pulse rounded-full bg-slate-200/65" />
+                  <div className="h-3 w-28 animate-pulse rounded-full bg-slate-200/75" />
+                  <div className="mt-2 h-4 w-44 animate-pulse rounded-full bg-slate-200/65" />
                   <div className="mt-4 space-y-2">
-                    <div className="h-12 animate-pulse rounded-lg bg-slate-200/60" />
-                    <div className="h-12 animate-pulse rounded-lg bg-slate-200/60" />
-                    <div className="h-12 animate-pulse rounded-lg bg-slate-200/60" />
-                    <div className="h-12 animate-pulse rounded-lg bg-slate-200/60" />
+                    <div className="h-28 animate-pulse rounded-xl bg-slate-200/60" />
+                    <div className="h-28 animate-pulse rounded-xl bg-slate-200/60" />
+                    <div className="h-28 animate-pulse rounded-xl bg-slate-200/60" />
                   </div>
                 </aside>
 
