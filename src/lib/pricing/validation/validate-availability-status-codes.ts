@@ -25,6 +25,19 @@ type AvailabilityDayRecord = {
 type DetailRecord = {
   normalized_availability?: {
     days?: AvailabilityDayRecord[];
+    day_codes?: unknown;
+    availability_source?: unknown;
+    calendar_bounds?: {
+      min_day_key?: unknown;
+      max_day_key?: unknown;
+    };
+    has_calendar_widget?: unknown;
+    booking_restrictions?: unknown;
+    min_night_rules?: unknown;
+  };
+  availability_raw?: {
+    observed_day_cell_count?: unknown;
+    observed_status_classes?: unknown;
   };
   normalized_rates?: {
     days?: Array<{
@@ -48,6 +61,8 @@ type ValidationIssueCode =
   | "non_canonical_status_code"
   | "missing_checkin_boolean"
   | "missing_checkout_boolean"
+  | "uniform_day_codes_red_flag"
+  | "uniform_status_code_red_flag"
   | "missing_turn_day_status"
   | "missing_checkout_turn_day_boundary"
   | "missing_checkin_turn_day_boundary"
@@ -187,6 +202,80 @@ function isDec31ToJan1Boundary(
   );
 }
 
+function normalizeIsoDate(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+function resolveAvailabilitySource(
+  value: unknown,
+): "listing_calendar" | "widget_calendar" | "fallback_unavailable" | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  if (
+    normalized === "listing_calendar" ||
+    normalized === "widget_calendar" ||
+    normalized === "fallback_unavailable"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+function hasCorroboratingAvailabilitySignals(
+  parsed: DetailRecord,
+  days: AvailabilityDayRecord[],
+): boolean {
+  const normalized = parsed.normalized_availability;
+  if (!normalized) {
+    return false;
+  }
+
+  const hasCalendarWidget = normalized.has_calendar_widget === true;
+  const hasBookingRestrictions =
+    Array.isArray(normalized.booking_restrictions) &&
+    normalized.booking_restrictions.length > 0;
+  const hasMinNightRules =
+    Array.isArray(normalized.min_night_rules) &&
+    normalized.min_night_rules.length > 0;
+  const hasDayLevelMinNights = days.some((day) => {
+    if (typeof day?.min_nights_required !== "number") {
+      return false;
+    }
+    return (
+      Number.isFinite(day.min_nights_required) && day.min_nights_required > 0
+    );
+  });
+  const observedDayCellCount =
+    typeof parsed.availability_raw?.observed_day_cell_count === "number" &&
+    Number.isFinite(parsed.availability_raw.observed_day_cell_count)
+      ? parsed.availability_raw.observed_day_cell_count
+      : 0;
+  const hasObservedDayCells = observedDayCellCount > 0;
+  const observedStatusClasses = Array.isArray(
+    parsed.availability_raw?.observed_status_classes,
+  )
+    ? parsed.availability_raw?.observed_status_classes
+    : [];
+  const hasObservedStatusClasses = observedStatusClasses.some(
+    (value) => typeof value === "string" && value.trim().length > 0,
+  );
+
+  return (
+    hasCalendarWidget ||
+    hasBookingRestrictions ||
+    hasMinNightRules ||
+    hasDayLevelMinNights ||
+    hasObservedDayCells ||
+    hasObservedStatusClasses
+  );
+}
+
 function nextNonXStatus(
   days: AvailabilityDayRecord[],
   startIndex: number,
@@ -278,6 +367,44 @@ async function validateAdapterAvailabilityStatusCodes(
       continue;
     }
 
+    const dayCodes =
+      typeof parsed.normalized_availability?.day_codes === "string"
+        ? parsed.normalized_availability.day_codes.trim().toUpperCase()
+        : "";
+    const availabilitySource = resolveAvailabilitySource(
+      parsed.normalized_availability?.availability_source,
+    );
+    const hasCorroboratingSignals = hasCorroboratingAvailabilitySignals(
+      parsed,
+      days,
+    );
+    const shouldFlagUniformUnavailable =
+      availabilitySource === "fallback_unavailable" ||
+      (availabilitySource === null && !hasCorroboratingSignals);
+    if (
+      shouldFlagUniformUnavailable &&
+      dayCodes.length > 0 &&
+      /^U+$/.test(dayCodes)
+    ) {
+      pushIssue(
+        issues,
+        "uniform_day_codes_red_flag",
+        `${fileName}: normalized_availability.day_codes is all 'U' across ${dayCodes.length} day(s); this is a red-flag availability signal`,
+        "warning",
+      );
+    } else if (
+      shouldFlagUniformUnavailable &&
+      dayCodes.length > 0 &&
+      /^X+$/.test(dayCodes)
+    ) {
+      pushIssue(
+        issues,
+        "uniform_day_codes_red_flag",
+        `${fileName}: normalized_availability.day_codes is all 'X' across ${dayCodes.length} day(s); this is a red-flag availability signal`,
+        "warning",
+      );
+    }
+
     const hasUsableAvailabilityDay = days.some((day) => {
       const date = typeof day?.date === "string" ? day.date.trim() : "";
       const status = toCanonicalStatusCode(day?.status_code);
@@ -300,6 +427,9 @@ async function validateAdapterAvailabilityStatusCodes(
     let missingDayChangeoverCount = 0;
     let nonCanonicalDayChangeoverCount = 0;
     let inconsistentDayChangeoverCount = 0;
+    let canonicalStatusCount = 0;
+    let statusUCount = 0;
+    let statusXCount = 0;
 
     for (let index = 0; index < days.length; index += 1) {
       const day = days[index] ?? {};
@@ -337,6 +467,15 @@ async function validateAdapterAvailabilityStatusCodes(
         );
       } else if (canonicalStatus === "I" || canonicalStatus === "O") {
         hasTurnDayStatus = true;
+      }
+
+      if (CANONICAL_STATUS_CODES.has(canonicalStatus ?? "")) {
+        canonicalStatusCount += 1;
+        if (canonicalStatus === "U") {
+          statusUCount += 1;
+        } else if (canonicalStatus === "X") {
+          statusXCount += 1;
+        }
       }
 
       if (
@@ -436,6 +575,30 @@ async function validateAdapterAvailabilityStatusCodes(
       );
     }
 
+    if (
+      shouldFlagUniformUnavailable &&
+      canonicalStatusCount > 0 &&
+      statusUCount === canonicalStatusCount
+    ) {
+      pushIssue(
+        issues,
+        "uniform_status_code_red_flag",
+        `${fileName}: normalized_availability.days status_code is all 'U' across ${canonicalStatusCount} day(s); this is a red-flag availability signal`,
+        "warning",
+      );
+    } else if (
+      shouldFlagUniformUnavailable &&
+      canonicalStatusCount > 0 &&
+      statusXCount === canonicalStatusCount
+    ) {
+      pushIssue(
+        issues,
+        "uniform_status_code_red_flag",
+        `${fileName}: normalized_availability.days status_code is all 'X' across ${canonicalStatusCount} day(s); this is a red-flag availability signal`,
+        "warning",
+      );
+    }
+
     const ratesDays = parsed.normalized_rates?.days;
     if (Array.isArray(ratesDays)) {
       for (const rateDay of ratesDays) {
@@ -480,6 +643,13 @@ async function validateAdapterAvailabilityStatusCodes(
       }
 
       if (previous === "A" && current === "U") {
+        const currentDate = normalizeIsoDate(days[index]?.date);
+        const maxDayKey = normalizeIsoDate(
+          parsed.normalized_availability?.calendar_bounds?.max_day_key,
+        );
+        if (currentDate && maxDayKey && currentDate > maxDayKey) {
+          continue;
+        }
         if (isDec31ToJan1Boundary(days[index - 1] ?? {}, days[index] ?? {})) {
           continue;
         }

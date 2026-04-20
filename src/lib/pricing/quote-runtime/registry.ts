@@ -1,10 +1,12 @@
 import { execute30ABeachSingleQuote } from "./adapters/30abeach";
 import { executeThirtyACottagesSingleQuote } from "./adapters/30acottages";
 import { execute30AEscapesSingleQuote } from "./adapters/30aescapes";
+import { execute30AFivestarSingleQuote } from "./adapters/30afivestar";
 import { execute30ALuxurySingleQuote } from "./adapters/30aluxury";
 import { execute30AvacaySingleQuote } from "./adapters/30avacay";
 import { execute360BlueSingleQuote } from "./adapters/360blue";
 import { executeAlysBeach30ASingleQuote } from "./adapters/alysbeach30a";
+import { executeBeachblueSingleQuote } from "./adapters/beachblue";
 import { executeBenchmark30aSingleQuote } from "./adapters/benchmark30a";
 import { executeCoastproperties30aSingleQuote } from "./adapters/coastproperties30a";
 import { executeDunevr30aSingleQuote } from "./adapters/dunevr30a";
@@ -37,6 +39,7 @@ export type QuoteRuntimeExecutor = (
 
 const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   "30abeach": execute30ABeachSingleQuote,
+  "30afivestar": execute30AFivestarSingleQuote,
   alysbeach30a: executeAlysBeach30ASingleQuote,
   "30acottages": executeThirtyACottagesSingleQuote,
   "30avacay": execute30AvacaySingleQuote,
@@ -44,6 +47,7 @@ const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   "30aluxury": execute30ALuxurySingleQuote,
   "360blue": execute360BlueSingleQuote,
   benchmark30a: executeBenchmark30aSingleQuote,
+  beachblue: executeBeachblueSingleQuote,
   coastproperties30a: executeCoastproperties30aSingleQuote,
   dunevr30a: executeDunevr30aSingleQuote,
   elp30a: executeElp30aSingleQuote,

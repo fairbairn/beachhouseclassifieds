@@ -223,6 +223,17 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 700,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
+  "30afivestar": {
+    adapterKey: "30afivestar",
+    defaultWeeks: 24,
+    defaultAssumptions: {
+      avgFeePct: 0.22,
+      avgTaxPct: 0.12,
+      avgAllInMultiplier: 1.34,
+    },
+    globalDefaultBaseNightly: 700,
+    assumptionsAnchorFallbackMultiplier: 0.92,
+  },
   funvacay30a: {
     adapterKey: "funvacay30a",
     defaultWeeks: 24,

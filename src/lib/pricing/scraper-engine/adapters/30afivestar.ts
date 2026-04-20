@@ -1,3 +1,5 @@
+import { execute30AFivestarSingleQuote } from "@/lib/pricing/quote-runtime/adapters/30afivestar";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -6,6 +8,7 @@ import {
   canonicalizeExternalListingId,
   externalListingIdFromDetailUrl,
 } from "@/lib/pricing/shared/external-listing-id";
+import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type FiveStarDayCode = "A" | "U" | "I" | "O" | "X";
@@ -69,7 +72,15 @@ type ThirtyAFiveStarDetailRecord = DetailRecordBase & {
     source: "pm_30afivestar";
     external_listing_id: string;
     captured_at: string;
+    availability_source:
+      | "listing_calendar"
+      | "widget_calendar"
+      | "fallback_unavailable";
     has_calendar_widget: boolean;
+    calendar_bounds: {
+      min_day_key: string | null;
+      max_day_key: string | null;
+    };
     booking_restrictions: string[];
     min_night_rules: Array<{
       start_date: string;
@@ -113,6 +124,8 @@ type ThirtyAFiveStarDetailRecord = DetailRecordBase & {
 
 const DEFAULT_ANCHOR_URL = "https://www.30afivestarproperties.com/properties";
 const HOST = "www.30afivestarproperties.com";
+const USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 const OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
@@ -135,11 +148,14 @@ const EXCLUDED_MEDIA_URL_LIST = [
   "https://uc.orez.io/f/351cb9f1a3fd4732b3a689c88d7ae0af",
   "https://uc.orez.io/f/bcfccc689c26406994ca141c42817d41",
   "https://uc.orez.io/f/77c4a2c6c4b14e988c23bfae0260a9d6",
+  "https://uc.orez.io/f/f94ef61db30245d69c9e254d8fe3ddc2",
+  "https://uc.orez.io/f/18b8f41f04e548ae944549f50a66320d",
 ] as const;
 
 const EXCLUDED_MEDIA_URLS = new Set(
   EXCLUDED_MEDIA_URL_LIST.map((url) => url.toLowerCase()),
 );
+const THIRTYAFIVESTAR_OWNERREZ_QUOTE_PATH = "/widgets/quote";
 
 const EXCLUDED_MEDIA_BASE_KEYS = new Set(
   EXCLUDED_MEDIA_URL_LIST.map((url) => normalizeMediaUrl(url))
@@ -318,7 +334,9 @@ function extractJsonLdObjects(html: string): unknown[] {
   return out;
 }
 
-function flattenJsonLdEntities(input: unknown[]): Array<Record<string, unknown>> {
+function flattenJsonLdEntities(
+  input: unknown[],
+): Array<Record<string, unknown>> {
   const out: Array<Record<string, unknown>> = [];
   const stack: unknown[] = [...input];
 
@@ -433,10 +451,7 @@ function extractSchemaPropertyProfile(input: unknown[]): {
         ? (best.occupancy as Record<string, unknown>)
         : null;
 
-  const bedRaw =
-    containsPlace?.bed ??
-    best.bed ??
-    ([] as unknown[]);
+  const bedRaw = containsPlace?.bed ?? best.bed ?? ([] as unknown[]);
   const bedArray = Array.isArray(bedRaw) ? bedRaw : [];
   const bedDetails: Array<{ numberOfBeds: number | null; typeOfBed: string }> =
     [];
@@ -468,7 +483,10 @@ function extractSchemaPropertyProfile(input: unknown[]): {
       best.numberOfBathroomsTotal,
     ),
     sleeps: firstFiniteNumber(occupancy?.value),
-    roomCount: firstFiniteNumber(containsPlace?.numberOfRooms, best.numberOfRooms),
+    roomCount: firstFiniteNumber(
+      containsPlace?.numberOfRooms,
+      best.numberOfRooms,
+    ),
     bedDetails,
   };
 }
@@ -503,7 +521,9 @@ function extractSchemaImageUrls(input: unknown[]): string[] {
       : [];
 
   const normalized = imageCandidates
-    .map((value) => (typeof value === "string" ? normalizeMediaUrl(value) : null))
+    .map((value) =>
+      typeof value === "string" ? normalizeMediaUrl(value) : null,
+    )
     .filter((value): value is string => Boolean(value));
 
   const filtered = normalized.filter((url) => {
@@ -533,9 +553,12 @@ function buildRoomsGuidanceFromSchema(input: {
 
   if (input.beds !== null || input.sleeps !== null) {
     const bedroomLabel =
-      input.beds === 1 ? "1 Bedroom" : input.beds !== null ? `${input.beds} Bedrooms` : "Bedrooms";
-    const sleepsLabel =
-      input.sleeps !== null ? `, sleeps ${input.sleeps}` : "";
+      input.beds === 1
+        ? "1 Bedroom"
+        : input.beds !== null
+          ? `${input.beds} Bedrooms`
+          : "Bedrooms";
+    const sleepsLabel = input.sleeps !== null ? `, sleeps ${input.sleeps}` : "";
     lines.push(`${bedroomLabel}${sleepsLabel}`);
   }
 
@@ -730,6 +753,33 @@ function extractOwnerRezWidgetKeys(html: string): {
   };
 }
 
+function extractOwnerRezCalendarWidgetKeys(html: string): {
+  propertyKey: string | null;
+  calendarWidgetKey: string | null;
+} {
+  const widgetMatch = html.match(
+    /<div[^>]*class=["'][^"']*ownerrez-widget[^"']*["'][^>]*data-widget-type=["']Multiple Month Calendar["'][^>]*>/i,
+  );
+
+  if (!widgetMatch) {
+    return {
+      propertyKey: null,
+      calendarWidgetKey: null,
+    };
+  }
+
+  const tag = widgetMatch[0];
+  const propertyIdRaw =
+    tag.match(/data-propertyId=["']([0-9a-f]{32})["']/i)?.[1] ?? null;
+  const widgetIdRaw =
+    tag.match(/data-widgetId=["']([0-9a-f]{32})["']/i)?.[1] ?? null;
+
+  return {
+    propertyKey: toDashedUuid(propertyIdRaw),
+    calendarWidgetKey: toDashedUuid(widgetIdRaw),
+  };
+}
+
 function extractPropertyPublicId(detailUrl: string): string | null {
   const externalId = externalListingIdFromDetailUrl(detailUrl);
   const match = externalId.match(/(orp[0-9a-z]+x)$/i);
@@ -763,6 +813,39 @@ function extractRoomsGuidance(html: string): string[] {
   }
 
   return dedupePreserveOrder(lines);
+}
+
+function extractDetailDescriptionFromContentColumn(html: string): string {
+  const section = html.match(
+    /<div\s+id=["']details["'][^>]*><\/div>([\s\S]*?)<h2\s+id=["']availability["'][^>]*>/i,
+  )?.[1];
+
+  if (!section) {
+    return "";
+  }
+
+  const withoutSummary = section
+    .replace(
+      /<div[^>]+class=["'][^"']*amenity-summary-size[^"']*["'][^>]*>[\s\S]*?<\/div>/gi,
+      " ",
+    )
+    .replace(
+      /<div[^>]+class=["'][^"']*amenity-summary-amenities[^"']*["'][^>]*>[\s\S]*?<\/div>/gi,
+      " ",
+    );
+
+  const paragraphs = Array.from(
+    withoutSummary.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi),
+  )
+    .map((match) => decodeEntities(stripHtml(match[1] ?? "")))
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  if (paragraphs.length > 0) {
+    return paragraphs.join("\n\n");
+  }
+
+  return decodeEntities(stripHtml(withoutSummary));
 }
 
 function extractAmenities(html: string): {
@@ -963,7 +1046,11 @@ function parseIsoDate(value: string): Date | null {
   const month = Number(monthRaw);
   const day = Number(dayRaw);
 
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
     return null;
   }
 
@@ -994,7 +1081,10 @@ function addIsoDays(isoDate: string, days: number): string {
 
 function extractVarStringValue(html: string, varName: string): string | null {
   const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(`var\\s+${escaped}\\s*=\\s*([\"'])([\\s\\S]*?)\\1\\s*;`, "i");
+  const regex = new RegExp(
+    `var\\s+${escaped}\\s*=\\s*([\"'])([\\s\\S]*?)\\1\\s*;`,
+    "i",
+  );
   const match = html.match(regex);
   if (!match?.[2]) {
     return null;
@@ -1034,7 +1124,7 @@ function extractJsonParsedVar<T>(html: string, varName: string): T | null {
 }
 
 function toDayCodeFromStatus(statusCode: FiveStarDayCode): CanonicalDayCode {
-  return statusCode === "U" || statusCode === "X" ? "N" : "Y";
+  return statusCode === "A" || statusCode === "O" ? "Y" : "N";
 }
 
 function toChangeoverCodeFromStatus(
@@ -1057,10 +1147,15 @@ function parseDollarValue(value: string): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function buildAvailabilityFromEmbeddedCalendar(html: string, horizonDays: number): {
+function buildAvailabilityFromEmbeddedCalendar(
+  html: string,
+  horizonDays: number,
+): {
   days: ThirtyAFiveStarDetailRecord["normalized_availability"]["days"];
   windowStart: string;
   windowEnd: string;
+  minDayKey: string | null;
+  maxDayKey: string | null;
   dayCodes: string;
   counts: ThirtyAFiveStarDetailRecord["normalized_availability"]["counts"];
 } | null {
@@ -1069,26 +1164,40 @@ function buildAvailabilityFromEmbeddedCalendar(html: string, horizonDays: number
       Array<{ Arrival?: string; Departure?: string; IsNotAllowed?: boolean }>
     >(html, "bookingData") ?? [];
 
-  const rates = extractJsonParsedVar<Record<string, string>>(html, "rates") ?? {};
-  const minDayKey = extractVarStringValue(html, "minDayKey") ?? "";
-  const maxDayKey = extractVarStringValue(html, "maxDayKey") ?? "";
+  const rates =
+    extractJsonParsedVar<Record<string, string>>(html, "rates") ?? {};
+  const minDayKeyRaw = extractVarStringValue(html, "minDayKey") ?? "";
+  const maxDayKeyRaw = extractVarStringValue(html, "maxDayKey") ?? "";
+  const minDayKey = /^\d{4}-\d{2}-\d{2}$/.test(minDayKeyRaw)
+    ? minDayKeyRaw
+    : null;
+  const maxDayKey = /^\d{4}-\d{2}-\d{2}$/.test(maxDayKeyRaw)
+    ? maxDayKeyRaw
+    : null;
 
   const hasEmbeddedCalendar =
     bookingData.length > 0 ||
     Object.keys(rates).length > 0 ||
-    /^\d{4}-\d{2}-\d{2}$/.test(minDayKey) ||
-    /^\d{4}-\d{2}-\d{2}$/.test(maxDayKey);
+    Boolean(minDayKey) ||
+    Boolean(maxDayKey);
 
   if (!hasEmbeddedCalendar) {
     return null;
   }
 
-  const bookingMap = new Map<string, { isStart?: boolean; isMiddle?: boolean; isEnd?: boolean }>();
+  const bookingMap = new Map<
+    string,
+    { isStart?: boolean; isMiddle?: boolean; isEnd?: boolean }
+  >();
 
   for (const booking of bookingData) {
     const arrival = typeof booking.Arrival === "string" ? booking.Arrival : "";
-    const departure = typeof booking.Departure === "string" ? booking.Departure : "";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(arrival) || !/^\d{4}-\d{2}-\d{2}$/.test(departure)) {
+    const departure =
+      typeof booking.Departure === "string" ? booking.Departure : "";
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(arrival) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(departure)
+    ) {
       continue;
     }
 
@@ -1121,7 +1230,8 @@ function buildAvailabilityFromEmbeddedCalendar(html: string, horizonDays: number
   );
   start.setUTCDate(start.getUTCDate() + 1);
 
-  const days: ThirtyAFiveStarDetailRecord["normalized_availability"]["days"] = [];
+  const days: ThirtyAFiveStarDetailRecord["normalized_availability"]["days"] =
+    [];
 
   for (let offset = 0; offset < Math.max(1, horizonDays); offset += 1) {
     const cursor = new Date(start);
@@ -1131,8 +1241,8 @@ function buildAvailabilityFromEmbeddedCalendar(html: string, horizonDays: number
     let statusCode: FiveStarDayCode = "A";
 
     if (
-      (minDayKey && /^\d{4}-\d{2}-\d{2}$/.test(minDayKey) && isoDate <= minDayKey) ||
-      (maxDayKey && /^\d{4}-\d{2}-\d{2}$/.test(maxDayKey) && isoDate >= maxDayKey)
+      (minDayKey && isoDate < minDayKey) ||
+      (maxDayKey && isoDate > maxDayKey)
     ) {
       statusCode = "U";
     } else {
@@ -1177,15 +1287,22 @@ function buildAvailabilityFromEmbeddedCalendar(html: string, horizonDays: number
     checkin_only: days.filter((day) => day.status_code === "I").length,
     checkout_only: days.filter((day) => day.status_code === "O").length,
     other: days.filter((day) => day.status_code === "X").length,
-    booking_available: days.filter((day) => day.booking_day_state === "bookable").length,
-    booking_unavailable: days.filter((day) => day.booking_day_state === "blocked").length,
-    booking_unknown: days.filter((day) => day.booking_day_state === "unknown").length,
+    booking_available: days.filter(
+      (day) => day.booking_day_state === "bookable",
+    ).length,
+    booking_unavailable: days.filter(
+      (day) => day.booking_day_state === "blocked",
+    ).length,
+    booking_unknown: days.filter((day) => day.booking_day_state === "unknown")
+      .length,
   };
 
   return {
     days,
     windowStart: days[0]?.date ?? "",
     windowEnd: days[days.length - 1]?.date ?? "",
+    minDayKey,
+    maxDayKey,
     dayCodes: days.map((day) => day.status_code).join(""),
     counts,
   };
@@ -1195,6 +1312,8 @@ function buildUnavailableAvailability(horizonDays: number): {
   days: ThirtyAFiveStarDetailRecord["normalized_availability"]["days"];
   windowStart: string;
   windowEnd: string;
+  minDayKey: string | null;
+  maxDayKey: string | null;
   dayCodes: string;
   counts: ThirtyAFiveStarDetailRecord["normalized_availability"]["counts"];
 } {
@@ -1239,6 +1358,8 @@ function buildUnavailableAvailability(horizonDays: number): {
     days,
     windowStart: days[0]?.date ?? "",
     windowEnd: days[days.length - 1]?.date ?? "",
+    minDayKey: null,
+    maxDayKey: null,
     dayCodes: days.map((d) => d.status_code).join(""),
     counts,
   };
@@ -1354,8 +1475,7 @@ async function fetchDetail(
   const response = await fetch(normalizedDetailUrl, {
     method: "GET",
     headers: {
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      "user-agent": USER_AGENT,
       accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       referer: DEFAULT_ANCHOR_URL,
     },
@@ -1431,7 +1551,11 @@ async function fetchDetail(
       html,
     ).slice(0, 2000);
 
+  const detailedContentDescription =
+    extractDetailDescriptionFromContentColumn(html);
+
   const descriptionExpanded =
+    detailedContentDescription ||
     schemaProfile.description ||
     extractFirst(
       /<div[^>]+id=["']description["'][^>]*>([\s\S]*?)<\/div>/i,
@@ -1470,16 +1594,64 @@ async function fetchDetail(
   const baths =
     schemaProfile.baths !== null ? schemaProfile.baths : parsedCapacity.baths;
   const sleeps =
-    schemaProfile.sleeps !== null ? schemaProfile.sleeps : parsedCapacity.sleeps;
+    schemaProfile.sleeps !== null
+      ? schemaProfile.sleeps
+      : parsedCapacity.sleeps;
 
   const widgetKeys = extractOwnerRezWidgetKeys(html);
+  const calendarWidgetKeys = extractOwnerRezCalendarWidgetKeys(html);
   const propertyPublicId = extractPropertyPublicId(normalizedDetailUrl);
 
-  const availability =
-    buildAvailabilityFromEmbeddedCalendar(
-      html,
-      Math.max(180, availabilityHorizonDays),
-    ) ?? buildUnavailableAvailability(Math.max(180, availabilityHorizonDays));
+  const availabilityHorizon = Math.max(180, availabilityHorizonDays);
+  let availabilitySource:
+    | "listing_calendar"
+    | "widget_calendar"
+    | "fallback_unavailable" = "fallback_unavailable";
+  let availability = buildAvailabilityFromEmbeddedCalendar(
+    html,
+    availabilityHorizon,
+  );
+  if (availability) {
+    availabilitySource = "listing_calendar";
+  }
+
+  const widgetPropertyKey =
+    calendarWidgetKeys.propertyKey ?? widgetKeys.propertyKey;
+  if (calendarWidgetKeys.calendarWidgetKey && widgetPropertyKey) {
+    const widgetUrl =
+      `https://app.ownerrez.com/widgets/${calendarWidgetKeys.calendarWidgetKey}` +
+      `?propertyKey=${encodeURIComponent(widgetPropertyKey)}`;
+
+    try {
+      const widgetResponse = await fetch(widgetUrl, {
+        headers: {
+          "user-agent": USER_AGENT,
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          referer: normalizedDetailUrl,
+        },
+      });
+
+      if (widgetResponse.ok) {
+        const widgetHtml = await widgetResponse.text();
+        const widgetAvailability = buildAvailabilityFromEmbeddedCalendar(
+          widgetHtml,
+          availabilityHorizon,
+        );
+        if (widgetAvailability) {
+          availability = widgetAvailability;
+          availabilitySource = "widget_calendar";
+        }
+      }
+    } catch {
+      // Keep listing-page availability if widget fetch fails.
+    }
+  }
+
+  if (!availability) {
+    availability = buildUnavailableAvailability(availabilityHorizon);
+    availabilitySource = "fallback_unavailable";
+  }
 
   const nameForMatch = (h1 || title || externalId).trim();
   const descriptionForMatch = (
@@ -1558,8 +1730,13 @@ async function fetchDetail(
       source: "pm_30afivestar",
       external_listing_id: externalId,
       captured_at: new Date().toISOString(),
+      availability_source: availabilitySource,
       has_calendar_widget:
         /data-widget-type=["']Multiple Month Calendar["']/i.test(html),
+      calendar_bounds: {
+        min_day_key: availability.minDayKey ?? null,
+        max_day_key: availability.maxDayKey ?? null,
+      },
       booking_restrictions: [],
       min_night_rules: [],
       window_start: availability.windowStart,
@@ -1614,6 +1791,25 @@ export function create30AFiveStarAdapter(): ScraperAdapter<ThirtyAFiveStarDetail
         context.browser,
         context.detailUrl,
         context.availabilityHorizonDays,
+      );
+    },
+    async runQuoteCapture(argv, progress) {
+      const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
+        "30afivestar",
+        argv,
+      );
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "30afivestar",
+          executeSingleQuote: execute30AFivestarSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: THIRTYAFIVESTAR_OWNERREZ_QUOTE_PATH,
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 400,
+        },
+        normalizedArgs,
+        progress,
       );
     },
   };

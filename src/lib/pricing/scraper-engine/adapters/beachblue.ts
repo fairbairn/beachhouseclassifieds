@@ -1,3 +1,5 @@
+import { executeBeachblueSingleQuote } from "@/lib/pricing/quote-runtime/adapters/beachblue";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -5,7 +7,6 @@ import type { Page } from "playwright";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
-import { runBeachBlueQuoteCli } from "./quotes/beachblue";
 
 type BeachBlueDayCode = "A" | "U" | "I" | "O" | "X";
 type CanonicalDayCode = "Y" | "N";
@@ -880,7 +881,19 @@ export function createBeachBlueAdapter(): ScraperAdapter<BeachBlueDetailRecord> 
         "beachblue",
         argv,
       );
-      await runBeachBlueQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "beachblue",
+          executeSingleQuote: executeBeachblueSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/vacation-rentals/router/",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 700,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
   };
 }

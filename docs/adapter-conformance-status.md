@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-04-13T20:25:27.026Z
+Audit date: 2026-04-20T17:09:43.221Z
 
 Data source:
 
@@ -58,52 +58,53 @@ Preferred (non-blocking):
 
 ## Conformance Matrix
 
-| Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Pricing | Images | Avg Img/List | Quote Runtime | Ready |
-| :---------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ------: | -----: | -----------: | ------------: | ----: |
-| 30abeach                |    17 |   17 |      17 |           17 |           17 |         17 |        17 |     17 |      17 |    811 |        47.71 |            ✅ |    ✅ |
-| 30acottages             |    44 |   44 |      44 |           44 |           44 |         44 |        44 |     44 |      44 |   2290 |        52.05 |            ✅ |    ✅ |
-| 30aescapes              |   168 |  168 |     168 |          168 |          168 |        168 |       168 |    168 |     168 |   6208 |        36.95 |            ✅ |    ✅ |
-| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     105 |   5240 |        49.90 |            ✅ |    ✅ |
-| 30avacay                |   115 |  115 |     115 |          115 |          115 |        115 |       115 |    115 |     115 |   5303 |        46.11 |            ✅ |    ✅ |
-| 360blue                 |   617 |  617 |     617 |          617 |          617 |        617 |       617 |    617 |     617 |  30787 |        49.90 |            ✅ |    ✅ |
-| alysbeach30a            |    72 |   72 |      72 |           72 |           72 |         72 |        72 |     72 |      72 |   2853 |        39.63 |            ✅ |    ✅ |
-| beachblue               |    16 |   16 |      16 |           16 |           16 |         16 |        16 |     16 |      16 |    717 |        44.81 |            ✅ |    ✅ |
-| benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |     128 |   8550 |        66.80 |            ✅ |    ✅ |
-| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |      30 |   1433 |        47.77 |            ✅ |    ✅ |
-| dunevr30a               |    90 |   90 |      90 |           90 |           90 |         90 |        90 |     90 |      90 |   3782 |        42.02 |            ✅ |    ✅ |
-| elp30a                  |   127 |  127 |     127 |          127 |          127 |        127 |       127 |    127 |     127 |   9554 |        75.23 |            ✅ |    ✅ |
-| exclusive30a            |   104 |  104 |     104 |          104 |          104 |        104 |       104 |    104 |     104 |   5673 |        54.55 |            ✅ |    ✅ |
-| fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |      63 |   3273 |        51.95 |            ✅ |    ✅ |
-| funvacay30a             |    46 |   46 |      46 |           46 |           46 |         46 |        46 |     46 |      46 |   2498 |        54.30 |            ✅ |    ✅ |
-| grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |      35 |   2151 |        61.46 |            ✅ |    ✅ |
-| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |     208 |  10774 |        51.80 |            ✅ |    ✅ |
-| keyco30a                |   391 |  391 |     391 |          391 |          391 |        391 |       391 |    391 |     391 |  25380 |        64.91 |            ✅ |    ✅ |
-| localvr30a              |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |      37 |   1542 |        41.68 |            ✅ |    ✅ |
-| luxe30a                 |    12 |   12 |      12 |           12 |           12 |         12 |        12 |     12 |      12 |    786 |        65.50 |            ✅ |    ✅ |
-| oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |     112 |   3161 |        28.22 |            ✅ |    ✅ |
-| oversee30a              |   107 |  107 |     107 |          107 |          107 |        107 |       107 |    107 |     107 |   6593 |        61.62 |            ✅ |    ✅ |
-| panhandle30a            |    53 |   53 |      53 |           53 |           53 |         53 |        53 |     53 |      53 |   2676 |        50.49 |            ✅ |    ✅ |
-| prominence30a           |    58 |   58 |      58 |           58 |           58 |         58 |        58 |     58 |      58 |   3357 |        57.88 |            ✅ |    ✅ |
-| realjoy30a              |   138 |  138 |     138 |          138 |          138 |        138 |       138 |    138 |     138 |   7945 |        57.57 |            ✅ |    ✅ |
-| rosemary30a             |   221 |  221 |     221 |          221 |          221 |        221 |       221 |    221 |     221 |   9287 |        42.02 |            ✅ |    ✅ |
-| royaldestinations       |   142 |  142 |     142 |          142 |          142 |        142 |       142 |    142 |     142 |   6749 |        47.53 |            ✅ |    ✅ |
-| sandersbeach30a         |    74 |   74 |      74 |           74 |           74 |         74 |        74 |     74 |      74 |   3670 |        49.59 |            ✅ |    ✅ |
-| sandpiper30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     106 |   5120 |        48.30 |            ✅ |    ✅ |
-| scenicstays30a          |    45 |   45 |      45 |           45 |           45 |         45 |        45 |     45 |      45 |   2524 |        56.09 |            ✅ |    ✅ |
-| stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |      37 |   2264 |        61.19 |            ✅ |    ✅ |
-| stayon30a               |    83 |   83 |      83 |           83 |           83 |         83 |        83 |     83 |      83 |   4213 |        50.76 |            ✅ |    ✅ |
-| **TOTAL**               |  3601 | 3601 |    3601 |         3601 |         3601 |       3601 |      3601 |   3601 |    3601 | 187164 |        51.98 |             — | 32/32 |
+| Adapter                 | Files | Core | Profile | Availability | Description+ | Amenities+ | Location+ | Media+ | Pricing | Images |                                               Avg Img/List | Quote Runtime | Ready |
+| :---------------------- | ----: | ---: | ------: | -----------: | -----------: | ---------: | --------: | -----: | ------: | -----: | ---------------------------------------------------------: | ------------: | ----: |
+| 30abeach                |    17 |   17 |      17 |           17 |           17 |         17 |        17 |     17 |      17 |    814 |                                                      47.88 |            ✅ |    ✅ |
+| 30acottages             |    44 |   44 |      44 |           44 |           44 |         44 |        44 |     44 |      44 |   2286 |                                                      51.95 |            ✅ |    ✅ |
+| 30aescapes              |   168 |  168 |     168 |          168 |          168 |        168 |       168 |    168 |     168 |   6206 |                                                      36.94 |            ✅ |    ✅ |
+| 30afivestar             |    32 |   32 |      32 |           32 |           32 |         32 |        32 |     32 |      32 |   1105 |                                                      34.53 |            ✅ |    ✅ |
+| 30aluxury               |   105 |  105 |     105 |          105 |          105 |        105 |       105 |    105 |     105 |   5273 |                                                      50.22 |            ✅ |    ✅ |
+| 30avacay                |   115 |  115 |     115 |          115 |          115 |        115 |       115 |    115 |     115 |   5303 |                                                      46.11 |            ✅ |    ✅ |
+| 360blue                 |   614 |  614 |     614 |          614 |          614 |        614 |       614 |    614 |     614 |  30675 |                                                      49.96 |            ✅ |    ✅ |
+| alysbeach30a            |    72 |   72 |      72 |           72 |           72 |         72 |        72 |     72 |      72 |   2853 |                                                      39.63 |            ✅ |    ✅ |
+| beachblue               |    16 |   16 |      16 |           16 |           16 |         16 |        16 |     16 |      16 |    717 |                                                      44.81 |            ✅ |    ✅ |
+| benchmark30a            |   128 |  128 |     128 |          128 |          128 |        128 |       128 |    128 |     128 |   8550 |                                                      66.80 |            ✅ |    ✅ |
+| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |      30 |   1433 |                                                      47.77 |            ✅ |    ✅ |
+| dunevr30a               |    90 |   90 |      90 |           90 |           90 |         90 |        90 |     90 |      90 |   3782 |                                                      42.02 |            ✅ |    ✅ |
+| elp30a                  |   127 |  127 |     127 |          127 |          127 |        127 |       127 |    127 |     127 |   9527 | <span style="color:#c62828;"><strong>75.02</strong></span> |            ✅ |    ✅ |
+| exclusive30a            |   104 |  104 |     104 |          104 |          104 |        104 |       104 |    104 |     104 |   5673 |                                                      54.55 |            ✅ |    ✅ |
+| fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |      63 |   3280 |                                                      52.06 |            ✅ |    ✅ |
+| funvacay30a             |    46 |   46 |      46 |           46 |           46 |         46 |        46 |     46 |      46 |   2497 |                                                      54.28 |            ✅ |    ✅ |
+| grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |      35 |   2151 |                                                      61.46 |            ✅ |    ✅ |
+| homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |     208 |  10774 |                                                      51.80 |            ✅ |    ✅ |
+| keyco30a                |   357 |  357 |     357 |          357 |          357 |        357 |       357 |    357 |     357 |  23651 |                                                      66.25 |            ✅ |    ✅ |
+| localvr30a              |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |      37 |   1542 |                                                      41.68 |            ✅ |    ✅ |
+| luxe30a                 |    12 |   12 |      12 |           12 |           12 |         12 |        12 |     12 |      12 |    786 |                                                      65.50 |            ✅ |    ✅ |
+| oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |     112 |   3161 |                                                      28.22 |            ✅ |    ✅ |
+| oversee30a              |   107 |  107 |     107 |          107 |          107 |        107 |       107 |    107 |     107 |   6593 |                                                      61.62 |            ✅ |    ✅ |
+| panhandle30a            |    53 |   53 |      53 |           53 |           53 |         53 |        53 |     53 |      53 |   2677 |                                                      50.51 |            ✅ |    ✅ |
+| prominence30a           |    58 |   58 |      58 |           58 |           58 |         58 |        58 |     58 |      58 |   3357 |                                                      57.88 |            ✅ |    ✅ |
+| realjoy30a              |   137 |  137 |     137 |          137 |          137 |        137 |       137 |    137 |     137 |   7882 |                                                      57.53 |            ✅ |    ✅ |
+| rosemary30a             |   221 |  221 |     221 |          221 |          221 |        221 |       221 |    221 |     221 |   9287 |                                                      42.02 |            ✅ |    ✅ |
+| royaldestinations       |   142 |  142 |     142 |          142 |          142 |        142 |       142 |    142 |     142 |   6749 |                                                      47.53 |            ✅ |    ✅ |
+| sandersbeach30a         |    74 |   74 |      74 |           74 |           74 |         74 |        74 |     74 |      74 |   3670 |                                                      49.59 |            ✅ |    ✅ |
+| sandpiper30a            |   106 |  106 |     106 |          106 |          106 |        106 |       106 |    106 |     106 |   5030 |                                                      47.45 |            ✅ |    ✅ |
+| scenicstays30a          |    45 |   45 |      45 |           45 |           45 |         45 |        45 |     45 |      45 |   2522 |                                                      56.04 |            ✅ |    ✅ |
+| stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |      37 |   2264 |                                                      61.19 |            ✅ |    ✅ |
+| stayon30a               |    83 |   83 |      83 |           83 |           83 |         83 |        83 |     83 |      83 |   4261 |                                                      51.34 |            ✅ |    ✅ |
+| **TOTAL**               |  3595 | 3595 |    3595 |         3595 |         3595 |       3595 |      3595 |   3595 |    3595 | 186331 |                                                      51.83 |             — | 33/33 |
 
 ## Current Snapshot Summary
 
-- 32 adapters audited.
-- All 32 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 32 / 32.
+- 33 adapters audited.
+- All 33 adapters are at full required-core parity for the current captured files.
+- Combined-ready adapters (Ready = ✅): 33 / 33.
 
-- Pricing-records coverage signal: 3601 / 3601 files currently have per-listing pricing JSON records.
+- Pricing-records coverage signal: 3595 / 3595 files currently have per-listing pricing JSON records.
 
-- Quote API capability signal: 32 / 32 adapters expose pre-reservation quote APIs.
-- Geo location minimum (required): 32 / 32 adapters currently have 100% numeric lat/lng coverage.
+- Quote API capability signal: 33 / 33 adapters expose pre-reservation quote APIs.
+- Geo location minimum (required): 33 / 33 adapters currently have 100% numeric lat/lng coverage.
 - Preferred horizon (>=730d) remains non-blocking and is tracked in probe metrics, outside this matrix.
 
 ## Quote Runtime Migration Ledger (API Quote = ✅, Highest Listings First)
@@ -112,15 +113,15 @@ This ledger lists every adapter in descending order by Files count. % shows each
 
 | Order | Adapter                 | Files |                                                                                                                                                                  % | Quote Runtime | State    |
 | ----: | ----------------------- | ----: | -----------------------------------------------------------------------------------------------------------------------------------------------------------------: | :-----------: | -------- |
-|     1 | 360blue                 |   617 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">17.1%</span> |      ✅       | complete |
-|     2 | keyco30a                |   391 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">10.8%</span> |      ✅       | complete |
+|     1 | 360blue                 |   614 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">17.1%</span> |      ✅       | complete |
+|     2 | keyco30a                |   357 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">9.9%</span> |      ✅       | complete |
 |     3 | rosemary30a             |   221 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">6.1%</span> |      ✅       | complete |
 |     4 | homeownerscollection30a |   208 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">5.8%</span> |      ✅       | complete |
-|     5 | 30aescapes              |   169 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">4.7%</span> |      ✅       | complete |
+|     5 | 30aescapes              |   168 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">4.7%</span> |      ✅       | complete |
 |     6 | royaldestinations       |   142 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.9%</span> |      ✅       | complete |
-|     7 | realjoy30a              |   138 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.8%</span> |      ✅       | complete |
-|     8 | elp30a                  |   129 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.6%</span> |      ✅       | complete |
-|     9 | benchmark30a            |   128 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.5%</span> |      ✅       | complete |
+|     7 | realjoy30a              |   137 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.8%</span> |      ✅       | complete |
+|     8 | benchmark30a            |   128 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.6%</span> |      ✅       | complete |
+|     9 | elp30a                  |   127 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.5%</span> |      ✅       | complete |
 |    10 | 30avacay                |   115 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.2%</span> |      ✅       | complete |
 |    11 | oceanreef30a            |   112 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.1%</span> |      ✅       | complete |
 |    12 | oversee30a              |   107 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.0%</span> |      ✅       | complete |
@@ -131,21 +132,22 @@ This ledger lists every adapter in descending order by Files count. % shows each
 |    17 | stayon30a               |    83 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.3%</span> |      ✅       | complete |
 |    18 | sandersbeach30a         |    74 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.1%</span> |      ✅       | complete |
 |    19 | alysbeach30a            |    72 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.0%</span> |      ✅       | complete |
-|    20 | fivestar30a             |    63 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.7%</span> |      ✅       | complete |
-|    21 | prominence30a           |    60 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.7%</span> |      ✅       | complete |
+|    20 | fivestar30a             |    63 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.8%</span> |      ✅       | complete |
+|    21 | prominence30a           |    58 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.6%</span> |      ✅       | complete |
 |    22 | panhandle30a            |    53 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.5%</span> |      ✅       | complete |
 |    23 | funvacay30a             |    46 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.3%</span> |      ✅       | complete |
-|    24 | scenicstays30a          |    45 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.2%</span> |      ✅       | complete |
+|    24 | scenicstays30a          |    45 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.3%</span> |      ✅       | complete |
 |    25 | 30acottages             |    44 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.2%</span> |      ✅       | complete |
 |    26 | localvr30a              |    37 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.0%</span> |      ✅       | complete |
 |    27 | stayat30a               |    37 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.0%</span> |      ✅       | complete |
 |    28 | grayt30a                |    35 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.0%</span> |      ✅       | complete |
-|    29 | coastproperties30a      |    30 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.8%</span> |      ✅       | complete |
-|    30 | 30abeach                |    17 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.5%</span> |      ✅       | complete |
-|    31 | beachblue               |    16 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.4%</span> |      ✅       | complete |
-|    32 | luxe30a                 |    12 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.3%</span> |      ✅       | complete |
+|    29 | 30afivestar             |    32 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.9%</span> |      ✅       | complete |
+|    30 | coastproperties30a      |    30 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.8%</span> |      ✅       | complete |
+|    31 | 30abeach                |    17 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.5%</span> |      ✅       | complete |
+|    32 | beachblue               |    16 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.4%</span> |      ✅       | complete |
+|    33 | luxe30a                 |    12 |  <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.3%</span> |      ✅       | complete |
 
-Migration queue coverage: 32 / 32 adapters listed.
+Migration queue coverage: 33 / 33 adapters listed.
 
 ## Quote Runtime Discovery Ledger (API Quote = ❌)
 
