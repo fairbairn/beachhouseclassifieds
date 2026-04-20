@@ -2,7 +2,7 @@
   "external_listing_id": "KLUf1mZQvq",
   "detail_url": "https://key.co/listings/KLUf1mZQvq",
   "quote_context": {},
-  "fetched_at": "2026-04-19T16:58:46.732Z",
+  "fetched_at": "2026-04-20T13:03:43.301Z",
   "title": "Clareon Home | KEY.co",
   "h1": "Clareon Home",
   "canonical_url": "https://key.co/listings/KLUf1mZQvq",
@@ -26,8 +26,6 @@
         "Internet",
         "Air conditioning",
         "Outdoor",
-        "Beach rentals",
-        "Beach",
         "Parking information- This unit has 2 parking spaces.",
         "Parking information",
         "Parking",
@@ -54,8 +52,6 @@
       "Internet",
       "Air conditioning",
       "Outdoor",
-      "Beach rentals",
-      "Beach",
       "Parking information- This unit has 2 parking spaces.",
       "Parking information",
       "Parking",
@@ -146,27 +142,16 @@
   "normalized_availability": {
     "source": "pm_keyco30a",
     "external_listing_id": "KLUf1mZQvq",
-    "captured_at": "2026-04-19T16:58:46.732Z",
-    "window_start": "2026-04-19",
-    "window_end": "2028-04-18",
+    "captured_at": "2026-04-20T13:03:43.301Z",
+    "window_start": "2026-04-20",
+    "window_end": "2028-04-19",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
       "X": "unknown"
     },
-    "day_codes": "AAAAAOUIAOUUUUUUUUUUUIAAAAOUUUUUUUUUUUUUUUIAAAOUUUUIAAOUIAAAAOUUUUIAOUIUUUUUUIAAAAOUIAAAAOUUUUUUUUIAAAOUUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "AAAAOUIAOUUUUUUUUUUUIAAAAOUUUUUUUUUUUUUUUIAAAOUUUUIAAOUIAAAAOUUUUIAOUIUUUUUUIAAAAOUIAAAAOUUUUUUUUIAAAOUUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 2
-      },
       {
         "date": "2026-04-20",
         "day_code": "Y",
@@ -8196,17 +8181,28 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-19",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
-      "available": 31,
+      "available": 30,
       "unavailable": 63,
       "checkin_only": 10,
       "checkout_only": 10,
-      "other": 617,
-      "booking_available": 41,
+      "other": 618,
+      "booking_available": 40,
       "booking_unavailable": 73,
-      "booking_unknown": 617
+      "booking_unknown": 618
     }
   },
   "availability_raw": {
@@ -8216,19 +8212,11 @@
   "normalized_rates": {
     "source": "pm_keyco30a",
     "external_listing_id": "KLUf1mZQvq",
-    "captured_at": "2026-04-19T16:58:46.732Z",
+    "captured_at": "2026-04-20T13:03:43.301Z",
     "currency": "USD",
-    "window_start": "2026-04-19",
-    "window_end": "2026-10-03",
+    "window_start": "2026-04-20",
+    "window_end": "2026-10-04",
     "days": [
-      {
-        "date": "2026-04-19",
-        "nightly_rate": null,
-        "min_nights": 2,
-        "is_booked": false,
-        "changeover_code": "C",
-        "season_name": "quote_unavailable"
-      },
       {
         "date": "2026-04-20",
         "nightly_rate": null,
@@ -9559,6 +9547,14 @@
       },
       {
         "date": "2026-10-03",
+        "nightly_rate": null,
+        "min_nights": null,
+        "is_booked": true,
+        "changeover_code": "X",
+        "season_name": "not_available"
+      },
+      {
+        "date": "2026-10-04",
         "nightly_rate": null,
         "min_nights": null,
         "is_booked": true,

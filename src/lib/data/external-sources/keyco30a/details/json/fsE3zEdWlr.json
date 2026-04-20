@@ -2,7 +2,7 @@
   "external_listing_id": "fsE3zEdWlr",
   "detail_url": "https://key.co/listings/fsE3zEdWlr",
   "quote_context": {},
-  "fetched_at": "2026-04-19T17:03:35.003Z",
+  "fetched_at": "2026-04-20T12:58:35.032Z",
   "title": "All Decked Out | KEY.co",
   "h1": "All Decked Out",
   "canonical_url": "https://key.co/listings/fsE3zEdWlr",
@@ -37,8 +37,6 @@
         "Fi Club access Beach chair setup",
         "Five beach cruiser bicycles",
         "Beach chair setup",
-        "Beach rentals",
-        "Beach",
         "Parking information",
         "Parking",
         "No pets",
@@ -73,8 +71,6 @@
       "Fi Club access Beach chair setup",
       "Five beach cruiser bicycles",
       "Beach chair setup",
-      "Beach rentals",
-      "Beach",
       "Parking information",
       "Parking",
       "No pets",
@@ -187,36 +183,25 @@
   "normalized_availability": {
     "source": "pm_keyco30a",
     "external_listing_id": "fsE3zEdWlr",
-    "captured_at": "2026-04-19T17:03:35.003Z",
-    "window_start": "2026-04-19",
-    "window_end": "2028-04-18",
+    "captured_at": "2026-04-20T12:58:35.033Z",
+    "window_start": "2026-04-20",
+    "window_end": "2028-04-19",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
       "X": "unknown"
     },
-    "day_codes": "OXUUUXUXUUUUUUXIAOXUUUUUUXXUUUUUUUIAAAAAOUUUUUUUIAAAAAOUUUUUUUUIAAOXUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUXUUUUUUUUUUUUIAAAAAAAAAAAAOUIAAAOXUUUUUUUUIAAAOXUUUUUUXIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOXIAAAAAAAAAAAAAAAAAAAAAAAAAOXXIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOXXXXXXIXXXXXXIXXXXXXIXXXXXXIXXXXXXIAAAAAOXUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "UUUUXUXUUUUUUXIAOXUUUUUUXXUUUUUUUIAAAAAOUUUUUUUIAAAAAOUUUUUUUUIAAOXUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUXUUUUUUUUUUUUIAAAAAAAAAAAAOUIAAAOXUUUUUUUUIAAAOXUUUUUUXIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOXIAAAAAAAAAAAAAAAAAAAAAAAAAOXXIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOXXXXXXIXXXXXXIXXXXXXIXXXXXXIXXXXXXIAAAAAAAAOXUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "Y",
-        "status_code": "O",
-        "changeover_code": "O",
-        "is_available": true,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": 3
-      },
       {
         "date": "2026-04-20",
         "day_code": "N",
-        "status_code": "X",
+        "status_code": "U",
         "changeover_code": "X",
         "is_available": false,
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
-        "booking_day_state": "unknown",
+        "booking_day_state": "blocked",
         "min_nights_required": 3
       },
       {
@@ -4182,16 +4167,49 @@
       {
         "date": "2027-04-16",
         "day_code": "Y",
-        "status_code": "O",
-        "changeover_code": "O",
+        "status_code": "A",
+        "changeover_code": "C",
         "is_available": true,
-        "is_available_for_checkin": false,
+        "is_available_for_checkin": true,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
         "min_nights_required": 5
       },
       {
         "date": "2027-04-17",
+        "day_code": "Y",
+        "status_code": "A",
+        "changeover_code": "C",
+        "is_available": true,
+        "is_available_for_checkin": true,
+        "is_available_for_checkout": true,
+        "booking_day_state": "bookable",
+        "min_nights_required": 4
+      },
+      {
+        "date": "2027-04-18",
+        "day_code": "Y",
+        "status_code": "A",
+        "changeover_code": "C",
+        "is_available": true,
+        "is_available_for_checkin": true,
+        "is_available_for_checkout": true,
+        "booking_day_state": "bookable",
+        "min_nights_required": 4
+      },
+      {
+        "date": "2027-04-19",
+        "day_code": "Y",
+        "status_code": "O",
+        "changeover_code": "O",
+        "is_available": true,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": true,
+        "booking_day_state": "bookable",
+        "min_nights_required": 4
+      },
+      {
+        "date": "2027-04-20",
         "day_code": "N",
         "status_code": "X",
         "changeover_code": "X",
@@ -4199,39 +4217,6 @@
         "is_available_for_checkin": false,
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
-        "min_nights_required": 4
-      },
-      {
-        "date": "2027-04-18",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 4
-      },
-      {
-        "date": "2027-04-19",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 4
-      },
-      {
-        "date": "2027-04-20",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
         "min_nights_required": 4
       },
       {
@@ -8237,16 +8222,27 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-19",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
-      "available": 189,
-      "unavailable": 157,
+      "available": 192,
+      "unavailable": 155,
       "checkin_only": 15,
-      "checkout_only": 12,
+      "checkout_only": 11,
       "other": 358,
-      "booking_available": 201,
-      "booking_unavailable": 172,
+      "booking_available": 203,
+      "booking_unavailable": 170,
       "booking_unknown": 358
     }
   },
@@ -8257,19 +8253,11 @@
   "normalized_rates": {
     "source": "pm_keyco30a",
     "external_listing_id": "fsE3zEdWlr",
-    "captured_at": "2026-04-19T17:03:35.003Z",
+    "captured_at": "2026-04-20T12:58:35.033Z",
     "currency": "USD",
-    "window_start": "2026-04-19",
-    "window_end": "2026-10-03",
+    "window_start": "2026-04-20",
+    "window_end": "2026-10-04",
     "days": [
-      {
-        "date": "2026-04-19",
-        "nightly_rate": 2772,
-        "min_nights": 3,
-        "is_booked": false,
-        "changeover_code": "C",
-        "season_name": "quote_weekly_backfill"
-      },
       {
         "date": "2026-04-20",
         "nightly_rate": null,
@@ -9605,13 +9593,21 @@
         "is_booked": false,
         "changeover_code": "C",
         "season_name": "quote_weekly_sample"
+      },
+      {
+        "date": "2026-10-04",
+        "nightly_rate": 2490,
+        "min_nights": 4,
+        "is_booked": false,
+        "changeover_code": "C",
+        "season_name": "quote_weekly_carry_forward"
       }
     ],
     "stats": {
       "days_with_rate": 54,
       "min_nightly_rate": 1914,
       "max_nightly_rate": 3060,
-      "avg_nightly_rate": 2447.39
+      "avg_nightly_rate": 2442.17
     }
   },
   "rates_raw": {

@@ -22,6 +22,7 @@ type CliOptions = {
 type DetailRecord = {
   external_listing_id?: unknown;
   detail_url?: unknown;
+  description_expanded?: unknown;
   property_profile?: {
     beds?: unknown;
     baths?: unknown;
@@ -62,6 +63,7 @@ type ValidationIssueCode =
   | "missing_index_entry_json"
   | "missing_external_listing_id"
   | "missing_detail_url"
+  | "missing_description_expanded"
   | "missing_location_signal"
   | "missing_availability_days"
   | "all_days_unknown"
@@ -787,6 +789,19 @@ export async function runValidateScrapeFilenameAlignmentCli(
         message: `details/json/${fileName} is missing detail_url`,
       });
       continue;
+    }
+
+    const descriptionExpanded =
+      typeof parsed.description_expanded === "string"
+        ? parsed.description_expanded.trim()
+        : "";
+    if (descriptionExpanded.length === 0) {
+      issues.push({
+        code: "missing_description_expanded",
+        message:
+          `details/json/${fileName} must include description_expanded ` +
+          `with length > 0`,
+      });
     }
 
     const hasLatLon = hasValidLatLon(parsed);

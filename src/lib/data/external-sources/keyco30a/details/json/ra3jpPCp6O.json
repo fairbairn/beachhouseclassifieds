@@ -2,7 +2,7 @@
   "external_listing_id": "ra3jpPCp6O",
   "detail_url": "https://key.co/listings/ra3jpPCp6O",
   "quote_context": {},
-  "fetched_at": "2026-04-19T17:07:15.761Z",
+  "fetched_at": "2026-04-20T13:09:12.020Z",
   "title": "Seahorse Stables Place | KEY.co",
   "h1": "Seahorse Stables Place",
   "canonical_url": "https://key.co/listings/ra3jpPCp6O",
@@ -36,8 +36,6 @@
         "Gas grill",
         "Bikes Shared pool",
         "Shared pool",
-        "Beach rentals",
-        "Beach",
         "Parking information",
         "Parking",
         "No pets",
@@ -74,8 +72,6 @@
       "Gas grill",
       "Bikes Shared pool",
       "Shared pool",
-      "Beach rentals",
-      "Beach",
       "Parking information",
       "Parking",
       "No pets",
@@ -196,27 +192,16 @@
   "normalized_availability": {
     "source": "pm_keyco30a",
     "external_listing_id": "ra3jpPCp6O",
-    "captured_at": "2026-04-19T17:07:15.761Z",
-    "window_start": "2026-04-19",
-    "window_end": "2028-04-18",
+    "captured_at": "2026-04-20T13:09:12.020Z",
+    "window_start": "2026-04-20",
+    "window_end": "2028-04-19",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
       "X": "unknown"
     },
-    "day_codes": "XXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "XXXXXUXXXXXXIXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "N",
-        "status_code": "X",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "unknown",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-20",
         "day_code": "N",
@@ -352,10 +337,10 @@
       {
         "date": "2026-05-02",
         "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
+        "status_code": "I",
+        "changeover_code": "I",
         "is_available": false,
-        "is_available_for_checkin": false,
+        "is_available_for_checkin": true,
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
         "min_nights_required": 7
@@ -8246,12 +8231,23 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-19",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
       "available": 0,
-      "unavailable": 24,
-      "checkin_only": 0,
+      "unavailable": 23,
+      "checkin_only": 1,
       "checkout_only": 0,
       "other": 707,
       "booking_available": 0,
@@ -8266,19 +8262,11 @@
   "normalized_rates": {
     "source": "pm_keyco30a",
     "external_listing_id": "ra3jpPCp6O",
-    "captured_at": "2026-04-19T17:07:15.761Z",
+    "captured_at": "2026-04-20T13:09:12.020Z",
     "currency": "USD",
-    "window_start": "2026-04-19",
-    "window_end": "2026-10-03",
+    "window_start": "2026-04-20",
+    "window_end": "2026-10-04",
     "days": [
-      {
-        "date": "2026-04-19",
-        "nightly_rate": null,
-        "min_nights": null,
-        "is_booked": true,
-        "changeover_code": "X",
-        "season_name": "not_available"
-      },
       {
         "date": "2026-04-20",
         "nightly_rate": null,
@@ -8377,11 +8365,11 @@
       },
       {
         "date": "2026-05-02",
-        "nightly_rate": null,
+        "nightly_rate": 631.54,
         "min_nights": null,
         "is_booked": true,
         "changeover_code": "X",
-        "season_name": "quote_unavailable"
+        "season_name": "quote_weekly_sample"
       },
       {
         "date": "2026-05-03",
@@ -8493,7 +8481,7 @@
         "min_nights": null,
         "is_booked": true,
         "changeover_code": "X",
-        "season_name": "not_available"
+        "season_name": "quote_unavailable"
       },
       {
         "date": "2026-05-17",
@@ -8549,7 +8537,7 @@
         "min_nights": null,
         "is_booked": true,
         "changeover_code": "X",
-        "season_name": "not_available"
+        "season_name": "quote_unavailable"
       },
       {
         "date": "2026-05-24",
@@ -9614,13 +9602,21 @@
         "is_booked": true,
         "changeover_code": "X",
         "season_name": "not_available"
+      },
+      {
+        "date": "2026-10-04",
+        "nightly_rate": null,
+        "min_nights": null,
+        "is_booked": true,
+        "changeover_code": "X",
+        "season_name": "not_available"
       }
     ],
     "stats": {
-      "days_with_rate": 0,
-      "min_nightly_rate": null,
-      "max_nightly_rate": null,
-      "avg_nightly_rate": null
+      "days_with_rate": 1,
+      "min_nightly_rate": 631.54,
+      "max_nightly_rate": 631.54,
+      "avg_nightly_rate": 631.54
     }
   },
   "rates_raw": {

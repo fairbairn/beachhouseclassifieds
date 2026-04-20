@@ -1341,7 +1341,9 @@ async function fetchDetail(
     const horizonIso = horizonDate.toISOString().slice(0, 10);
 
     const unitId = extracted.unitId?.trim() ?? "";
-    const shouldUseBookingAvailabilityApi = mode !== "avail";
+    // Prefer provider booking-availability API whenever unit id is available.
+    // This avoids brittle UI-calendar pagination ceilings during avail-only refreshes.
+    const shouldUseBookingAvailabilityApi = true;
     const bookingAvailabilityRows =
       shouldUseBookingAvailabilityApi && /^\d+$/.test(unitId)
         ? await fetchBookingAvailabilitySeries(
@@ -1583,20 +1585,38 @@ async function fetchDetail(
               };
             });
 
-    // Fallback: when provider rows leave direct A<->U boundaries without turn markers,
-    // infer check-in/check-out-only days from adjacency.
+    // Fallback: when provider rows omit turn-day markers, infer I/O from nearest
+    // non-X neighbors so validator boundaries remain explicit.
     for (let i = 0; i < normalizedDays.length; i += 1) {
       const current = normalizedDays[i];
       if (!current || current.status_code !== "A") {
         continue;
       }
 
-      const prev = i > 0 ? normalizedDays[i - 1] : null;
-      const next = i + 1 < normalizedDays.length ? normalizedDays[i + 1] : null;
-      const prevUnavailable = prev?.status_code === "U";
-      const nextUnavailable = next?.status_code === "U";
+      let prevNonXStatus: "A" | "U" | "I" | "O" | null = null;
+      for (let j = i - 1; j >= 0; j -= 1) {
+        const status = normalizedDays[j]?.status_code;
+        if (!status || status === "X") {
+          continue;
+        }
+        prevNonXStatus = status;
+        break;
+      }
 
-      if (prevUnavailable && !nextUnavailable) {
+      let nextNonXStatus: "A" | "U" | "I" | "O" | null = null;
+      for (let j = i + 1; j < normalizedDays.length; j += 1) {
+        const status = normalizedDays[j]?.status_code;
+        if (!status || status === "X") {
+          continue;
+        }
+        nextNonXStatus = status;
+        break;
+      }
+
+      const needsCheckinBoundary = prevNonXStatus === "U";
+      const needsCheckoutBoundary = nextNonXStatus === "U";
+
+      if (needsCheckinBoundary) {
         current.status_code = "I";
         current.day_code = toDayCodeFromStatus("I");
         current.changeover_code = "I";
@@ -1604,7 +1624,10 @@ async function fetchDetail(
         current.is_available_for_checkin = true;
         current.is_available_for_checkout = false;
         current.booking_day_state = "bookable";
-      } else if (!prevUnavailable && nextUnavailable) {
+        continue;
+      }
+
+      if (needsCheckoutBoundary) {
         current.status_code = "O";
         current.day_code = toDayCodeFromStatus("O");
         current.changeover_code = "O";
@@ -1732,8 +1755,8 @@ async function fetchDetail(
       Number(
         process.env.BLUE360_RATES_MAX_QUERIES ??
           process.env.BLUE360_RATE_QUOTE_MAX_DAYS ??
-          "26",
-      ) || 26,
+          "24",
+      ) || 24,
     );
     const ratesTargetQueries = Math.max(
       1,

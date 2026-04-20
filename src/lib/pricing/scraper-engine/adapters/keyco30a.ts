@@ -292,7 +292,7 @@ type KeycoDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://key.co/search?listing_destination=FL+%7C+Grayton+Beach&listing_destination=FL+%7C+Inlet+Beach&listing_destination=FL+%7C+Santa+Rosa+Beach&listing_destination=FL+%7C+Rosemary+Beach&listing_destination=FL+%7C+Seacrest&listing_destination=FL+%7C+Seagrove+Beach&listing_destination=FL+%7C+Seaside&listing_destination=FL+%7C+WaterSound&listing_destination=FL+%7C+Watercolor&listing_adult_count=1&listing_min_bedrooms=3";
+  "https://key.co/search?listing_destination=FL+%7C+30A&listing_destination=FL+%7C+Grayton+Beach&listing_destination=FL+%7C+Inlet+Beach&listing_destination=FL+%7C+Rosemary+Beach&listing_destination=FL+%7C+Santa+Rosa+Beach&listing_destination=FL+%7C+Seacrest&listing_destination=FL+%7C+Seagrove+Beach&listing_destination=FL+%7C+Seaside&listing_destination=FL+%7C+WaterSound&listing_destination=FL+%7C+Watercolor&listing_adult_count=1&listing_min_bedrooms=3";
 
 const OUTPUT_ROOT = resolve(
   process.cwd(),

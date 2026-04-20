@@ -6,6 +6,7 @@ import { runValidateAdapterQuoteSidecarsCli } from "@/lib/pricing/validation/val
 import { create30ABeachAdapter } from "./adapters/30abeach";
 import { createThirtyACottagesAdapter } from "./adapters/30acottages";
 import { create30AEscapesAdapter } from "./adapters/30aescapes";
+import { create30AFiveStarAdapter } from "./adapters/30afivestar";
 import { create30ALuxuryAdapter } from "./adapters/30aluxury";
 import { createThirtyAVacayAdapter } from "./adapters/30avacay";
 import { create360BlueAdapter } from "./adapters/360blue";
@@ -48,6 +49,7 @@ type AdapterFactory = () => ScraperAdapter<DetailRecordBase>;
 
 const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   "30abeach": create30ABeachAdapter,
+  "30afivestar": create30AFiveStarAdapter,
   alysbeach30a: createAlysBeach30AAdapter,
   "30acottages": createThirtyACottagesAdapter,
   "30aescapes": create30AEscapesAdapter,
