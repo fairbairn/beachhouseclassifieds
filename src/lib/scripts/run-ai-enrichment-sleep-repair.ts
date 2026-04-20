@@ -31,6 +31,7 @@ type Options = {
   secondaryModel: string | null;
   tertiaryModel: string | null;
   deterministicFallback: boolean;
+  countOnly: boolean;
   dryRun: boolean;
 };
 
@@ -130,6 +131,9 @@ function printUsage(): void {
     "  --disable-deterministic-fallback    Skip deterministic fallback",
   );
   console.log(
+    "  --count-only                        Count candidate rows only; no model generation",
+  );
+  console.log(
     "  --dry-run                           Compute repairs only; do not persist",
   );
   console.log("  --help                              Show help");
@@ -149,6 +153,7 @@ function parseArgs(argv: string[]): Options {
     defaultSleepModelCascade[1] ?? "gpt-4.1-mini";
   let tertiaryModel: string | null = defaultSleepModelCascade[2] ?? "gpt-4.1";
   let deterministicFallback = true;
+  let countOnly = false;
   let dryRun = false;
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -177,6 +182,11 @@ function parseArgs(argv: string[]): Options {
 
     if (arg === "--disable-deterministic-fallback") {
       deterministicFallback = false;
+      continue;
+    }
+
+    if (arg === "--count-only") {
+      countOnly = true;
       continue;
     }
 
@@ -266,6 +276,7 @@ function parseArgs(argv: string[]): Options {
     secondaryModel,
     tertiaryModel,
     deterministicFallback,
+    countOnly,
     dryRun,
   };
 }
@@ -1129,11 +1140,6 @@ async function run(): Promise<number> {
     throw new Error("Postgres database is not configured.");
   }
 
-  const apiKey = getOpenAiApiKey();
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is missing.");
-  }
-
   if (options.externalListingId && !options.adapterKey) {
     throw new Error(
       "--external-listing-id requires --adapter-key to avoid cross-adapter ambiguity.",
@@ -1182,6 +1188,39 @@ async function run(): Promise<number> {
     }
   }
 
+  const whereClause = predicates.length > 0 ? and(...predicates) : sql`true`;
+
+  if (options.countOnly) {
+    const countRows = await pgDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(listing_ai_enrichment)
+      .where(whereClause);
+
+    const totalCandidates = countRows[0]?.count ?? 0;
+    const selected = Math.min(options.limit, totalCandidates);
+
+    progress.success(
+      `sleep repair count-only total_candidates=${totalCandidates} limit=${options.limit} would_select=${selected} include_audit_passed=${options.includeAuditPassed}`,
+    );
+
+    console.log("listing_ai_enrichment_sleep_repair_count");
+    console.log(`- total_candidates: ${totalCandidates}`);
+    console.log(`- limit: ${options.limit}`);
+    console.log(`- would_select: ${selected}`);
+    console.log(`- adapter_key: ${options.adapterKey ?? "all"}`);
+    console.log(`- listing_id: ${options.listingId ?? "all"}`);
+    console.log(`- external_listing_id: ${options.externalListingId ?? "all"}`);
+    console.log(`- include_audit_passed: ${options.includeAuditPassed}`);
+    console.log("- count_only: true");
+
+    return 0;
+  }
+
+  const apiKey = getOpenAiApiKey();
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is missing.");
+  }
+
   const rows = await pgDb
     .select({
       id: listing_ai_enrichment.id,
@@ -1193,7 +1232,7 @@ async function run(): Promise<number> {
       audit_payload: listing_ai_enrichment.audit_payload,
     })
     .from(listing_ai_enrichment)
-    .where(and(...predicates))
+    .where(whereClause)
     .orderBy(listing_ai_enrichment.updated_at)
     .limit(options.limit);
 

@@ -436,6 +436,35 @@ export async function selectPendingListingAiEnrichment(input: {
     .limit(Math.max(1, input.limit));
 }
 
+export async function countPendingListingAiEnrichment(input: {
+  adapterKey?: string;
+  listingId?: string;
+}): Promise<number> {
+  if (!pgDb) {
+    throw new Error("Postgres database is not configured.");
+  }
+
+  const predicates = [
+    eq(listing_ai_enrichment.status, "pending"),
+    eq(listing_ai_enrichment.prompt_version, LISTING_REFINEMENT_PROMPT_VERSION),
+  ];
+
+  if (input.adapterKey) {
+    predicates.push(eq(listing_ai_enrichment.adapter_key, input.adapterKey));
+  }
+
+  if (input.listingId) {
+    predicates.push(eq(listing_ai_enrichment.listing_id, input.listingId));
+  }
+
+  const rows = await pgDb
+    .select({ count: sql<number>`count(*)::int` })
+    .from(listing_ai_enrichment)
+    .where(and(...predicates));
+
+  return rows[0]?.count ?? 0;
+}
+
 export async function processPendingListingAiEnrichment(input: {
   limit: number;
   concurrency: number;

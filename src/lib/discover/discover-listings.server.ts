@@ -788,6 +788,7 @@ async function loadFromListingTable(input?: {
           and(
             eq(listing.site_id, discoverSiteId),
             eq(listing.status, "active"),
+            isNull(listing.visibility_disabled_reason),
             or(eq(listing.state, "FL"), isNull(listing.state)),
             isNotNull(listing.area_name),
             eq(listing.slug, includeSlug as string),
@@ -803,6 +804,7 @@ async function loadFromListingTable(input?: {
           and(
             eq(listing.site_id, discoverSiteId),
             eq(listing.status, "active"),
+            isNull(listing.visibility_disabled_reason),
             or(eq(listing.state, "FL"), isNull(listing.state)),
             isNotNull(listing.area_name),
           ),
@@ -823,6 +825,7 @@ async function loadFromListingTable(input?: {
         and(
           eq(listing.site_id, discoverSiteId),
           eq(listing.status, "active"),
+          isNull(listing.visibility_disabled_reason),
           or(eq(listing.state, "FL"), isNull(listing.state)),
           isNotNull(listing.area_name),
           eq(listing.slug, includeSlug),

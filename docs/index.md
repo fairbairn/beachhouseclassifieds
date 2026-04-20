@@ -20,6 +20,7 @@ Welcome to the docs site scaffold.
 - Use [CLI Runner Reference](./cli-runner-reference.md) for primary operational commands and their main flags.
 - Use [src/lib/scripts Catalog](./scripts-catalog.md) for full script inventory coverage, package alias mapping, and active/internal status tracking.
 - Use [Listings Operations and Exclusion Spec](./listings-operations-and-exclusion-spec.md) as the living operations contract for AI enrichment, sleeping arrangement processing, duplicate analysis, and keyco exclusion remap rules.
+- Use [Adapter Data Refresh Runbook](./adapter-data-refresh-runbook.md) for the standard end-to-end sequence to ingest listing/image/pricing updates, run enrichment + sleep repair, apply listing/image data, and backfill geocoding holes.
 - Use [Listing Images Processing and Apply Plan](./listing-images-processing-and-apply-plan.md) as the phased blueprint for interim source-image apply, canonical hash-based archive rollout, and join-free runtime listing image projections.
 - Use [Adapter Scrape and Extraction](./adapter-scrape-and-extraction.md) for how primary adapters discover, fetch, and normalize listing detail payloads.
 - Use [Quote Modules and Platform Strategy](./quote-modules-platform-strategy.md) for quote-sidecar behavior and stack-specific extraction strategy.

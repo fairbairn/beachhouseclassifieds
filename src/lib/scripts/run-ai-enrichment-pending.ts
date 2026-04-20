@@ -5,6 +5,7 @@ import {
   formatModeProgressLine,
 } from "@/core/tooling/terminal/scrape-progress";
 import {
+  countPendingListingAiEnrichment,
   processPendingListingAiEnrichment,
   type PendingEnrichmentProgressEvent,
 } from "@/lib/listings/enrichment/listing-ai-enrichment-service";
@@ -18,6 +19,7 @@ type Options = {
   model: string | null;
   rebuildHelpfulHints: boolean;
   sleepRepairOnly: boolean;
+  countOnly: boolean;
   dryRun: boolean;
 };
 
@@ -47,6 +49,9 @@ function printUsage(): void {
   console.log(
     "  --sleep-repair-only      Repair sleeping structures only; preserve existing non-sleep fields",
   );
+  console.log(
+    "  --count-only         Count pending rows only; no model generation",
+  );
   console.log("  --dry-run            Do not persist enrichment output");
   console.log("  --help               Show help");
 }
@@ -60,6 +65,7 @@ function parseArgs(argv: string[]): Options {
   let model: string | null = null;
   let rebuildHelpfulHints = false;
   let sleepRepairOnly = false;
+  let countOnly = false;
   let dryRun = false;
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -83,6 +89,11 @@ function parseArgs(argv: string[]): Options {
 
     if (arg === "--sleep-repair-only") {
       sleepRepairOnly = true;
+      continue;
+    }
+
+    if (arg === "--count-only") {
+      countOnly = true;
       continue;
     }
 
@@ -143,6 +154,7 @@ function parseArgs(argv: string[]): Options {
     model,
     rebuildHelpfulHints,
     sleepRepairOnly,
+    countOnly,
     dryRun,
   };
 }
@@ -177,6 +189,28 @@ async function run(): Promise<number> {
   progress.phase(
     `starting pending enrichment limit=${options.limit} concurrency=${options.concurrency} progress_every=${options.progressEvery} dry_run=${options.dryRun} adapter_key=${options.adapterKey ?? "all"} listing_id=${options.listingId ?? "all"} model=${options.model ?? "default"} rebuild_helpful_hints=${options.rebuildHelpfulHints} sleep_repair_only=${options.sleepRepairOnly}`,
   );
+
+  if (options.countOnly) {
+    const pendingCount = await countPendingListingAiEnrichment({
+      adapterKey: options.adapterKey ?? undefined,
+      listingId: options.listingId ?? undefined,
+    });
+    const selected = Math.min(options.limit, pendingCount);
+
+    progress.success(
+      `pending enrichment count-only total_pending=${pendingCount} limit=${options.limit} would_select=${selected}`,
+    );
+
+    console.log("listing_ai_enrichment_pending_count");
+    console.log(`- total_pending: ${pendingCount}`);
+    console.log(`- limit: ${options.limit}`);
+    console.log(`- would_select: ${selected}`);
+    console.log(`- adapter_key: ${options.adapterKey ?? "all"}`);
+    console.log(`- listing_id: ${options.listingId ?? "all"}`);
+    console.log("- count_only: true");
+
+    return 0;
+  }
 
   const summary = await processPendingListingAiEnrichment({
     limit: options.limit,

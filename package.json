@@ -210,6 +210,8 @@
     "listings:ingest:canonical:all:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:ingest:canonical:all:raw --",
     "listings:geocode:cache:raw": "tsx src/lib/scripts/run-build-listing-geocode-cache.ts",
     "listings:geocode:cache:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:geocode:cache:raw --",
+    "listings:visibility:sync:raw": "tsx src/lib/scripts/run-listing-visibility-sync.ts",
+    "listings:visibility:sync:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:visibility:sync:raw --",
     "listings:description:clear-legacy:raw": "tsx src/lib/scripts/run-clear-legacy-description-markdown.ts",
     "listings:description:clear-legacy:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:description:clear-legacy:raw --",
     "listings:derivation:readiness:raw": "tsx src/lib/scripts/run-ai-derivation-readiness-report.ts",

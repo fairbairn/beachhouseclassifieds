@@ -108,6 +108,7 @@ export const listing = pgTable(
       .default(sql`'[]'::jsonb`),
     image_count: integer("image_count").notNull().default(0),
     images_version: integer("images_version").notNull().default(1),
+    visibility_disabled_reason: text("visibility_disabled_reason"),
     created_at: timestamp("created_at", { mode: "string", withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -125,6 +126,7 @@ export const listing = pgTable(
     discover_visibility_idx: index("listing_discover_visibility_idx").on(
       table.site_id,
       table.status,
+      table.visibility_disabled_reason,
       table.state,
       table.area_name,
     ),
