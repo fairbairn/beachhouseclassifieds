@@ -9,6 +9,7 @@ import {
 } from "@/lib/pricing/shared/external-listing-id";
 
 const chalk = new Chalk({ level: 1 });
+const MIN_DESCRIPTION_EXPANDED_CHARS = 100;
 
 const LOWERCASE_FILENAME_ENFORCEMENT_EXEMPT_ADAPTERS = new Set(["keyco30a"]);
 
@@ -23,6 +24,10 @@ type DetailRecord = {
   external_listing_id?: unknown;
   detail_url?: unknown;
   description_expanded?: unknown;
+  amenities?: {
+    categories?: unknown;
+    all?: unknown;
+  };
   property_profile?: {
     beds?: unknown;
     baths?: unknown;
@@ -33,6 +38,7 @@ type DetailRecord = {
     image_urls?: unknown;
   };
   normalized_availability?: {
+    day_codes?: unknown;
     days?: Array<{
       date?: unknown;
       status_code?: unknown;
@@ -64,9 +70,12 @@ type ValidationIssueCode =
   | "missing_external_listing_id"
   | "missing_detail_url"
   | "missing_description_expanded"
+  | "description_expanded_too_short"
+  | "missing_amenities_signal"
   | "missing_location_signal"
   | "missing_availability_days"
   | "all_days_unknown"
+  | "all_days_unavailable"
   | "detail_url_identifier_invalid"
   | "external_id_not_from_detail_url"
   | "json_filename_mismatch"
@@ -802,6 +811,42 @@ export async function runValidateScrapeFilenameAlignmentCli(
           `details/json/${fileName} must include description_expanded ` +
           `with length > 0`,
       });
+    } else if (descriptionExpanded.length < MIN_DESCRIPTION_EXPANDED_CHARS) {
+      issues.push({
+        code: "description_expanded_too_short",
+        message:
+          `details/json/${fileName} description_expanded length=${descriptionExpanded.length} ` +
+          `must be >= ${MIN_DESCRIPTION_EXPANDED_CHARS}`,
+      });
+    }
+
+    const amenitiesCategories =
+      parsed.amenities &&
+      typeof parsed.amenities === "object" &&
+      parsed.amenities.categories &&
+      typeof parsed.amenities.categories === "object" &&
+      !Array.isArray(parsed.amenities.categories)
+        ? (parsed.amenities.categories as Record<string, unknown>)
+        : null;
+    const amenitiesAll =
+      parsed.amenities &&
+      typeof parsed.amenities === "object" &&
+      Array.isArray(parsed.amenities.all)
+        ? parsed.amenities.all.filter(
+            (value): value is string =>
+              typeof value === "string" && value.trim().length > 0,
+          )
+        : [];
+
+    const hasAmenityCategories =
+      amenitiesCategories !== null &&
+      Object.keys(amenitiesCategories).length > 0;
+    const hasAmenityAll = amenitiesAll.length > 0;
+    if (!hasAmenityCategories && !hasAmenityAll) {
+      issues.push({
+        code: "missing_amenities_signal",
+        message: `details/json/${fileName} has no amenities signal: amenities.categories and amenities.all are empty`,
+      });
     }
 
     const hasLatLon = hasValidLatLon(parsed);
@@ -940,6 +985,19 @@ export async function runValidateScrapeFilenameAlignmentCli(
     }
 
     const availability = getAvailabilityStats(parsed);
+    const dayCodes =
+      typeof parsed.normalized_availability?.day_codes === "string"
+        ? parsed.normalized_availability.day_codes.trim().toUpperCase()
+        : "";
+    if (dayCodes.length > 0 && /^U+$/.test(dayCodes)) {
+      issues.push({
+        code: "all_days_unavailable",
+        message:
+          `details/json/${fileName} normalized_availability.day_codes is all 'U' ` +
+          `(${dayCodes.length} days), indicating availability capture fallback/failure`,
+      });
+    }
+
     if (!availability.hasDays) {
       issues.push({
         code: "missing_availability_days",
