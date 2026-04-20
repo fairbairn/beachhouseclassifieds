@@ -1,8 +1,14 @@
 {
   "external_listing_id": "three-steps-to-the-beach",
   "detail_url": "https://www.paradise30a.com/vacation-rentals/rental/three-steps-to-the-beach",
-  "fetched_at": "2026-04-20T18:56:27.451Z",
+  "fetched_at": "2026-04-20T19:40:12.213Z",
   "html_path": "src/lib/data/external-sources/paradise30a/details/html/three-steps-to-the-beach.html",
+  "listing_flags": {
+    "non_bookable_online": false,
+    "availability_validation_exempt": false,
+    "availability_validation_exempt_reason_code": null,
+    "availability_validation_exempt_reason": null
+  },
   "title": "Three Steps to the Beach | Inlet Beach, FL | Paradise Properties Vacation Rentals & Sales",
   "h1": "Three Steps to the Beach",
   "canonical_url": "https://www.paradise30a.com/vacation-rentals/rental/three-steps-to-the-beach/",
@@ -157,8 +163,12 @@
   "normalized_availability": {
     "source": "pm_paradise30a",
     "external_listing_id": "three-steps-to-the-beach",
-    "captured_at": "2026-04-20T18:56:27.451Z",
+    "captured_at": "2026-04-20T19:40:12.213Z",
     "availability_source": "listing_calendar",
+    "validation_exempt": false,
+    "validation_exempt_reason_code": null,
+    "validation_exempt_reason": null,
+    "validation_exempt_evidence": [],
     "has_calendar_widget": true,
     "booking_restrictions": [
       "embedded_calendar_component"
@@ -462,7 +472,7 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "OUUUUUUUUUIUUUIUUUUIUUUUUUIUUUUUUIUUUUUUOUUUUUUIUUUUUUOUUUUUUIUUUUUUAUUUUUUAUUUUUUOUUUUUUIUUUUUUUUUUUUUIUUUUUUAOUUUUUIUUUUUUIUUUUUIAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAAUUUUUUOUUUUUUIOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "OUUUUUUUUUIUUUIUUUUIUUUUUUIUUUUUUIUUUUUUOUUUUUUIUUUUUUOUUUUUUIUUUUUUIUUUUUUIUUUUUUOUUUUUUIUUUUUUUUUUUUUIUUUUUUIOUUUUUIUUUUUUIUUUUUIAAAAAAAAAAAAAAAAAAAOUUUIAAAAAAAAAAAOUUUUUUOUUUUUUIOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-20",
@@ -1214,13 +1224,13 @@
       },
       {
         "date": "2026-06-27",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 7
       },
       {
@@ -1291,13 +1301,13 @@
       },
       {
         "date": "2026-07-04",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 7
       },
       {
@@ -1676,13 +1686,13 @@
       },
       {
         "date": "2026-08-08",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 4
       },
       {
@@ -2293,10 +2303,10 @@
       {
         "date": "2026-10-03",
         "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
+        "status_code": "O",
+        "changeover_code": "O",
         "is_available": true,
-        "is_available_for_checkin": true,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
         "min_nights_required": 7
@@ -5218,13 +5228,13 @@
       }
     ],
     "counts": {
-      "available": 240,
+      "available": 236,
       "unavailable": 165,
-      "checkin_only": 17,
-      "checkout_only": 10,
+      "checkin_only": 20,
+      "checkout_only": 11,
       "other": 0,
-      "booking_available": 250,
-      "booking_unavailable": 182,
+      "booking_available": 247,
+      "booking_unavailable": 185,
       "booking_unknown": 0
     }
   },

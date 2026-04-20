@@ -13,6 +13,12 @@ type CanonicalDayCode = "Y" | "N";
 type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type Paradise30ADetailRecord = DetailRecordBase & {
+  listing_flags: {
+    non_bookable_online: boolean;
+    availability_validation_exempt: boolean;
+    availability_validation_exempt_reason_code: string | null;
+    availability_validation_exempt_reason: string | null;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -69,7 +75,11 @@ type Paradise30ADetailRecord = DetailRecordBase & {
     source: "pm_paradise30a";
     external_listing_id: string;
     captured_at: string;
-    availability_source: "fallback_unavailable";
+    availability_source: "listing_calendar" | "fallback_unavailable";
+    validation_exempt: boolean;
+    validation_exempt_reason_code: string | null;
+    validation_exempt_reason: string | null;
+    validation_exempt_evidence: string[];
     has_calendar_widget: boolean;
     booking_restrictions: string[];
     min_night_rules: Array<{
@@ -138,9 +148,7 @@ const OUTPUT_ROOT = resolve(
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 const PARADISE30A_ROUTER_PATH = "/vacation-rentals/router/";
 
-function normalizeLink(url: string): string {
-  return url.split("#")[0]?.replace(/\/$/, "") ?? url;
-}
+const NON_BOOKABLE_ONLINE_REASON_CODE = "non_bookable_online";
 
 function normalizeDetailUrl(url: string): string | null {
   try {
@@ -201,6 +209,53 @@ function hashSha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function detectNonBookableOnlineAvailabilityExemption(html: string): {
+  exempt: boolean;
+  reasonCode: string | null;
+  reason: string | null;
+  evidence: string[];
+} {
+  const phraseChecks: Array<{ pattern: RegExp; evidence: string }> = [
+    {
+      pattern: /this rental cannot be booked online/i,
+      evidence: "this rental cannot be booked online",
+    },
+    {
+      pattern: /request information/i,
+      evidence: "request information",
+    },
+    {
+      pattern: /contact our reservation staff/i,
+      evidence: "contact our reservation staff",
+    },
+    {
+      pattern: /send us a note through the form below/i,
+      evidence: "send us a note through the form below",
+    },
+  ];
+
+  const evidence = phraseChecks
+    .filter((check) => check.pattern.test(html))
+    .map((check) => check.evidence);
+
+  if (evidence.length === 0) {
+    return {
+      exempt: false,
+      reasonCode: null,
+      reason: null,
+      evidence: [],
+    };
+  }
+
+  return {
+    exempt: true,
+    reasonCode: NON_BOOKABLE_ONLINE_REASON_CODE,
+    reason:
+      "Listing explicitly indicates online booking is disabled and requires reservation staff contact.",
+    evidence: dedupePreserveOrder(evidence),
+  };
+}
+
 function dedupePreserveOrder(values: string[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -247,15 +302,6 @@ function parseIsoDate(value: string): Date | null {
 
 function isoFromDate(date: Date): string {
   return date.toISOString().slice(0, 10);
-}
-
-function addIsoDays(isoDate: string, days: number): string {
-  const parsed = parseIsoDate(isoDate);
-  if (!parsed) {
-    return isoDate;
-  }
-  parsed.setUTCDate(parsed.getUTCDate() + days);
-  return isoFromDate(parsed);
 }
 
 function eachIsoDateInclusive(startIso: string, endIso: string): string[] {
@@ -461,6 +507,49 @@ function toChangeoverCodeFromStatus(
   return status === "A" ? "C" : "X";
 }
 
+function applyStatusCodeToDay(
+  day: Paradise30ADetailRecord["normalized_availability"]["days"][number],
+  statusCode: ParadiseDayCode,
+): void {
+  day.status_code = statusCode;
+  day.day_code = toCanonicalDayCodeFromStatus(statusCode);
+  day.changeover_code = toChangeoverCodeFromStatus(statusCode);
+  day.is_available = statusCode === "A" || statusCode === "O";
+  day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
+  day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
+  day.booking_day_state =
+    statusCode === "A" || statusCode === "O"
+      ? "bookable"
+      : statusCode === "U" || statusCode === "I"
+        ? "blocked"
+        : "unknown";
+}
+
+function enforceExplicitTurnDayBoundaries(
+  days: Paradise30ADetailRecord["normalized_availability"]["days"],
+): void {
+  if (days.length < 2) {
+    return;
+  }
+
+  for (let index = 1; index < days.length; index += 1) {
+    const previousDay = days[index - 1];
+    const currentDay = days[index];
+    if (!previousDay || !currentDay) {
+      continue;
+    }
+
+    if (previousDay.status_code === "U" && currentDay.status_code === "A") {
+      applyStatusCodeToDay(currentDay, "I");
+      continue;
+    }
+
+    if (previousDay.status_code === "A" && currentDay.status_code === "U") {
+      applyStatusCodeToDay(previousDay, "O");
+    }
+  }
+}
+
 function buildAvailabilityFromCalendarPayload(payload: ParsedCalendarPayload): {
   windowStart: string;
   windowEnd: string;
@@ -577,14 +666,6 @@ function buildAvailabilityFromCalendarPayload(payload: ParsedCalendarPayload): {
   }
 
   const days: Paradise30ADetailRecord["normalized_availability"]["days"] = [];
-  let available = 0;
-  let unavailable = 0;
-  let checkinOnly = 0;
-  let checkoutOnly = 0;
-  let other = 0;
-  let bookingAvailable = 0;
-  let bookingUnavailable = 0;
-  let bookingUnknown = 0;
 
   for (const dateIso of dayDates) {
     const weekday = weekdayIndexSunday0(dateIso);
@@ -625,16 +706,40 @@ function buildAvailabilityFromCalendarPayload(payload: ParsedCalendarPayload): {
       statusCode = "U";
     }
 
-    const isAvailable = statusCode === "A" || statusCode === "O";
-    const isAvailableForCheckin = statusCode === "A" || statusCode === "I";
-    const isAvailableForCheckout = statusCode === "A" || statusCode === "O";
-    const bookingDayState: "bookable" | "blocked" | "unknown" =
-      statusCode === "A" || statusCode === "O"
-        ? "bookable"
-        : statusCode === "U" || statusCode === "I"
-          ? "blocked"
-          : "unknown";
+    const day: Paradise30ADetailRecord["normalized_availability"]["days"][number] =
+      {
+        date: dateIso,
+        day_code: toCanonicalDayCodeFromStatus(statusCode),
+        status_code: statusCode,
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
+        is_available: statusCode === "A" || statusCode === "O",
+        is_available_for_checkin: statusCode === "A" || statusCode === "I",
+        is_available_for_checkout: statusCode === "A" || statusCode === "O",
+        booking_day_state:
+          statusCode === "A" || statusCode === "O"
+            ? "bookable"
+            : statusCode === "U" || statusCode === "I"
+              ? "blocked"
+              : "unknown",
+        min_nights_required: minRule ? minRule.min_nights : null,
+      };
 
+    days.push(day);
+  }
+
+  enforceExplicitTurnDayBoundaries(days);
+
+  let available = 0;
+  let unavailable = 0;
+  let checkinOnly = 0;
+  let checkoutOnly = 0;
+  let other = 0;
+  let bookingAvailable = 0;
+  let bookingUnavailable = 0;
+  let bookingUnknown = 0;
+
+  for (const day of days) {
+    const statusCode = day.status_code;
     if (statusCode === "A") {
       available += 1;
     } else if (statusCode === "U") {
@@ -647,25 +752,13 @@ function buildAvailabilityFromCalendarPayload(payload: ParsedCalendarPayload): {
       other += 1;
     }
 
-    if (bookingDayState === "bookable") {
+    if (day.booking_day_state === "bookable") {
       bookingAvailable += 1;
-    } else if (bookingDayState === "blocked") {
+    } else if (day.booking_day_state === "blocked") {
       bookingUnavailable += 1;
     } else {
       bookingUnknown += 1;
     }
-
-    days.push({
-      date: dateIso,
-      day_code: toCanonicalDayCodeFromStatus(statusCode),
-      status_code: statusCode,
-      changeover_code: toChangeoverCodeFromStatus(statusCode),
-      is_available: isAvailable,
-      is_available_for_checkin: isAvailableForCheckin,
-      is_available_for_checkout: isAvailableForCheckout,
-      booking_day_state: bookingDayState,
-      min_nights_required: minRule ? minRule.min_nights : null,
-    });
   }
 
   const dayCodes = days.map((day) => day.status_code).join("");
@@ -1075,6 +1168,8 @@ async function fetchDetail(
   const parsedAvailability = calendarPayload
     ? buildAvailabilityFromCalendarPayload(calendarPayload)
     : null;
+  const nonBookableOnlineExemption =
+    detectNonBookableOnlineAvailabilityExemption(html);
 
   const descriptionExpanded = pickFirstString(
     overviewDescription,
@@ -1129,6 +1224,13 @@ async function fetchDetail(
     detail_url: detailUrl,
     fetched_at: fetchedAt,
     html_path: htmlPath,
+    listing_flags: {
+      non_bookable_online: nonBookableOnlineExemption.exempt,
+      availability_validation_exempt: nonBookableOnlineExemption.exempt,
+      availability_validation_exempt_reason_code:
+        nonBookableOnlineExemption.reasonCode,
+      availability_validation_exempt_reason: nonBookableOnlineExemption.reason,
+    },
     title,
     h1,
     canonical_url: canonicalUrl,
@@ -1187,9 +1289,17 @@ async function fetchDetail(
       availability_source: parsedAvailability
         ? "listing_calendar"
         : "fallback_unavailable",
+      validation_exempt: nonBookableOnlineExemption.exempt,
+      validation_exempt_reason_code: nonBookableOnlineExemption.reasonCode,
+      validation_exempt_reason: nonBookableOnlineExemption.reason,
+      validation_exempt_evidence: nonBookableOnlineExemption.evidence,
       has_calendar_widget: parsedAvailability !== null,
       booking_restrictions:
-        parsedAvailability !== null ? ["embedded_calendar_component"] : [],
+        parsedAvailability !== null
+          ? ["embedded_calendar_component"]
+          : nonBookableOnlineExemption.exempt
+            ? ["non_bookable_online"]
+            : [],
       min_night_rules: parsedAvailability?.minNightRules ?? [],
       window_start: availability.windowStart,
       window_end: availability.windowEnd,
@@ -1291,19 +1401,17 @@ export function createParadise30AAdapter(): ScraperAdapter<Paradise30ADetailReco
         progress,
       );
     },
-    async runSingleQuoteObservation(input) {
+    async runSingleQuoteObservation(input, _progress) {
       const quote = await executeParadise30aSingleQuote({
         listingId: input.listingId,
-        detailUrl: input.detailUrl,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
         adults: input.adults,
         children: input.children,
-        pets: 0,
         quoteContext:
           input.quoteContext && typeof input.quoteContext === "object"
             ? input.quoteContext
-            : undefined,
+            : null,
       });
 
       if (!quote.success) {
@@ -1330,7 +1438,10 @@ export function createParadise30AAdapter(): ScraperAdapter<Paradise30ADetailReco
 
       return {
         elapsedMs: quote.elapsedMs,
-        observation: quote.observation,
+        observation: {
+          ...quote.observation,
+          reason: quote.observation.quoteAvailable ? null : "quote_unavailable",
+        },
       };
     },
   };

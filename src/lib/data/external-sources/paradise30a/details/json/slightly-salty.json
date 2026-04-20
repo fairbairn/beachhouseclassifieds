@@ -1,8 +1,14 @@
 {
   "external_listing_id": "slightly-salty",
   "detail_url": "https://www.paradise30a.com/vacation-rentals/rental/slightly-salty",
-  "fetched_at": "2026-04-20T18:56:24.111Z",
+  "fetched_at": "2026-04-20T19:40:08.758Z",
   "html_path": "src/lib/data/external-sources/paradise30a/details/html/slightly-salty.html",
+  "listing_flags": {
+    "non_bookable_online": true,
+    "availability_validation_exempt": true,
+    "availability_validation_exempt_reason_code": "non_bookable_online",
+    "availability_validation_exempt_reason": "Listing explicitly indicates online booking is disabled and requires reservation staff contact."
+  },
   "title": "Slightly Salty | Seacrest Beach, FL | Paradise Properties Vacation Rentals & Sales",
   "h1": "Slightly Salty",
   "canonical_url": "https://www.paradise30a.com/vacation-rentals/rental/slightly-salty/",
@@ -135,10 +141,21 @@
   "normalized_availability": {
     "source": "pm_paradise30a",
     "external_listing_id": "slightly-salty",
-    "captured_at": "2026-04-20T18:56:24.111Z",
+    "captured_at": "2026-04-20T19:40:08.758Z",
     "availability_source": "fallback_unavailable",
+    "validation_exempt": true,
+    "validation_exempt_reason_code": "non_bookable_online",
+    "validation_exempt_reason": "Listing explicitly indicates online booking is disabled and requires reservation staff contact.",
+    "validation_exempt_evidence": [
+      "this rental cannot be booked online",
+      "request information",
+      "contact our reservation staff",
+      "send us a note through the form below"
+    ],
     "has_calendar_widget": false,
-    "booking_restrictions": [],
+    "booking_restrictions": [
+      "non_bookable_online"
+    ],
     "min_night_rules": [],
     "window_start": "2026-04-20",
     "window_end": "2027-08-18",

@@ -16,6 +16,7 @@ type AvailabilityDayRecord = {
   day_code?: unknown;
   status_code?: unknown;
   changeover_code?: unknown;
+  min_nights_required?: unknown;
   is_available_for_checkin?: unknown;
   is_available_for_checkout?: unknown;
   is_checkin_allowed?: unknown;
@@ -23,10 +24,16 @@ type AvailabilityDayRecord = {
 };
 
 type DetailRecord = {
+  listing_flags?: {
+    availability_validation_exempt?: unknown;
+    availability_validation_exempt_reason_code?: unknown;
+  };
   normalized_availability?: {
     days?: AvailabilityDayRecord[];
     day_codes?: unknown;
     availability_source?: unknown;
+    validation_exempt?: unknown;
+    validation_exempt_reason_code?: unknown;
     calendar_bounds?: {
       min_day_key?: unknown;
       max_day_key?: unknown;
@@ -227,6 +234,27 @@ function resolveAvailabilitySource(
   return null;
 }
 
+function isAvailabilityValidationExempt(parsed: DetailRecord): boolean {
+  if (parsed.normalized_availability?.validation_exempt === true) {
+    return true;
+  }
+
+  if (parsed.listing_flags?.availability_validation_exempt === true) {
+    return true;
+  }
+
+  const reasonCandidates = [
+    parsed.normalized_availability?.validation_exempt_reason_code,
+    parsed.listing_flags?.availability_validation_exempt_reason_code,
+  ];
+
+  return reasonCandidates.some(
+    (value) =>
+      typeof value === "string" &&
+      value.trim().toLowerCase() === "non_bookable_online",
+  );
+}
+
 function hasCorroboratingAvailabilitySignals(
   parsed: DetailRecord,
   days: AvailabilityDayRecord[],
@@ -353,7 +381,11 @@ async function validateAdapterAvailabilityStatusCodes(
     }
 
     const days = parsed.normalized_availability?.days;
+    const availabilityValidationExempt = isAvailabilityValidationExempt(parsed);
     if (!Array.isArray(days) || days.length === 0) {
+      if (availabilityValidationExempt) {
+        continue;
+      }
       pushIssue(
         issues,
         "missing_required_availability_data",
@@ -364,6 +396,12 @@ async function validateAdapterAvailabilityStatusCodes(
         "missing_normalized_availability_days",
         `${fileName}: normalized_availability.days is missing or empty`,
       );
+      continue;
+    }
+
+    if (availabilityValidationExempt) {
+      filesWithAvailability += 1;
+      daysChecked += days.length;
       continue;
     }
 

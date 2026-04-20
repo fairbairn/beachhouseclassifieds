@@ -1,8 +1,14 @@
 {
   "external_listing_id": "pompano-palace",
   "detail_url": "https://www.paradise30a.com/vacation-rentals/rental/pompano-palace",
-  "fetched_at": "2026-04-20T18:56:18.750Z",
+  "fetched_at": "2026-04-20T19:40:03.371Z",
   "html_path": "src/lib/data/external-sources/paradise30a/details/html/pompano-palace.html",
+  "listing_flags": {
+    "non_bookable_online": false,
+    "availability_validation_exempt": false,
+    "availability_validation_exempt_reason_code": null,
+    "availability_validation_exempt_reason": null
+  },
   "title": "Pompano Palace | Rosemary Beach, FL | Paradise Properties Vacation Rentals & Sales",
   "h1": "Pompano Palace",
   "canonical_url": "https://www.paradise30a.com/vacation-rentals/rental/pompano-palace/",
@@ -165,8 +171,12 @@
   "normalized_availability": {
     "source": "pm_paradise30a",
     "external_listing_id": "pompano-palace",
-    "captured_at": "2026-04-20T18:56:18.750Z",
+    "captured_at": "2026-04-20T19:40:03.371Z",
     "availability_source": "listing_calendar",
+    "validation_exempt": false,
+    "validation_exempt_reason_code": null,
+    "validation_exempt_reason": null,
+    "validation_exempt_evidence": [],
     "has_calendar_widget": true,
     "booking_restrictions": [
       "embedded_calendar_component"
@@ -476,7 +486,7 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIUUUUUUIUUUUUUAUUUUUUOUUUUUUIUUUUUUUUUUUUUUUUUUUUIUUUUUUIUUUUUUAUUUUUUAUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIUUUUUUIUUUUUUIUUUUUUOUUUUUUIUUUUUUUUUUUUUUUUUUUUIUUUUUUIUUUUUUIUUUUUUIUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-20",
@@ -997,13 +1007,13 @@
       },
       {
         "date": "2026-06-06",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 7
       },
       {
@@ -1536,13 +1546,13 @@
       },
       {
         "date": "2026-07-25",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 7
       },
       {
@@ -1613,13 +1623,13 @@
       },
       {
         "date": "2026-08-01",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 7
       },
       {
@@ -1690,13 +1700,13 @@
       },
       {
         "date": "2026-08-08",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 4
       },
       {
@@ -2846,10 +2856,10 @@
       {
         "date": "2026-11-21",
         "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
+        "status_code": "O",
+        "changeover_code": "O",
         "is_available": true,
-        "is_available_for_checkin": true,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
         "min_nights_required": 6
@@ -2922,13 +2932,13 @@
       },
       {
         "date": "2026-11-28",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 6
       },
       {
@@ -5232,13 +5242,13 @@
       }
     ],
     "counts": {
-      "available": 345,
+      "available": 339,
       "unavailable": 80,
-      "checkin_only": 5,
-      "checkout_only": 2,
+      "checkin_only": 10,
+      "checkout_only": 3,
       "other": 0,
-      "booking_available": 347,
-      "booking_unavailable": 85,
+      "booking_available": 342,
+      "booking_unavailable": 90,
       "booking_unknown": 0
     }
   },

@@ -1,8 +1,14 @@
 {
   "external_listing_id": "tibidabo-beach-house",
   "detail_url": "https://www.paradise30a.com/vacation-rentals/rental/tibidabo-beach-house",
-  "fetched_at": "2026-04-20T18:56:27.527Z",
+  "fetched_at": "2026-04-20T19:40:12.379Z",
   "html_path": "src/lib/data/external-sources/paradise30a/details/html/tibidabo-beach-house.html",
+  "listing_flags": {
+    "non_bookable_online": true,
+    "availability_validation_exempt": true,
+    "availability_validation_exempt_reason_code": "non_bookable_online",
+    "availability_validation_exempt_reason": "Listing explicitly indicates online booking is disabled and requires reservation staff contact."
+  },
   "title": "Tibidabo Beach House | Panama City Beach, FL | Paradise Properties Vacation Rentals & Sales",
   "h1": "Tibidabo Beach House",
   "canonical_url": "https://www.paradise30a.com/vacation-rentals/rental/tibidabo-beach-house/",
@@ -141,10 +147,21 @@
   "normalized_availability": {
     "source": "pm_paradise30a",
     "external_listing_id": "tibidabo-beach-house",
-    "captured_at": "2026-04-20T18:56:27.527Z",
+    "captured_at": "2026-04-20T19:40:12.379Z",
     "availability_source": "fallback_unavailable",
+    "validation_exempt": true,
+    "validation_exempt_reason_code": "non_bookable_online",
+    "validation_exempt_reason": "Listing explicitly indicates online booking is disabled and requires reservation staff contact.",
+    "validation_exempt_evidence": [
+      "this rental cannot be booked online",
+      "request information",
+      "contact our reservation staff",
+      "send us a note through the form below"
+    ],
     "has_calendar_widget": false,
-    "booking_restrictions": [],
+    "booking_restrictions": [
+      "non_bookable_online"
+    ],
     "min_night_rules": [],
     "window_start": "2026-04-20",
     "window_end": "2027-08-18",

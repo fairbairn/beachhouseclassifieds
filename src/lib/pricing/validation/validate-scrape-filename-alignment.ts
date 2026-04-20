@@ -23,6 +23,10 @@ type CliOptions = {
 type DetailRecord = {
   external_listing_id?: unknown;
   detail_url?: unknown;
+  listing_flags?: {
+    availability_validation_exempt?: unknown;
+    availability_validation_exempt_reason_code?: unknown;
+  };
   description_expanded?: unknown;
   amenities?: {
     categories?: unknown;
@@ -39,6 +43,8 @@ type DetailRecord = {
   };
   normalized_availability?: {
     day_codes?: unknown;
+    validation_exempt?: unknown;
+    validation_exempt_reason_code?: unknown;
     days?: Array<{
       date?: unknown;
       status_code?: unknown;
@@ -98,7 +104,8 @@ type ValidationWarningCode =
   | "orphan_artifact"
   | "null_property_profile_capacity"
   | "image_url_pattern_outlier"
-  | "image_url_double_https";
+  | "image_url_double_https"
+  | "availability_validation_exempt";
 
 type ValidationWarning = {
   code: ValidationWarningCode;
@@ -233,6 +240,27 @@ function toFiniteNumber(value: unknown): number | null {
   }
 
   return null;
+}
+
+function isAvailabilityValidationExempt(record: DetailRecord): boolean {
+  if (record.normalized_availability?.validation_exempt === true) {
+    return true;
+  }
+
+  if (record.listing_flags?.availability_validation_exempt === true) {
+    return true;
+  }
+
+  const reasonCandidates = [
+    record.normalized_availability?.validation_exempt_reason_code,
+    record.listing_flags?.availability_validation_exempt_reason_code,
+  ];
+
+  return reasonCandidates.some(
+    (value) =>
+      typeof value === "string" &&
+      value.trim().toLowerCase() === "non_bookable_online",
+  );
 }
 
 function hasValidLatLon(record: DetailRecord): boolean {
@@ -990,12 +1018,21 @@ export async function runValidateScrapeFilenameAlignmentCli(
         ? parsed.normalized_availability.day_codes.trim().toUpperCase()
         : "";
     if (dayCodes.length > 0 && /^U+$/.test(dayCodes)) {
-      issues.push({
-        code: "all_days_unavailable",
-        message:
-          `details/json/${fileName} normalized_availability.day_codes is all 'U' ` +
-          `(${dayCodes.length} days), indicating availability capture fallback/failure`,
-      });
+      if (isAvailabilityValidationExempt(parsed)) {
+        warnings.push({
+          code: "availability_validation_exempt",
+          message:
+            `details/json/${fileName} normalized_availability.day_codes is all 'U' ` +
+            `(${dayCodes.length} days), but listing is flagged as availability-validation exempt`,
+        });
+      } else {
+        issues.push({
+          code: "all_days_unavailable",
+          message:
+            `details/json/${fileName} normalized_availability.day_codes is all 'U' ` +
+            `(${dayCodes.length} days), indicating availability capture fallback/failure`,
+        });
+      }
     }
 
     if (!availability.hasDays) {

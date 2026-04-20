@@ -1,8 +1,14 @@
 {
   "external_listing_id": "30a-hideaway",
   "detail_url": "https://www.paradise30a.com/vacation-rentals/rental/30a-hideaway",
-  "fetched_at": "2026-04-20T18:56:06.317Z",
+  "fetched_at": "2026-04-20T19:39:50.861Z",
   "html_path": "src/lib/data/external-sources/paradise30a/details/html/30a-hideaway.html",
+  "listing_flags": {
+    "non_bookable_online": false,
+    "availability_validation_exempt": false,
+    "availability_validation_exempt_reason_code": null,
+    "availability_validation_exempt_reason": null
+  },
   "title": "30A Hideaway | Inlet Beach, FL | Paradise Properties Vacation Rentals & Sales",
   "h1": "30A Hideaway",
   "canonical_url": "https://www.paradise30a.com/vacation-rentals/rental/30a-hideaway/",
@@ -183,8 +189,12 @@
   "normalized_availability": {
     "source": "pm_paradise30a",
     "external_listing_id": "30a-hideaway",
-    "captured_at": "2026-04-20T18:56:06.317Z",
+    "captured_at": "2026-04-20T19:39:50.861Z",
     "availability_source": "listing_calendar",
+    "validation_exempt": false,
+    "validation_exempt_reason_code": null,
+    "validation_exempt_reason": null,
+    "validation_exempt_evidence": [],
     "has_calendar_widget": true,
     "booking_restrictions": [
       "embedded_calendar_component"
@@ -494,7 +504,7 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "IAAOUUIAAAAAOUUUUUUIUUUUIUIUUUUUUIUUUUUUIAAAAAAOUUUUUUIUUUUUUIUUUUUUAUUUUUUAAUUUUUOUUUUUUUUUUUUUIUUUUUUAUUUUUUAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUUUUUUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "IAAOUUIAAAAAOUUUUUUIUUUUIUIUUUUUUIUUUUUUIAAAAAAOUUUUUUIUUUUUUIUUUUUUIUUUUUUIOUUUUUOUUUUUUUUUUUUUIUUUUUUIUUUUUUIAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
       {
         "date": "2026-04-20",
@@ -1246,13 +1256,13 @@
       },
       {
         "date": "2026-06-27",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 7
       },
       {
@@ -1323,22 +1333,22 @@
       },
       {
         "date": "2026-07-04",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 7
       },
       {
         "date": "2026-07-05",
         "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
+        "status_code": "O",
+        "changeover_code": "O",
         "is_available": true,
-        "is_available_for_checkin": true,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
         "min_nights_required": 6
@@ -1631,13 +1641,13 @@
       },
       {
         "date": "2026-08-01",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 7
       },
       {
@@ -1708,13 +1718,13 @@
       },
       {
         "date": "2026-08-08",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 4
       },
       {
@@ -2864,10 +2874,10 @@
       {
         "date": "2026-11-21",
         "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
+        "status_code": "O",
+        "changeover_code": "O",
         "is_available": true,
-        "is_available_for_checkin": true,
+        "is_available_for_checkin": false,
         "is_available_for_checkout": true,
         "booking_day_state": "bookable",
         "min_nights_required": 6
@@ -2940,13 +2950,13 @@
       },
       {
         "date": "2026-11-28",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
+        "day_code": "N",
+        "status_code": "I",
+        "changeover_code": "I",
+        "is_available": false,
         "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
         "min_nights_required": 6
       },
       {
@@ -5250,13 +5260,13 @@
       }
     ],
     "counts": {
-      "available": 321,
+      "available": 314,
       "unavailable": 93,
-      "checkin_only": 12,
-      "checkout_only": 6,
+      "checkin_only": 17,
+      "checkout_only": 8,
       "other": 0,
-      "booking_available": 327,
-      "booking_unavailable": 105,
+      "booking_available": 322,
+      "booking_unavailable": 110,
       "booking_unknown": 0
     }
   },
