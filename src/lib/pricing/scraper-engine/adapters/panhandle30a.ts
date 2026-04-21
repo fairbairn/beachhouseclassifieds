@@ -1,86 +1,13 @@
-import { executePanhandle30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/panhandle30a";
-import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
+import { runPanhandle30aQuoteCli } from "./quotes/panhandle30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
-type CanonicalDayCode = "Y" | "N";
-type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
-
-function toDayCodeFromStatus(status: LuxuryDayCode): CanonicalDayCode {
-  return status === "A" || status === "O" ? "Y" : "N";
-}
-
-function toChangeoverCodeFromStatus(
-  status: LuxuryDayCode,
-): CanonicalChangeoverCode {
-  if (status === "I") {
-    return "I";
-  }
-  if (status === "O") {
-    return "O";
-  }
-  return status === "A" ? "C" : "X";
-}
-
-function applyDerivedStatus(
-  day: LuxuryDetailRecord["normalized_availability"]["days"][number],
-  statusCode: LuxuryDayCode,
-): void {
-  day.status_code = statusCode;
-  day.day_code = toDayCodeFromStatus(statusCode);
-  day.changeover_code = toChangeoverCodeFromStatus(statusCode);
-  day.is_available = statusCode === "A" || statusCode === "O";
-  day.is_available_for_checkin = statusCode === "A" || statusCode === "I";
-  day.is_available_for_checkout = statusCode === "A" || statusCode === "O";
-  day.booking_day_state =
-    statusCode === "A" || statusCode === "O"
-      ? "bookable"
-      : statusCode === "U" || statusCode === "I"
-        ? "blocked"
-        : "unknown";
-}
-
-function deriveTurnDayStatuses(
-  days: LuxuryDetailRecord["normalized_availability"]["days"],
-): void {
-  for (let index = 0; index < days.length; index += 1) {
-    const day = days[index];
-    if (!day || day.status_code !== "A") {
-      continue;
-    }
-
-    const previousDay = index > 0 ? days[index - 1] : null;
-    const nextDay = index + 1 < days.length ? days[index + 1] : null;
-    const previousUnavailable =
-      previousDay !== null &&
-      (previousDay.status_code === "U" || previousDay.status_code === "X");
-    const nextUnavailable =
-      nextDay !== null &&
-      (nextDay.status_code === "U" || nextDay.status_code === "X");
-
-    if (!previousUnavailable && !nextUnavailable) {
-      continue;
-    }
-
-    if (previousUnavailable && !nextUnavailable) {
-      applyDerivedStatus(day, "I");
-      continue;
-    }
-
-    if (!previousUnavailable && nextUnavailable) {
-      applyDerivedStatus(day, "O");
-      continue;
-    }
-
-    applyDerivedStatus(day, "I");
-  }
-}
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
@@ -88,7 +15,6 @@ type LuxuryDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
-  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -114,11 +40,6 @@ type LuxuryDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
-  };
-  quote_context: {
-    source: "detail_hidden_inputs";
-    property_id: string;
-    property_name: string;
   };
   normalized_matching_profile: {
     source: "pm_panhandle30a";
@@ -157,9 +78,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
     day_codes: string;
     days: Array<{
       date: string;
-      day_code: CanonicalDayCode;
       status_code: LuxuryDayCode;
-      changeover_code: CanonicalChangeoverCode;
       is_available: boolean;
       is_available_for_checkin: boolean;
       is_available_for_checkout: boolean;
@@ -275,32 +194,6 @@ function normalizeListingName(value: string): string {
   return cleaned.slice(0, 240);
 }
 
-function extractQuoteContextFromHtml(input: {
-  html: string;
-  fallbackListingId: string;
-  fallbackName: string;
-}): LuxuryDetailRecord["quote_context"] {
-  const propertyIdMatch = input.html.match(
-    /<input[^>]*name="propertyID"[^>]*value="(\d+)"[^>]*>/i,
-  );
-  const propertyNameMatch = input.html.match(
-    /<input[^>]*name="propertyName"[^>]*value="([^"]*)"[^>]*>/i,
-  );
-
-  const propertyId =
-    propertyIdMatch?.[1]?.trim() || input.fallbackListingId.trim();
-  const propertyName =
-    propertyNameMatch?.[1]?.replace(/&amp;/g, "&").trim() ||
-    input.fallbackName.trim() ||
-    input.fallbackListingId.trim();
-
-  return {
-    source: "detail_hidden_inputs",
-    property_id: propertyId,
-    property_name: propertyName,
-  };
-}
-
 function dedupePreserveOrder(values: string[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -322,84 +215,6 @@ function parseFirstNumber(value: string): number | null {
   }
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function extractRoomsGuidance(html: string): string[] {
-  const beddingStart = html.search(
-    /<div[^>]*class=["'][^"']*pdp-section[^"']*pdp-bedding[^"']*["'][^>]*>/i,
-  );
-  if (beddingStart < 0) {
-    return [];
-  }
-
-  const afterStart = html.slice(beddingStart);
-  const beddingHtml = afterStart;
-
-  const itemStarts = Array.from(
-    beddingHtml.matchAll(
-      /<div[^>]*class=["'][^"']*bedroom-type-item[^"']*["'][^>]*>/gi,
-    ),
-  )
-    .map((match) => match.index)
-    .filter((index): index is number => typeof index === "number");
-
-  if (itemStarts.length === 0) {
-    return [];
-  }
-
-  const lines: string[] = [];
-
-  for (let index = 0; index < itemStarts.length; index += 1) {
-    const start = itemStarts[index];
-    const end = itemStarts[index + 1] ?? beddingHtml.length;
-    const itemHtml = beddingHtml.slice(start, end);
-
-    const roomName = stripHtml(
-      itemHtml.match(
-        /<div[^>]*class=["'][^"']*bedroom-type-bedroom-name[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      )?.[1] ?? "",
-    )
-      .replace(/\s+/g, " ")
-      .trim();
-
-    const bedNames = Array.from(
-      itemHtml.matchAll(
-        /<div[^>]*class=["'][^"']*bedroom-type-name[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
-      ),
-    )
-      .map((match) =>
-        stripHtml(match[1] ?? "")
-          .replace(/\s+/g, " ")
-          .trim(),
-      )
-      .filter((value) => value.length > 0);
-
-    let bedSummary = dedupePreserveOrder(bedNames).join(", ");
-    if (!bedSummary) {
-      const imageAlt = stripHtml(
-        itemHtml.match(/<img[^>]*alt=["']([^"']+)["'][^>]*>/i)?.[1] ?? "",
-      )
-        .replace(/\s+/g, " ")
-        .trim();
-      if (imageAlt) {
-        bedSummary = imageAlt;
-      }
-    }
-
-    if (!roomName && !bedSummary) {
-      continue;
-    }
-
-    if (roomName && bedSummary) {
-      lines.push(`${roomName}: ${bedSummary}`);
-    } else if (roomName) {
-      lines.push(roomName);
-    } else if (bedSummary) {
-      lines.push(bedSummary);
-    }
-  }
-
-  return dedupePreserveOrder(lines);
 }
 
 function parseCityStateFromAddress(address: string): {
@@ -445,188 +260,16 @@ function normalizeGalleryUrl(rawUrl: string): string {
           decodeURIComponent(source),
           parsed.origin,
         );
-        return normalizeGalleryUrl(resolvedSource.toString());
+        return `${resolvedSource.origin}${resolvedSource.pathname}`;
       } catch {
         // Fall through to normalized Rezfusion URL.
       }
     }
 
-    const searchWidth = Number(parsed.searchParams.get("width") ?? "");
-    const searchW = Number(parsed.searchParams.get("w") ?? "");
-    const pathWidthMatch = parsed.pathname.match(/\/width=(\d+)/i);
-    const pathWidth = pathWidthMatch ? Number(pathWidthMatch[1]) : NaN;
-    const resolvedWidth = Math.max(
-      Number.isFinite(searchWidth) ? searchWidth : 0,
-      Number.isFinite(searchW) ? searchW : 0,
-      Number.isFinite(pathWidth) ? pathWidth : 0,
-    );
-
-    let canonicalPath = parsed.pathname;
-    if (
-      resolvedWidth > 0 &&
-      (/images\.rezfusion\.com/i.test(parsed.hostname) ||
-        /\/vrm-img\//i.test(parsed.pathname))
-    ) {
-      canonicalPath = canonicalPath.replace(
-        /\/width=\d+/i,
-        `/width=${Math.floor(resolvedWidth)}`,
-      );
-    }
-
-    return `${parsed.origin}${canonicalPath}`;
+    return `${parsed.origin}${parsed.pathname}${parsed.search}`;
   } catch {
     return "";
   }
-}
-
-function extractCandidateImageWidth(url: URL): number {
-  const searchWidth = Number(url.searchParams.get("width") ?? "");
-  const searchW = Number(url.searchParams.get("w") ?? "");
-  const pathWidthMatch = url.pathname.match(/\/width=(\d+)/i);
-  const pathWidth = pathWidthMatch ? Number(pathWidthMatch[1]) : NaN;
-
-  return Math.max(
-    Number.isFinite(searchWidth) ? searchWidth : 0,
-    Number.isFinite(searchW) ? searchW : 0,
-    Number.isFinite(pathWidth) ? pathWidth : 0,
-  );
-}
-
-function buildGalleryVariantKey(url: URL): string {
-  const canonicalPath = url.pathname
-    .replace(/\/width=\d+/i, "/width=*")
-    .replace(/\/height=\d+/i, "/height=*")
-    .replace(/,quality=\d+/i, ",quality=*");
-
-  const filtered = new URLSearchParams();
-  const variantParams = new Set([
-    "width",
-    "w",
-    "height",
-    "h",
-    "quality",
-    "q",
-    "dpr",
-    "fit",
-    "crop",
-    "auto",
-    "format",
-    "fm",
-  ]);
-
-  for (const [key, value] of url.searchParams.entries()) {
-    if (variantParams.has(key.toLowerCase())) {
-      continue;
-    }
-    filtered.append(key, value);
-  }
-
-  const query = filtered.toString();
-  return `${url.origin}${canonicalPath}${query ? `?${query}` : ""}`;
-}
-
-function dedupePreferLargestGalleryVariants(values: string[]): string[] {
-  const byKey = new Map<
-    string,
-    {
-      key: string;
-      url: string;
-      width: number;
-      firstSeen: number;
-    }
-  >();
-
-  for (const [index, value] of values.entries()) {
-    const normalized = value.trim();
-    if (!normalized) {
-      continue;
-    }
-
-    try {
-      const parsed = new URL(normalized);
-      const key = buildGalleryVariantKey(parsed);
-      const width = extractCandidateImageWidth(parsed);
-      const existing = byKey.get(key);
-
-      if (!existing) {
-        byKey.set(key, {
-          key,
-          url: normalized,
-          width,
-          firstSeen: index,
-        });
-        continue;
-      }
-
-      if (width > existing.width) {
-        byKey.set(key, {
-          ...existing,
-          url: normalized,
-          width,
-        });
-      }
-    } catch {
-      const existing = byKey.get(normalized);
-      if (!existing) {
-        byKey.set(normalized, {
-          key: normalized,
-          url: normalized,
-          width: 0,
-          firstSeen: index,
-        });
-      }
-    }
-  }
-
-  return Array.from(byKey.values())
-    .sort((left, right) => left.firstSeen - right.firstSeen)
-    .map((entry) => entry.url);
-}
-
-function filterGallerySourceNoise(values: string[]): string[] {
-  const hasDirectImage = values.some(
-    (value) =>
-      /images\.vrmgr\.com/i.test(value) ||
-      /images\.rezfusion\.com/i.test(value) ||
-      /\/vrm-img\//i.test(value),
-  );
-  if (!hasDirectImage) {
-    return values;
-  }
-
-  return values.filter((value) => !/picturehandler\.ashx/i.test(value));
-}
-
-function extractGoogleMapsLlFromHtml(html: string): {
-  latitude: number;
-  longitude: number;
-} | null {
-  const hrefMatch = html.match(
-    /href=["']https?:\/\/maps\.google\.com\/maps\?([^"']+)["']/i,
-  );
-  const querySource = hrefMatch?.[1] ?? "";
-  if (!querySource) {
-    return null;
-  }
-
-  const decodedQuery = querySource.replace(/&amp;/gi, "&");
-  const llMatch = decodedQuery.match(
-    /(?:^|[&?])ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
-  );
-  if (!llMatch) {
-    return null;
-  }
-
-  const latitude = Number(llMatch[1]);
-  const longitude = Number(llMatch[2]);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return null;
-  }
-
-  return {
-    latitude,
-    longitude,
-  };
 }
 
 function extractFieldLocationFromHtml(html: string): {
@@ -634,14 +277,9 @@ function extractFieldLocationFromHtml(html: string): {
   latitude: number | null;
   longitude: number | null;
 } {
-  const widgetMatch =
-    html.match(
-      /<div[^>]*data-latitude=["'][^"']+["'][^>]*data-longitude=["'][^"']+["'][^>]*>/i,
-    ) ||
-    html.match(
-      /<div[^>]*data-longitude=["'][^"']+["'][^>]*data-latitude=["'][^"']+["'][^>]*>/i,
-    ) ||
-    html.match(/<div[^>]*data-straddress1=["'][^"']+["'][^>]*>/i);
+  const widgetMatch = html.match(
+    /<div[^>]+class=["'][^"']*be-property-widget[^"']*["'][^>]*>/i,
+  );
   const widgetTag = widgetMatch?.[0] ?? "";
 
   const attrValue = (name: string): string => {
@@ -704,10 +342,6 @@ function extractFieldLocationFromHtml(html: string): {
   );
   const atCoordMatch = html.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/i);
   const maps3d4dMatch = html.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/i);
-  const googleMapsLl = extractGoogleMapsLlFromHtml(html);
-  const genericLlMatch = html.match(
-    /[?&]ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
-  );
 
   const latitudeFallback = latLngPairMatch?.[1]
     ? Number(latLngPairMatch[1])
@@ -717,11 +351,7 @@ function extractFieldLocationFromHtml(html: string): {
         ? Number(atCoordMatch[1])
         : maps3d4dMatch?.[1]
           ? Number(maps3d4dMatch[1])
-          : googleMapsLl?.latitude !== undefined
-            ? googleMapsLl.latitude
-            : genericLlMatch?.[1]
-              ? Number(genericLlMatch[1])
-              : NaN;
+          : NaN;
   const longitudeFallback = latLngPairMatch?.[2]
     ? Number(latLngPairMatch[2])
     : lngLatPairMatch?.[1]
@@ -730,11 +360,7 @@ function extractFieldLocationFromHtml(html: string): {
         ? Number(atCoordMatch[2])
         : maps3d4dMatch?.[2]
           ? Number(maps3d4dMatch[2])
-          : googleMapsLl?.longitude !== undefined
-            ? googleMapsLl.longitude
-            : genericLlMatch?.[2]
-              ? Number(genericLlMatch[2])
-              : NaN;
+          : NaN;
 
   const latitudeResolved = Number.isFinite(latitude)
     ? latitude
@@ -1454,39 +1080,6 @@ async function fetchDetail(
             return urls;
           }
 
-          const selectBestSrcsetCandidate = (raw: string): string => {
-            const trimmed = raw.trim();
-            if (!trimmed) {
-              return "";
-            }
-
-            const matches = Array.from(
-              trimmed.matchAll(
-                /(https?:\/\/\S+?)(?:\s+(\d+)w)?(?=,\s*https?:\/\/|\s*$)/gi,
-              ),
-            );
-            if (matches.length === 0) {
-              return trimmed.split(/\s+/)[0] ?? "";
-            }
-
-            let bestUrl = "";
-            let bestWidth = 0;
-            for (const match of matches) {
-              const candidateUrl = (match[1] ?? "").trim();
-              const width = Number(match[2] ?? "0");
-              const safeWidth = Number.isFinite(width) ? width : 0;
-              if (!candidateUrl) {
-                continue;
-              }
-              if (!bestUrl || safeWidth >= bestWidth) {
-                bestUrl = candidateUrl;
-                bestWidth = safeWidth;
-              }
-            }
-
-            return bestUrl || (trimmed.split(/\s+/)[0] ?? "");
-          };
-
           const attrValues = Array.from(
             mediaRoot.querySelectorAll(
               "a[href], a[data-srcset], a[data-thumb], img[src], img[srcset], img[data-src], img[data-rstmb], [data-rsbigimg], [data-image]",
@@ -1510,7 +1103,8 @@ async function fetchDetail(
                 continue;
               }
               try {
-                const candidate = selectBestSrcsetCandidate(raw);
+                const candidate =
+                  raw.split(",")[0]?.trim().split(/\s+/)[0] ?? "";
                 const absolute = new URL(
                   candidate,
                   window.location.origin,
@@ -1652,9 +1246,7 @@ async function fetchDetail(
 
         return {
           date,
-          day_code: toDayCodeFromStatus(code),
           status_code: code,
-          changeover_code: toChangeoverCodeFromStatus(code),
           is_available: code === "A" || code === "O",
           is_available_for_checkin: code === "A" || code === "I",
           is_available_for_checkout: code === "A" || code === "O",
@@ -1686,9 +1278,7 @@ async function fetchDetail(
       completeWindowDays.push(
         existing ?? {
           date: isoDate,
-          day_code: "N",
           status_code: "X",
-          changeover_code: "X",
           is_available: false,
           is_available_for_checkin: false,
           is_available_for_checkout: false,
@@ -1706,7 +1296,6 @@ async function fetchDetail(
     );
     const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
-    const roomsGuidance = extractRoomsGuidance(html);
 
     const locationPayload = extractFieldLocationFromHtml(html);
 
@@ -1748,12 +1337,10 @@ async function fetchDetail(
       all: amenitiesAll,
     };
 
-    const mediaUrls = dedupePreferLargestGalleryVariants(
-      filterGallerySourceNoise(
-        extracted.galleryUrls
-          .map((url) => normalizeGalleryUrl(url))
-          .filter(Boolean),
-      ),
+    const mediaUrls = dedupePreserveOrder(
+      extracted.galleryUrls
+        .map((url) => normalizeGalleryUrl(url))
+        .filter(Boolean),
     );
     const mediaGallery: LuxuryDetailRecord["media_gallery"] = {
       image_count: mediaUrls.length,
@@ -1815,16 +1402,9 @@ async function fetchDetail(
         ),
       },
     };
-    const quoteContext = extractQuoteContextFromHtml({
-      html,
-      fallbackListingId: externalListingId,
-      fallbackName: listingName,
-    });
 
     const extractionMs = Date.now() - beforeLoad - pageLoadMs;
     const totalMs = Date.now() - startedAt;
-
-    deriveTurnDayStatuses(completeWindowDays);
 
     return {
       external_listing_id: externalListingId,
@@ -1835,12 +1415,10 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
-      rooms_guidance: roomsGuidance,
       amenities,
       location,
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
-      quote_context: quoteContext,
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_panhandle30a",
@@ -1967,61 +1545,7 @@ export function createPanhandle30AAdapter(): ScraperAdapter<LuxuryDetailRecord> 
         "panhandle30a",
         argv,
       );
-      await runRuntimeAdapterQuoteCli(
-        {
-          adapterKey: "panhandle30a",
-          executeSingleQuote: executePanhandle30aSingleQuote,
-          defaultQuoteTimeoutMs: 20000,
-          defaultQuoteMaxAttempts: 2,
-          defaultEndpointPath: "/ajax/quote",
-          defaultTaxPct: 0.12,
-          defaultBaseNightly: 650,
-        },
-        normalizedArgs,
-        progress,
-      );
-    },
-    async runSingleQuoteObservation(input) {
-      const result = await executePanhandle30aSingleQuote({
-        listingId: input.listingId,
-        checkInIso: input.checkInIso,
-        checkOutIso: input.checkOutIso,
-        adults: input.adults,
-        children: input.children,
-        quoteContext: input.quoteContext ?? null,
-        options: {
-          timeoutMs: Number(process.env.QUOTE_CAPTURE_TIMEOUT_MS ?? "20000"),
-        },
-      });
-
-      if (result.success) {
-        return {
-          elapsedMs: result.elapsedMs,
-          observation: {
-            ...result.observation,
-            reason: result.observation.quoteAvailable
-              ? null
-              : "quote_unavailable",
-          },
-        };
-      }
-
-      return {
-        elapsedMs: result.elapsedMs,
-        observation: {
-          startDate: input.checkInIso,
-          endDate: input.checkOutIso,
-          quoteAvailable: false,
-          currency: null,
-          baseTotal: null,
-          taxesTotal: null,
-          feesTotalExclTaxes: null,
-          grandTotal: null,
-          quotedTotal: null,
-          handoffUrl: input.handoffUrl ?? null,
-          reason: result.error.code,
-        },
-      };
+      await runPanhandle30aQuoteCli(normalizedArgs, progress);
     },
   };
 }
