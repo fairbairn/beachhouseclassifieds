@@ -5,7 +5,7 @@
     "unit_id": "593",
     "detail_url": "https://www.oceanreefresorts.com/vacation-rentals/rising-tide"
   },
-  "fetched_at": "2026-04-19T16:27:54.461Z",
+  "fetched_at": "2026-04-21T01:48:09.460Z",
   "title": "Rising Tide on 30A's Dune Allen Beach | Ocean Reef Resorts",
   "h1": "Rising Tide",
   "canonical_url": "https://www.oceanreefresorts.com/vacation-rentals/rising-tide",
@@ -103,8 +103,8 @@
   "normalized_availability": {
     "source": "pm_oceanreef30a",
     "external_listing_id": "rising-tide",
-    "captured_at": "2026-04-19T16:27:54.461Z",
-    "window_start": "2026-04-19",
+    "captured_at": "2026-04-21T01:48:09.460Z",
+    "window_start": "2026-04-21",
     "window_end": "2027-03-31",
     "code_legend": {
       "A": "available",
@@ -113,28 +113,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
+    "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked"
-      },
-      {
-        "date": "2026-04-20",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked"
-      },
       {
         "date": "2026-04-21",
         "day_code": "N",
@@ -3588,22 +3568,34 @@
     ],
     "counts": {
       "available": 0,
-      "unavailable": 347,
+      "unavailable": 345,
       "checkin_only": 0,
       "checkout_only": 0,
       "other": 0,
       "booking_available": 0,
-      "booking_unavailable": 347,
+      "booking_unavailable": 345,
       "booking_unknown": 0
-    }
+    },
+    "validation_exempt": true,
+    "validation_exempt_reason_code": "calendar_unavailable",
+    "validation_exempt_reason": "Listing calendar is uniformly unavailable across full captured window (345 days)",
+    "validation_exempt_evidence": [
+      "day_codes_all_u",
+      "window_length_345_days"
+    ]
   },
   "availability_raw": {
     "expected_listing_count": 0,
-    "observed_day_cell_count": 347,
+    "observed_day_cell_count": 345,
     "observed_status_classes": [
       "booked",
       "booked today"
     ]
   },
-  "html_path": "src/lib/data/external-sources/oceanreef30a/details/html/rising-tide.html"
+  "html_path": "src/lib/data/external-sources/oceanreef30a/details/html/rising-tide.html",
+  "listing_flags": {
+    "availability_validation_exempt": true,
+    "availability_validation_exempt_reason_code": "calendar_unavailable",
+    "availability_validation_exempt_reason": "Listing calendar is uniformly unavailable across full captured window (345 days)"
+  }
 }

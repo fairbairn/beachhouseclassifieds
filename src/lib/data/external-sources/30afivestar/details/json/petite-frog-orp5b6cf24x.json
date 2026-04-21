@@ -1,7 +1,7 @@
 {
   "external_listing_id": "petite-frog-orp5b6cf24x",
   "detail_url": "https://www.30afivestarproperties.com/petite-frog-orp5b6cf24x",
-  "fetched_at": "2026-04-20T15:29:33.972Z",
+  "fetched_at": "2026-04-21T01:43:22.399Z",
   "html_path": "src/lib/data/external-sources/30afivestar/details/html/petite-frog-orp5b6cf24x.html",
   "title": "Petite Frog - 30A Five Star Properties",
   "h1": "Petite Frog",
@@ -346,6 +346,11 @@
     "detail_url": "https://www.30afivestarproperties.com/petite-frog-orp5b6cf24x",
     "property_public_id": "orp5b6cf24x"
   },
+  "listing_flags": {
+    "availability_validation_exempt": true,
+    "availability_validation_exempt_reason_code": "fully_booked",
+    "availability_validation_exempt_reason": "Listing calendar is fully booked across captured horizon"
+  },
   "normalized_matching_profile": {
     "source": "pm_30afivestar",
     "external_listing_id": "petite-frog-orp5b6cf24x",
@@ -362,8 +367,15 @@
   "normalized_availability": {
     "source": "pm_30afivestar",
     "external_listing_id": "petite-frog-orp5b6cf24x",
-    "captured_at": "2026-04-20T15:29:33.972Z",
+    "captured_at": "2026-04-21T01:43:22.399Z",
     "availability_source": "widget_calendar",
+    "validation_exempt": true,
+    "validation_exempt_reason_code": "fully_booked",
+    "validation_exempt_reason": "Listing calendar is fully booked across captured horizon",
+    "validation_exempt_evidence": [
+      "calendar_widget_present",
+      "all_days_marked_unavailable"
+    ],
     "has_calendar_widget": true,
     "calendar_bounds": {
       "min_day_key": "2026-04-21",
@@ -371,8 +383,8 @@
     },
     "booking_restrictions": [],
     "min_night_rules": [],
-    "window_start": "2026-04-21",
-    "window_end": "2027-04-20",
+    "window_start": "2026-04-22",
+    "window_end": "2027-04-21",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -382,17 +394,6 @@
     },
     "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
     "days": [
-      {
-        "date": "2026-04-21",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-22",
         "day_code": "N",
@@ -4388,6 +4389,17 @@
       },
       {
         "date": "2027-04-20",
+        "day_code": "N",
+        "status_code": "U",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
+        "min_nights_required": null
+      },
+      {
+        "date": "2027-04-21",
         "day_code": "N",
         "status_code": "U",
         "changeover_code": "X",

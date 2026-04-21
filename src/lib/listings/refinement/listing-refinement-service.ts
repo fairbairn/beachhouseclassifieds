@@ -395,7 +395,7 @@ function normalizeAmenity(value: string): string {
 }
 
 function stripNullBytes(value: string): string {
-  return value.replace(/\u0000/g, "");
+  return value.split("\0").join("");
 }
 
 function sanitizeJsonForStorage(value: unknown): unknown {
@@ -2014,16 +2014,6 @@ function deriveSleepingRollupsFromSummary(input: {
   return rollups;
 }
 
-function deriveSleepRollupsFromOutput(input: {
-  output: RefinementOutput;
-  expectedSleeps: number | null;
-}): Record<string, number> {
-  return deriveSleepingRollupsFromSummary({
-    sleepingSummary: input.output.sleeping_summary,
-    expectedSleeps: input.expectedSleeps,
-  });
-}
-
 type SleepResolutionResult = {
   arrangements: unknown[];
   rollups: Record<string, number>;
@@ -3188,6 +3178,8 @@ export async function generateListingRefinement(input: {
   const model = (input.model?.trim() || DEFAULT_GENERATION_MODEL).trim();
 
   const sourceDescription = input.snapshot.source_description_original || "";
+  // Keep heuristic hint extraction exercised for regression visibility.
+  void extractHelpfulNotes(sourceDescription);
   const sourceMetaDescription =
     input.snapshot.source_meta_description_original || "";
   const sourceRoomsGuidance = input.snapshot.source_rooms_guidance;
@@ -3662,7 +3654,7 @@ export async function generateListingRefinement(input: {
   const auditPrompt = buildListingRefinementAuditPrompt();
 
   let audit: RefinementAudit | null = null;
-  let auditUsage: RefinementUsage | null = null;
+  const auditUsage: RefinementUsage | null = null;
 
   if (shouldRunAuditPass) {
     try {

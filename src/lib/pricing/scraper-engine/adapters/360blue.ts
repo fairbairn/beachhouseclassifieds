@@ -1514,7 +1514,7 @@ async function fetchDetail(
       Array.from(new Set(bookingRestrictionMatches)).slice(0, 60),
     );
 
-    let normalizedDays =
+    const normalizedDays =
       bookingAvailabilityRows.length > 0
         ? bookingAvailabilityRows
             .filter((row) => row.date >= todayIso && row.date <= horizonIso)

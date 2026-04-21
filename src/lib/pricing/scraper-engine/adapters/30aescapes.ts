@@ -1352,7 +1352,7 @@ export function buildEscapesAvailabilityFromHtml(params: {
     Array.from(new Set(bookingRestrictionMatches)).slice(0, 60),
   );
 
-  let normalizedDays = Array.from(dayCodeByDate.entries())
+  const normalizedDays = Array.from(dayCodeByDate.entries())
     .filter(([date]) => date >= todayIso && date <= horizonIso)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([date, code]) => {

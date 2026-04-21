@@ -1207,7 +1207,7 @@ export async function runRuntimeAdapterQuoteCli(
     );
   }
 
-  let backfillStatuses: QuoteBackfillStatus[] = [];
+  const backfillStatuses: QuoteBackfillStatus[] = [];
   if (options.backfillOnly) {
     progress?.phase(
       `evaluating quote backfill candidates (window_hours=${options.backfillWindowHours})`,

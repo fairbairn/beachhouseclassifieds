@@ -461,7 +461,7 @@ function extractRoomDetailsGuidanceFromDescription(text: string): string[] {
   // First pass: extract compact room-detail snippets from natural prose.
   const matches = Array.from(
     normalized.matchAll(
-      /(?:\b(?:first|second|third|1st|2nd|3rd)\b\s*)?(?:\b(?:bedroom|guest\s*room|guestroom|master|bunk\s*room|bunk\s*area|loft|additional\s*bedding|sleeping\s*arrangements)\b)[^*\n\.]{0,220}/gi,
+      /(?:\b(?:first|second|third|1st|2nd|3rd)\b\s*)?(?:\b(?:bedroom|guest\s*room|guestroom|master|bunk\s*room|bunk\s*area|loft|additional\s*bedding|sleeping\s*arrangements)\b)[^*\n.]{0,220}/gi,
     ),
   ).map((match) => (match[0] ?? "").replace(/\s+/g, " ").trim());
 
@@ -475,7 +475,7 @@ function extractRoomDetailsGuidanceFromDescription(text: string): string[] {
     .map((part) => part.trim())
     .filter((part) => part.length >= 12 && part.length <= 280);
   for (const candidate of bulletCandidates) {
-    const trimmed = candidate.replace(/^[\-:;,\s]+/, "").trim();
+    const trimmed = candidate.replace(/^[:-;,\s]+/, "").trim();
     if (!trimmed) {
       continue;
     }

@@ -48,7 +48,29 @@ function parseArgs(argv: string[]): CliOptions {
 }
 
 function stripAnsi(value: string): string {
-  return value.replace(/\u001b\[[0-9;]*m/g, "");
+  let out = "";
+  let i = 0;
+  while (i < value.length) {
+    const ch = value.charCodeAt(i);
+    // ESC [ ... final-byte
+    if (ch === 27 && value[i + 1] === "[") {
+      i += 2;
+      while (i < value.length) {
+        const code = value.charCodeAt(i);
+        if (code >= 64 && code <= 126) {
+          i += 1;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+
+    out += value[i] ?? "";
+    i += 1;
+  }
+
+  return out;
 }
 
 function parseWarnings(summaryLine: string): number {

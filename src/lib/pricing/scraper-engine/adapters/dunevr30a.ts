@@ -1459,13 +1459,6 @@ async function fetchDetail(
 
     const normalizedDays = filteredDays.map((day, index) => {
       const previousDay = index > 0 ? filteredDays[index - 1] : undefined;
-      const bookingDayState: "bookable" | "blocked" | "unknown" =
-        day.code === "Y"
-          ? "bookable"
-          : day.code === "N"
-            ? "blocked"
-            : "unknown";
-
       const rateForDay = normalizedRateDays.find(
         (rate) => rate.date === day.date,
       );

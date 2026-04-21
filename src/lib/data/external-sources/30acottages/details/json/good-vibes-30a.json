@@ -1,7 +1,7 @@
 {
   "external_listing_id": "good-vibes-30a",
   "detail_url": "https://www.30acottagesandconcierge.com/vacation-rentals/good-vibes-30a",
-  "fetched_at": "2026-04-19T14:56:17.709Z",
+  "fetched_at": "2026-04-21T01:26:34.453Z",
   "title": "Good Vibes 30A Vacation Rental",
   "h1": "Good Vibes 30A",
   "canonical_url": "https://www.30acottagesandconcierge.com/vacation-rentals/good-vibes-30a",
@@ -13,8 +13,20 @@
     "2 Full Beds: 2 Full Beds - Shared Hall Bath"
   ],
   "amenities": {
-    "categories": {},
-    "all": []
+    "categories": {
+      "General": [
+        "Outdoor Gas Grill",
+        "Flat Screen Televisions",
+        "Linens Provided",
+        "Washer/ Dryer"
+      ]
+    },
+    "all": [
+      "Outdoor Gas Grill",
+      "Flat Screen Televisions",
+      "Linens Provided",
+      "Washer/ Dryer"
+    ]
   },
   "location": {
     "address": "77 Williams Street",
@@ -102,7 +114,7 @@
   "normalized_availability": {
     "source": "pm_30acottages",
     "external_listing_id": "good-vibes-30a",
-    "captured_at": "2026-04-19T14:56:17.709Z",
+    "captured_at": "2026-04-21T01:26:34.453Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key#Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -112,8 +124,8 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-19",
-    "window_end": "2028-04-18",
+    "window_start": "2026-04-21",
+    "window_end": "2028-04-20",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -121,30 +133,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "OUUUUIAAAAAOUUIAAOUUUUUUIAAOUUUUUUUUUUUUUIAAAAAAOUUUUIAAOUUUUUIOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "UUUIAAAAAOUUIAAOUUUUUUIAAOUUUUUUUUUUUUUIAAAAAAOUUUUIAAOUUUUUIOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "Y",
-        "status_code": "O",
-        "changeover_code": "O",
-        "is_available": true,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-20",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-21",
         "day_code": "N",
@@ -8163,24 +8153,46 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-19",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
+      },
+      {
+        "date": "2028-04-20",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
       "available": 415,
-      "unavailable": 40,
+      "unavailable": 39,
       "checkin_only": 7,
-      "checkout_only": 7,
-      "other": 262,
-      "booking_available": 422,
-      "booking_unavailable": 47,
-      "booking_unknown": 262
+      "checkout_only": 6,
+      "other": 264,
+      "booking_available": 421,
+      "booking_unavailable": 46,
+      "booking_unknown": 264
     }
   },
   "html_path": "src/lib/data/external-sources/30acottages/details/html/good-vibes-30a.html",
   "scrape_metrics": {
-    "total_ms": 27918,
-    "page_load_ms": 5184,
-    "extraction_ms": 22648,
+    "total_ms": 26121,
+    "page_load_ms": 3805,
+    "extraction_ms": 22229,
     "calendar_clicks": 26,
     "calendar_iterations": 26
   }

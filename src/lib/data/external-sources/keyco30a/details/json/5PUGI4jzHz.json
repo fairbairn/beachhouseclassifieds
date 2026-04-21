@@ -2,7 +2,7 @@
   "external_listing_id": "5PUGI4jzHz",
   "detail_url": "https://key.co/listings/5PUGI4jzHz",
   "quote_context": {},
-  "fetched_at": "2026-04-20T12:51:40.916Z",
+  "fetched_at": "2026-04-21T01:47:38.213Z",
   "title": "Beach Blessing | KEY.co",
   "h1": "Beach Blessing",
   "canonical_url": "https://key.co/listings/5PUGI4jzHz",
@@ -150,9 +150,9 @@
   "normalized_availability": {
     "source": "pm_keyco30a",
     "external_listing_id": "5PUGI4jzHz",
-    "captured_at": "2026-04-20T12:51:40.916Z",
-    "window_start": "2026-04-20",
-    "window_end": "2028-04-19",
+    "captured_at": "2026-04-21T01:47:38.214Z",
+    "window_start": "2026-04-21",
+    "window_end": "2028-04-20",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -160,17 +160,6 @@
     },
     "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
     "days": [
-      {
-        "date": "2026-04-20",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": 3
-      },
       {
         "date": "2026-04-21",
         "day_code": "N",
@@ -8200,6 +8189,17 @@
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
         "min_nights_required": 1
+      },
+      {
+        "date": "2028-04-20",
+        "day_code": "N",
+        "status_code": "U",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
+        "min_nights_required": 1
       }
     ],
     "counts": {
@@ -8211,7 +8211,14 @@
       "booking_available": 0,
       "booking_unavailable": 731,
       "booking_unknown": 0
-    }
+    },
+    "validation_exempt": true,
+    "validation_exempt_reason_code": "calendar_unavailable",
+    "validation_exempt_reason": "Listing calendar is uniformly unavailable across full captured window (731 days)",
+    "validation_exempt_evidence": [
+      "day_codes_all_u",
+      "window_length_731_days"
+    ]
   },
   "availability_raw": {
     "source_note": "Parsed embedded availabilityCalendar data from listing payload.",
@@ -8220,19 +8227,11 @@
   "normalized_rates": {
     "source": "pm_keyco30a",
     "external_listing_id": "5PUGI4jzHz",
-    "captured_at": "2026-04-20T12:51:40.916Z",
+    "captured_at": "2026-04-21T01:47:38.215Z",
     "currency": "USD",
-    "window_start": "2026-04-20",
-    "window_end": "2026-10-04",
+    "window_start": "2026-04-21",
+    "window_end": "2026-10-05",
     "days": [
-      {
-        "date": "2026-04-20",
-        "nightly_rate": null,
-        "min_nights": 3,
-        "is_booked": true,
-        "changeover_code": "X",
-        "season_name": "not_available"
-      },
       {
         "date": "2026-04-21",
         "nightly_rate": null,
@@ -9568,6 +9567,14 @@
         "is_booked": true,
         "changeover_code": "X",
         "season_name": "not_available"
+      },
+      {
+        "date": "2026-10-05",
+        "nightly_rate": null,
+        "min_nights": 3,
+        "is_booked": true,
+        "changeover_code": "X",
+        "season_name": "not_available"
       }
     ],
     "stats": {
@@ -9586,5 +9593,10 @@
     "observations_path": "/Users/scott/Projects/BeachHouseClassifieds/src/lib/data/external-sources/keyco30a/details/quotes/5PUGI4jzHz.json",
     "observations": []
   },
-  "html_path": "src/lib/data/external-sources/keyco30a/details/html/5PUGI4jzHz.html"
+  "html_path": "src/lib/data/external-sources/keyco30a/details/html/5PUGI4jzHz.html",
+  "listing_flags": {
+    "availability_validation_exempt": true,
+    "availability_validation_exempt_reason_code": "calendar_unavailable",
+    "availability_validation_exempt_reason": "Listing calendar is uniformly unavailable across full captured window (731 days)"
+  }
 }

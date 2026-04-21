@@ -1,7 +1,7 @@
 {
   "external_listing_id": "take-it-easy",
   "detail_url": "https://www.30acottagesandconcierge.com/vacation-rentals/take-it-easy",
-  "fetched_at": "2026-04-19T14:57:14.344Z",
+  "fetched_at": "2026-04-21T01:28:21.501Z",
   "title": "Take It Easy Vacation Rental",
   "h1": "Take It Easy",
   "canonical_url": "https://www.30acottagesandconcierge.com/vacation-rentals/take-it-easy",
@@ -15,8 +15,28 @@
     "2nd Floor Sitting Area w/ Pull Out Couch: Sofa Sleeper (Queen/Full)"
   ],
   "amenities": {
-    "categories": {},
-    "all": []
+    "categories": {
+      "General": [
+        "No Pets Allowed",
+        "Private Pool",
+        "Parking Lot",
+        "Outdoor Gas Grill",
+        "Flat Screen Televisions",
+        "Free Wireless Internet",
+        "Linens Provided",
+        "Washer/ Dryer"
+      ]
+    },
+    "all": [
+      "No Pets Allowed",
+      "Private Pool",
+      "Parking Lot",
+      "Outdoor Gas Grill",
+      "Flat Screen Televisions",
+      "Free Wireless Internet",
+      "Linens Provided",
+      "Washer/ Dryer"
+    ]
   },
   "location": {
     "address": "74 Louva Lane",
@@ -111,7 +131,7 @@
   "normalized_availability": {
     "source": "pm_30acottages",
     "external_listing_id": "take-it-easy",
-    "captured_at": "2026-04-19T14:57:14.344Z",
+    "captured_at": "2026-04-21T01:28:21.501Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key#Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -121,8 +141,8 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-19",
-    "window_end": "2028-04-18",
+    "window_start": "2026-04-21",
+    "window_end": "2028-04-20",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -130,30 +150,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAOUUIAAOUUUUUUUUUIOUUUUIAAAAAOUUUIOUUUUUUIOUUUIAAAAAAOUUUUUUUUIOUUUUUIAOUUUUUUUUUIAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAOUUUUUUIOUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "AAOUUIAAOUUUUUUUUUIOUUUUIAAAAAOUUUIOUUUUUUIOUUUIAAAAAAOUUUUUUUUIOUUUUUIAOUUUUUUUUUIAAAAAAAAAOUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUIAAAAAAAAAAAAAAAAAAAOUUUUUUIOUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-20",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-21",
         "day_code": "Y",
@@ -8172,24 +8170,46 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-19",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
+      },
+      {
+        "date": "2028-04-20",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
-      "available": 355,
+      "available": 353,
       "unavailable": 88,
       "checkin_only": 13,
       "checkout_only": 13,
-      "other": 262,
-      "booking_available": 368,
+      "other": 264,
+      "booking_available": 366,
       "booking_unavailable": 101,
-      "booking_unknown": 262
+      "booking_unknown": 264
     }
   },
   "html_path": "src/lib/data/external-sources/30acottages/details/html/take-it-easy.html",
   "scrape_metrics": {
-    "total_ms": 27967,
-    "page_load_ms": 5444,
-    "extraction_ms": 22362,
+    "total_ms": 26409,
+    "page_load_ms": 4057,
+    "extraction_ms": 22262,
     "calendar_clicks": 26,
     "calendar_iterations": 26
   }

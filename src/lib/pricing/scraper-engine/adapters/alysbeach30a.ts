@@ -571,10 +571,75 @@ function extractAmenities(html: string): {
     groupMatch = groupRegex.exec(amenitiesSection);
   }
 
+  if (Object.keys(categories).length === 0) {
+    const categoryRegex =
+      /<div[^>]+class=["'][^"']*amenities-category[^"']*["'][^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/gi;
+    let categoryMatch: RegExpExecArray | null =
+      categoryRegex.exec(amenitiesSection);
+    while (categoryMatch) {
+      const categoryName = stripHtml(categoryMatch[1] ?? "") || "General";
+      const listHtml = categoryMatch[2] ?? "";
+
+      const items = Array.from(listHtml.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi))
+        .map((entry) => stripHtml(entry[1] ?? ""))
+        .map((entry) => entry.replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+
+      if (items.length > 0) {
+        const uniqueItems = Array.from(new Set(items));
+        categories[categoryName] = uniqueItems;
+        for (const item of uniqueItems) {
+          all.add(item);
+        }
+      }
+
+      categoryMatch = categoryRegex.exec(amenitiesSection);
+    }
+  }
+
   return {
     categories,
     all: Array.from(all),
   };
+}
+
+function extractAmenityHintsFromDescription(description: string): string[] {
+  const text = description.replace(/\s+/g, " ").trim();
+  if (!text) {
+    return [];
+  }
+
+  const hintKeywords = [
+    "pool",
+    "beach",
+    "wifi",
+    "cable",
+    "kitchen",
+    "grill",
+    "security",
+    "concierge",
+    "wellness",
+    "racquet",
+  ];
+
+  const segments = text
+    .split(/[.;]|\u2022|\n/)
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter((value) => value.length >= 6 && value.length <= 120);
+
+  const hints = new Set<string>();
+  for (const segment of segments) {
+    const lowered = segment.toLowerCase();
+    if (!hintKeywords.some((keyword) => lowered.includes(keyword))) {
+      continue;
+    }
+    hints.add(segment.slice(0, 120));
+    if (hints.size >= 24) {
+      break;
+    }
+  }
+
+  return Array.from(hints);
 }
 
 function collectMediaUrls(html: string, baseUrl: string): string[] {
@@ -1027,6 +1092,14 @@ async function fetchDetail(
       descriptionSource,
     );
     const amenities = extractAmenities(html);
+    if (amenities.all.length === 0) {
+      const amenityHints =
+        extractAmenityHintsFromDescription(descriptionExpanded);
+      if (amenityHints.length > 0) {
+        amenities.categories = { General: amenityHints };
+        amenities.all = amenityHints;
+      }
+    }
     const imageUrls = collectMediaUrls(html, normalizedDetailUrl);
     const mapsHrefCoordinates = extractGoogleMapsLlCoordinates(html);
 

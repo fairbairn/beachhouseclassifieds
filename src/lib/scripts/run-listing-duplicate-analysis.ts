@@ -806,7 +806,7 @@ function renderMatchBox(match: DuplicateCandidate, rank: number): string {
 
 function csvEscape(value: string): string {
   if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/\"/g, '""')}"`;
+    return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
 }

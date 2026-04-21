@@ -1,7 +1,7 @@
 {
   "external_listing_id": "hakuna-matata",
   "detail_url": "https://www.30acottagesandconcierge.com/vacation-rentals/hakuna-matata",
-  "fetched_at": "2026-04-19T14:56:17.661Z",
+  "fetched_at": "2026-04-21T01:26:35.953Z",
   "title": "Hakuna Matata Vacation Rental",
   "h1": "Hakuna Matata",
   "canonical_url": "https://www.30acottagesandconcierge.com/vacation-rentals/hakuna-matata",
@@ -14,8 +14,24 @@
     "3rd Floor Queen Guest Bedroom #2: Queen - w/ Shared Hall Bath"
   ],
   "amenities": {
-    "categories": {},
-    "all": []
+    "categories": {
+      "General": [
+        "No Pets Allowed",
+        "Garage",
+        "Flat Screen Televisions",
+        "Free Wireless Internet",
+        "Linens Provided",
+        "Washer/ Dryer"
+      ]
+    },
+    "all": [
+      "No Pets Allowed",
+      "Garage",
+      "Flat Screen Televisions",
+      "Free Wireless Internet",
+      "Linens Provided",
+      "Washer/ Dryer"
+    ]
   },
   "location": {
     "address": "11 E Crabbing Hole Lane",
@@ -112,7 +128,7 @@
   "normalized_availability": {
     "source": "pm_30acottages",
     "external_listing_id": "hakuna-matata",
-    "captured_at": "2026-04-19T14:56:17.661Z",
+    "captured_at": "2026-04-21T01:26:35.953Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key#Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -122,8 +138,8 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-19",
-    "window_end": "2028-04-18",
+    "window_start": "2026-04-21",
+    "window_end": "2028-04-20",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -131,30 +147,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-20",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-21",
         "day_code": "Y",
@@ -8173,24 +8167,46 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-19",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
+      },
+      {
+        "date": "2028-04-20",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
-      "available": 453,
+      "available": 451,
       "unavailable": 12,
       "checkin_only": 2,
       "checkout_only": 2,
-      "other": 262,
-      "booking_available": 455,
+      "other": 264,
+      "booking_available": 453,
       "booking_unavailable": 14,
-      "booking_unknown": 262
+      "booking_unknown": 264
     }
   },
   "html_path": "src/lib/data/external-sources/30acottages/details/html/hakuna-matata.html",
   "scrape_metrics": {
-    "total_ms": 27440,
-    "page_load_ms": 4656,
-    "extraction_ms": 22688,
+    "total_ms": 26290,
+    "page_load_ms": 3882,
+    "extraction_ms": 22321,
     "calendar_clicks": 26,
     "calendar_iterations": 26
   }

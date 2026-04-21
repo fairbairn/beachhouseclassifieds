@@ -1,7 +1,7 @@
 {
   "external_listing_id": "lemonade-stand-cottage",
   "detail_url": "https://homeownerscollection.com/seaside-vacation-rentals/lemonade-stand-cottage",
-  "fetched_at": "2026-04-20T00:27:43.312Z",
+  "fetched_at": "2026-04-21T01:47:09.799Z",
   "title": "Lemonade Stand Cottage Seaside, FL",
   "h1": "Lemonade Stand",
   "canonical_url": "https://homeownerscollection.com/seaside-vacation-rentals/lemonade-stand-cottage",
@@ -174,7 +174,7 @@
   "normalized_availability": {
     "source": "pm_homeownerscollection30a",
     "external_listing_id": "lemonade-stand-cottage",
-    "captured_at": "2026-04-20T00:27:43.312Z",
+    "captured_at": "2026-04-21T01:47:09.799Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key#Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -184,8 +184,8 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-20",
-    "window_end": "2028-04-19",
+    "window_start": "2026-04-21",
+    "window_end": "2028-04-20",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -195,17 +195,6 @@
     },
     "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
     "days": [
-      {
-        "date": "2026-04-20",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-21",
         "day_code": "N",
@@ -8235,6 +8224,17 @@
         "is_available_for_checkout": false,
         "booking_day_state": "blocked",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-20",
+        "day_code": "N",
+        "status_code": "U",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "blocked",
+        "min_nights_required": null
       }
     ],
     "counts": {
@@ -8246,12 +8246,19 @@
       "booking_available": 0,
       "booking_unavailable": 731,
       "booking_unknown": 0
-    }
+    },
+    "validation_exempt": true,
+    "validation_exempt_reason_code": "calendar_unavailable",
+    "validation_exempt_reason": "Listing calendar is uniformly unavailable across full captured window (731 days)",
+    "validation_exempt_evidence": [
+      "day_codes_all_u",
+      "window_length_731_days"
+    ]
   },
   "normalized_rates": {
     "source": "pm_homeownerscollection30a",
     "external_listing_id": "lemonade-stand-cottage",
-    "captured_at": "2026-04-20T00:27:43.310Z",
+    "captured_at": "2026-04-21T01:47:09.791Z",
     "currency": "USD",
     "window_start": "2026-04-25",
     "window_end": "2026-10-09",
@@ -9621,10 +9628,15 @@
   },
   "html_path": "src/lib/data/external-sources/homeownerscollection30a/details/html/lemonade-stand-cottage.html",
   "scrape_metrics": {
-    "total_ms": 47345,
-    "page_load_ms": 3660,
-    "extraction_ms": 43599,
+    "total_ms": 11379,
+    "page_load_ms": 2821,
+    "extraction_ms": 8467,
     "calendar_clicks": 0,
     "calendar_iterations": 1
+  },
+  "listing_flags": {
+    "availability_validation_exempt": true,
+    "availability_validation_exempt_reason_code": "calendar_unavailable",
+    "availability_validation_exempt_reason": "Listing calendar is uniformly unavailable across full captured window (731 days)"
   }
 }

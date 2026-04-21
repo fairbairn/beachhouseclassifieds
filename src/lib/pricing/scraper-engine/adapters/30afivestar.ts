@@ -1082,7 +1082,7 @@ function addIsoDays(isoDate: string, days: number): string {
 function extractVarStringValue(html: string, varName: string): string | null {
   const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(
-    `var\\s+${escaped}\\s*=\\s*([\"'])([\\s\\S]*?)\\1\\s*;`,
+    `var\\s+${escaped}\\s*=\\s*(["'])([\\s\\S]*?)\\1\\s*;`,
     "i",
   );
   const match = html.match(regex);
@@ -1103,7 +1103,7 @@ function decodeJsDoubleQuotedString(value: string): string | null {
 function extractJsonParsedVar<T>(html: string, varName: string): T | null {
   const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(
-    `var\\s+${escaped}\\s*=\\s*JSON\\.parse\\(\"([\\s\\S]*?)\"\\)\\s*;`,
+    `var\\s+${escaped}\\s*=\\s*JSON\\.parse\\("([\\s\\S]*?)"\\)\\s*;`,
     "i",
   );
   const match = html.match(regex);

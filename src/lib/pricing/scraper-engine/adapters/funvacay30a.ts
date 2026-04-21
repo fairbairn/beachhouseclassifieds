@@ -797,6 +797,71 @@ function extractPrimaryUnitTypeFromHtml(html: string): string {
   return raw;
 }
 
+function extractUnitAmenityTermsFromHtml(html: string): string[] {
+  const chunkMatch = html.match(
+    /["']rc_core_term_unit_amenities["']\s*:\s*\{[\s\S]*?\}\s*,\s*["']rc_core_term_community["']/i,
+  );
+  const chunk = chunkMatch?.[0] ?? "";
+  if (!chunk) {
+    return [];
+  }
+
+  const names = new Set<string>();
+  const nameRegex = /["']name["']\s*:\s*["']([^"']+)["']/gi;
+  let match: RegExpExecArray | null = nameRegex.exec(chunk);
+  while (match) {
+    const normalized = stripHtml(match[1] ?? "")
+      .replace(/\\\//g, "/")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (normalized.length > 0) {
+      names.add(normalized.slice(0, 200));
+    }
+    match = nameRegex.exec(chunk);
+  }
+
+  return Array.from(names);
+}
+
+function extractAmenityHintsFromDescription(description: string): string[] {
+  const text = description.replace(/\s+/g, " ").trim();
+  if (!text) {
+    return [];
+  }
+
+  const hintKeywords = [
+    "pool",
+    "beach",
+    "wifi",
+    "kitchen",
+    "grill",
+    "golf cart",
+    "washer",
+    "dryer",
+    "bike",
+    "parking",
+  ];
+
+  const segments = text
+    .split(/[.;]|\u2022|\n/)
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter((value) => value.length >= 6 && value.length <= 140);
+
+  const hints = new Set<string>();
+  for (const segment of segments) {
+    const lowered = segment.toLowerCase();
+    if (!hintKeywords.some((keyword) => lowered.includes(keyword))) {
+      continue;
+    }
+    hints.add(segment.slice(0, 140));
+    if (hints.size >= 24) {
+      break;
+    }
+  }
+
+  return Array.from(hints);
+}
+
 function extractMapMarkerCoordinatesFromHtml(html: string): {
   latitude: number | null;
   longitude: number | null;
@@ -1179,10 +1244,10 @@ function extractAvailabilityFromRightWidgetHtml(
       const record: LegacyAvailRange = {};
       for (const key of ["b", "e", "a", "q", "s"] as const) {
         const quoted = objectLiteral.match(
-          new RegExp(`['\"]${key}['\"]\\s*:\\s*['\"]([^'\"]*)['\"]`, "i"),
+          new RegExp(`['"]${key}['"]\\s*:\\s*['"]([^'"]*)['"]`, "i"),
         );
         const numeric = objectLiteral.match(
-          new RegExp(`['\"]${key}['\"]\\s*:\\s*(\\d+)`, "i"),
+          new RegExp(`['"]${key}['"]\\s*:\\s*(\\d+)`, "i"),
         );
         const value = quoted?.[1] ?? numeric?.[1];
         if (typeof value === "string") {
@@ -2733,6 +2798,21 @@ async function fetchDetail(
       );
       if (jsonLdAmenities.length > 0) {
         amenitiesCategories.General = jsonLdAmenities;
+      }
+    }
+
+    if (Object.keys(amenitiesCategories).length === 0) {
+      const embeddedAmenities = extractUnitAmenityTermsFromHtml(html);
+      if (embeddedAmenities.length > 0) {
+        amenitiesCategories.General = embeddedAmenities;
+      }
+    }
+
+    if (Object.keys(amenitiesCategories).length === 0) {
+      const amenityHints =
+        extractAmenityHintsFromDescription(descriptionExpanded);
+      if (amenityHints.length > 0) {
+        amenitiesCategories.General = amenityHints;
       }
     }
 

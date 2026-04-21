@@ -1082,7 +1082,7 @@ async function fetchDetail(
       parsePositiveNumberLike(
         extractFirst(/\b(\d+(?:\.\d+)?)\s*beds?\b/i, capacitySourceText) ||
           extractFirst(
-            /\bbeds?\s*[:\-]?\s*(\d+(?:\.\d+)?)\b/i,
+            /\bbeds?\s*[:-]?\s*(\d+(?:\.\d+)?)\b/i,
             capacitySourceText,
           ),
       );
@@ -1103,7 +1103,7 @@ async function fetchDetail(
           capacitySourceText,
         ) ||
           extractFirst(
-            /\bbath(?:room)?s?\s*[:\-]?\s*(\d+(?:\.\d+)?)\b/i,
+            /\bbath(?:room)?s?\s*[:-]?\s*(\d+(?:\.\d+)?)\b/i,
             capacitySourceText,
           ),
       );
@@ -1124,8 +1124,8 @@ async function fetchDetail(
       ) ??
       parsePositiveNumberLike(
         extractFirst(/\b(\d+)\s*guests?\b/i, capacitySourceText) ||
-          extractFirst(/\bguests?\s*[:\-]?\s*(\d+)\b/i, capacitySourceText) ||
-          extractFirst(/\bsleeps?\s*[:\-]?\s*(\d+)\b/i, capacitySourceText),
+          extractFirst(/\bguests?\s*[:-]?\s*(\d+)\b/i, capacitySourceText) ||
+          extractFirst(/\bsleeps?\s*[:-]?\s*(\d+)\b/i, capacitySourceText),
       );
 
     const mediaUrls = collectMediaUrls(html, detailUrl, jsonLdObjects);

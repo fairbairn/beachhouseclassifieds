@@ -1189,16 +1189,15 @@ async function fetchDetail(
     extractIconMetric(html, "Bedrooms") ??
     toNumberOrNull(propDetails?.bed) ??
     parseFirstNumber(
-      descriptionExpanded.match(/bedrooms?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i)?.[1] ??
+      descriptionExpanded.match(/bedrooms?\s*[:-]?\s*(\d+(?:\.\d+)?)/i)?.[1] ??
         "",
     );
   const baths =
     extractIconMetric(html, "Bathrooms") ??
     toNumberOrNull(propDetails?.bath) ??
     parseFirstNumber(
-      descriptionExpanded.match(
-        /bathrooms?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i,
-      )?.[1] ?? "",
+      descriptionExpanded.match(/bathrooms?\s*[:-]?\s*(\d+(?:\.\d+)?)/i)?.[1] ??
+        "",
     );
   const sleeps =
     extractIconMetric(html, "Sleeps") ??
@@ -1401,7 +1400,7 @@ export function createParadise30AAdapter(): ScraperAdapter<Paradise30ADetailReco
         progress,
       );
     },
-    async runSingleQuoteObservation(input, _progress) {
+    async runSingleQuoteObservation(input) {
       const quote = await executeParadise30aSingleQuote({
         listingId: input.listingId,
         checkInIso: input.checkInIso,

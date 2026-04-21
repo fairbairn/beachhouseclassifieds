@@ -1,7 +1,7 @@
 {
   "external_listing_id": "ships-watch",
   "detail_url": "https://www.30acottagesandconcierge.com/vacation-rentals/ships-watch",
-  "fetched_at": "2026-04-19T14:57:09.162Z",
+  "fetched_at": "2026-04-21T01:27:54.937Z",
   "title": "Ships Watch Vacation Rental",
   "h1": "Ships Watch",
   "canonical_url": "https://www.30acottagesandconcierge.com/vacation-rentals/ships-watch",
@@ -12,8 +12,18 @@
     "Bedroom 2: 2 Twin Beds - Two Twin Beds"
   ],
   "amenities": {
-    "categories": {},
-    "all": []
+    "categories": {
+      "General": [
+        "No Pets Allowed",
+        "Linens Provided",
+        "Washer/ Dryer"
+      ]
+    },
+    "all": [
+      "No Pets Allowed",
+      "Linens Provided",
+      "Washer/ Dryer"
+    ]
   },
   "location": {
     "address": "120 Quincy Circle",
@@ -100,7 +110,7 @@
   "normalized_availability": {
     "source": "pm_30acottages",
     "external_listing_id": "ships-watch",
-    "captured_at": "2026-04-19T14:57:09.162Z",
+    "captured_at": "2026-04-21T01:27:54.937Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key#Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -110,8 +120,8 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-19",
-    "window_end": "2028-04-18",
+    "window_start": "2026-04-21",
+    "window_end": "2028-04-20",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -119,30 +129,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUIAAOUUUUUUIOUUIOUUUUIAAAAAAAAOUUUUUUUIAAAAAAAAAAOUUUIAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "UUIAAOUUUUUUIOUUIOUUUUIAAAAAAAAOUUUUUUUIAAAAAAAAAAOUUUIAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-20",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-21",
         "day_code": "N",
@@ -8161,24 +8149,46 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-19",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
+      },
+      {
+        "date": "2028-04-20",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
       "available": 417,
-      "unavailable": 35,
+      "unavailable": 33,
       "checkin_only": 9,
       "checkout_only": 8,
-      "other": 262,
+      "other": 264,
       "booking_available": 425,
-      "booking_unavailable": 44,
-      "booking_unknown": 262
+      "booking_unavailable": 42,
+      "booking_unknown": 264
     }
   },
   "html_path": "src/lib/data/external-sources/30acottages/details/html/ships-watch.html",
   "scrape_metrics": {
-    "total_ms": 26180,
-    "page_load_ms": 3898,
-    "extraction_ms": 22197,
+    "total_ms": 26373,
+    "page_load_ms": 4074,
+    "extraction_ms": 22210,
     "calendar_clicks": 26,
     "calendar_iterations": 26
   }

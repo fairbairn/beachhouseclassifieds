@@ -1,7 +1,7 @@
 {
   "external_listing_id": "haven-rest",
   "detail_url": "https://www.30acottagesandconcierge.com/vacation-rentals/haven-rest",
-  "fetched_at": "2026-04-19T14:56:17.748Z",
+  "fetched_at": "2026-04-21T01:26:36.664Z",
   "title": "Haven of Rest Vacation Rental",
   "h1": "Haven of Rest",
   "canonical_url": "https://www.30acottagesandconcierge.com/vacation-rentals/haven-rest",
@@ -13,8 +13,20 @@
     "Bunk Room: Bunk Beds (2 Fulls)"
   ],
   "amenities": {
-    "categories": {},
-    "all": []
+    "categories": {
+      "General": [
+        "Garage",
+        "Outdoor Gas Grill",
+        "Linens Provided",
+        "Washer/ Dryer"
+      ]
+    },
+    "all": [
+      "Garage",
+      "Outdoor Gas Grill",
+      "Linens Provided",
+      "Washer/ Dryer"
+    ]
   },
   "location": {
     "address": "106 B E. Milestone Dr",
@@ -119,7 +131,7 @@
   "normalized_availability": {
     "source": "pm_30acottages",
     "external_listing_id": "haven-rest",
-    "captured_at": "2026-04-19T14:56:17.748Z",
+    "captured_at": "2026-04-21T01:26:36.664Z",
     "has_calendar_widget": true,
     "booking_restrictions": [
       "Key#Night Available#Night Unavailable#Arrive Only#Depart Only",
@@ -129,8 +141,8 @@
       "Depart Only"
     ],
     "min_night_rules": [],
-    "window_start": "2026-04-19",
-    "window_end": "2028-04-18",
+    "window_start": "2026-04-21",
+    "window_end": "2028-04-20",
     "code_legend": {
       "A": "available",
       "U": "unavailable",
@@ -138,30 +150,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "AAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "day_codes": "AAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
-      {
-        "date": "2026-04-20",
-        "day_code": "Y",
-        "status_code": "A",
-        "changeover_code": "C",
-        "is_available": true,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": true,
-        "booking_day_state": "bookable",
-        "min_nights_required": null
-      },
       {
         "date": "2026-04-21",
         "day_code": "Y",
@@ -8180,24 +8170,46 @@
         "is_available_for_checkout": false,
         "booking_day_state": "unknown",
         "min_nights_required": null
+      },
+      {
+        "date": "2028-04-19",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
+      },
+      {
+        "date": "2028-04-20",
+        "day_code": "N",
+        "status_code": "X",
+        "changeover_code": "X",
+        "is_available": false,
+        "is_available_for_checkin": false,
+        "is_available_for_checkout": false,
+        "booking_day_state": "unknown",
+        "min_nights_required": null
       }
     ],
     "counts": {
-      "available": 438,
+      "available": 436,
       "unavailable": 25,
       "checkin_only": 3,
       "checkout_only": 3,
-      "other": 262,
-      "booking_available": 441,
+      "other": 264,
+      "booking_available": 439,
       "booking_unavailable": 28,
-      "booking_unknown": 262
+      "booking_unknown": 264
     }
   },
   "html_path": "src/lib/data/external-sources/30acottages/details/html/haven-rest.html",
   "scrape_metrics": {
-    "total_ms": 27193,
-    "page_load_ms": 4366,
-    "extraction_ms": 22738,
+    "total_ms": 26388,
+    "page_load_ms": 4005,
+    "extraction_ms": 22293,
     "calendar_clicks": 26,
     "calendar_iterations": 26
   }

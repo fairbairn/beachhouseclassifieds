@@ -741,6 +741,32 @@ function extractListingAboutFromHtml(html: string): string {
   return stripHtml(aboutMatch[1]).slice(0, 30000);
 }
 
+function extractUnitAmenityTermsFromHtml(html: string): string[] {
+  const chunkMatch = html.match(
+    /["']rc_core_term_unit_amenities["']\s*:\s*\{[\s\S]*?\}\s*,\s*["']rc_core_term_community["']/i,
+  );
+  const chunk = chunkMatch?.[0] ?? "";
+  if (!chunk) {
+    return [];
+  }
+
+  const names = new Set<string>();
+  const nameRegex = /["']name["']\s*:\s*["']([^"']+)["']/gi;
+  let match: RegExpExecArray | null = nameRegex.exec(chunk);
+  while (match) {
+    const normalized = stripHtml(match[1] ?? "")
+      .replace(/\\\//g, "/")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (normalized.length > 0) {
+      names.add(normalized.slice(0, 200));
+    }
+    match = nameRegex.exec(chunk);
+  }
+
+  return Array.from(names);
+}
+
 function extractExternalListingId(detailUrl: string): string {
   try {
     const parsed = new URL(detailUrl);
@@ -1957,6 +1983,13 @@ async function fetchDetail(
         continue;
       }
       amenitiesCategories[cleanCategory] = cleanItems;
+    }
+
+    if (Object.keys(amenitiesCategories).length === 0) {
+      const embeddedAmenities = extractUnitAmenityTermsFromHtml(html);
+      if (embeddedAmenities.length > 0) {
+        amenitiesCategories.General = embeddedAmenities;
+      }
     }
 
     const amenitiesAll = dedupePreserveOrder(
