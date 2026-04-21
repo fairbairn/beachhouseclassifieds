@@ -15,7 +15,9 @@ Welcome to the docs site scaffold.
 - Use [Brand and Visual Direction](./brand-and-visual-direction.md) for typography, color, messaging, CTA, and visual style decisions.
 - Use [Site Structure and UI Map](./site-structure-and-ui-map.md) for routes, page composition, and component ownership.
 - Use [Discover Experience Reference](./discover-experience-reference.md) as the implementation contract for Discover panel layout, feature naming, map behavior, and demo data rules.
+- Use [Discover Search Transition Plan](./discover-search-postgres-transition-plan.md) for current Postgres-vs-Meilisearch context and phased Discover query evolution steps.
 - Use [Discovery Workspace and Planner Vision](./discovery-workspace-and-planner-vision.md) as the living product record for search UX, favoriting flow, route decisions, and planner boundaries.
+- Use [Known Peculiarities and Workarounds](./known-peculiarities-and-workarounds.md) for recurring runtime notices (including Google Maps JS client notices) and current no-change/workaround guidance.
 - Use [Pricing and Conformance System Reference](./pricing-system-reference.md) as the hub for scrape, quote, cache, validation, and readiness workflows.
 - Use [CLI Runner Reference](./cli-runner-reference.md) for primary operational commands and their main flags.
 - Use [src/lib/scripts Catalog](./scripts-catalog.md) for full script inventory coverage, package alias mapping, and active/internal status tracking.

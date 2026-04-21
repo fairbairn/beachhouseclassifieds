@@ -117,6 +117,13 @@ function addCopyButton(table: HTMLTableElement, key: string): void {
     wrap = outer;
   }
 
+  let toolbar = wrap.querySelector(":scope > .doc-table-copy-toolbar");
+  if (!toolbar) {
+    toolbar = document.createElement("div");
+    toolbar.className = "doc-table-copy-toolbar";
+    wrap.insertBefore(toolbar, table);
+  }
+
   if (wrap.querySelector(`button[data-copy-key=\"${key}\"]`)) {
     return;
   }
@@ -125,37 +132,49 @@ function addCopyButton(table: HTMLTableElement, key: string): void {
   button.type = "button";
   button.className = "doc-table-copy-btn";
   button.dataset.copyKey = key;
-  button.title = "Copy table";
-  button.setAttribute("aria-label", "Copy table");
-  button.textContent = "📋";
+  button.title = "Copy table as Markdown";
+  button.setAttribute("aria-label", "Copy table as Markdown");
+  button.innerHTML =
+    '<span class="doc-table-copy-btn-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 2H3.75C3.336 2 3 2.336 3 2.75V11.25C3 11.664 3.336 12 3.75 12H10.25C10.664 12 11 11.664 11 11.25V9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.75 4H12.25C12.664 4 13 4.336 13 4.75V13.25C13 13.664 12.664 14 12.25 14H5.75C5.336 14 5 13.664 5 13.25V9.75" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="doc-table-copy-btn-label">Copy</span>';
+
+  const labelEl = button.querySelector(
+    ".doc-table-copy-btn-label",
+  ) as HTMLSpanElement | null;
+
+  const setLabel = (value: string): void => {
+    if (labelEl) {
+      labelEl.textContent = value;
+      return;
+    }
+    button.textContent = value;
+  };
 
   button.addEventListener("click", async () => {
     try {
       await copyText(tableToMarkdown(table));
-      const prev = button.textContent;
-      button.textContent = "✓";
+      setLabel("Copied");
       window.setTimeout(() => {
-        button.textContent = prev || "📋";
+        setLabel("Copy");
       }, 1200);
     } catch {
-      button.textContent = "!";
+      setLabel("Error");
       window.setTimeout(() => {
-        button.textContent = "📋";
+        setLabel("Copy");
       }, 1200);
     }
   });
 
-  wrap.appendChild(button);
+  toolbar.appendChild(button);
 }
 
-function installTableCopyButtons(): void {
+function installTableCopyButtons(): boolean {
   const pagePath = window.location.pathname;
   if (!pagePath.includes("/adapter-conformance-status")) {
-    return;
+    return false;
   }
 
   const doc = document.querySelector(".vp-doc");
-  if (!doc) return;
+  if (!doc) return false;
 
   const headings = Array.from(doc.querySelectorAll("h2"));
 
@@ -187,6 +206,23 @@ function installTableCopyButtons(): void {
 
   if (conformanceTable) addCopyButton(conformanceTable, "conformance");
   if (runtimeTable) addCopyButton(runtimeTable, "runtime");
+
+  return Boolean(conformanceTable || runtimeTable);
+}
+
+function installTableCopyButtonsWithRetries(maxAttempts = 8): void {
+  let attempt = 0;
+
+  const run = () => {
+    const found = installTableCopyButtons();
+    if (found || attempt >= maxAttempts) {
+      return;
+    }
+    attempt += 1;
+    window.setTimeout(run, 120);
+  };
+
+  run();
 }
 
 const theme: Theme = {
@@ -194,7 +230,12 @@ const theme: Theme = {
   enhanceApp({ router }) {
     if (typeof window === "undefined") return;
 
-    const run = () => window.setTimeout(installTableCopyButtons, 0);
+    const run = () =>
+      window.requestAnimationFrame(() => {
+        window.setTimeout(() => {
+          installTableCopyButtonsWithRetries();
+        }, 0);
+      });
 
     run();
     router.onAfterRouteChanged = () => {

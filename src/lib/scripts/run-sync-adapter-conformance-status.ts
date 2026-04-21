@@ -1,6 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import "@/core/tooling/env/load-env-profile";
+
+import { sql } from "drizzle-orm";
+
+import { pgDb } from "@/core/server/db";
 import { getKnownAdapterKeys } from "@/lib/pricing/scraper-engine/adapter-registry";
 
 type AdapterMetrics = {
@@ -17,6 +22,17 @@ type AdapterMetrics = {
   imageUrls: number;
   avgImgList: number;
   hasRuntime: boolean;
+};
+
+type CanonicalVisibilityTotals = {
+  totalActive: number;
+  visibleCount: number;
+  invisibleCount: number;
+};
+
+type CanonicalVisibilityReasonRow = {
+  reason: string;
+  count: number;
 };
 
 function hasText(value: unknown): value is string {
@@ -51,6 +67,90 @@ function padCell(
 function formatPercentAligned(part: number, total: number): string {
   const percent = total > 0 ? `${((part / total) * 100).toFixed(1)}%` : "0.0%";
   return `<span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">${percent}</span>`;
+}
+
+function findSectionEnd(lines: string[], sectionStartIndex: number): number {
+  for (let i = sectionStartIndex + 1; i < lines.length; i += 1) {
+    if (lines[i].startsWith("## ")) {
+      return i;
+    }
+  }
+  return lines.length;
+}
+
+function formatReasonLabel(reason: string): string {
+  return reason
+    .split("_")
+    .filter((part) => part.length > 0)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatPercentText(part: number, total: number): string {
+  if (total <= 0) {
+    return "0.0%";
+  }
+  return `${((part / total) * 100).toFixed(1)}%`;
+}
+
+async function loadCanonicalVisibilityTotals(): Promise<{
+  totals: CanonicalVisibilityTotals;
+  reasons: CanonicalVisibilityReasonRow[];
+} | null> {
+  if (!pgDb) {
+    return null;
+  }
+
+  const totalsResult = await pgDb.execute<{
+    total_active: number;
+    visible_count: number;
+    invisible_count: number;
+  }>(sql`
+    select
+      count(*)::int as total_active,
+      sum((visibility_disabled_reason is null)::int)::int as visible_count,
+      sum((visibility_disabled_reason is not null)::int)::int as invisible_count
+    from listing
+    where status = 'active'
+  `);
+
+  const reasonRowsResult = await pgDb.execute<{
+    reason: string;
+    count: number;
+  }>(sql`
+    select
+      visibility_disabled_reason as reason,
+      count(*)::int as count
+    from listing
+    where status = 'active'
+      and visibility_disabled_reason is not null
+    group by visibility_disabled_reason
+    order by count(*) desc, visibility_disabled_reason asc
+  `);
+
+  const totalsRow = totalsResult.rows[0];
+  if (!totalsRow) {
+    return {
+      totals: {
+        totalActive: 0,
+        visibleCount: 0,
+        invisibleCount: 0,
+      },
+      reasons: [],
+    };
+  }
+
+  return {
+    totals: {
+      totalActive: totalsRow.total_active,
+      visibleCount: totalsRow.visible_count,
+      invisibleCount: totalsRow.invisible_count,
+    },
+    reasons: reasonRowsResult.rows.map((row) => ({
+      reason: row.reason,
+      count: row.count,
+    })),
+  };
 }
 
 async function listJsonFiles(dirPath: string): Promise<string[]> {
@@ -256,6 +356,7 @@ async function main(): Promise<void> {
 
   const apiQuoteAdapters = parseQuotedApiSet(lines);
   const adapterKeys = getKnownAdapterKeys();
+  const canonicalVisibility = await loadCanonicalVisibilityTotals();
 
   const stats: AdapterMetrics[] = [];
   for (const adapterKey of adapterKeys) {
@@ -471,6 +572,66 @@ async function main(): Promise<void> {
     }
   }
 
+  const visibilityHeading = "## Canonical Visibility Totals";
+  const visibilityLines = [
+    visibilityHeading,
+    "",
+    "Snapshot from canonical listing rows (`status = active`).",
+    "",
+  ];
+
+  if (!canonicalVisibility) {
+    visibilityLines.push(
+      "- Visibility totals are unavailable in this environment (Postgres database is not configured).",
+      "",
+    );
+  } else {
+    visibilityLines.push(
+      `- Total canonical listings (active): ${canonicalVisibility.totals.totalActive}`,
+      `- Visible listings: ${canonicalVisibility.totals.visibleCount} (${formatPercentText(canonicalVisibility.totals.visibleCount, canonicalVisibility.totals.totalActive)})`,
+      `- Invisible listings: ${canonicalVisibility.totals.invisibleCount} (${formatPercentText(canonicalVisibility.totals.invisibleCount, canonicalVisibility.totals.totalActive)})`,
+      "",
+      "### Invisible Reason Breakdown",
+      "",
+    );
+
+    if (canonicalVisibility.totals.invisibleCount <= 0) {
+      visibilityLines.push(
+        "All active canonical listings are currently visible.",
+        "",
+      );
+    } else {
+      visibilityLines.push(
+        "| Reason | Count | Share of Invisible |",
+        "| :----- | ----: | -----------------: |",
+      );
+
+      for (const row of canonicalVisibility.reasons) {
+        visibilityLines.push(
+          `| ${formatReasonLabel(row.reason)} | ${row.count} | ${formatPercentText(row.count, canonicalVisibility.totals.invisibleCount)} |`,
+        );
+      }
+      visibilityLines.push("");
+    }
+  }
+
+  const visibilityStartIdx = lines.findIndex(
+    (line) => line.trim() === visibilityHeading,
+  );
+  if (visibilityStartIdx >= 0) {
+    const visibilityEndIdx = findSectionEnd(lines, visibilityStartIdx);
+    lines.splice(
+      visibilityStartIdx,
+      visibilityEndIdx - visibilityStartIdx,
+      ...visibilityLines,
+    );
+  } else {
+    const summaryEndIdx =
+      summaryIdx >= 0 ? findSectionEnd(lines, summaryIdx) : -1;
+    const insertIdx = summaryEndIdx >= 0 ? summaryEndIdx : tableEnd;
+    lines.splice(insertIdx, 0, ...visibilityLines);
+  }
+
   const ledgerHeading =
     "## Quote Runtime Migration Ledger (API Quote = ✅, Highest Listings First)";
   const discoveryHeading = "## Quote Runtime Discovery Ledger (API Quote = ❌)";
@@ -524,6 +685,15 @@ async function main(): Promise<void> {
         adaptersInRegistry: adapterKeys.length,
         adaptersRendered: stats.length,
         readyCount,
+        canonicalVisibility:
+          canonicalVisibility === null
+            ? null
+            : {
+                totalActive: canonicalVisibility.totals.totalActive,
+                visibleCount: canonicalVisibility.totals.visibleCount,
+                invisibleCount: canonicalVisibility.totals.invisibleCount,
+                reasons: canonicalVisibility.reasons,
+              },
         totals: {
           ...totals,
           avgImgList: totalAvg,

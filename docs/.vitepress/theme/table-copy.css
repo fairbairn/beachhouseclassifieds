@@ -2,11 +2,16 @@
   position: relative;
 }
 
+.doc-table-copy-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 8px;
+}
+
 .doc-table-copy-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 6px;
   background: var(--vp-c-bg-soft);
@@ -17,10 +22,22 @@
   cursor: pointer;
 }
 
-.doc-table-copy-btn:hover {
-  background: var(--vp-c-bg-elv);
+.doc-table-copy-btn-icon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
 }
 
-.doc-table-copy-wrap table {
-  margin-top: 28px;
+.doc-table-copy-btn-icon svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.doc-table-copy-btn-label {
+  font-size: 12px;
+}
+
+.doc-table-copy-btn:hover {
+  background: var(--vp-c-bg-elv);
 }

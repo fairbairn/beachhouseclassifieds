@@ -215,6 +215,8 @@
     "listings:ingest:canonical:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:ingest:canonical:raw --",
     "listings:ingest:canonical:all:raw": "tsx src/lib/scripts/run-canonical-listing-ingest.ts --all-adapters",
     "listings:ingest:canonical:all:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:ingest:canonical:all:raw --",
+    "listings:source-links:reconcile-stale:raw": "tsx src/lib/scripts/run-listing-source-link-reconcile-stale.ts",
+    "listings:source-links:reconcile-stale:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:source-links:reconcile-stale:raw --",
     "listings:geocode:cache:raw": "tsx src/lib/scripts/run-build-listing-geocode-cache.ts",
     "listings:geocode:cache:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:geocode:cache:raw --",
     "listings:visibility:sync:raw": "tsx src/lib/scripts/run-listing-visibility-sync.ts",

@@ -172,6 +172,13 @@ These are the highest-value decisions users make first. The discovery workspace 
 
 ## Decision Log
 
+### 2026-04-21
+
+- Query evolution strategy confirmed: keep detail query stable and evolve Discover listings query first.
+- Near-term implementation path is Postgres-first for full-corpus filtered totals/facets + sorted limited listing peeks (`max 96`).
+- Meilisearch remains planned as a later backend provider behind a stable Discover query contract.
+- Discover route/server boundary policy reinforced: route-level server data access should use TanStack server boundaries (`createServerFn`) rather than client-reachable direct `.server` imports.
+
 ### 2026-04-08
 
 - Planner is a special compare area and not the primary search route.

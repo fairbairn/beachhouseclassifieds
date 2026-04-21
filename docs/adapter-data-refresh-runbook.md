@@ -30,6 +30,12 @@ Run commands in this order.
 npm run listings:ingest:canonical:all:postgres:local
 ```
 
+If canonical ingest exits with `verification_failed > 0`, reconcile stale active source-link rows for failed adapters, then rerun step 1:
+
+```bash
+npm run listings:source-links:reconcile-stale:postgres:local -- --adapter-key <adapterA> --adapter-key <adapterB>
+```
+
 2. Ingest images from adapter detail snapshots into source-image tables
 
 ```bash

@@ -2,7 +2,7 @@
 
 This document is the implementation-level reference for the `/discover` experience.
 
-Last updated: 2026-04-11
+Last updated: 2026-04-21
 
 ## Purpose
 
@@ -23,6 +23,28 @@ Last updated: 2026-04-11
 - Discover sample data model + rows: `src/components/discover/discover-data.ts`
 - Demo sample generator: `.tmp/scripts/build-discover-sample-from-adapters.mjs`
 - Demo sample apply utility: `.tmp/scripts/apply-discover-sample-to-discover-data.mjs`
+
+## Runtime Data Flow (Current)
+
+- Discover parent route (`/discover`) loads a server-seeded page, then progressively fills client listings.
+- Current server seed count is intentionally small (`12`) to keep first paint and hydration light.
+- Detail overlay route (`/discover/listing/$slug`) fetches server detail via a TanStack server function boundary.
+- Client-side narrowing (location text + advanced filters) currently runs in-memory over fetched rows.
+
+Implications:
+
+- Initial unfiltered metadata can represent broader server totals.
+- Once user narrowing is active, effective counts/facets shown in UI are derived from the narrowed local set.
+
+## Server Boundary Policy (Discover)
+
+- Do not import `.server` modules directly from client-reachable route files.
+- Route-level server data access should use TanStack server boundaries (`createServerFn`) or route server handlers.
+- Keep `.server` imports isolated behind those boundaries.
+
+Why this policy exists:
+
+- It avoids import-protection build failures and keeps server/client ownership explicit.
 
 ## Page Architecture
 
@@ -138,6 +160,26 @@ Selection now uses direct state-aware focus:
 ### Fallback Behavior
 
 - If Maps JS key is not available, show iframe embed fallback.
+
+### Google Maps JS Console Notices (Current Interpretation)
+
+Observed console notices:
+
+- mapId + custom style precedence warning
+- 45° imagery behavior change notice
+
+Current interpretation for this project:
+
+- The map uses `mapId` (`DEMO_MAP_ID`) and dynamic `roadmap`/`satellite` switching by zoom.
+- We are not currently applying per-map JSON style overrides in code, so behavior remains expected.
+- With a `mapId`, default map-type styling should be treated as cloud-managed, not client-map-style managed.
+- The 45° notice is informational for current UX: satellite/hybrid no longer auto-switch to 45° imagery at high zoom in API v3.62+.
+- Since current Discover map behavior does not rely on 45° auto-tilt, no immediate behavior change is required.
+
+Operator guidance:
+
+- Keep current behavior unchanged unless we intentionally introduce cloud style differences or a tilt-dependent UX.
+- Revisit only if map visuals diverge from expected cloud style configuration.
 
 ## Sorting and Recommended Ordering
 
@@ -273,6 +315,12 @@ This section captures the implemented interactive facet behavior in the current 
 - No selected facets: Properties count reflects total inventory and all facet breakouts.
 - Selected facets: constrained result count reflects filtered set returned by backend.
 
+### Near-Term Integration Intent (Postgres)
+
+- Implement Discover-side server query contract in Postgres first.
+- Return full filtered corpus counts/facets plus sorted limited result peek (`max 96`) per request.
+- Keep detail-page query behavior unchanged while Discover listing query evolves.
+
 ### Future UX Note (Not Yet Implemented)
 
 - If users over-constrain filters/facets and reach zero results, provide a listings-panel guidance experience that explains constraint pressure and suggests concrete ways to recover results.
@@ -304,6 +352,20 @@ Use this section to track meaningful Discover UX/data contract decisions over ti
 - Follow-up: optional tuning or validation notes
 
 ### Recent Entries
+
+- Date: 2026-04-21
+- Scope: route boundary | build stability
+- Decision: Discover detail overlay route now uses a TanStack `createServerFn` boundary for server-only detail payload access.
+- Why: Preserve server/client boundaries and avoid client import-protection violations in production builds.
+- Implementation: `src/routes/discover.listing.$slug.tsx`, `src/lib/discover/discover-listings-api.server.ts`
+- Follow-up: Apply the same boundary pattern to future Discover route-level server fetches.
+
+- Date: 2026-04-21
+- Scope: discover query strategy
+- Decision: Adopt Postgres-first enhancement path for Discover listing query (full-corpus counts/facets + filtered/sorted limited results), with Meilisearch deferred behind a stable UX query contract.
+- Why: Lower near-term delivery risk and faster incremental progress using existing canonical visibility/pricing/availability data in Postgres.
+- Implementation: `docs/discover-search-postgres-transition-plan.md`
+- Follow-up: Implement incremental contract phases and parity validation before Meilisearch ingestion work.
 
 - Date: 2026-04-09
 - Scope: data curation

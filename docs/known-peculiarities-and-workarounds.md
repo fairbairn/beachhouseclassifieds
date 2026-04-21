@@ -69,6 +69,24 @@ Workarounds used:
 - Adapter-specific extraction modules for quirks.
 - Precision reruns and narrow-scope fixes to avoid collateral churn.
 
+## Discover Google Maps JS Console Notices
+
+Observed in client console:
+
+- `A Map's preregistered map type may not apply all custom styles when a mapId is present...`
+- `As of version 3.62, ... satellite and hybrid map types will no longer automatically switch to 45° Imagery ...`
+
+Current interpretation:
+
+- Discover map currently uses `mapId` plus zoom-driven map-type switching (`roadmap` / `satellite`).
+- With `mapId` present, default map-type style behavior is cloud-controlled for default types; this is expected platform behavior, not a runtime failure.
+- The 45° imagery notice is a deprecation notice; current Discover UX does not rely on automatic 45° tilt imagery behavior.
+
+Current decision:
+
+- No immediate code change is required solely for these notices.
+- Revisit only if visual styling expectations diverge from configured cloud map styles, or if future UX introduces explicit tilt/45° requirements.
+
 ## Why This Doc Exists
 
 This is an operator memory aid to avoid rediscovering old failure modes and to accelerate future adapter hardening.
