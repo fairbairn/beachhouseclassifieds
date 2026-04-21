@@ -1,58 +1,22 @@
 import {
-  sampleListings,
-  type DiscoverListing,
-} from "@/components/discover/discover-data";
-import {
   getAreaFromListing,
   getBeachZoneFromListing,
   verifyGulfFrontClaim,
 } from "@/components/discover/discover-utils";
 import { normalizeDiscoverListings } from "@/lib/discover/community-normalization";
-import { getDiscoverListings } from "@/lib/discover/discover-listings.server";
+import {
+  getDiscoverCorpusMetadata,
+  getDiscoverListings,
+} from "@/lib/discover/discover-listings.server";
+import type {
+  DiscoverListing,
+  DiscoverListingDetailPayload,
+  DiscoverListingsMetadata,
+  DiscoverListingsPagePayload,
+} from "@/lib/discover/discover-types";
 
 const DEFAULT_DISCOVER_PAGE_SIZE = 24;
 const MAX_DISCOVER_PAGE_SIZE = 96;
-
-export type DiscoverListingsPagePayload = {
-  _stats: {
-    nextCursor: string | null;
-    hasMore: boolean;
-    totalCount: number;
-    metadata?: DiscoverListingsMetadata;
-  };
-  listings: DiscoverListing[];
-};
-
-export type DiscoverListingDetailPayload = {
-  listing: DiscoverListing | null;
-  _stats?: {
-    images: {
-      imageCount: number;
-      previewImageCount: number;
-    };
-  };
-};
-
-export type DiscoverListingsMetadata = {
-  totalCount: number;
-  mapListings: Array<{
-    id: string;
-    name: string;
-    lat: number;
-    lng: number;
-    typicalAllInNightly: number;
-  }>;
-  facets: {
-    areas: Record<string, number>;
-    beaches: Record<string, number>;
-    communities: Record<string, number>;
-    features: {
-      gulfFront: number;
-      privatePool: number;
-      golfCart: number;
-    };
-  };
-};
 
 function normalizeDiscoverListingsForApi(listings: DiscoverListing[]) {
   const locationAlignedListings = listings.map((listing) => {
@@ -143,11 +107,15 @@ function parseCursor(cursor: string | undefined): {
 }
 
 function resolvePageSize(limit: number | undefined): number {
-  if (!Number.isFinite(limit)) {
+  const resolvedLimit = typeof limit === "number" ? limit : Number.NaN;
+  if (!Number.isFinite(resolvedLimit)) {
     return DEFAULT_DISCOVER_PAGE_SIZE;
   }
 
-  return Math.max(1, Math.min(MAX_DISCOVER_PAGE_SIZE, Math.floor(limit)));
+  return Math.max(
+    1,
+    Math.min(MAX_DISCOVER_PAGE_SIZE, Math.floor(resolvedLimit)),
+  );
 }
 
 function buildDiscoverListingsMetadata(
@@ -190,13 +158,18 @@ function buildDiscoverListingsMetadata(
 
   return {
     totalCount: listings.length,
-    mapListings: listings.map((listing) => ({
-      id: listing.id,
-      name: listing.name,
-      lat: listing.lat,
-      lng: listing.lng,
-      typicalAllInNightly: listing.typicalAllInNightly,
-    })),
+    mapListings: listings
+      .filter(
+        (listing) =>
+          typeof listing.lat === "number" && typeof listing.lng === "number",
+      )
+      .map((listing) => ({
+        id: listing.id,
+        name: listing.name,
+        lat: listing.lat as number,
+        lng: listing.lng as number,
+        typicalAllInNightly: listing.typicalAllInNightly,
+      })),
     facets: {
       areas,
       beaches,
@@ -214,34 +187,35 @@ export async function buildDiscoverListingsPagePayload(input?: {
   limit?: number;
   cursor?: string;
 }): Promise<DiscoverListingsPagePayload> {
-  const allListings = await buildDiscoverListingsPayload();
-  const totalCount = allListings.length;
-  const includeMetadata = !input?.cursor;
-  const metadata = includeMetadata
-    ? buildDiscoverListingsMetadata(allListings)
-    : undefined;
-
   const pageSize = resolvePageSize(input?.limit);
   const parsedCursor = parseCursor(input?.cursor);
 
-  const startIndex = parsedCursor
-    ? allListings.findIndex(
-        (listing) =>
-          listing.demoOrder > parsedCursor.demoOrder ||
-          (listing.demoOrder === parsedCursor.demoOrder &&
-            listing.id > parsedCursor.id),
-      )
-    : 0;
+  const pageProbeListings = await buildDiscoverListingsPayload({
+    maxListings: pageSize + 1,
+    afterCursor: parsedCursor ?? undefined,
+  });
 
-  const safeStartIndex = startIndex >= 0 ? startIndex : totalCount;
-  const pageItems = allListings.slice(
-    safeStartIndex,
-    safeStartIndex + pageSize,
-  );
-  const hasMore = safeStartIndex + pageItems.length < totalCount;
+  const hasMore = pageProbeListings.length > pageSize;
+  const pageItems = hasMore
+    ? pageProbeListings.slice(0, pageSize)
+    : pageProbeListings;
   const nextCursor = hasMore
     ? encodeCursor(pageItems[pageItems.length - 1] as DiscoverListing)
     : null;
+
+  const corpusMetadata = await getDiscoverCorpusMetadata();
+  const totalCount = corpusMetadata?.totalCount ?? pageItems.length;
+  const includeMetadata = !input?.cursor;
+  const metadata = includeMetadata
+    ? {
+        totalCount,
+        // Keep metadata lean: list rows already carry map fields.
+        mapListings: [],
+        facets:
+          corpusMetadata?.facets ??
+          buildDiscoverListingsMetadata(pageItems).facets,
+      }
+    : undefined;
 
   return {
     _stats: {
@@ -256,6 +230,11 @@ export async function buildDiscoverListingsPagePayload(input?: {
 
 export async function buildDiscoverListingsPayload(input?: {
   includeSlug?: string;
+  maxListings?: number | null;
+  afterCursor?: {
+    demoOrder: number;
+    id: string;
+  };
 }): Promise<DiscoverListing[]> {
   const includeSlug = input?.includeSlug?.trim() || undefined;
 
@@ -263,15 +242,11 @@ export async function buildDiscoverListingsPayload(input?: {
     includeSlug,
     onlySlug: Boolean(includeSlug),
     disableFallback: true,
+    maxListings: includeSlug ? 1 : input?.maxListings,
+    afterCursor: includeSlug ? undefined : input?.afterCursor,
   }).catch(() => []);
 
-  const resolvedSourceListings = includeSlug
-    ? sourceListings
-    : sourceListings.length > 0
-      ? sourceListings
-      : sampleListings;
-
-  return normalizeDiscoverListingsForApi(resolvedSourceListings);
+  return normalizeDiscoverListingsForApi(sourceListings);
 }
 
 export async function buildDiscoverListingDetailPayload(input: {

@@ -1,25 +1,9 @@
-import type { DiscoverListing } from "@/components/discover/discover-data";
+import type {
+  DiscoverListingsMetadata,
+  DiscoverListingsPageResponse,
+} from "@/lib/discover/discover-types";
 
-export type DiscoverListingsMetadata = {
-  totalCount: number;
-  mapListings: Array<{
-    id: string;
-    name: string;
-    lat: number;
-    lng: number;
-    typicalAllInNightly: number;
-  }>;
-  facets: {
-    areas: Record<string, number>;
-    beaches: Record<string, number>;
-    communities: Record<string, number>;
-    features: {
-      gulfFront: number;
-      privatePool: number;
-      golfCart: number;
-    };
-  };
-};
+export type { DiscoverListingsPageResponse } from "@/lib/discover/discover-types";
 
 export const DISCOVER_LISTINGS_PAGE_SIZE = 24;
 const DISCOVER_LISTINGS_PAGE_CACHE_TTL_MS = 30_000;
@@ -37,16 +21,6 @@ const discoverListingsPageInFlight = new Map<
   string,
   Promise<DiscoverListingsPageResponse>
 >();
-
-export type DiscoverListingsPageResponse = {
-  _stats: {
-    nextCursor: string | null;
-    hasMore: boolean;
-    totalCount: number;
-    metadata: DiscoverListingsMetadata;
-  };
-  listings: DiscoverListing[];
-};
 
 function emptyMetadata(): DiscoverListingsMetadata {
   return {
@@ -133,8 +107,8 @@ function normalizeMetadata(
   };
 }
 
-function resolveDiscoverListingsEndpoint(params: URLSearchParams): string {
-  const path = `/api/discover/listings?${params.toString()}`;
+function resolveDiscoverListingsEndpoint(): string {
+  const path = "/api/discover/listings";
   if (typeof window !== "undefined") {
     return path;
   }
@@ -172,13 +146,18 @@ export async function fetchDiscoverListingsPage(input?: {
     }
   }
 
-  const params = new URLSearchParams();
-  params.set("limit", String(input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE));
-  if (input?.cursor) {
-    params.set("cursor", input.cursor);
-  }
+  const requestBody = {
+    limit: input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE,
+    cursor: input?.cursor,
+  };
   const requestPromise = (async (): Promise<DiscoverListingsPageResponse> => {
-    const response = await fetch(resolveDiscoverListingsEndpoint(params));
+    const response = await fetch(resolveDiscoverListingsEndpoint(), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
     if (!response.ok) {
       return {
         _stats: {

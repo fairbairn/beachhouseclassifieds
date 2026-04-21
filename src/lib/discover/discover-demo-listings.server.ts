@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { DiscoverListing } from "@/components/discover/discover-data";
+import type { DiscoverListing } from "@/lib/discover/discover-types";
 
 const LISTINGS_DIR = path.resolve(process.cwd(), "db/listings");
 const TARGET_LISTING_COUNT = 96;

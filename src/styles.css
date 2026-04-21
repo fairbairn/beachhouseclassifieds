@@ -91,8 +91,167 @@ a:hover {
   animation: discover-card-fade-in 260ms ease-out both;
 }
 
+@keyframes discover-skeleton-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.dsp {
+  animation: discover-skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 .discover-listing-card {
   backface-visibility: hidden;
+}
+
+.discover-listing-card-base {
+  position: relative;
+  display: flex;
+  height: 100%;
+  cursor: pointer;
+  flex-direction: column;
+  border-width: 1px;
+  border-radius: 1rem;
+  background: #ffffff;
+  padding: 1rem;
+  box-shadow: 0 12px 30px -24px rgba(15, 23, 42, 0.65);
+  transition-property: transform, box-shadow, border-color;
+  transition-duration: 200ms;
+}
+
+.discover-listing-card-base:hover {
+  transform: translateY(-0.125rem);
+  box-shadow: 0 18px 34px -22px rgba(15, 23, 42, 0.7);
+}
+
+.discover-listing-card-base:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgb(103 232 249 / 0.9),
+    0 18px 34px -22px rgba(15, 23, 42, 0.7);
+}
+
+.discover-listing-card-standard {
+  border-color: rgb(226 232 240);
+}
+
+.discover-listing-card-beachfront {
+  border-color: rgb(252 211 77);
+  box-shadow:
+    0 0 24px 7px rgba(251, 191, 36, 0.5),
+    0 32px 60px -20px rgba(180, 83, 9, 0.82);
+  filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.6));
+}
+
+.discover-listing-image-overlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+.group:hover .discover-listing-image-overlay,
+.group:focus-visible .discover-listing-image-overlay {
+  opacity: 1;
+}
+
+.discover-listing-image-overlay-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  border: 1px solid rgb(255 255 255 / 0.7);
+  background: rgb(255 255 255 / 0.8);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgb(30 41 59);
+  box-shadow: 0 8px 20px -12px rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.discover-listing-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border-width: 1px;
+  padding: 0.5rem;
+  transition-property:
+    transform, border-color, background-color, color, box-shadow;
+  transition-duration: 200ms;
+}
+
+.discover-listing-action-button:hover {
+  transform: translateY(-0.125rem);
+  box-shadow: 0 2px 8px -2px rgb(15 23 42 / 0.25);
+}
+
+.discover-listing-map-button-active {
+  border-color: rgb(244 63 94);
+  background: #ffffff;
+  color: rgb(190 18 60);
+  box-shadow:
+    0 0 0 2px rgba(251, 113, 133, 0.28),
+    0 10px 20px -12px rgba(225, 29, 72, 0.72);
+}
+
+.discover-listing-map-button-idle {
+  border-color: rgb(203 213 225);
+  color: rgb(100 116 139);
+}
+
+.discover-listing-map-button-idle:hover {
+  border-color: rgb(253 164 175);
+  background: rgb(255 241 242);
+  color: rgb(190 18 60);
+}
+
+.discover-listing-favorite-button-active {
+  border-color: rgb(253 164 175);
+  background: rgb(255 241 242);
+  color: rgb(225 29 72);
+}
+
+.discover-listing-favorite-button-active:hover {
+  background: rgb(255 228 230);
+}
+
+.discover-listing-favorite-button-idle {
+  border-color: rgb(203 213 225);
+  color: rgb(100 116 139);
+}
+
+.discover-listing-favorite-button-idle:hover {
+  border-color: rgb(253 164 175);
+  color: rgb(225 29 72);
+}
+
+.discover-listing-placeholder-card {
+  position: relative;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  border-radius: 1rem;
+  border: 1px solid rgb(226 232 240);
+  background: #ffffff;
+  padding: 1rem;
+  box-shadow: 0 12px 30px -24px rgba(15, 23, 42, 0.65);
+}
+
+.discover-listing-loading-card {
+  height: 19.5rem;
+  border-radius: 1rem;
+  border: 1px solid rgb(226 232 240);
+  background: rgb(255 255 255 / 0.9);
+  box-shadow: 0 12px 30px -24px rgba(15, 23, 42, 0.65);
 }
 
 .discover-date-picker .discover-range-middle,

@@ -1,14 +1,7 @@
-import type { DiscoverListing } from "@/components/discover/discover-data";
-
-export type DiscoverListingDetailPayload = {
-  listing: DiscoverListing | null;
-  _stats?: {
-    images: {
-      imageCount: number;
-      previewImageCount: number;
-    };
-  };
-};
+import type {
+  DiscoverListing,
+  DiscoverListingDetailPayload,
+} from "@/lib/discover/discover-types";
 
 type CacheEntry = {
   listings: DiscoverListing[];

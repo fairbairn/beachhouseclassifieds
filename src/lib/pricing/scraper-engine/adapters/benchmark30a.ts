@@ -1341,7 +1341,7 @@ async function fetchDetail(
         Object.values(categorizedAmenities).flatMap((items) => items),
       );
 
-      const toImageKey = (urlValue: string): string => {
+      const toCanonicalImageUrl = (urlValue: string): string => {
         try {
           const parsed = new URL(urlValue, window.location.href);
           return `${parsed.origin}${parsed.pathname}`;
@@ -1391,12 +1391,12 @@ async function fetchDetail(
           continue;
         }
 
-        const key = toImageKey(candidate);
+        const key = toCanonicalImageUrl(candidate);
         if (!key || imageUrlMap.has(key)) {
           continue;
         }
 
-        imageUrlMap.set(key, candidate);
+        imageUrlMap.set(key, key);
       }
 
       const imageUrls = Array.from(imageUrlMap.values());

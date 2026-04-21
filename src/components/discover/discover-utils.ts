@@ -4,9 +4,9 @@ import {
   geoByCommunity,
   geoByRegion,
   known30ACommunities,
-  type DiscoverListing,
 } from "@/components/discover/discover-data";
 import { GULF_FRONT_VERIFICATION_POLYGON } from "@/components/discover/gulf-front-polygon";
+import type { DiscoverListing } from "@/lib/discover/discover-types";
 
 type BroadArea = "West 30A" | "Central 30A" | "East 30A";
 

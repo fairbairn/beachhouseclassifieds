@@ -1,7 +1,8 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { DiscoverListing } from "@/components/discover/discover-data";
+import type { DiscoverListing } from "@/lib/discover/discover-types";
+import { getDiscoverDemoListings } from "@/lib/discover/discover-demo-listings.server";
 import { normalizeDiscoverListingsWithDiagnostics } from "@/lib/discover/community-normalization";
 
 type AuditReport = {
@@ -38,48 +39,8 @@ type AuditReport = {
   }>;
 };
 
-const DISCOVER_DATA_FILE = path.resolve(
-  process.cwd(),
-  "src/components/discover/discover-data.ts",
-);
-
-function extractSampleListingsArrayLiteral(sourceText: string): string {
-  const marker = "export const sampleListings: DiscoverListing[] =";
-  const markerIndex = sourceText.indexOf(marker);
-  if (markerIndex === -1) {
-    throw new Error(
-      "Unable to locate sampleListings export in discover-data.ts",
-    );
-  }
-
-  const nextMarker = "\nexport const known30AAreas";
-  const arrayStart = markerIndex + marker.length;
-  const arrayEnd = sourceText.indexOf(nextMarker, arrayStart);
-  if (arrayEnd === -1) {
-    throw new Error(
-      "Unable to locate known30AAreas export after sampleListings",
-    );
-  }
-
-  return sourceText.slice(arrayStart, arrayEnd).trim().replace(/;\s*$/, "");
-}
-
 async function loadSampleListingsFromSource(): Promise<DiscoverListing[]> {
-  const sourceText = await readFile(DISCOVER_DATA_FILE, "utf8");
-  const arrayLiteral = extractSampleListingsArrayLiteral(sourceText);
-
-  // Remove image-variable references so the literal can be evaluated in Node.
-  const nodeSafeLiteral = arrayLiteral.replace(
-    /previewImages:\s*\[[^\]]*\],/g,
-    "previewImages: [],",
-  );
-
-  const evaluated = Function(`return (${nodeSafeLiteral});`)();
-  if (!Array.isArray(evaluated)) {
-    throw new Error("sampleListings literal did not evaluate to an array");
-  }
-
-  return evaluated as DiscoverListing[];
+  return getDiscoverDemoListings();
 }
 
 async function run(): Promise<number> {
@@ -159,7 +120,7 @@ async function run(): Promise<number> {
 
   for (const listing of report.changedListings) {
     console.log(
-      `- ${listing.id} :: ${listing.originalCommunity} -> ${listing.normalizedCommunity} [${listing.reason}; ${listing.confidence}]`,
+      `- ${listing.id} :: ${listing.originalCommunity} -> ${listing.normalizedCommunity} [${listing.reason}]`,
     );
   }
 

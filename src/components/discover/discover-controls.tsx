@@ -108,7 +108,7 @@ export function DateRangeField({
   startDate: string;
   endDate: string;
   onChange: (next: { startDate: string; endDate: string }) => void;
-  openRequestToken?: number;
+  openRequestToken?: number | null;
   selectedNights?: number;
   emptyLabel?: string;
 }) {
@@ -246,7 +246,7 @@ export function DateRangeField({
   };
 
   useEffect(() => {
-    if (openRequestToken === undefined) {
+    if (openRequestToken == null) {
       return;
     }
 

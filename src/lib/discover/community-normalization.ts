@@ -1,4 +1,4 @@
-import type { DiscoverListing } from "@/components/discover/discover-data";
+import type { DiscoverListing } from "@/lib/discover/discover-types";
 import {
   resolvePlannedCommunity,
   type CommunityCandidateScore,

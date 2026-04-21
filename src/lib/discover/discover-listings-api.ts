@@ -1,58 +1,19 @@
 import {
-  sampleListings,
-  type DiscoverListing,
-} from "@/components/discover/discover-data";
-import {
   getAreaFromListing,
   getBeachZoneFromListing,
   verifyGulfFrontClaim,
 } from "@/components/discover/discover-utils";
 import { normalizeDiscoverListings } from "@/lib/discover/community-normalization";
 import { getDiscoverListings } from "@/lib/discover/discover-listings.server";
+import type {
+  DiscoverListing,
+  DiscoverListingDetailPayload,
+  DiscoverListingsMetadata,
+  DiscoverListingsPagePayload,
+} from "@/lib/discover/discover-types";
 
 const DEFAULT_DISCOVER_PAGE_SIZE = 24;
 const MAX_DISCOVER_PAGE_SIZE = 96;
-
-export type DiscoverListingsPagePayload = {
-  _stats: {
-    nextCursor: string | null;
-    hasMore: boolean;
-    totalCount: number;
-    metadata?: DiscoverListingsMetadata;
-  };
-  listings: DiscoverListing[];
-};
-
-export type DiscoverListingDetailPayload = {
-  listing: DiscoverListing | null;
-  _stats?: {
-    images: {
-      imageCount: number;
-      previewImageCount: number;
-    };
-  };
-};
-
-export type DiscoverListingsMetadata = {
-  totalCount: number;
-  mapListings: Array<{
-    id: string;
-    name: string;
-    lat: number;
-    lng: number;
-    typicalAllInNightly: number;
-  }>;
-  facets: {
-    areas: Record<string, number>;
-    beaches: Record<string, number>;
-    communities: Record<string, number>;
-    features: {
-      gulfFront: number;
-      privatePool: number;
-      golfCart: number;
-    };
-  };
-};
 
 function normalizeDiscoverListingsForApi(listings: DiscoverListing[]) {
   const locationAlignedListings = listings.map((listing) => {
@@ -143,11 +104,15 @@ function parseCursor(cursor: string | undefined): {
 }
 
 function resolvePageSize(limit: number | undefined): number {
-  if (!Number.isFinite(limit)) {
+  const resolvedLimit = typeof limit === "number" ? limit : Number.NaN;
+  if (!Number.isFinite(resolvedLimit)) {
     return DEFAULT_DISCOVER_PAGE_SIZE;
   }
 
-  return Math.max(1, Math.min(MAX_DISCOVER_PAGE_SIZE, Math.floor(limit)));
+  return Math.max(
+    1,
+    Math.min(MAX_DISCOVER_PAGE_SIZE, Math.floor(resolvedLimit)),
+  );
 }
 
 function buildDiscoverListingsMetadata(
@@ -190,13 +155,18 @@ function buildDiscoverListingsMetadata(
 
   return {
     totalCount: listings.length,
-    mapListings: listings.map((listing) => ({
-      id: listing.id,
-      name: listing.name,
-      lat: listing.lat,
-      lng: listing.lng,
-      typicalAllInNightly: listing.typicalAllInNightly,
-    })),
+    mapListings: listings
+      .filter(
+        (listing) =>
+          typeof listing.lat === "number" && typeof listing.lng === "number",
+      )
+      .map((listing) => ({
+        id: listing.id,
+        name: listing.name,
+        lat: listing.lat as number,
+        lng: listing.lng as number,
+        typicalAllInNightly: listing.typicalAllInNightly,
+      })),
     facets: {
       areas,
       beaches,
@@ -265,13 +235,7 @@ export async function buildDiscoverListingsPayload(input?: {
     disableFallback: true,
   }).catch(() => []);
 
-  const resolvedSourceListings = includeSlug
-    ? sourceListings
-    : sourceListings.length > 0
-      ? sourceListings
-      : sampleListings;
-
-  return normalizeDiscoverListingsForApi(resolvedSourceListings);
+  return normalizeDiscoverListingsForApi(sourceListings);
 }
 
 export async function buildDiscoverListingDetailPayload(input: {

@@ -3,23 +3,33 @@ import {
   createFileRoute,
   useRouterState,
 } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
 
 import { DiscoverPage } from "@/components/discover/DiscoverPage";
-import { fetchDiscoverListingsPage } from "@/lib/discover/discover-listings-query";
 import { hasDiscoverModalIntentForPath } from "@/lib/discover/discover-modal-intent";
 
 const DISCOVER_SSR_SEED_COUNT = 12;
+
+const loadDiscoverSeedPage = createServerFn({ method: "GET" })
+  .inputValidator((input: { limit: number }) => input)
+  .handler(async ({ data }) => {
+    const { executeDiscoverSearch } =
+      await import("@/lib/discover/discover-search-service.server");
+
+    return executeDiscoverSearch({
+      limit: data.limit,
+    });
+  });
 
 export const Route = createFileRoute("/discover")({
   staleTime: 5 * 60 * 1000,
   shouldReload: false,
   loader: async () => {
-    const seedPage = await fetchDiscoverListingsPage({
-      limit: DISCOVER_SSR_SEED_COUNT,
+    const seedPage = await loadDiscoverSeedPage({
+      data: { limit: DISCOVER_SSR_SEED_COUNT },
     });
 
     return {
-      initialListings: seedPage.listings,
       initialListingsPage: seedPage,
     };
   },
@@ -27,7 +37,7 @@ export const Route = createFileRoute("/discover")({
 });
 
 function DiscoverRoutePage() {
-  const { initialListings, initialListingsPage } = Route.useLoaderData();
+  const { initialListingsPage } = Route.useLoaderData();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
@@ -46,7 +56,6 @@ function DiscoverRoutePage() {
       </div>
       <DiscoverPage
         overlayListingId={undefined}
-        initialListings={initialListings}
         initialListingsPage={initialListingsPage}
         disableOverlayFromPath={!isModalIntentDetailRoute}
       />

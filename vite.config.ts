@@ -41,9 +41,16 @@ const isIgnoredUnusedExternalImportWarning = (warning: {
 
 const config = defineConfig(({ mode }) => {
   const isAnalyzeBuild = mode === "analyze";
+  const enableTanStackDevtools =
+    process.env.VITE_TANSTACK_DEVTOOLS?.trim() === "1";
 
   return {
     envPrefix: ["VITE_", "GOOGLE_MAPS_API_KEY", "GOOGLE_MAPS_JS_KEY"],
+    server: {
+      watch: {
+        ignored: ["**/src/lib/data/external-sources/**"],
+      },
+    },
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -85,7 +92,7 @@ const config = defineConfig(({ mode }) => {
       },
     },
     plugins: [
-      devtools(),
+      ...(enableTanStackDevtools ? [devtools()] : []),
       netlify(),
       // this is the plugin that enables path aliases
       viteTsConfigPaths({

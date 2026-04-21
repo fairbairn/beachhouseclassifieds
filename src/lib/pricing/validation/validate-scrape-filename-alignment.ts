@@ -92,7 +92,8 @@ type ValidationIssueCode =
   | "empty_media_gallery_image_urls"
   | "invalid_media_gallery_image_count"
   | "media_gallery_count_mismatch"
-  | "duplicate_media_gallery_image_urls";
+  | "duplicate_media_gallery_image_urls"
+  | "media_gallery_image_url_has_query_params";
 
 type ValidationIssue = {
   code: ValidationIssueCode;
@@ -475,6 +476,15 @@ function getImageUrlPatternOutliers(
 function hasDoubleHttpsSegment(value: string): boolean {
   const matches = value.match(/https:\/\//gi);
   return (matches?.length ?? 0) >= 2;
+}
+
+function hasUrlQueryParams(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.search.length > 0;
+  } catch {
+    return value.includes("?");
+  }
 }
 
 function isIsoDate(value: string): boolean {
@@ -981,6 +991,18 @@ export async function runValidateScrapeFilenameAlignmentCli(
               `(unique=${uniqueImageUrls.size}, total=${imageUrls.length})`,
           });
         }
+
+          const queryParamUrls = imageUrls.filter((url) => hasUrlQueryParams(url));
+          if (queryParamUrls.length > 0) {
+            const sample = queryParamUrls.slice(0, 3).join(", ");
+            issues.push({
+              code: "media_gallery_image_url_has_query_params",
+              message:
+                `details/json/${fileName} has ${queryParamUrls.length} media_gallery.image_urls with query params; ` +
+                `adapter scrapers must emit canonical URLs without query strings` +
+                (sample ? ` (sample: ${sample})` : ""),
+            });
+          }
       }
 
       const doubleHttpsUrls = imageUrls.filter((url) =>
