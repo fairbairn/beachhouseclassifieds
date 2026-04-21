@@ -1,9 +1,9 @@
-import type { DiscoverListing } from "@/lib/discover/discover-types";
 import {
   resolvePlannedCommunity,
   type CommunityCandidateScore,
   type CommunityResolutionResult,
 } from "@/lib/discover/community-resolution";
+import type { DiscoverListing } from "@/lib/discover/discover-types";
 
 export type DiscoverCommunityNormalizationDecision = {
   id: string;
@@ -65,7 +65,7 @@ export function normalizeDiscoverListingCommunity(listing: DiscoverListing): {
   let reason: DiscoverCommunityNormalizationDecision["reason"];
 
   if (!hasCoordinates) {
-    normalizedCommunity = listing.area;
+    normalizedCommunity = listing.community;
     reason = "missing-coordinates";
   } else if (insideCommunities.length === 1) {
     normalizedCommunity = insideCommunities[0];
@@ -74,11 +74,11 @@ export function normalizeDiscoverListingCommunity(listing: DiscoverListing): {
     if (insideCommunities.includes(listing.community)) {
       normalizedCommunity = listing.community;
     } else {
-      normalizedCommunity = listing.area;
+      normalizedCommunity = listing.community;
     }
     reason = "polygon-inside-multiple";
   } else {
-    normalizedCommunity = listing.area;
+    normalizedCommunity = listing.community;
     reason = "no-polygon-match";
   }
 

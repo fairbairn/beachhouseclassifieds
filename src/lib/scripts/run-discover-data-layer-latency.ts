@@ -6,6 +6,10 @@ import {
   getDiscoverCorpusMetadata,
   getDiscoverListings,
 } from "@/lib/discover/discover-listings-data-layer.server";
+import {
+  sortDiscoverListings,
+  type DiscoverSortValue,
+} from "@/lib/discover/discover-page-derived";
 import chalk from "chalk";
 import { and, inArray, isNotNull } from "drizzle-orm";
 import { performance } from "node:perf_hooks";
@@ -13,15 +17,31 @@ import { performance } from "node:perf_hooks";
 type CliOptions = {
   ssrLimit: number;
   fetchLimit: number;
+  sortLimit: number;
+  sortNights: number;
   repeats: number;
   json: boolean;
   progress: boolean;
+};
+
+type SortBenchmarkMode = {
+  value: DiscoverSortValue;
+  label: string;
+};
+
+type SortBenchmarkRow = {
+  mode: DiscoverSortValue;
+  label: string;
+  ms: number;
+  count: number;
 };
 
 type RunMetrics = {
   metadataMs: number;
   ssrMs: number;
   fetchMs: number;
+  sortFetch96Ms: number;
+  sortBenchmarks: SortBenchmarkRow[];
   visibilityAuditMs: number;
   totalMs: number;
   totalCount: number;
@@ -33,6 +53,8 @@ type RunMetrics = {
 function parseArgs(argv: string[]): CliOptions {
   let ssrLimit = 12;
   let fetchLimit = 84;
+  let sortLimit = 96;
+  let sortNights = 3;
   let repeats = 1;
   let json = false;
   let progress = true;
@@ -44,6 +66,8 @@ function parseArgs(argv: string[]): CliOptions {
           "discover_data_layer_latency",
           "  --ssr-limit <n>      default: 12",
           "  --fetch-limit <n>    default: 84",
+          "  --sort-limit <n>     default: 96",
+          "  --sort-nights <n>    default: 3",
           "  --repeats <n>        default: 1",
           "  --json               output json payload",
           "  --no-progress        disable per-run progress lines",
@@ -84,6 +108,24 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--sort-limit" && next) {
+      const value = Number(next);
+      if (Number.isFinite(value) && value > 0) {
+        sortLimit = Math.floor(value);
+      }
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--sort-nights" && next) {
+      const value = Number(next);
+      if (Number.isFinite(value) && value > 0) {
+        sortNights = Math.floor(value);
+      }
+      i += 1;
+      continue;
+    }
+
     if (arg === "--json") {
       json = true;
       continue;
@@ -99,7 +141,15 @@ function parseArgs(argv: string[]): CliOptions {
     }
   }
 
-  return { ssrLimit, fetchLimit, repeats, json, progress };
+  return {
+    ssrLimit,
+    fetchLimit,
+    sortLimit,
+    sortNights,
+    repeats,
+    json,
+    progress,
+  };
 }
 
 async function timeStage<T>(
@@ -121,10 +171,42 @@ function formatMs(value: number): string {
   return `${value.toFixed(1)}ms`;
 }
 
+function stripAnsi(value: string): string {
+  let out = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 27 && value[index + 1] === "[") {
+      index += 2;
+      while (index < value.length && value[index] !== "m") {
+        index += 1;
+      }
+      continue;
+    }
+    out += value[index];
+  }
+  return out;
+}
+
+function colorizeDuration(
+  value: number,
+  warnMs: number,
+  failMs: number,
+): string {
+  const formatted = formatMs(value);
+  if (value >= failMs) {
+    return chalk.red(formatted);
+  }
+  if (value >= warnMs) {
+    return chalk.yellow(formatted);
+  }
+  return chalk.green(formatted);
+}
+
 function buildTable(headers: string[], rows: string[][]): string {
   const widths = headers.map((header, index) => {
-    const cellWidths = rows.map((row) => (row[index] ?? "").length);
-    return Math.max(header.length, ...cellWidths);
+    const headerWidth = stripAnsi(header).length;
+    const cellWidths = rows.map((row) => stripAnsi(row[index] ?? "").length);
+    return Math.max(headerWidth, ...cellWidths);
   });
 
   const divider =
@@ -133,7 +215,13 @@ function buildTable(headers: string[], rows: string[][]): string {
   const renderRow = (cells: string[]) =>
     "|" +
     cells
-      .map((cell, index) => ` ${(cell ?? "").padEnd(widths[index] ?? 0)} `)
+      .map((cell, index) => {
+        const rawCell = cell ?? "";
+        const visible = stripAnsi(rawCell).length;
+        const width = widths[index] ?? 0;
+        const padding = Math.max(0, width - visible);
+        return ` ${rawCell}${" ".repeat(padding)} `;
+      })
       .join("|") +
     "|";
 
@@ -167,8 +255,17 @@ async function countReturnedNonVisible(slugs: string[]): Promise<number> {
 async function runOne(input: {
   ssrLimit: number;
   fetchLimit: number;
+  sortLimit: number;
+  sortNights: number;
 }): Promise<RunMetrics> {
   const startedAt = performance.now();
+
+  const sortModes: SortBenchmarkMode[] = [
+    { value: "price-low", label: "Price Low->High" },
+    { value: "price-high", label: "Price High->Low" },
+    { value: "sleeps-high", label: "Sleeps High->Low" },
+    { value: "beach-pool-first", label: "Beachfront+Pool" },
+  ];
 
   const metadataStage = await timeStage(async () =>
     getDiscoverCorpusMetadata(),
@@ -177,18 +274,34 @@ async function runOne(input: {
     getDiscoverListings({ maxListings: input.ssrLimit }),
   );
 
-  const lastSsr = ssrStage.value[ssrStage.value.length - 1];
   const fetchStage = await timeStage(async () => {
-    if (!lastSsr) {
+    if (ssrStage.value.length === 0) {
       return [];
     }
+
     return getDiscoverListings({
       maxListings: input.fetchLimit,
-      afterCursor: {
-        demoOrder: lastSsr.demoOrder,
-        id: lastSsr.id,
-      },
+      offset: input.ssrLimit,
     });
+  });
+
+  const sortFetchStage = await timeStage(async () =>
+    getDiscoverListings({ maxListings: input.sortLimit }),
+  );
+
+  const sortBenchmarks: SortBenchmarkRow[] = sortModes.map((mode) => {
+    const started = performance.now();
+    const sorted = sortDiscoverListings({
+      listings: sortFetchStage.value,
+      sortOption: mode.value,
+      nights: input.sortNights,
+    });
+    return {
+      mode: mode.value,
+      label: mode.label,
+      ms: performance.now() - started,
+      count: sorted.length,
+    };
   });
 
   const returnedSlugs = [
@@ -204,6 +317,8 @@ async function runOne(input: {
     metadataMs: metadataStage.ms,
     ssrMs: ssrStage.ms,
     fetchMs: fetchStage.ms,
+    sortFetch96Ms: sortFetchStage.ms,
+    sortBenchmarks,
     visibilityAuditMs: visibilityAuditStage.ms,
     totalMs: performance.now() - startedAt,
     totalCount: metadataStage.value?.totalCount ?? 0,
@@ -223,6 +338,8 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
           "discover_data_layer_latency",
           `ssr_limit=${options.ssrLimit}`,
           `fetch_limit=${options.fetchLimit}`,
+          `sort_limit=${options.sortLimit}`,
+          `sort_nights=${options.sortNights}`,
           `repeats=${options.repeats}`,
         ].join(" "),
       ) + "\n",
@@ -242,17 +359,50 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
     const run = await runOne({
       ssrLimit: options.ssrLimit,
       fetchLimit: options.fetchLimit,
+      sortLimit: options.sortLimit,
+      sortNights: options.sortNights,
     });
     runs.push(run);
   }
+
+  const sortModes: SortBenchmarkMode[] = [
+    { value: "price-low", label: "Price Low->High" },
+    { value: "price-high", label: "Price High->Low" },
+    { value: "sleeps-high", label: "Sleeps High->Low" },
+    { value: "beach-pool-first", label: "Beachfront+Pool" },
+  ];
+
+  const sortSummary = sortModes.map((mode) => {
+    const durations = runs
+      .map((run) =>
+        run.sortBenchmarks.find((entry) => entry.mode === mode.value),
+      )
+      .filter((entry): entry is SortBenchmarkRow => Boolean(entry))
+      .map((entry) => entry.ms);
+
+    return {
+      mode: mode.value,
+      label: mode.label,
+      avgMs: average(durations),
+      minMs: durations.length > 0 ? Math.min(...durations) : 0,
+      maxMs: durations.length > 0 ? Math.max(...durations) : 0,
+      count:
+        runs[runs.length - 1]?.sortBenchmarks.find(
+          (entry) => entry.mode === mode.value,
+        )?.count ?? 0,
+    };
+  });
 
   const summary = {
     repeats: options.repeats,
     ssrLimit: options.ssrLimit,
     fetchLimit: options.fetchLimit,
+    sortLimit: options.sortLimit,
+    sortNights: options.sortNights,
     avgMetadataMs: average(runs.map((run) => run.metadataMs)),
     avgSsrMs: average(runs.map((run) => run.ssrMs)),
     avgFetchMs: average(runs.map((run) => run.fetchMs)),
+    avgSortFetch96Ms: average(runs.map((run) => run.sortFetch96Ms)),
     avgVisibilityAuditMs: average(runs.map((run) => run.visibilityAuditMs)),
     avgTotalMs: average(runs.map((run) => run.totalMs)),
     lastTotalCount: runs[runs.length - 1]?.totalCount ?? 0,
@@ -265,7 +415,9 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   };
 
   if (options.json) {
-    process.stdout.write(`${JSON.stringify({ runs, summary }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ runs, summary, sortSummary }, null, 2)}\n`,
+    );
   } else {
     const status =
       summary.maxNonVisibleReturned > 0
@@ -278,6 +430,7 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
       "Metadata",
       "SSR",
       "Fetch",
+      "Sort Fetch 96",
       "Audit",
       "Total",
       "SSR Count",
@@ -288,11 +441,12 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
     const runRows = runs.map((run, index) => [
       String(index + 1),
       run.nonVisibleReturnedCount === 0 ? "PASS" : "FAIL",
-      formatMs(run.metadataMs),
-      formatMs(run.ssrMs),
-      formatMs(run.fetchMs),
-      formatMs(run.visibilityAuditMs),
-      formatMs(run.totalMs),
+      colorizeDuration(run.metadataMs, 50, 100),
+      colorizeDuration(run.ssrMs, 50, 100),
+      colorizeDuration(run.fetchMs, 100, 250),
+      colorizeDuration(run.sortFetch96Ms, 100, 250),
+      colorizeDuration(run.visibilityAuditMs, 20, 50),
+      colorizeDuration(run.totalMs, 250, 600),
       String(run.ssrCount),
       String(run.fetchCount),
       String(run.totalCount),
@@ -305,19 +459,36 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
       ["Repeats", String(summary.repeats)],
       ["SSR Limit", String(summary.ssrLimit)],
       ["Fetch Limit", String(summary.fetchLimit)],
-      ["Average Metadata", formatMs(summary.avgMetadataMs)],
-      ["Average SSR", formatMs(summary.avgSsrMs)],
-      ["Average Fetch", formatMs(summary.avgFetchMs)],
-      ["Average Audit", formatMs(summary.avgVisibilityAuditMs)],
-      ["Average Total", formatMs(summary.avgTotalMs)],
+      ["Sort Limit", String(summary.sortLimit)],
+      ["Sort Nights", String(summary.sortNights)],
+      ["Average Metadata", colorizeDuration(summary.avgMetadataMs, 50, 100)],
+      ["Average SSR", colorizeDuration(summary.avgSsrMs, 50, 100)],
+      ["Average Fetch", colorizeDuration(summary.avgFetchMs, 100, 250)],
+      [
+        "Average Sort Fetch 96",
+        colorizeDuration(summary.avgSortFetch96Ms, 100, 250),
+      ],
+      ["Average Audit", colorizeDuration(summary.avgVisibilityAuditMs, 20, 50)],
+      ["Average Total", colorizeDuration(summary.avgTotalMs, 250, 600)],
       ["Last Total Count", String(summary.lastTotalCount)],
       ["Last SSR Count", String(summary.lastSsrCount)],
       ["Last Fetch Count", String(summary.lastFetchCount)],
       ["Max Non-Visible Returned", String(summary.maxNonVisibleReturned)],
     ];
 
+    const sortHeaders = ["Sort Mode", "Avg", "Min", "Max", "Rows"];
+    const sortRows = sortSummary.map((row) => [
+      row.label,
+      colorizeDuration(row.avgMs, 2, 8),
+      colorizeDuration(row.minMs, 2, 8),
+      colorizeDuration(row.maxMs, 2, 8),
+      String(row.count),
+    ]);
+
     process.stdout.write("\n" + chalk.bold("run_metrics") + "\n");
     process.stdout.write(`${buildTable(runHeaders, runRows)}\n`);
+    process.stdout.write("\n" + chalk.bold("sort_benchmark_full_96") + "\n");
+    process.stdout.write(`${buildTable(sortHeaders, sortRows)}\n`);
     process.stdout.write("\n" + chalk.bold("summary") + "\n");
     process.stdout.write(`${buildTable(summaryHeaders, summaryRows)}\n`);
     process.stdout.write(`${status} discover_data_layer_latency\n`);

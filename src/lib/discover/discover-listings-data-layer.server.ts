@@ -1,28 +1,22 @@
+import { queryDiscoverCountAndFacets } from "@/lib/discover/data-layer/queries/discover-count-facets-query.server";
+import { queryDiscoverDetailRow } from "@/lib/discover/data-layer/queries/discover-detail-query.server";
+import {
+  queryDiscoverListingsRows,
+  queryDiscoverPricingSummaryRows,
+  queryDiscoverSourcePricingRows,
+  type DiscoverListingRecordRow,
+} from "@/lib/discover/data-layer/queries/discover-listings-query.server";
 import type { DiscoverListing } from "@/lib/discover/discover-types";
-import { pgDb } from "@/core/server/db";
 import {
-  listing,
-  listing_pricing_summary,
-  listing_source_link,
-  listing_source_pricing,
-  site,
-} from "@/lib/db/schema-postgres";
-import {
-  and,
-  desc,
-  eq,
-  gt,
-  gte,
-  inArray,
-  isNull,
-  lte,
-  or,
-  sql,
-} from "drizzle-orm";
+  areaLabelFromCode,
+  beachAreaLabelFromCode,
+  communityLabelFromCode,
+  toAreaCodeFromLabel,
+  toBeachAreaCodeFromLabel,
+  toCommunityCodeFromLabel,
+} from "@/lib/listings/taxonomy/location-taxonomy";
 
 const TARGET_LISTING_COUNT = 96;
-const DISCOVER_SITE_SLUG = "30acollections";
-const DISCOVER_PRICING_SUMMARY_METHOD = "monthly_forward_avg_v1";
 
 export type DiscoverCorpusMetadata = {
   totalCount: number;
@@ -37,36 +31,6 @@ export type DiscoverCorpusMetadata = {
     };
   };
 };
-
-let cachedDiscoverSiteId: string | null | undefined;
-
-async function resolveDiscoverSiteId(): Promise<string | null> {
-  if (cachedDiscoverSiteId !== undefined) {
-    return cachedDiscoverSiteId;
-  }
-
-  if (!pgDb) {
-    cachedDiscoverSiteId = null;
-    return cachedDiscoverSiteId;
-  }
-
-  const rows = await pgDb
-    .select({ id: site.id })
-    .from(site)
-    .where(eq(site.slug, DISCOVER_SITE_SLUG))
-    .limit(1);
-
-  cachedDiscoverSiteId = rows[0]?.id ?? null;
-  return cachedDiscoverSiteId;
-}
-
-function discoverEligibilityWhere(discoverSiteId: string) {
-  return and(
-    eq(listing.site_id, discoverSiteId),
-    eq(listing.status, "active"),
-    isNull(listing.visibility_disabled_reason),
-  );
-}
 
 function asObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -272,6 +236,85 @@ function buildSleepingArrangementLines(raw: {
   return fallbackLines.slice(0, 10);
 }
 
+function toFriendlyWords(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized
+    .split(" ")
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (lower === "30a") {
+        return "30A";
+      }
+      return lower[0].toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
+
+function resolveFriendlyArea(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const codeMatch = areaLabelFromCode(trimmed);
+  if (codeMatch) {
+    return codeMatch;
+  }
+
+  const fromLabelCode = toAreaCodeFromLabel(trimmed);
+  if (fromLabelCode) {
+    return areaLabelFromCode(fromLabelCode) ?? toFriendlyWords(trimmed);
+  }
+
+  return toFriendlyWords(trimmed);
+}
+
+function resolveFriendlyBeach(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const codeMatch = beachAreaLabelFromCode(trimmed);
+  if (codeMatch) {
+    return codeMatch;
+  }
+
+  const fromLabelCode = toBeachAreaCodeFromLabel(trimmed);
+  if (fromLabelCode) {
+    return beachAreaLabelFromCode(fromLabelCode) ?? toFriendlyWords(trimmed);
+  }
+
+  return toFriendlyWords(trimmed);
+}
+
+function resolveFriendlyCommunity(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const codeMatch = communityLabelFromCode(trimmed);
+  if (codeMatch) {
+    return codeMatch;
+  }
+
+  const fromLabelCode = toCommunityCodeFromLabel(trimmed);
+  if (fromLabelCode) {
+    return communityLabelFromCode(fromLabelCode) ?? "";
+  }
+
+  return "";
+}
+
 function toIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
@@ -365,42 +408,15 @@ async function loadPricingContextByListingSlug(input: {
     listing_id: string;
     listing_number: number;
   }>;
+  includeAvailabilityCalendar: boolean;
 }): Promise<Map<string, SourcePricingContext>> {
   const out = new Map<string, SourcePricingContext>();
 
-  if (!pgDb || input.listingRows.length === 0) {
+  if (input.listingRows.length === 0) {
     return out;
   }
 
   const listingIds = input.listingRows.map((row) => row.listing_id);
-  const sourceLinkRows = await pgDb
-    .select({
-      id: listing_source_link.id,
-      listing_id: listing_source_link.listing_id,
-      is_primary_source: listing_source_link.is_primary_source,
-    })
-    .from(listing_source_link)
-    .where(
-      and(
-        inArray(listing_source_link.listing_id, listingIds),
-        eq(listing_source_link.source_status, "active"),
-        isNull(listing_source_link.active_to),
-      ),
-    );
-
-  const sourceLinkIdByListingId = new Map<string, string>();
-  for (const row of sourceLinkRows) {
-    if (!sourceLinkIdByListingId.has(row.listing_id) || row.is_primary_source) {
-      sourceLinkIdByListingId.set(row.listing_id, row.id);
-    }
-  }
-
-  const pickedSourceLinkIds = Array.from(
-    new Set(sourceLinkIdByListingId.values()),
-  );
-  if (pickedSourceLinkIds.length === 0) {
-    return out;
-  }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -417,33 +433,10 @@ async function loadPricingContextByListingSlug(input: {
   const targetMonthStartDateIso =
     monthStartDateIsoList[0] ?? toIsoDate(nextMonthStartDate);
 
-  const summaryRows = await pgDb
-    .select({
-      listing_id: listing_pricing_summary.listing_id,
-      month_start_date: listing_pricing_summary.month_start_date,
-      recommended_all_in_nightly:
-        listing_pricing_summary.recommended_all_in_nightly,
-      computed_at: listing_pricing_summary.computed_at,
-      anchor_date: listing_pricing_summary.anchor_date,
-    })
-    .from(listing_pricing_summary)
-    .where(
-      and(
-        inArray(listing_pricing_summary.listing_id, listingIds),
-        eq(listing_pricing_summary.nights, 7),
-        eq(listing_pricing_summary.method, DISCOVER_PRICING_SUMMARY_METHOD),
-        inArray(
-          listing_pricing_summary.month_start_date,
-          monthStartDateIsoList,
-        ),
-      ),
-    )
-    .orderBy(
-      listing_pricing_summary.listing_id,
-      listing_pricing_summary.month_start_date,
-      desc(listing_pricing_summary.computed_at),
-      desc(listing_pricing_summary.anchor_date),
-    );
+  const summaryRows = await queryDiscoverPricingSummaryRows({
+    listingIds,
+    monthStartDateIsoList,
+  });
 
   const summaryNightlyByListingId = new Map<string, Map<string, number>>();
   for (const row of summaryRows) {
@@ -461,29 +454,7 @@ async function loadPricingContextByListingSlug(input: {
     summaryNightlyByListingId.set(row.listing_id, listingSummary);
   }
 
-  const pricingRows = await pgDb
-    .select({
-      source_link_id: listing_source_pricing.source_link_id,
-      stay_date: listing_source_pricing.stay_date,
-      is_available: listing_source_pricing.is_available,
-      availability_status_code: listing_source_pricing.availability_status_code,
-      is_available_for_checkin: listing_source_pricing.is_available_for_checkin,
-      is_available_for_checkout:
-        listing_source_pricing.is_available_for_checkout,
-      min_nights: listing_source_pricing.min_nights,
-      base_nightly: listing_source_pricing.base_nightly,
-      all_in_nightly: listing_source_pricing.all_in_nightly,
-    })
-    .from(listing_source_pricing)
-    .where(
-      and(
-        inArray(listing_source_pricing.source_link_id, pickedSourceLinkIds),
-        gte(listing_source_pricing.stay_date, toIsoDate(today)),
-        lte(listing_source_pricing.stay_date, toIsoDate(horizonEnd)),
-      ),
-    );
-
-  const pricingBySourceLinkId = new Map<
+  const pricingByListingId = new Map<
     string,
     Array<{
       stay_date: string;
@@ -492,37 +463,54 @@ async function loadPricingContextByListingSlug(input: {
       is_available_for_checkin: boolean | null;
       is_available_for_checkout: boolean | null;
       min_nights: number | null;
-      base_nightly: string | null;
       all_in_nightly: string;
     }>
   >();
 
-  for (const row of pricingRows) {
-    const entries = pricingBySourceLinkId.get(row.source_link_id) ?? [];
-    entries.push({
-      stay_date: row.stay_date,
-      is_available: row.is_available,
-      availability_status_code: row.availability_status_code,
-      is_available_for_checkin: row.is_available_for_checkin,
-      is_available_for_checkout: row.is_available_for_checkout,
-      min_nights: row.min_nights,
-      base_nightly: row.base_nightly,
-      all_in_nightly: row.all_in_nightly,
+  if (input.includeAvailabilityCalendar) {
+    const pricingRows = await queryDiscoverSourcePricingRows({
+      listingIds,
+      startDateIso: toIsoDate(today),
+      endDateIso: toIsoDate(horizonEnd),
     });
-    pricingBySourceLinkId.set(row.source_link_id, entries);
+
+    for (const row of pricingRows) {
+      const entries = pricingByListingId.get(row.listing_id) ?? [];
+      entries.push({
+        stay_date: row.stay_date,
+        is_available: row.is_available,
+        availability_status_code: row.availability_status_code,
+        is_available_for_checkin: row.is_available_for_checkin,
+        is_available_for_checkout: row.is_available_for_checkout,
+        min_nights: row.min_nights,
+        all_in_nightly: row.all_in_nightly,
+      });
+      pricingByListingId.set(row.listing_id, entries);
+    }
   }
 
   for (const listingRow of input.listingRows) {
-    const sourceLinkId = sourceLinkIdByListingId.get(listingRow.listing_id);
-    if (!sourceLinkId) {
-      continue;
+    const entries = pricingByListingId.get(listingRow.listing_id) ?? [];
+
+    const contiguousAvailableNightsByIndex = new Array<number>(entries.length);
+    let contiguousFromNextDay = 0;
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const isAvailable = entries[index]?.is_available === true;
+      contiguousFromNextDay = isAvailable ? contiguousFromNextDay + 1 : 0;
+      contiguousAvailableNightsByIndex[index] = contiguousFromNextDay;
     }
 
-    const entries = (pricingBySourceLinkId.get(sourceLinkId) ?? []).sort(
-      (a, b) => a.stay_date.localeCompare(b.stay_date),
-    );
-    if (entries.length === 0) {
-      continue;
+    const monthStats = new Map<string, { sum: number; count: number }>();
+    for (const entry of entries) {
+      const nightly = asNumber(entry.all_in_nightly);
+      if (nightly === null) {
+        continue;
+      }
+      const monthKey = entry.stay_date.slice(0, 7);
+      const existing = monthStats.get(monthKey) ?? { sum: 0, count: 0 };
+      existing.sum += nightly;
+      existing.count += 1;
+      monthStats.set(monthKey, existing);
     }
 
     const availabilityCalendarStatus: Record<
@@ -555,13 +543,8 @@ async function loadPricingContextByListingSlug(input: {
         typeof entry.is_available_for_checkout === "boolean";
 
       const minNights = Math.max(1, entry.min_nights ?? 1);
-      let contiguousAvailableNights = 0;
-      for (let cursor = index; cursor < entries.length; cursor += 1) {
-        if (!entries[cursor]?.is_available) {
-          break;
-        }
-        contiguousAvailableNights += 1;
-      }
+      const contiguousAvailableNights =
+        contiguousAvailableNightsByIndex[index] ?? 0;
 
       const isNightAvailable = entry.is_available;
       const derivedIsCheckInAllowed =
@@ -612,18 +595,68 @@ async function loadPricingContextByListingSlug(input: {
       summaryNightlyByListingId.get(listingRow.listing_id) ??
       new Map<string, number>();
 
+    const summaryOnlyMonthlyValues = monthStartDateIsoList
+      .map((monthStartIso) => ({
+        monthStartIso,
+        nightly: summaryByMonth.get(monthStartIso),
+      }))
+      .filter(
+        (
+          value,
+        ): value is {
+          monthStartIso: string;
+          nightly: number;
+        } => typeof value.nightly === "number",
+      );
+
+    if (
+      !input.includeAvailabilityCalendar &&
+      summaryOnlyMonthlyValues.length > 0
+    ) {
+      const upcomingTypicalPricingMonths = summaryOnlyMonthlyValues.map(
+        ({ monthStartIso, nightly }) => {
+          const monthIndex = monthStartDateIsoList.indexOf(monthStartIso);
+          const monthDate =
+            monthIndex >= 0
+              ? (monthStartDates[monthIndex] ?? nextMonthStartDate)
+              : nextMonthStartDate;
+          return {
+            monthLabel: monthDate.toLocaleString("en-US", { month: "long" }),
+            monthStartDate: monthStartIso,
+            typicalAllInNightly: Math.max(1, Math.round(nightly)),
+          };
+        },
+      );
+
+      const primaryMonthNightly =
+        summaryByMonth.get(targetMonthStartDateIso) ??
+        summaryOnlyMonthlyValues[0]?.nightly;
+
+      if (primaryMonthNightly !== undefined) {
+        out.set(listingRow.slug, {
+          typicalPricingMonth: nextMonthStartDate.toLocaleString("en-US", {
+            month: "long",
+          }),
+          typicalBaseNightly: Math.max(
+            1,
+            Math.round(primaryMonthNightly * 0.88),
+          ),
+          typicalAllInNightly: Math.max(1, Math.round(primaryMonthNightly)),
+          upcomingTypicalPricingMonths,
+          availabilityCalendarStatus: {},
+        });
+      }
+      continue;
+    }
+
     const monthFallbackAverages = new Map<string, number>();
     for (const monthStartIso of monthStartDateIsoList) {
-      const values = entries
-        .filter((entry) =>
-          entry.stay_date.startsWith(monthStartIso.slice(0, 7)),
-        )
-        .map((entry) => asNumber(entry.all_in_nightly))
-        .filter((value): value is number => value !== null);
-      if (values.length === 0) {
+      const monthKey = monthStartIso.slice(0, 7);
+      const stats = monthStats.get(monthKey);
+      if (!stats || stats.count === 0) {
         continue;
       }
-      const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+      const avg = stats.sum / stats.count;
       monthFallbackAverages.set(monthStartIso, avg);
     }
 
@@ -676,12 +709,6 @@ async function loadPricingContextByListingSlug(input: {
       )
       .map((entry) => asNumber(entry.all_in_nightly))
       .filter((value): value is number => value !== null);
-    const baseValues = entries
-      .filter((entry) =>
-        entry.stay_date.startsWith(targetMonthStartDateIso.slice(0, 7)),
-      )
-      .map((entry) => asNumber(entry.base_nightly))
-      .filter((value): value is number => value !== null);
 
     const typicalAllIn =
       allInValues.length > 0
@@ -692,10 +719,7 @@ async function loadPricingContextByListingSlug(input: {
       continue;
     }
 
-    const typicalBase =
-      baseValues.length > 0
-        ? baseValues.reduce((sum, value) => sum + value, 0) / baseValues.length
-        : Math.ceil(typicalAllIn * 0.88);
+    const typicalBase = Math.ceil(typicalAllIn * 0.88);
 
     out.set(listingRow.slug, {
       typicalPricingMonth: nextMonthStartDate.toLocaleString("en-US", {
@@ -757,48 +781,12 @@ async function loadFromListingTable(input?: {
   includeSlug?: string;
   onlySlug?: boolean;
   maxListings?: number | null;
+  offset?: number;
   afterCursor?: {
     demoOrder: number;
     id: string;
   };
 }): Promise<DiscoverListing[]> {
-  if (!pgDb) {
-    return [];
-  }
-
-  const discoverSiteId = await resolveDiscoverSiteId();
-  if (!discoverSiteId) {
-    return [];
-  }
-
-  const selectFields = {
-    id: listing.id,
-    slug: listing.slug,
-    canonical_name: listing.canonical_name,
-    listing_number: listing.listing_number,
-    bedrooms: listing.bedrooms,
-    bathrooms: listing.bathrooms,
-    sleeps: listing.sleeps,
-    lat: listing.lat,
-    lng: listing.lng,
-    city: listing.city,
-    area: listing.area,
-    area_name: listing.area_name,
-    beach_area_name: listing.beach_area_name,
-    community_name: listing.community_name,
-    is_gulf_front: listing.is_gulf_front,
-    description_headline_plain: listing.description_headline_plain,
-    description_short_plain: listing.description_short_plain,
-    description_markdown: listing.description_markdown,
-    highlights: listing.highlights,
-    helpful_hints: listing.helpful_hints,
-    sleeping_arrangements: listing.sleeping_arrangements,
-    sleeping_summary: listing.sleeping_summary,
-    amenities_normalized: listing.amenities_normalized,
-    traits: listing.traits,
-    images: listing.images,
-  } as const;
-
   const includeSlug = input?.includeSlug?.trim();
   const onlySlug = Boolean(input?.onlySlug && includeSlug);
   const maxListings =
@@ -808,69 +796,32 @@ async function loadFromListingTable(input?: {
         ? null
         : TARGET_LISTING_COUNT;
   const afterCursor = input?.afterCursor;
+  const offset =
+    typeof input?.offset === "number" && Number.isFinite(input.offset)
+      ? Math.max(0, Math.floor(input.offset))
+      : 0;
 
-  const rows = onlySlug
-    ? await pgDb
-        .select({
-          ...selectFields,
-        })
-        .from(listing)
-        .where(
-          and(
-            discoverEligibilityWhere(discoverSiteId),
-            eq(listing.slug, includeSlug as string),
-          ),
-        )
-        .limit(1)
-    : await (async () => {
-        const query = pgDb
-          .select({
-            ...selectFields,
-          })
-          .from(listing)
-          .where(
-            and(
-              discoverEligibilityWhere(discoverSiteId),
-              afterCursor
-                ? or(
-                    gt(listing.listing_number, afterCursor.demoOrder),
-                    and(
-                      eq(listing.listing_number, afterCursor.demoOrder),
-                      gt(listing.slug, afterCursor.id),
-                    ),
-                  )
-                : undefined,
-            ),
-          )
-          .orderBy(listing.listing_number, listing.slug);
+  let rows: DiscoverListingRecordRow[] = [];
 
-        if (typeof maxListings === "number") {
-          return query.limit(maxListings);
-        }
-
-        return query;
-      })();
+  if (onlySlug && includeSlug) {
+    const detailRow = await queryDiscoverDetailRow({ slug: includeSlug });
+    rows = detailRow ? [detailRow] : [];
+  } else {
+    rows = await queryDiscoverListingsRows({
+      maxListings,
+      offset,
+      afterCursor,
+    });
+  }
 
   const hasIncluded = Boolean(
     includeSlug && rows.some((row) => row.slug === includeSlug),
   );
 
   if (!onlySlug && includeSlug && !hasIncluded) {
-    const includeRows = await pgDb
-      .select({
-        ...selectFields,
-      })
-      .from(listing)
-      .where(
-        and(
-          discoverEligibilityWhere(discoverSiteId),
-          eq(listing.slug, includeSlug),
-        ),
-      )
-      .limit(1);
-
-    if (includeRows.length > 0) {
-      rows.push(includeRows[0]);
+    const includeRow = await queryDiscoverDetailRow({ slug: includeSlug });
+    if (includeRow) {
+      rows.push(includeRow);
     }
   }
 
@@ -882,11 +833,12 @@ async function loadFromListingTable(input?: {
       listing_id: row.id,
       listing_number: row.listing_number ?? 0,
     })),
+    includeAvailabilityCalendar: onlySlug,
   });
 
   const mappedRows: Array<DiscoverListing | null> = rows.map((row, index) => {
-    const amenities = asStringArray(row.amenities_normalized);
-    const traits = row.traits;
+    const amenities = onlySlug ? asStringArray(row.amenities_normalized) : [];
+    const traits = onlySlug ? row.traits : [];
     const sleeps = Math.max(1, Math.round(row.sleeps ?? 0) || 6);
     const bedrooms = Math.max(1, Math.round(row.bedrooms ?? 0) || 3);
     const bathroomNumber = asNumber(row.bathrooms);
@@ -895,27 +847,32 @@ async function loadFromListingTable(input?: {
         ? Math.max(1, Math.round(bathroomNumber * 2) / 2)
         : Math.max(1, bedrooms - 0.5);
 
-    const summary = asObject(row.sleeping_summary);
-    const bedCounts = asObject(summary.bed_counts);
-    const kingBeds = Math.max(0, Math.round(asNumber(bedCounts.king) ?? 0));
-    const queenBeds = Math.max(0, Math.round(asNumber(bedCounts.queen) ?? 0));
+    const summary = onlySlug ? asObject(row.sleeping_summary) : {};
 
-    const area =
-      asString(row.beach_area_name) ||
+    const rawArea =
       asString(row.area_name) ||
       asString(row.city) ||
       asString(row.area) ||
       "30A";
-    const community = asString(row.community_name) || area;
+    const rawBeach = asString(row.beach_area_name) || rawArea;
+    const rawCommunity = asString(row.community_name);
 
-    const imageGalleryFromListing = extractImageGalleryFromListingImages(
-      row.images,
-    );
-    const imageUrlsFromListing = imageGalleryFromListing.map(
-      (image) => image.url,
-    );
-    const previewFromListing = imageUrlsFromListing.slice(0, 5);
-    const imageCountFromListing = imageUrlsFromListing.length;
+    const area = resolveFriendlyArea(rawArea) || "30A";
+    const beach = resolveFriendlyBeach(rawBeach) || area;
+    const community = resolveFriendlyCommunity(rawCommunity);
+
+    const imageGalleryFromListing = onlySlug
+      ? extractImageGalleryFromListingImages(row.images)
+      : [];
+    const previewFromListing = onlySlug
+      ? imageGalleryFromListing.slice(0, 5).map((image) => image.url)
+      : asStringArray(row.preview_image_urls);
+    const imageCountFromListing =
+      typeof row.image_count === "number" && Number.isFinite(row.image_count)
+        ? Math.max(0, Math.floor(row.image_count))
+        : Array.isArray(row.images)
+          ? row.images.length
+          : previewFromListing.length;
     const preview =
       previewFromListing.length > 0
         ? previewFromListing
@@ -923,20 +880,28 @@ async function loadFromListingTable(input?: {
           ? (previewSeeds[index % previewSeeds.length]?.previewImages ?? [])
           : [];
 
-    const description = asString(row.description_markdown);
-    const descriptionHeadline =
-      asString(row.description_headline_plain) ||
-      asString(row.description_short_plain);
-    const highlightsList = sanitizeAiCopyList(asStringArray(row.highlights), 10)
-      .map((entry) => ensureTerminalPeriod(entry))
-      .filter(Boolean);
-    const helpfulHints = sanitizeAiCopyList(asStringArray(row.helpful_hints), 8)
-      .map((entry) => normalizeHintTone(entry))
-      .map((entry) => ensureTerminalPeriod(entry))
-      .filter(Boolean);
+    const description = onlySlug ? asString(row.description_markdown) : "";
+    const descriptionHeadline = onlySlug
+      ? asString(row.description_headline_plain) ||
+        asString(row.description_short_plain)
+      : "";
+    const highlightsList = onlySlug
+      ? sanitizeAiCopyList(asStringArray(row.highlights), 10)
+          .map((entry) => ensureTerminalPeriod(entry))
+          .filter(Boolean)
+      : [];
+    const helpfulHints = onlySlug
+      ? sanitizeAiCopyList(asStringArray(row.helpful_hints), 8)
+          .map((entry) => normalizeHintTone(entry))
+          .map((entry) => ensureTerminalPeriod(entry))
+          .filter(Boolean)
+      : [];
     const sourcePricing = pricingContextBySlug.get(row.slug);
+    if (!sourcePricing) {
+      return null;
+    }
     if (
-      !sourcePricing ||
+      onlySlug &&
       Object.keys(sourcePricing.availabilityCalendarStatus).length === 0
     ) {
       return null;
@@ -945,49 +910,41 @@ async function loadFromListingTable(input?: {
     return {
       id: row.slug,
       name: row.canonical_name,
-      demoOrder: row.listing_number ?? index + 1,
       area,
+      beach,
       community,
       lat: row.lat ?? undefined,
       lng: row.lng ?? undefined,
       bedrooms,
       bathrooms,
       sleeps,
-      kingBeds,
-      queenBeds,
-      privatePool:
-        amenities.includes("private_pool") ||
-        readTraitFlag(traits, "feature.private_pool"),
-      beachfront:
-        Boolean(row.is_gulf_front) ||
-        amenities.includes("gulf_front") ||
-        amenities.includes("beachfront"),
-      gulfView:
-        amenities.includes("gulf_front") ||
-        amenities.includes("beachfront") ||
-        amenities.includes("water_view"),
-      golfCart:
-        amenities.includes("golf_cart") ||
-        readTraitFlag(traits, "feature.golf_cart"),
-      petsAllowed:
-        amenities.includes("pet_friendly") ||
-        readTraitFlag(traits, "feature.pets_allowed"),
-      accessible:
-        readTraitFlag(traits, "feature.accessible") ||
-        amenities.includes("accessible"),
-      elevator:
-        amenities.includes("elevator") ||
-        readTraitFlag(traits, "feature.elevator"),
+      privatePool: onlySlug
+        ? amenities.includes("private_pool") ||
+          readTraitFlag(traits, "feature.private_pool")
+        : Boolean(row.has_private_pool_amenity),
+      gulffront: onlySlug
+        ? Boolean(row.is_gulf_front) ||
+          amenities.includes("gulf_front") ||
+          amenities.includes("beachfront")
+        : Boolean(row.is_gulf_front) ||
+          Boolean(row.has_gulf_front_amenity) ||
+          Boolean(row.has_beachfront_amenity),
+      golfCart: onlySlug
+        ? amenities.includes("golf_cart") ||
+          readTraitFlag(traits, "feature.golf_cart")
+        : Boolean(row.has_golf_cart_amenity),
       previewImages: preview,
       imageCount:
         imageCountFromListing > 0 ? imageCountFromListing : preview.length,
       imageGallery:
-        imageGalleryFromListing.length > 0
+        onlySlug && imageGalleryFromListing.length > 0
           ? imageGalleryFromListing
-          : preview.map((url, imageIndex) => ({
-              name: `Photo ${imageIndex + 1}`,
-              url,
-            })),
+          : onlySlug
+            ? preview.map((url, imageIndex) => ({
+                name: `Photo ${imageIndex + 1}`,
+                url,
+              }))
+            : undefined,
       typicalPricingMonth: sourcePricing.typicalPricingMonth,
       typicalBaseNightly: sourcePricing.typicalBaseNightly,
       typicalAllInNightly: sourcePricing.typicalAllInNightly,
@@ -997,13 +954,17 @@ async function loadFromListingTable(input?: {
       description: description || undefined,
       highlightsList,
       helpfulHints,
-      sleepingArrangements: buildSleepingArrangementLines({
-        arrangements: row.sleeping_arrangements,
-        summary: row.sleeping_summary,
-      }),
-      amenitiesList: amenities,
-      availabilityCalendarStatus: sourcePricing.availabilityCalendarStatus,
-      sleepingSummary: summary,
+      sleepingArrangements: onlySlug
+        ? buildSleepingArrangementLines({
+            arrangements: row.sleeping_arrangements,
+            summary: row.sleeping_summary,
+          })
+        : undefined,
+      amenitiesList: onlySlug ? amenities : undefined,
+      availabilityCalendarStatus: onlySlug
+        ? sourcePricing.availabilityCalendarStatus
+        : undefined,
+      sleepingSummary: onlySlug ? summary : undefined,
     };
   });
 
@@ -1015,6 +976,7 @@ export async function getDiscoverListings(input?: {
   onlySlug?: boolean;
   disableFallback?: boolean;
   maxListings?: number | null;
+  offset?: number;
   afterCursor?: {
     demoOrder: number;
     id: string;
@@ -1029,118 +991,7 @@ export async function getDiscoverListings(input?: {
 }
 
 export async function getDiscoverCorpusMetadata(): Promise<DiscoverCorpusMetadata | null> {
-  if (!pgDb) {
-    return null;
-  }
-
-  const discoverSiteId = await resolveDiscoverSiteId();
-  if (!discoverSiteId) {
-    return null;
-  }
-
-  const eligibilityWhere = discoverEligibilityWhere(discoverSiteId);
-
-  const metadataResult = await pgDb.execute<{
-    total_count: number;
-    gulf_front_count: number;
-    private_pool_count: number;
-    golf_cart_count: number;
-    areas: unknown;
-    beaches: unknown;
-    communities: unknown;
-  }>(sql`
-    with eligible as materialized (
-      select
-        coalesce(
-          nullif(trim(${listing.beach_area_name}), ''),
-          nullif(trim(${listing.area_name}), ''),
-          nullif(trim(${listing.area}), ''),
-          '30A'
-        ) as area_name,
-        coalesce(
-          nullif(trim(${listing.beach_area_name}), ''),
-          nullif(trim(${listing.area_name}), '')
-        ) as beach_name,
-        coalesce(
-          nullif(trim(${listing.community_name}), ''),
-          nullif(trim(${listing.area_name}), ''),
-          nullif(trim(${listing.beach_area_name}), ''),
-          '30A'
-        ) as community_name,
-        ${listing.is_gulf_front} as is_gulf_front,
-        coalesce(${listing.traits}, '[]'::jsonb) as traits
-      from ${listing}
-      where ${eligibilityWhere}
-    ),
-    areas as (
-      select coalesce(jsonb_object_agg(name, count), '{}'::jsonb) as facets
-      from (
-        select area_name as name, count(*)::int as count
-        from eligible
-        where area_name is not null
-        group by area_name
-      ) grouped
-    ),
-    beaches as (
-      select coalesce(jsonb_object_agg(name, count), '{}'::jsonb) as facets
-      from (
-        select beach_name as name, count(*)::int as count
-        from eligible
-        where beach_name is not null
-        group by beach_name
-      ) grouped
-    ),
-    communities as (
-      select coalesce(jsonb_object_agg(name, count), '{}'::jsonb) as facets
-      from (
-        select community_name as name, count(*)::int as count
-        from eligible
-        where community_name is not null
-        group by community_name
-      ) grouped
-    )
-    select
-      (select count(*)::int from eligible) as total_count,
-      coalesce(
-        (select sum((is_gulf_front = true)::int)::int from eligible),
-        0
-      ) as gulf_front_count,
-      coalesce(
-        (
-          select
-            sum(
-              (
-                jsonb_path_exists(
-                  traits,
-                  '$[*] ? (@.key == "feature.private_pool" && @.value_boolean == true)'
-                )
-              )::int
-            )::int
-          from eligible
-        ),
-        0
-      ) as private_pool_count,
-      coalesce(
-        (
-          select
-            sum(
-              (
-                jsonb_path_exists(
-                  traits,
-                  '$[*] ? (@.key == "feature.golf_cart" && @.value_boolean == true)'
-                )
-              )::int
-            )::int
-          from eligible
-        ),
-        0
-      ) as golf_cart_count,
-      (select facets from areas) as areas,
-      (select facets from beaches) as beaches,
-      (select facets from communities) as communities
-  `);
-
-  const metadata = metadataResult.rows[0];
+  const metadata = await queryDiscoverCountAndFacets();
   if (!metadata) {
     return {
       totalCount: 0,

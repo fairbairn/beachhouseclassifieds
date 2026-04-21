@@ -1,23 +1,17 @@
 export type DiscoverListing = {
   id: string;
   name: string;
-  demoOrder: number;
   area: string;
+  beach: string;
   community: string;
   lat?: number;
   lng?: number;
   bedrooms: number;
   bathrooms: number;
   sleeps: number;
-  kingBeds: number;
-  queenBeds: number;
   privatePool: boolean;
-  beachfront: boolean;
-  gulfView?: boolean;
+  gulffront: boolean;
   golfCart: boolean;
-  petsAllowed: boolean;
-  accessible: boolean;
-  elevator: boolean;
   previewImages: string[];
   imageCount?: number;
   typicalPrice?: string;
@@ -95,32 +89,30 @@ export type DiscoverSearchMetadata = {
 
 export type DiscoverListingsMetadata = DiscoverSearchMetadata;
 
-export type DiscoverPageStats<TMetadata = DiscoverSearchMetadata> = {
-  nextCursor: string | null;
-  hasMore: boolean;
+export type DiscoverPageStats = {
   totalCount: number;
-  metadata: TMetadata;
-};
-
-export type DiscoverPageStatsWithOptionalMetadata<
-  TMetadata = DiscoverSearchMetadata,
-> = Omit<DiscoverPageStats<TMetadata>, "metadata"> & {
-  metadata?: TMetadata;
+  count: number;
+  requested: number;
 };
 
 export type DiscoverSearchRequest = {
   includeSlug?: string;
-  cursor?: string;
   limit?: number;
+  offset?: number;
+  includeMetadata?: boolean;
 };
 
+export type DiscoverListingsStats = DiscoverPageStats;
+
 export type DiscoverSearchResponse = {
-  _stats: DiscoverPageStats;
+  _stats: DiscoverListingsStats;
+  metadata?: DiscoverListingsMetadata;
   listings: DiscoverListing[];
 };
 
 export type DiscoverListingsPagePayload = {
-  _stats: DiscoverPageStatsWithOptionalMetadata;
+  _stats: DiscoverListingsStats;
+  metadata?: DiscoverListingsMetadata;
   listings: DiscoverListing[];
 };
 

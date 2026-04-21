@@ -4,7 +4,6 @@ import {
   readSessionFromContext,
   getOptionalSession as resolveOptionalSession,
 } from "@/core/auth/session-access";
-import { getServerSession } from "@/core/auth/session-adapter";
 import { getSessionWithProxy } from "@/core/client/auth/auth-proxy";
 import { CORE_ROUTE_PATHS } from "@/core/paths/core-paths";
 
@@ -22,6 +21,15 @@ function resolveAuthGuardPaths(
   };
 }
 
+async function resolveDefaultServerSession() {
+  if (!import.meta.env.SSR) {
+    return null;
+  }
+
+  const { getServerSession } = await import("@/core/auth/session-adapter");
+  return getServerSession();
+}
+
 export function createAuthGuards(options?: {
   paths?: Partial<AuthGuardPaths>;
   isServer?: () => boolean;
@@ -33,7 +41,8 @@ export function createAuthGuards(options?: {
 }) {
   const paths = resolveAuthGuardPaths(options?.paths);
   const isServer = options?.isServer ?? (() => import.meta.env.SSR);
-  const resolveServerSession = options?.getServerSession ?? getServerSession;
+  const resolveServerSession =
+    options?.getServerSession ?? resolveDefaultServerSession;
   const resolveClientSession = options?.getClientSession ?? getSessionWithProxy;
 
   async function getOptionalSession() {

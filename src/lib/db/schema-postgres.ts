@@ -130,6 +130,13 @@ export const listing = pgTable(
       table.state,
       table.area_name,
     ),
+    discover_feed_order_idx: index("listing_discover_feed_order_idx").on(
+      table.site_id,
+      table.status,
+      table.visibility_disabled_reason,
+      table.listing_number,
+      table.slug,
+    ),
     city_idx: index("listing_city_idx").on(table.city),
     state_idx: index("listing_state_idx").on(table.state),
     community_name_idx: index("listing_community_name_idx").on(
@@ -384,6 +391,16 @@ export const listing_pricing_summary = pgTable(
     source_link_anchor_idx: index(
       "listing_pricing_summary_source_link_anchor_idx",
     ).on(table.source_link_id, table.anchor_date),
+    discover_lookup_idx: index(
+      "listing_pricing_summary_discover_lookup_idx",
+    ).on(
+      table.listing_id,
+      table.nights,
+      table.method,
+      table.month_start_date,
+      table.computed_at,
+      table.anchor_date,
+    ),
     freshness_idx: index("listing_pricing_summary_freshness_idx").on(
       table.freshness_status,
     ),

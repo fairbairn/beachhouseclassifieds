@@ -12,7 +12,8 @@ function parseSearchRequestFromUrl(request: Request) {
   return {
     includeSlug: url.searchParams.get("include")?.trim() || undefined,
     limit: Number(url.searchParams.get("limit") ?? ""),
-    cursor: url.searchParams.get("cursor")?.trim() || undefined,
+    offset: Number(url.searchParams.get("offset") ?? ""),
+    includeMetadata: url.searchParams.get("includeMetadata") !== "false",
   };
 }
 
@@ -20,7 +21,8 @@ async function parseSearchRequestFromBody(request: Request) {
   const payload = (await request.json().catch(() => null)) as {
     includeSlug?: unknown;
     limit?: unknown;
-    cursor?: unknown;
+    offset?: unknown;
+    includeMetadata?: unknown;
   } | null;
 
   return {
@@ -34,10 +36,16 @@ async function parseSearchRequestFromBody(request: Request) {
         : typeof payload?.limit === "string"
           ? Number(payload.limit)
           : Number.NaN,
-    cursor:
-      typeof payload?.cursor === "string"
-        ? payload.cursor.trim() || undefined
-        : undefined,
+    offset:
+      typeof payload?.offset === "number"
+        ? payload.offset
+        : typeof payload?.offset === "string"
+          ? Number(payload.offset)
+          : Number.NaN,
+    includeMetadata:
+      typeof payload?.includeMetadata === "boolean"
+        ? payload.includeMetadata
+        : true,
   };
 }
 

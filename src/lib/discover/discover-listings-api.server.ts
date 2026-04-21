@@ -1,8 +1,3 @@
-import {
-  getAreaFromListing,
-  getBeachZoneFromListing,
-  verifyGulfFrontClaim,
-} from "@/components/discover/discover-utils";
 import { normalizeDiscoverListings } from "@/lib/discover/community-normalization";
 import {
   getDiscoverCorpusMetadata,
@@ -15,95 +10,47 @@ import type {
   DiscoverListingsPagePayload,
 } from "@/lib/discover/discover-types";
 
-const DEFAULT_DISCOVER_PAGE_SIZE = 24;
+const DEFAULT_DISCOVER_PAGE_SIZE = 96;
 const MAX_DISCOVER_PAGE_SIZE = 96;
+const DISCOVER_MAP_SEED_MAX = 96;
 
 function normalizeDiscoverListingsForApi(listings: DiscoverListing[]) {
-  const locationAlignedListings = listings.map((listing) => {
-    const beachZone = getBeachZoneFromListing(listing);
-    if (!beachZone) {
-      return verifyGulfFrontClaim(listing);
-    }
+  const normalizedListings = normalizeDiscoverListings(listings);
 
-    return verifyGulfFrontClaim({
-      ...listing,
-      area: beachZone,
-    });
-  });
+  // Server discover payloads should remain independent of UI utility modules.
+  const resolveArea = (listing: DiscoverListing): string => {
+    const area = listing.area.trim();
+    return area.length > 0 ? area : "30A";
+  };
 
-  const normalizedListings = normalizeDiscoverListings(locationAlignedListings);
+  const locationAlignedListings = normalizedListings.map((listing) => ({
+    ...listing,
+    area: resolveArea(listing),
+  }));
 
-  return [...normalizedListings].sort((a, b) => {
-    if (a.demoOrder !== b.demoOrder) {
-      return a.demoOrder - b.demoOrder;
-    }
-    return a.id.localeCompare(b.id);
-  });
+  return locationAlignedListings;
 }
 
 function toSummaryListing(listing: DiscoverListing): DiscoverListing {
   return {
     id: listing.id,
     name: listing.name,
-    demoOrder: listing.demoOrder,
     area: listing.area,
+    beach: listing.beach,
     community: listing.community,
     lat: listing.lat,
     lng: listing.lng,
     bedrooms: listing.bedrooms,
     bathrooms: listing.bathrooms,
     sleeps: listing.sleeps,
-    kingBeds: listing.kingBeds,
-    queenBeds: listing.queenBeds,
     privatePool: listing.privatePool,
-    beachfront: listing.beachfront,
-    gulfView: listing.gulfView,
+    gulffront: listing.gulffront,
     golfCart: listing.golfCart,
-    petsAllowed: listing.petsAllowed,
-    accessible: listing.accessible,
-    elevator: listing.elevator,
     previewImages: listing.previewImages,
     typicalPricingMonth: listing.typicalPricingMonth,
     typicalBaseNightly: listing.typicalBaseNightly,
     typicalAllInNightly: listing.typicalAllInNightly,
   };
-}
-
-function encodeCursor(listing: DiscoverListing): string {
-  return `${listing.demoOrder}|${encodeURIComponent(listing.id)}`;
-}
-
-function parseCursor(cursor: string | undefined): {
-  demoOrder: number;
-  id: string;
-} | null {
-  if (!cursor) {
-    return null;
-  }
-
-  const [demoOrderRaw, ...idParts] = cursor.split("|");
-  if (!demoOrderRaw || idParts.length === 0) {
-    return null;
-  }
-
-  const demoOrder = Number(demoOrderRaw);
-  if (!Number.isFinite(demoOrder)) {
-    return null;
-  }
-
-  const encodedId = idParts.join("|");
-  if (!encodedId) {
-    return null;
-  }
-
-  try {
-    return {
-      demoOrder,
-      id: decodeURIComponent(encodedId),
-    };
-  } catch {
-    return null;
-  }
 }
 
 function resolvePageSize(limit: number | undefined): number {
@@ -118,47 +65,14 @@ function resolvePageSize(limit: number | undefined): number {
   );
 }
 
-function buildDiscoverListingsMetadata(
-  listings: DiscoverListing[],
-): DiscoverListingsMetadata {
-  const areas: Record<string, number> = {};
-  const beaches: Record<string, number> = {};
-  const communities: Record<string, number> = {};
-
-  let gulfFront = 0;
-  let privatePool = 0;
-  let golfCart = 0;
-
-  for (const listing of listings) {
-    const normalizedArea = getAreaFromListing(listing);
-    if (normalizedArea) {
-      areas[normalizedArea] = (areas[normalizedArea] ?? 0) + 1;
-    }
-
-    const beachZone = getBeachZoneFromListing(listing);
-    if (beachZone) {
-      beaches[beachZone] = (beaches[beachZone] ?? 0) + 1;
-    }
-
-    if (listing.community) {
-      communities[listing.community] =
-        (communities[listing.community] ?? 0) + 1;
-    }
-
-    if (listing.beachfront) {
-      gulfFront += 1;
-    }
-    if (listing.privatePool) {
-      privatePool += 1;
-    }
-    if (listing.golfCart) {
-      golfCart += 1;
-    }
-  }
-
+function buildMetadataFromListings(input: {
+  listings: DiscoverListing[];
+  totalCount: number;
+  facets?: DiscoverListingsMetadata["facets"];
+}): DiscoverListingsMetadata {
   return {
-    totalCount: listings.length,
-    mapListings: listings
+    totalCount: input.totalCount,
+    mapListings: input.listings
       .filter(
         (listing) =>
           typeof listing.lat === "number" && typeof listing.lng === "number",
@@ -170,14 +84,15 @@ function buildDiscoverListingsMetadata(
         lng: listing.lng as number,
         typicalAllInNightly: listing.typicalAllInNightly,
       })),
-    facets: {
-      areas,
-      beaches,
-      communities,
+    facets: input.facets ?? {
+      areas: {},
+      beaches: {},
+      communities: {},
       features: {
-        gulfFront,
-        privatePool,
-        golfCart,
+        gulfFront: input.listings.filter((listing) => listing.gulffront).length,
+        privatePool: input.listings.filter((listing) => listing.privatePool)
+          .length,
+        golfCart: input.listings.filter((listing) => listing.golfCart).length,
       },
     },
   };
@@ -185,45 +100,57 @@ function buildDiscoverListingsMetadata(
 
 export async function buildDiscoverListingsPagePayload(input?: {
   limit?: number;
-  cursor?: string;
+  offset?: number;
+  includeMetadata?: boolean;
 }): Promise<DiscoverListingsPagePayload> {
   const pageSize = resolvePageSize(input?.limit);
-  const parsedCursor = parseCursor(input?.cursor);
+  const offset =
+    typeof input?.offset === "number" && Number.isFinite(input.offset)
+      ? Math.max(0, Math.floor(input.offset))
+      : 0;
+  const includeMetadata = input?.includeMetadata ?? offset === 0;
+  const [pageItems, corpusMetadata] = await Promise.all([
+    buildDiscoverListingsPayload({
+      maxListings: pageSize,
+      offset,
+    }),
+    includeMetadata ? getDiscoverCorpusMetadata().catch(() => null) : null,
+  ]);
 
-  const pageProbeListings = await buildDiscoverListingsPayload({
-    maxListings: pageSize + 1,
-    afterCursor: parsedCursor ?? undefined,
-  });
+  const totalCount = Math.max(
+    corpusMetadata?.totalCount ?? 0,
+    offset + pageItems.length,
+  );
 
-  const hasMore = pageProbeListings.length > pageSize;
-  const pageItems = hasMore
-    ? pageProbeListings.slice(0, pageSize)
-    : pageProbeListings;
-  const nextCursor = hasMore
-    ? encodeCursor(pageItems[pageItems.length - 1] as DiscoverListing)
-    : null;
+  let metadataListings = pageItems;
+  if (includeMetadata) {
+    const needsMapSeedFetch =
+      offset > 0 ||
+      pageItems.length < Math.min(DISCOVER_MAP_SEED_MAX, totalCount);
 
-  const corpusMetadata = await getDiscoverCorpusMetadata();
-  const totalCount = corpusMetadata?.totalCount ?? pageItems.length;
-  const includeMetadata = !input?.cursor;
-  const metadata = includeMetadata
-    ? {
-        totalCount,
-        // Keep metadata lean: list rows already carry map fields.
-        mapListings: [],
-        facets:
-          corpusMetadata?.facets ??
-          buildDiscoverListingsMetadata(pageItems).facets,
-      }
-    : undefined;
+    if (needsMapSeedFetch) {
+      metadataListings = await buildDiscoverListingsPayload({
+        maxListings: DISCOVER_MAP_SEED_MAX,
+        offset: 0,
+      });
+    }
+  }
 
   return {
     _stats: {
-      nextCursor,
-      hasMore,
       totalCount,
-      ...(metadata ? { metadata } : {}),
+      count: pageItems.length,
+      requested: pageSize,
     },
+    ...(includeMetadata
+      ? {
+          metadata: buildMetadataFromListings({
+            listings: metadataListings,
+            totalCount,
+            facets: corpusMetadata?.facets,
+          }),
+        }
+      : {}),
     listings: pageItems.map(toSummaryListing),
   };
 }
@@ -231,10 +158,7 @@ export async function buildDiscoverListingsPagePayload(input?: {
 export async function buildDiscoverListingsPayload(input?: {
   includeSlug?: string;
   maxListings?: number | null;
-  afterCursor?: {
-    demoOrder: number;
-    id: string;
-  };
+  offset?: number;
 }): Promise<DiscoverListing[]> {
   const includeSlug = input?.includeSlug?.trim() || undefined;
 
@@ -243,7 +167,7 @@ export async function buildDiscoverListingsPayload(input?: {
     onlySlug: Boolean(includeSlug),
     disableFallback: true,
     maxListings: includeSlug ? 1 : input?.maxListings,
-    afterCursor: includeSlug ? undefined : input?.afterCursor,
+    offset: includeSlug ? undefined : input?.offset,
   }).catch(() => []);
 
   return normalizeDiscoverListingsForApi(sourceListings);

@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
+import { isAbsolute } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
@@ -38,6 +39,120 @@ const isIgnoredUnusedExternalImportWarning = (warning: {
     )
   );
 };
+
+const toPosixPath = (value: string): string => value.replace(/\\/g, "/");
+
+const containsForbiddenClientDomainSegment = (value: string): boolean => {
+  const normalized = toPosixPath(value);
+  return (
+    normalized.includes("/server/") ||
+    normalized.includes("/cli/") ||
+    normalized.includes("/src/lib/scripts/") ||
+    normalized.includes("/src/core/server/") ||
+    normalized.includes("/src/lib/listings/refinement/") ||
+    normalized.includes("/src/lib/listings/enrichment/") ||
+    normalized.includes(".server.") ||
+    normalized.endsWith(".server") ||
+    normalized.includes(".cli.") ||
+    normalized.endsWith(".cli")
+  );
+};
+
+const containsForbiddenSsrDomainSegment = (value: string): boolean => {
+  const normalized = toPosixPath(value);
+  return (
+    normalized.includes("/cli/") ||
+    normalized.includes("/src/lib/scripts/") ||
+    normalized.includes("/src/lib/listings/refinement/") ||
+    normalized.includes("/src/lib/listings/enrichment/") ||
+    normalized.includes(".cli.") ||
+    normalized.endsWith(".cli")
+  );
+};
+
+const isForbiddenAliasImport = (source: string): boolean => {
+  return source.startsWith("@server") || source.startsWith("@cli");
+};
+
+function forbidNonWebImports() {
+  return {
+    name: "forbid-non-web-imports",
+    enforce: "pre" as const,
+    async resolveId(
+      source: string,
+      importer: string | undefined,
+      options: { ssr?: boolean } | undefined,
+    ) {
+      const isClientBuild = options?.ssr !== true;
+      const isSsrBuild = options?.ssr === true;
+
+      const violatesAliasRule = isForbiddenAliasImport(source);
+      const violatesDomainRule = isClientBuild
+        ? containsForbiddenClientDomainSegment(source)
+        : isSsrBuild
+          ? containsForbiddenSsrDomainSegment(source)
+          : false;
+
+      if (violatesAliasRule || violatesDomainRule) {
+        throw new Error(
+          [
+            isClientBuild
+              ? "BUILD FAILED: Forbidden module imported into client bundle."
+              : "BUILD FAILED: Forbidden module imported into SSR server bundle.",
+            `Importer: ${importer ?? "<entry>"}`,
+            `Source: ${source}`,
+            isClientBuild
+              ? "Client bundles must not include CLI/server/internal-processing modules."
+              : "SSR bundles must not include CLI/data-enrichment/internal-processing modules.",
+          ].join("\n"),
+        );
+      }
+
+      if (!importer) {
+        return null;
+      }
+
+      const resolved = await this.resolve(source, importer, {
+        ...options,
+        skipSelf: true,
+      });
+
+      const resolvedId = resolved?.id;
+      if (!resolvedId || resolvedId.startsWith("\0")) {
+        return null;
+      }
+
+      const normalizedResolvedId = toPosixPath(resolvedId);
+      if (!isAbsolute(normalizedResolvedId)) {
+        return null;
+      }
+
+      const violatesResolvedDomainRule = isClientBuild
+        ? containsForbiddenClientDomainSegment(normalizedResolvedId)
+        : isSsrBuild
+          ? containsForbiddenSsrDomainSegment(normalizedResolvedId)
+          : false;
+
+      if (violatesResolvedDomainRule) {
+        throw new Error(
+          [
+            isClientBuild
+              ? "BUILD FAILED: Forbidden module resolved into client bundle."
+              : "BUILD FAILED: Forbidden module resolved into SSR server bundle.",
+            `Importer: ${importer}`,
+            `Source: ${source}`,
+            `Resolved: ${normalizedResolvedId}`,
+            isClientBuild
+              ? "Client bundles must not include CLI/server/internal-processing modules."
+              : "SSR bundles must not include CLI/data-enrichment/internal-processing modules.",
+          ].join("\n"),
+        );
+      }
+
+      return null;
+    },
+  };
+}
 
 const config = defineConfig(({ mode }) => {
   const isAnalyzeBuild = mode === "analyze";
@@ -92,6 +207,7 @@ const config = defineConfig(({ mode }) => {
       },
     },
     plugins: [
+      forbidNonWebImports(),
       ...(enableTanStackDevtools ? [devtools()] : []),
       netlify(),
       // this is the plugin that enables path aliases

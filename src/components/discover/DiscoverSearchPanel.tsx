@@ -1,9 +1,6 @@
 import {
-  Accessibility,
-  ArrowUpDown,
   CarFront,
   ChevronDown,
-  Dog,
   Droplets,
   SlidersHorizontal,
   Waves,
@@ -55,22 +52,12 @@ export function DiscoverSearchPanel({
   onMinBedroomsChange,
   minBathrooms,
   onMinBathroomsChange,
-  minKingBeds,
-  onMinKingBedsChange,
-  minQueenBeds,
-  onMinQueenBedsChange,
-  filterBeachfront,
-  onToggleBeachfront,
+  filterGulffront,
+  onToggleGulffront,
   filterPool,
   onTogglePool,
   filterGolfCart,
   onToggleGolfCart,
-  filterPets,
-  onTogglePets,
-  filterElevator,
-  onToggleElevator,
-  filterAccessible,
-  onToggleAccessible,
 }: {
   locationQuery: string;
   onLocationQueryChange: (value: string) => void;
@@ -105,22 +92,12 @@ export function DiscoverSearchPanel({
   onMinBedroomsChange: (value: number) => void;
   minBathrooms: number;
   onMinBathroomsChange: (value: number) => void;
-  minKingBeds: number;
-  onMinKingBedsChange: (value: number) => void;
-  minQueenBeds: number;
-  onMinQueenBedsChange: (value: number) => void;
-  filterBeachfront: boolean;
-  onToggleBeachfront: () => void;
+  filterGulffront: boolean;
+  onToggleGulffront: () => void;
   filterPool: boolean;
   onTogglePool: () => void;
   filterGolfCart: boolean;
   onToggleGolfCart: () => void;
-  filterPets: boolean;
-  onTogglePets: () => void;
-  filterElevator: boolean;
-  onToggleElevator: () => void;
-  filterAccessible: boolean;
-  onToggleAccessible: () => void;
 }) {
   return (
     <header className="relative z-20 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)]">
@@ -293,31 +270,11 @@ export function DiscoverSearchPanel({
                     onChange={onMinBathroomsChange}
                   />
                 </div>
-                <div className="w-53 shrink-0">
-                  <GuestStepper
-                    controlLabel="minimum king beds"
-                    pillText={`${minKingBeds}+ King Beds`}
-                    value={minKingBeds}
-                    min={0}
-                    max={10}
-                    onChange={onMinKingBedsChange}
-                  />
-                </div>
-                <div className="w-53 shrink-0">
-                  <GuestStepper
-                    controlLabel="minimum queen beds"
-                    pillText={`${minQueenBeds}+ Queen Beds`}
-                    value={minQueenBeds}
-                    min={0}
-                    max={10}
-                    onChange={onMinQueenBedsChange}
-                  />
-                </div>
-                <div className="grid min-w-136 flex-1 grid-cols-6 gap-2">
+                <div className="grid min-w-136 flex-1 grid-cols-3 gap-2">
                   <IconOptionBox
                     label="Gulf Front"
-                    selected={filterBeachfront}
-                    onToggle={onToggleBeachfront}
+                    selected={filterGulffront}
+                    onToggle={onToggleGulffront}
                     icon={<Waves className="h-5 w-5" />}
                   />
                   <IconOptionBox
@@ -331,24 +288,6 @@ export function DiscoverSearchPanel({
                     selected={filterGolfCart}
                     onToggle={onToggleGolfCart}
                     icon={<CarFront className="h-5 w-5" />}
-                  />
-                  <IconOptionBox
-                    label="Pets"
-                    selected={filterPets}
-                    onToggle={onTogglePets}
-                    icon={<Dog className="h-5 w-5" />}
-                  />
-                  <IconOptionBox
-                    label="Elevator"
-                    selected={filterElevator}
-                    onToggle={onToggleElevator}
-                    icon={<ArrowUpDown className="h-5 w-5" />}
-                  />
-                  <IconOptionBox
-                    label="Accessible"
-                    selected={filterAccessible}
-                    onToggle={onToggleAccessible}
-                    icon={<Accessibility className="h-5 w-5" />}
                   />
                 </div>
               </div>

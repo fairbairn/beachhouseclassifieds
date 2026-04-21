@@ -163,7 +163,7 @@ export function DiscoverListingCard({
         LISTING_CARD_BASE_STYLES,
         isFadingIn && "discover-card-fade-in",
         threeUpCardMinHeightClass,
-        listing.beachfront
+        listing.gulffront
           ? LISTING_CARD_BEACHFRONT_STYLES
           : LISTING_CARD_STANDARD_STYLES,
       )}
@@ -295,7 +295,7 @@ export function DiscoverListingCard({
       </div>
 
       <div className="mt-2 flex h-6 flex-nowrap gap-1.5 overflow-hidden">
-        {listing.beachfront ? (
+        {listing.gulffront ? (
           <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
             Gulf Front
           </span>
@@ -310,7 +310,7 @@ export function DiscoverListingCard({
             Golf Cart
           </span>
         ) : null}
-        {!listing.beachfront && !listing.privatePool && !listing.golfCart ? (
+        {!listing.gulffront && !listing.privatePool && !listing.golfCart ? (
           <span
             aria-hidden="true"
             className="invisible rounded-full border px-2.5 py-1 text-[11px] font-semibold"

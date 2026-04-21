@@ -121,17 +121,23 @@ function resolveDiscoverListingsEndpoint(): string {
   return `${baseUrl}${path}`;
 }
 
-function getPageQueryCacheKey(input?: { cursor?: string; limit?: number }) {
+function getPageQueryCacheKey(input?: {
+  limit?: number;
+  offset?: number;
+  includeMetadata?: boolean;
+}) {
   const limit = Number.isFinite(input?.limit)
     ? String(input?.limit)
     : String(DISCOVER_LISTINGS_PAGE_SIZE);
-  const cursor = input?.cursor?.trim() ?? "";
-  return `limit=${limit}|cursor=${cursor}`;
+  const offset = Number.isFinite(input?.offset) ? String(input?.offset) : "0";
+  const includeMetadata = input?.includeMetadata === false ? "0" : "1";
+  return `limit=${limit}|offset=${offset}|metadata=${includeMetadata}`;
 }
 
 export async function fetchDiscoverListingsPage(input?: {
-  cursor?: string;
   limit?: number;
+  offset?: number;
+  includeMetadata?: boolean;
 }): Promise<DiscoverListingsPageResponse> {
   const cacheKey = getPageQueryCacheKey(input);
   if (typeof window !== "undefined") {
@@ -148,7 +154,8 @@ export async function fetchDiscoverListingsPage(input?: {
 
   const requestBody = {
     limit: input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE,
-    cursor: input?.cursor,
+    offset: input?.offset,
+    includeMetadata: input?.includeMetadata,
   };
   const requestPromise = (async (): Promise<DiscoverListingsPageResponse> => {
     const response = await fetch(resolveDiscoverListingsEndpoint(), {
@@ -161,10 +168,9 @@ export async function fetchDiscoverListingsPage(input?: {
     if (!response.ok) {
       return {
         _stats: {
-          nextCursor: null,
-          hasMore: false,
           totalCount: 0,
-          metadata: emptyMetadata(),
+          count: 0,
+          requested: input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE,
         },
         listings: [],
       };
@@ -177,47 +183,38 @@ export async function fetchDiscoverListingsPage(input?: {
     if (!payload || !Array.isArray(payload.listings)) {
       return {
         _stats: {
-          nextCursor: null,
-          hasMore: false,
           totalCount: 0,
-          metadata: emptyMetadata(),
+          count: 0,
+          requested: input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE,
         },
         listings: [],
       };
     }
 
-    const stats =
-      payload._stats && typeof payload._stats === "object"
-        ? payload._stats
-        : {
-            nextCursor:
-              (payload as { nextCursor?: string | null }).nextCursor ?? null,
-            hasMore: Boolean((payload as { hasMore?: boolean }).hasMore),
-            totalCount: Number.isFinite(
-              (payload as { totalCount?: number }).totalCount,
-            )
-              ? ((payload as { totalCount?: number }).totalCount as number)
-              : payload.listings.length,
-            metadata: normalizeMetadata(
-              (payload as { metadata?: unknown }).metadata,
-              payload.listings.length,
-            ),
-          };
+    const stats = payload._stats;
+    const totalCount = Number.isFinite(stats?.totalCount)
+      ? stats.totalCount
+      : payload.listings.length;
+    const count = Number.isFinite(stats?.count)
+      ? stats.count
+      : payload.listings.length;
+    const requested = Number.isFinite(stats?.requested)
+      ? stats.requested
+      : (input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE);
+    const metadataRaw = (payload as { metadata?: unknown }).metadata;
+    const includeMetadataInResponse =
+      metadataRaw !== undefined && metadataRaw !== null;
+    const metadata = includeMetadataInResponse
+      ? normalizeMetadata(metadataRaw, totalCount)
+      : undefined;
 
     const normalizedPayload: DiscoverListingsPageResponse = {
       _stats: {
-        nextCursor: stats.nextCursor ?? null,
-        hasMore: Boolean(stats.hasMore),
-        totalCount: Number.isFinite(stats.totalCount)
-          ? stats.totalCount
-          : payload.listings.length,
-        metadata: normalizeMetadata(
-          stats.metadata,
-          Number.isFinite(stats.totalCount)
-            ? stats.totalCount
-            : payload.listings.length,
-        ),
+        totalCount,
+        count,
+        requested,
       },
+      ...(metadata ? { metadata } : {}),
       listings: payload.listings,
     };
 

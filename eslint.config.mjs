@@ -37,5 +37,35 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
     },
   },
+  {
+    files: ["src/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+    ignores: [
+      "src/lib/scripts/**",
+      "src/lib/listings/refinement/**",
+      "src/lib/listings/enrichment/**",
+      "src/lib/listings/ingestion/**",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/lib/listings/refinement/**",
+                "@/lib/listings/enrichment/**",
+                "./refinement/**",
+                "../refinement/**",
+                "./enrichment/**",
+                "../enrichment/**",
+              ],
+              message:
+                "Web/runtime modules must not import listing refinement or enrichment internals. Keep these dependencies in CLI-only paths.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   eslintConfigPrettier,
 );

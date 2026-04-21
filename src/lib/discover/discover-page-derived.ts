@@ -17,14 +17,9 @@ export type DiscoverFilterState = {
   minSleeps: number;
   minBedrooms: number;
   minBathrooms: number;
-  minKingBeds: number;
-  minQueenBeds: number;
   filterPool: boolean;
-  filterBeachfront: boolean;
+  filterGulffront: boolean;
   filterGolfCart: boolean;
-  filterPets: boolean;
-  filterAccessible: boolean;
-  filterElevator: boolean;
 };
 
 export function filterDiscoverListings(
@@ -35,7 +30,7 @@ export function filterDiscoverListings(
 
   return sourceListings.filter((listing) => {
     const locationBlob =
-      `${listing.area} ${listing.community} ${listing.name}`.toLowerCase();
+      `${listing.beach} ${listing.area} ${listing.community} ${listing.name}`.toLowerCase();
     const passesLocation =
       normalizedQuery.length === 0 || locationBlob.includes(normalizedQuery);
 
@@ -45,14 +40,9 @@ export function filterDiscoverListings(
       listing.sleeps >= filters.minSleeps &&
       listing.bedrooms >= filters.minBedrooms &&
       listing.bathrooms >= filters.minBathrooms &&
-      listing.kingBeds >= filters.minKingBeds &&
-      listing.queenBeds >= filters.minQueenBeds &&
       (!filters.filterPool || listing.privatePool) &&
-      (!filters.filterBeachfront || listing.beachfront) &&
-      (!filters.filterGolfCart || listing.golfCart) &&
-      (!filters.filterPets || listing.petsAllowed) &&
-      (!filters.filterAccessible || listing.accessible) &&
-      (!filters.filterElevator || listing.elevator)
+      (!filters.filterGulffront || listing.gulffront) &&
+      (!filters.filterGolfCart || listing.golfCart)
     );
   });
 }
@@ -89,8 +79,8 @@ export function sortDiscoverListings(input: {
   }
 
   return listings.sort((a, b) => {
-    if (a.beachfront !== b.beachfront) {
-      return Number(b.beachfront) - Number(a.beachfront);
+    if (a.gulffront !== b.gulffront) {
+      return Number(b.gulffront) - Number(a.gulffront);
     }
     if (a.privatePool !== b.privatePool) {
       return Number(b.privatePool) - Number(a.privatePool);
@@ -186,7 +176,7 @@ export function buildDiscoverFacetCounts(input: {
     if (listing.privatePool) {
       privatePoolCount += 1;
     }
-    if (listing.beachfront) {
+    if (listing.gulffront) {
       beachfrontCount += 1;
     }
     if (listing.golfCart) {
@@ -230,7 +220,7 @@ export function buildEffectiveDiscoverFacetCounts(input: {
   effectiveCommunityCounts: Array<readonly [string, number]>;
   effectiveFeatureCounts: DiscoverFeatureCount[];
 } {
-  const metadata = input.initialListingsPage?._stats?.metadata;
+  const metadata = input.initialListingsPage?.metadata;
   const shouldUseMetadata = !input.hasClientSideNarrowing && Boolean(metadata);
 
   if (!shouldUseMetadata || !metadata) {

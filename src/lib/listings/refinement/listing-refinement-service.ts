@@ -1,5 +1,11 @@
 import "@/core/tooling/env/load-env-profile";
 
+if (typeof window !== "undefined") {
+  throw new Error(
+    "Protected module violation: listing refinement service cannot run in browser/client bundles.",
+  );
+}
+
 import { createHash, randomUUID } from "node:crypto";
 
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
@@ -4023,7 +4029,7 @@ export async function persistListingRefinement(input: {
     hasMeaningfulSleepEnvironment(outputSleepRollups);
   const sleepTolerancePass = isSleepAccommodationAcceptable({
     match: sleepCapacityMatch,
-    rollups: outputSleepRollups,
+    sleepingSummary: input.result.output.sleeping_summary,
   });
   const auditPassed = !auditInvoked
     ? sleepTolerancePass

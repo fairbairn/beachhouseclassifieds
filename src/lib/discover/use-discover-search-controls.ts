@@ -6,8 +6,6 @@ import { formatNights } from "@/components/discover/discover-utils";
 const DEFAULT_MIN_SLEEPS = 0;
 const DEFAULT_MIN_BEDROOMS = 0;
 const DEFAULT_MIN_BATHROOMS = 0;
-const DEFAULT_MIN_KING_BEDS = 0;
-const DEFAULT_MIN_QUEEN_BEDS = 0;
 
 function formatSummaryDate(value: string, fallback: string): string {
   if (!value) {
@@ -46,14 +44,9 @@ export function useDiscoverSearchControls() {
   const [minSleeps, setMinSleeps] = useState(DEFAULT_MIN_SLEEPS);
   const [minBedrooms, setMinBedrooms] = useState(DEFAULT_MIN_BEDROOMS);
   const [minBathrooms, setMinBathrooms] = useState(DEFAULT_MIN_BATHROOMS);
-  const [minKingBeds, setMinKingBeds] = useState(DEFAULT_MIN_KING_BEDS);
-  const [minQueenBeds, setMinQueenBeds] = useState(DEFAULT_MIN_QUEEN_BEDS);
   const [filterPool, setFilterPool] = useState(false);
-  const [filterBeachfront, setFilterBeachfront] = useState(false);
+  const [filterGulffront, setFilterGulffront] = useState(false);
   const [filterGolfCart, setFilterGolfCart] = useState(false);
-  const [filterPets, setFilterPets] = useState(false);
-  const [filterAccessible, setFilterAccessible] = useState(false);
-  const [filterElevator, setFilterElevator] = useState(false);
 
   const guestCount = adults + children;
 
@@ -62,14 +55,9 @@ export function useDiscoverSearchControls() {
     minSleeps > 0 ||
     minBedrooms > 0 ||
     minBathrooms > 0 ||
-    minKingBeds > 0 ||
-    minQueenBeds > 0 ||
     filterPool ||
-    filterBeachfront ||
+    filterGulffront ||
     filterGolfCart ||
-    filterPets ||
-    filterAccessible ||
-    filterElevator ||
     adults !== 2 ||
     children !== 0;
 
@@ -103,14 +91,9 @@ export function useDiscoverSearchControls() {
     setMinSleeps(DEFAULT_MIN_SLEEPS);
     setMinBedrooms(DEFAULT_MIN_BEDROOMS);
     setMinBathrooms(DEFAULT_MIN_BATHROOMS);
-    setMinKingBeds(DEFAULT_MIN_KING_BEDS);
-    setMinQueenBeds(DEFAULT_MIN_QUEEN_BEDS);
     setFilterPool(false);
-    setFilterBeachfront(false);
+    setFilterGulffront(false);
     setFilterGolfCart(false);
-    setFilterPets(false);
-    setFilterAccessible(false);
-    setFilterElevator(false);
   }, []);
 
   const filtersSummary = useMemo(() => {
@@ -118,30 +101,20 @@ export function useDiscoverSearchControls() {
       minSleeps > 0 ? `Sleeps ${minSleeps}+` : null,
       minBedrooms > 0 ? `${minBedrooms}BR+` : null,
       minBathrooms > 0 ? `${minBathrooms}BA+` : null,
-      minKingBeds > 0 ? `${minKingBeds}K+` : null,
-      minQueenBeds > 0 ? `${minQueenBeds}Q+` : null,
-      filterBeachfront ? "Gulf Front" : null,
+      filterGulffront ? "Gulf Front" : null,
       filterPool ? "Private Pool" : null,
       filterGolfCart ? "Golf Cart" : null,
-      filterPets ? "Pets" : null,
-      filterElevator ? "Elevator" : null,
-      filterAccessible ? "Accessible" : null,
     ].filter((part): part is string => Boolean(part));
 
     return activeFilterParts.length > 0
       ? activeFilterParts.join(" • ")
       : "None";
   }, [
-    filterAccessible,
-    filterBeachfront,
-    filterElevator,
+    filterGulffront,
     filterGolfCart,
-    filterPets,
     filterPool,
     minBathrooms,
     minBedrooms,
-    minKingBeds,
-    minQueenBeds,
     minSleeps,
   ]);
 
@@ -174,22 +147,12 @@ export function useDiscoverSearchControls() {
     setMinBedrooms,
     minBathrooms,
     setMinBathrooms,
-    minKingBeds,
-    setMinKingBeds,
-    minQueenBeds,
-    setMinQueenBeds,
     filterPool,
     setFilterPool,
-    filterBeachfront,
-    setFilterBeachfront,
+    filterGulffront,
+    setFilterGulffront,
     filterGolfCart,
     setFilterGolfCart,
-    filterPets,
-    setFilterPets,
-    filterAccessible,
-    setFilterAccessible,
-    filterElevator,
-    setFilterElevator,
     guestCount,
     hasClientSideNarrowing,
     dateSummary,

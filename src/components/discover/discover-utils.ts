@@ -238,7 +238,7 @@ function pointInPolygon(
 
 function inferSpecificAreaFromText(listing: DiscoverListing): string | null {
   const searchableText = normalizeText(
-    `${listing.name} ${listing.id} ${listing.area} ${listing.community}`,
+    `${listing.name} ${listing.id} ${listing.beach} ${listing.area} ${listing.community}`,
   );
 
   for (const candidate of AREA_TOKEN_CANDIDATES) {
@@ -385,6 +385,15 @@ export function getTypicalPriceBounds(priceLabel: string) {
 }
 
 export function getAreaFromListing(listing: DiscoverListing) {
+  const explicitArea = listing.area.trim();
+  if (
+    explicitArea === "West 30A" ||
+    explicitArea === "Central 30A" ||
+    explicitArea === "East 30A"
+  ) {
+    return explicitArea;
+  }
+
   const specificArea = resolveSpecificArea(listing);
   if (specificArea && specificArea in SPECIFIC_AREA_TO_BROAD_AREA) {
     return SPECIFIC_AREA_TO_BROAD_AREA[specificArea];
@@ -396,18 +405,25 @@ export function getAreaFromListing(listing: DiscoverListing) {
 export function getBeachZoneFromListing(
   listing: DiscoverListing,
 ): string | null {
+  const explicitBeach = listing.beach.trim();
+  if (explicitBeach.length > 0) {
+    return explicitBeach;
+  }
+
   return resolveSpecificArea(listing);
 }
 
 export function getLocationPresentation(listing: DiscoverListing) {
-  const isPlannedCommunity = known30ACommunities.includes(listing.community);
-  const specificArea = resolveSpecificArea(listing);
+  const communityName = listing.community.trim();
+  const isPlannedCommunity =
+    communityName.length > 0 && known30ACommunities.includes(communityName);
+  const specificArea = getBeachZoneFromListing(listing);
   const region = getAreaFromListing(listing);
 
   if (isPlannedCommunity) {
     return {
       isPlannedCommunity: true,
-      locationChip: listing.community,
+      locationChip: communityName,
       subline: specificArea ? `${specificArea} • ${region}` : region,
     };
   }
@@ -456,7 +472,7 @@ export function getListingGeoTarget(listing: DiscoverListing) {
 export function verifyGulfFrontClaim(
   listing: DiscoverListing,
 ): DiscoverListing {
-  if (!listing.beachfront) {
+  if (!listing.gulffront) {
     return listing;
   }
 
@@ -468,8 +484,7 @@ export function verifyGulfFrontClaim(
   ) {
     return {
       ...listing,
-      beachfront: false,
-      gulfView: true,
+      gulffront: false,
     };
   }
 
@@ -479,15 +494,11 @@ export function verifyGulfFrontClaim(
   );
 
   if (isInsideGulfFrontPolygon) {
-    return {
-      ...listing,
-      gulfView: listing.gulfView ?? false,
-    };
+    return listing;
   }
 
   return {
     ...listing,
-    beachfront: false,
-    gulfView: true,
+    gulffront: false,
   };
 }

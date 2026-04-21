@@ -215,22 +215,12 @@ export function DiscoverPage({
     setMinBedrooms,
     minBathrooms,
     setMinBathrooms,
-    minKingBeds,
-    setMinKingBeds,
-    minQueenBeds,
-    setMinQueenBeds,
     filterPool,
     setFilterPool,
-    filterBeachfront,
-    setFilterBeachfront,
+    filterGulffront,
+    setFilterGulffront,
     filterGolfCart,
     setFilterGolfCart,
-    filterPets,
-    setFilterPets,
-    filterAccessible,
-    setFilterAccessible,
-    filterElevator,
-    setFilterElevator,
     guestCount,
     hasClientSideNarrowing,
     dateSummary,
@@ -290,7 +280,7 @@ export function DiscoverPage({
   >({});
   const didBackgroundFillRef = useRef(false);
   const [isBackgroundFillLoading, setIsBackgroundFillLoading] = useState(() => {
-    if (isOverlayRoute || !initialListingsPage?._stats?.hasMore) {
+    if (isOverlayRoute || !initialListingsPage?._stats) {
       return false;
     }
 
@@ -422,7 +412,7 @@ export function DiscoverPage({
     }
 
     const seedPage = initialListingsPage;
-    if (!seedPage?._stats?.hasMore || !seedPage._stats.nextCursor) {
+    if (!seedPage?._stats) {
       return;
     }
 
@@ -448,8 +438,9 @@ export function DiscoverPage({
 
     const loadRemainingListings = async () => {
       const page = await fetchDiscoverListingsPage({
-        cursor: seedPage._stats.nextCursor ?? undefined,
+        offset: seedCount,
         limit: remaining,
+        includeMetadata: false,
       }).catch(() => null);
 
       if (isCancelled) {
@@ -670,14 +661,9 @@ export function DiscoverPage({
       minSleeps,
       minBedrooms,
       minBathrooms,
-      minKingBeds,
-      minQueenBeds,
       filterPool,
-      filterBeachfront,
+      filterGulffront,
       filterGolfCart,
-      filterPets,
-      filterAccessible,
-      filterElevator,
     });
   }, [
     guestCount,
@@ -685,13 +671,8 @@ export function DiscoverPage({
     minSleeps,
     minBathrooms,
     minBedrooms,
-    minKingBeds,
-    minQueenBeds,
-    filterAccessible,
-    filterBeachfront,
-    filterElevator,
+    filterGulffront,
     filterGolfCart,
-    filterPets,
     filterPool,
     sourceListings,
   ]);
@@ -708,14 +689,14 @@ export function DiscoverPage({
     return buildDiscoverMapListings({
       displayListings,
       hasClientSideNarrowing,
-      mapSeedListings: initialListingsPage?._stats?.metadata?.mapListings,
+      mapSeedListings: initialListingsPage?.metadata?.mapListings,
       nights,
       getListingGeo: getListingGeoTarget,
     });
   }, [
     displayListings,
     hasClientSideNarrowing,
-    initialListingsPage?._stats?.metadata?.mapListings,
+    initialListingsPage?.metadata?.mapListings,
     nights,
   ]);
 
@@ -1039,7 +1020,7 @@ export function DiscoverPage({
     }
 
     const features = [
-      overlayListing.beachfront ? "Gulf Front" : null,
+      overlayListing.gulffront ? "Gulf Front" : null,
       overlayListing.privatePool ? "Private Pool" : null,
       overlayListing.golfCart ? "Golf Cart" : null,
     ].filter((value): value is string => Boolean(value));
@@ -1490,22 +1471,12 @@ export function DiscoverPage({
               onMinBedroomsChange={setMinBedrooms}
               minBathrooms={minBathrooms}
               onMinBathroomsChange={setMinBathrooms}
-              minKingBeds={minKingBeds}
-              onMinKingBedsChange={setMinKingBeds}
-              minQueenBeds={minQueenBeds}
-              onMinQueenBedsChange={setMinQueenBeds}
-              filterBeachfront={filterBeachfront}
-              onToggleBeachfront={() => setFilterBeachfront((v) => !v)}
+              filterGulffront={filterGulffront}
+              onToggleGulffront={() => setFilterGulffront((v) => !v)}
               filterPool={filterPool}
               onTogglePool={() => setFilterPool((v) => !v)}
               filterGolfCart={filterGolfCart}
               onToggleGolfCart={() => setFilterGolfCart((v) => !v)}
-              filterPets={filterPets}
-              onTogglePets={() => setFilterPets((v) => !v)}
-              filterElevator={filterElevator}
-              onToggleElevator={() => setFilterElevator((v) => !v)}
-              filterAccessible={filterAccessible}
-              onToggleAccessible={() => setFilterAccessible((v) => !v)}
             />
 
             <div
@@ -1805,7 +1776,7 @@ export function DiscoverPage({
                                           10,
                                         )
                                       : [
-                                          overlayListing.beachfront
+                                          overlayListing.gulffront
                                             ? "Gulf Front"
                                             : null,
                                           overlayListing.privatePool
@@ -1813,15 +1784,6 @@ export function DiscoverPage({
                                             : null,
                                           overlayListing.golfCart
                                             ? "Golf Cart"
-                                            : null,
-                                          overlayListing.elevator
-                                            ? "Elevator"
-                                            : null,
-                                          overlayListing.accessible
-                                            ? "Accessible"
-                                            : null,
-                                          overlayListing.petsAllowed
-                                            ? "Pets Allowed"
                                             : null,
                                         ].filter((chip): chip is string =>
                                           Boolean(chip),

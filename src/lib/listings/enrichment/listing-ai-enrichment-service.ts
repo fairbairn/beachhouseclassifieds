@@ -1,3 +1,9 @@
+if (typeof window !== "undefined") {
+  throw new Error(
+    "Protected module violation: listing enrichment service cannot run in browser/client bundles.",
+  );
+}
+
 import { randomUUID } from "node:crypto";
 
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";

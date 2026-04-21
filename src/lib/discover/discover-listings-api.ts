@@ -30,77 +30,29 @@ function normalizeDiscoverListingsForApi(listings: DiscoverListing[]) {
 
   const normalizedListings = normalizeDiscoverListings(locationAlignedListings);
 
-  return [...normalizedListings].sort((a, b) => {
-    if (a.demoOrder !== b.demoOrder) {
-      return a.demoOrder - b.demoOrder;
-    }
-    return a.id.localeCompare(b.id);
-  });
+  return normalizedListings;
 }
 
 function toSummaryListing(listing: DiscoverListing): DiscoverListing {
   return {
     id: listing.id,
     name: listing.name,
-    demoOrder: listing.demoOrder,
     area: listing.area,
+    beach: listing.beach,
     community: listing.community,
     lat: listing.lat,
     lng: listing.lng,
     bedrooms: listing.bedrooms,
     bathrooms: listing.bathrooms,
     sleeps: listing.sleeps,
-    kingBeds: listing.kingBeds,
-    queenBeds: listing.queenBeds,
     privatePool: listing.privatePool,
-    beachfront: listing.beachfront,
-    gulfView: listing.gulfView,
+    gulffront: listing.gulffront,
     golfCart: listing.golfCart,
-    petsAllowed: listing.petsAllowed,
-    accessible: listing.accessible,
-    elevator: listing.elevator,
     previewImages: listing.previewImages,
     typicalPricingMonth: listing.typicalPricingMonth,
     typicalBaseNightly: listing.typicalBaseNightly,
     typicalAllInNightly: listing.typicalAllInNightly,
   };
-}
-
-function encodeCursor(listing: DiscoverListing): string {
-  return `${listing.demoOrder}|${encodeURIComponent(listing.id)}`;
-}
-
-function parseCursor(cursor: string | undefined): {
-  demoOrder: number;
-  id: string;
-} | null {
-  if (!cursor) {
-    return null;
-  }
-
-  const [demoOrderRaw, ...idParts] = cursor.split("|");
-  if (!demoOrderRaw || idParts.length === 0) {
-    return null;
-  }
-
-  const demoOrder = Number(demoOrderRaw);
-  if (!Number.isFinite(demoOrder)) {
-    return null;
-  }
-
-  const encodedId = idParts.join("|");
-  if (!encodedId) {
-    return null;
-  }
-
-  try {
-    return {
-      demoOrder,
-      id: decodeURIComponent(encodedId),
-    };
-  } catch {
-    return null;
-  }
 }
 
 function resolvePageSize(limit: number | undefined): number {
@@ -182,44 +134,21 @@ function buildDiscoverListingsMetadata(
 
 export async function buildDiscoverListingsPagePayload(input?: {
   limit?: number;
-  cursor?: string;
 }): Promise<DiscoverListingsPagePayload> {
   const allListings = await buildDiscoverListingsPayload();
   const totalCount = allListings.length;
-  const includeMetadata = !input?.cursor;
-  const metadata = includeMetadata
-    ? buildDiscoverListingsMetadata(allListings)
-    : undefined;
+  const metadata = buildDiscoverListingsMetadata(allListings);
 
   const pageSize = resolvePageSize(input?.limit);
-  const parsedCursor = parseCursor(input?.cursor);
-
-  const startIndex = parsedCursor
-    ? allListings.findIndex(
-        (listing) =>
-          listing.demoOrder > parsedCursor.demoOrder ||
-          (listing.demoOrder === parsedCursor.demoOrder &&
-            listing.id > parsedCursor.id),
-      )
-    : 0;
-
-  const safeStartIndex = startIndex >= 0 ? startIndex : totalCount;
-  const pageItems = allListings.slice(
-    safeStartIndex,
-    safeStartIndex + pageSize,
-  );
-  const hasMore = safeStartIndex + pageItems.length < totalCount;
-  const nextCursor = hasMore
-    ? encodeCursor(pageItems[pageItems.length - 1] as DiscoverListing)
-    : null;
+  const pageItems = allListings.slice(0, pageSize);
 
   return {
     _stats: {
-      nextCursor,
-      hasMore,
       totalCount,
-      ...(metadata ? { metadata } : {}),
+      count: pageItems.length,
+      requested: pageSize,
     },
+    metadata,
     listings: pageItems.map(toSummaryListing),
   };
 }
