@@ -1,13 +1,16 @@
+import { executePanhandle30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/panhandle30a";
+import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
-import { runPanhandle30aQuoteCli } from "./quotes/panhandle30a";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
+const BROWSER_LIKE_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
@@ -15,6 +18,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
+  rooms_guidance: string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -40,6 +44,11 @@ type LuxuryDetailRecord = DetailRecordBase & {
     sleeps: number | null;
     city: string;
     state: string;
+  };
+  quote_context: {
+    source: "detail_hidden_inputs";
+    property_id: string;
+    property_name: string;
   };
   normalized_matching_profile: {
     source: "pm_panhandle30a";
@@ -106,8 +115,8 @@ type LuxuryDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://www.panhandlegetaways.com/all-30a-vacation-rentals?customFilterPageID=665&flexTab=0&flexDates=0&sortBy=price%20desc&mapsearch=1&sleeps=Any&bedrooms=3&bathrooms=Any&location=1&type=114";
-const EXPECTED_LISTING_COUNT = 135;
+  "https://www.panhandlegetaways.com/vacation-rentals?customFilterPageID=176&flexTab=0&flexDates=0&sortBy=Random&mapsearch=1&sleeps=Any&bedrooms=Any&bathrooms=Any&location=1&type=114";
+const EXPECTED_LISTING_COUNT = 115;
 const DETAIL_PATH_PREFIXES = [
   "/all-30a-vacation-rentals/",
   "/vacation-rentals/",
@@ -129,6 +138,15 @@ function normalizeLink(url: string): string {
 function normalizeDetailUrl(url: string): string {
   try {
     const parsed = new URL(url);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const slug = segments[segments.length - 1] ?? "";
+    if (
+      slug &&
+      slug !== "vacation-rentals" &&
+      slug !== "all-30a-vacation-rentals"
+    ) {
+      return `${parsed.origin}/vacation-rentals/${slug}`;
+    }
     return `${parsed.origin}${parsed.pathname}`.replace(/\/$/, "");
   } catch {
     return normalizeLink(url);
@@ -192,6 +210,32 @@ function normalizeListingName(value: string): string {
     .trim();
 
   return cleaned.slice(0, 240);
+}
+
+function extractQuoteContextFromHtml(input: {
+  html: string;
+  fallbackListingId: string;
+  fallbackName: string;
+}): LuxuryDetailRecord["quote_context"] {
+  const propertyIdMatch = input.html.match(
+    /<input[^>]*name="propertyID"[^>]*value="(\d+)"[^>]*>/i,
+  );
+  const propertyNameMatch = input.html.match(
+    /<input[^>]*name="propertyName"[^>]*value="([^"]*)"[^>]*>/i,
+  );
+
+  const propertyId =
+    propertyIdMatch?.[1]?.trim() || input.fallbackListingId.trim();
+  const propertyName =
+    propertyNameMatch?.[1]?.replace(/&amp;/g, "&").trim() ||
+    input.fallbackName.trim() ||
+    input.fallbackListingId.trim();
+
+  return {
+    source: "detail_hidden_inputs",
+    property_id: propertyId,
+    property_name: propertyName,
+  };
 }
 
 function dedupePreserveOrder(values: string[]): string[] {
@@ -266,7 +310,7 @@ function normalizeGalleryUrl(rawUrl: string): string {
       }
     }
 
-    return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+    return `${parsed.origin}${parsed.pathname}`;
   } catch {
     return "";
   }
@@ -277,8 +321,22 @@ function extractFieldLocationFromHtml(html: string): {
   latitude: number | null;
   longitude: number | null;
 } {
+  const directStreetMatch = html.match(/data-straddress1=["']([^"']*)["']/i);
+  const directLatMatch = html.match(/data-latitude=["'](-?\d+(?:\.\d+)?)["']/i);
+  const directLngMatch = html.match(
+    /data-longitude=["'](-?\d+(?:\.\d+)?)["']/i,
+  );
+
+  if (directStreetMatch || directLatMatch || directLngMatch) {
+    return {
+      street: (directStreetMatch?.[1] ?? "").trim(),
+      latitude: directLatMatch ? Number(directLatMatch[1]) : null,
+      longitude: directLngMatch ? Number(directLngMatch[1]) : null,
+    };
+  }
+
   const widgetMatch = html.match(
-    /<div[^>]+class=["'][^"']*be-property-widget[^"']*["'][^>]*>/i,
+    /<div[^>]+class=["'][^"']*\bbe-property-widget\b[^"']*["'][^>]*>/i,
   );
   const widgetTag = widgetMatch?.[0] ?? "";
 
@@ -390,6 +448,69 @@ function extractExternalListingId(detailUrl: string): string {
   }
 }
 
+function looksLikeDetailHtml(html: string): boolean {
+  const lowered = html.toLowerCase();
+  if (!lowered) {
+    return false;
+  }
+
+  return (
+    lowered.includes('id="pdpdescription"') ||
+    lowered.includes("pdp-bedding") ||
+    lowered.includes("pdp-amenities") ||
+    lowered.includes("be-property-widget") ||
+    lowered.includes("picturehandler.ashx")
+  );
+}
+
+async function loadDetailHtmlWithPlaywright(
+  page: Page,
+  detailUrl: string,
+): Promise<string> {
+  await page.goto(detailUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: 120000,
+    referer: DEFAULT_ANCHOR_URL,
+  });
+  await page.waitForTimeout(1200);
+
+  const htmlFromGoto = await page.content();
+  if (looksLikeDetailHtml(htmlFromGoto)) {
+    return htmlFromGoto;
+  }
+
+  const response = await page.request.get(detailUrl, {
+    timeout: 120000,
+    failOnStatusCode: false,
+    headers: {
+      "user-agent": BROWSER_LIKE_USER_AGENT,
+      accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "accept-language": "en-US,en;q=0.9",
+    },
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `playwright detail request failed status=${response.status()} for ${detailUrl}`,
+    );
+  }
+
+  const htmlFromRequest = await response.text();
+  if (!looksLikeDetailHtml(htmlFromRequest)) {
+    throw new Error(
+      `playwright detail request returned unexpected page for ${detailUrl}`,
+    );
+  }
+
+  await page.setContent(htmlFromRequest, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForTimeout(250);
+
+  return htmlFromRequest;
+}
+
 async function installEvaluateNameShim(page: Page): Promise<void> {
   const shim = "window.__name = window.__name || ((target) => target);";
   await page.addInitScript(shim);
@@ -434,55 +555,64 @@ async function clickTab(page: Page, tabText: string): Promise<boolean> {
   return result;
 }
 
-async function clickVisibleControlsByLabel(
-  page: Page,
-  labels: string[],
-): Promise<number> {
-  const lowered = labels.map((label) => label.toLowerCase());
-  const clicked = await page.evaluate((targets) => {
-    let clicks = 0;
-    const nodes = Array.from(
-      document.querySelectorAll(
-        "a, button, [role='button'], [role='tab'], [data-action], [aria-label], [title]",
-      ),
-    );
-
-    for (const node of nodes) {
-      const element = node as HTMLElement;
-      if (element.offsetParent === null) {
-        continue;
-      }
-
-      const label = [
-        element.textContent ?? "",
-        element.getAttribute("aria-label") ?? "",
-        element.getAttribute("title") ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim();
-
-      if (!label) {
-        continue;
-      }
-
-      if (!targets.some((target) => label.includes(target))) {
-        continue;
-      }
-
-      element.click();
-      clicks += 1;
-    }
-
-    return clicks;
-  }, lowered);
-
-  if (clicked > 0) {
-    await page.waitForTimeout(700);
+function extractRoomsGuidance(html: string): string[] {
+  const beddingStart = html.search(
+    /<div[^>]*class=["'][^"']*pdp-section[^"']*pdp-bedding[^"']*["'][^>]*>/i,
+  );
+  if (beddingStart < 0) {
+    return [];
   }
 
-  return clicked;
+  const beddingHtml = html.slice(beddingStart);
+  const itemStarts = Array.from(
+    beddingHtml.matchAll(
+      /<div[^>]*class=["'][^"']*bedroom-type-item[^"']*["'][^>]*>/gi,
+    ),
+  )
+    .map((match) => match.index)
+    .filter((index): index is number => typeof index === "number");
+
+  if (itemStarts.length === 0) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  for (let index = 0; index < itemStarts.length; index += 1) {
+    const start = itemStarts[index];
+    const end = itemStarts[index + 1] ?? beddingHtml.length;
+    const itemHtml = beddingHtml.slice(start, end);
+
+    const roomName = stripHtml(
+      itemHtml.match(
+        /<div[^>]*class=["'][^"']*bedroom-type-bedroom-name[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      )?.[1] ?? "",
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const bedNames = Array.from(
+      itemHtml.matchAll(
+        /<div[^>]*class=["'][^"']*bedroom-type-name[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
+      ),
+    )
+      .map((match) =>
+        stripHtml(match[1] ?? "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      )
+      .filter(Boolean);
+
+    const summary = dedupePreserveOrder(bedNames).join(", ");
+    if (roomName && summary) {
+      lines.push(`${roomName}: ${summary}`);
+    } else if (roomName) {
+      lines.push(roomName);
+    } else if (summary) {
+      lines.push(summary);
+    }
+  }
+
+  return dedupePreserveOrder(lines);
 }
 
 async function discoverListings(
@@ -506,7 +636,9 @@ async function discoverListings(
   await page.waitForTimeout(Math.max(700, scrollPauseMs));
 
   await page.evaluate(() => {
-    const root = document.querySelector("riot-solr-result-list, .result-list");
+    const root = document.querySelector(
+      ".be-wrapper .be-main .srp-results-wrap .srp-results, riot-solr-result-list, .result-list",
+    );
     if (!root) {
       return;
     }
@@ -560,14 +692,16 @@ async function discoverListings(
             return "";
           }
 
-          return `${absolute.origin}${absolute.pathname}`.replace(/\/$/, "");
+          return `${absolute.origin}/vacation-rentals/${slug}`;
         } catch {
           return "";
         }
       };
 
       const resultRoots = Array.from(
-        document.querySelectorAll("riot-solr-result-list, .result-list"),
+        document.querySelectorAll(
+          ".be-wrapper .be-main .srp-results-wrap .srp-results, riot-solr-result-list, .result-list",
+        ),
       );
 
       const resultAnchors =
@@ -804,11 +938,20 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
 }
 
 async function extractDescriptionText(page: Page): Promise<string> {
-  await clickTab(page, "Description");
-
   return page.evaluate(() => {
+    const sectionSpecific = document.querySelector(
+      "#pdpDescription .be-read-more-wrap, #pdpDescription .pdp-section-body, #pdpDescription",
+    );
+    const sectionText = (sectionSpecific?.textContent ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (sectionText.length > 120) {
+      return sectionText;
+    }
+
     const candidates: string[] = [];
     const selectors = [
+      "#pdpDescription",
       "#description",
       "[id*='description']",
       "[class*='description']",
@@ -850,28 +993,18 @@ async function fetchDetail(
   maxCalendarAdvanceMonths: number,
 ): Promise<LuxuryDetailRecord | null> {
   const startedAt = Date.now();
-  const page = await browser.newPage();
+  const context = await browser.newContext({
+    userAgent: BROWSER_LIKE_USER_AGENT,
+    locale: "en-US",
+    viewport: { width: 1440, height: 2200 },
+  });
+  const page = await context.newPage();
 
   try {
     await installEvaluateNameShim(page);
 
     const beforeLoad = Date.now();
-    await page.goto(detailUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 120000,
-    });
-    await page.waitForTimeout(1800);
-
-    await clickVisibleControlsByLabel(page, [
-      "read more",
-      "show all amenities",
-      "show all",
-      "view all amenities",
-      "all photos",
-      "view photos",
-      "gallery",
-      "lightbox",
-    ]);
+    const acquiredHtml = await loadDetailHtmlWithPlaywright(page, detailUrl);
 
     const pageLoadMs = Date.now() - beforeLoad;
 
@@ -1103,17 +1236,25 @@ async function fetchDetail(
                 continue;
               }
               try {
+                const srcsetParts = raw
+                  .split(",")
+                  .map((part) => part.trim())
+                  .filter(Boolean);
                 const candidate =
-                  raw.split(",")[0]?.trim().split(/\s+/)[0] ?? "";
+                  srcsetParts.length > 0
+                    ? (srcsetParts[srcsetParts.length - 1]
+                        ?.split(/\s+/)[0]
+                        ?.trim() ?? "")
+                    : "";
                 const absolute = new URL(
                   candidate,
                   window.location.origin,
                 ).toString();
                 if (
-                  /\.(jpe?g|png|webp|gif)(\?|$)/i.test(absolute) ||
                   absolute.includes("picturehandler.ashx") ||
-                  absolute.includes("/evrn/") ||
-                  absolute.includes("/images.")
+                  /\/(?:images\.vrmgr\.com|api\.vrmreservations\.com)\//i.test(
+                    absolute,
+                  )
                 ) {
                   urls.push(absolute);
                 }
@@ -1246,6 +1387,9 @@ async function fetchDetail(
 
         return {
           date,
+          day_code: code === "A" || code === "O" ? "Y" : "N",
+          changeover_code:
+            code === "I" ? "I" : code === "O" ? "O" : code === "A" ? "C" : "X",
           status_code: code,
           is_available: code === "A" || code === "O",
           is_available_for_checkin: code === "A" || code === "I",
@@ -1278,6 +1422,8 @@ async function fetchDetail(
       completeWindowDays.push(
         existing ?? {
           date: isoDate,
+          day_code: "N",
+          changeover_code: "X",
           status_code: "X",
           is_available: false,
           is_available_for_checkin: false,
@@ -1289,13 +1435,102 @@ async function fetchDetail(
       windowCursor.setUTCDate(windowCursor.getUTCDate() + 1);
     }
 
+    const hydrateAvailabilityStatus = (
+      day: (typeof completeWindowDays)[number],
+      statusCode: LuxuryDayCode,
+    ): (typeof completeWindowDays)[number] => {
+      const bookingDayState: "bookable" | "blocked" | "unknown" =
+        statusCode === "A" || statusCode === "O"
+          ? "bookable"
+          : statusCode === "U" || statusCode === "I"
+            ? "blocked"
+            : "unknown";
+
+      return {
+        ...day,
+        status_code: statusCode,
+        day_code: statusCode === "A" || statusCode === "O" ? "Y" : "N",
+        changeover_code:
+          statusCode === "I"
+            ? "I"
+            : statusCode === "O"
+              ? "O"
+              : statusCode === "A"
+                ? "C"
+                : "X",
+        is_available: statusCode === "A" || statusCode === "O",
+        is_available_for_checkin: statusCode === "A" || statusCode === "I",
+        is_available_for_checkout: statusCode === "A" || statusCode === "O",
+        booking_day_state: bookingDayState,
+      };
+    };
+
+    // Promote direct and bridged transitions to explicit turn-day boundaries.
+    for (let index = 1; index < completeWindowDays.length; index += 1) {
+      const previous = completeWindowDays[index - 1];
+      const current = completeWindowDays[index];
+      if (!previous || !current) {
+        continue;
+      }
+
+      if (previous.status_code === "U" && current.status_code === "A") {
+        completeWindowDays[index] = hydrateAvailabilityStatus(current, "I");
+        continue;
+      }
+
+      if (previous.status_code === "A" && current.status_code === "U") {
+        completeWindowDays[index - 1] = hydrateAvailabilityStatus(
+          previous,
+          "O",
+        );
+      }
+    }
+
+    for (let index = 0; index < completeWindowDays.length - 2; index += 1) {
+      const start = completeWindowDays[index];
+      if (!start) {
+        continue;
+      }
+
+      if (start.status_code === "U") {
+        let cursor = index + 1;
+        while (
+          cursor < completeWindowDays.length &&
+          completeWindowDays[cursor]?.status_code === "X"
+        ) {
+          cursor += 1;
+        }
+
+        const next = completeWindowDays[cursor];
+        if (next?.status_code === "A") {
+          completeWindowDays[cursor] = hydrateAvailabilityStatus(next, "I");
+        }
+      }
+
+      if (start.status_code === "A") {
+        let cursor = index + 1;
+        while (
+          cursor < completeWindowDays.length &&
+          completeWindowDays[cursor]?.status_code === "X"
+        ) {
+          cursor += 1;
+        }
+
+        const next = completeWindowDays[cursor];
+        if (next?.status_code === "U") {
+          completeWindowDays[index] = hydrateAvailabilityStatus(start, "O");
+        }
+      }
+    }
+
     const externalListingId = extractExternalListingId(detailUrl);
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
     );
-    const html = await page.content();
+    const html = acquiredHtml;
     await writeFile(htmlPath, html, "utf8");
+    const roomsGuidance = extractRoomsGuidance(html);
 
     const locationPayload = extractFieldLocationFromHtml(html);
 
@@ -1337,11 +1572,18 @@ async function fetchDetail(
       all: amenitiesAll,
     };
 
-    const mediaUrls = dedupePreserveOrder(
+    const mediaUrlsAll = dedupePreserveOrder(
       extracted.galleryUrls
         .map((url) => normalizeGalleryUrl(url))
         .filter(Boolean),
     );
+    const nonPictureHandlerMediaUrls = mediaUrlsAll.filter(
+      (url) => !/picturehandler\.ashx/i.test(url),
+    );
+    const mediaUrls =
+      nonPictureHandlerMediaUrls.length > 0
+        ? nonPictureHandlerMediaUrls
+        : mediaUrlsAll;
     const mediaGallery: LuxuryDetailRecord["media_gallery"] = {
       image_count: mediaUrls.length,
       image_urls: mediaUrls,
@@ -1372,6 +1614,11 @@ async function fetchDetail(
     const listingName = normalizeListingName(
       extracted.h1 || extracted.title || externalListingId,
     );
+    const quoteContext = extractQuoteContextFromHtml({
+      html,
+      fallbackListingId: externalListingId,
+      fallbackName: listingName,
+    });
 
     const normalizedMatchingProfile = {
       source: "pm_panhandle30a" as const,
@@ -1412,13 +1659,19 @@ async function fetchDetail(
       fetched_at: new Date().toISOString(),
       title: normalizeListingName(extracted.title || extracted.h1 || ""),
       h1: listingName,
-      canonical_url: extracted.canonical || detailUrl,
+      canonical_url:
+        extracted.canonical &&
+        extracted.canonical.toLowerCase().includes(`/${externalListingId}`)
+          ? extracted.canonical
+          : detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
+      rooms_guidance: roomsGuidance,
       amenities,
       location,
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
+      quote_context: quoteContext,
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_panhandle30a",
@@ -1482,6 +1735,7 @@ async function fetchDetail(
     return null;
   } finally {
     await page.close();
+    await context.close();
   }
 }
 
@@ -1545,7 +1799,19 @@ export function createPanhandle30AAdapter(): ScraperAdapter<LuxuryDetailRecord> 
         "panhandle30a",
         argv,
       );
-      await runPanhandle30aQuoteCli(normalizedArgs, progress);
+      await runRuntimeAdapterQuoteCli(
+        {
+          adapterKey: "panhandle30a",
+          executeSingleQuote: executePanhandle30aSingleQuote,
+          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteMaxAttempts: 2,
+          defaultEndpointPath: "/ajax/quote",
+          defaultTaxPct: 0.12,
+          defaultBaseNightly: 650,
+        },
+        normalizedArgs,
+        progress,
+      );
     },
   };
 }

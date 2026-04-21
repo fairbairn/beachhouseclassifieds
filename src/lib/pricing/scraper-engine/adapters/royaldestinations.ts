@@ -50,6 +50,12 @@ type ParsedRule = {
 type AmenityGroups = Record<string, string[]>;
 
 type RoyalDestinationsDetailRecord = DetailRecordBase & {
+  listing_flags: {
+    non_bookable_online: boolean;
+    availability_validation_exempt: boolean;
+    availability_validation_exempt_reason_code: string | null;
+    availability_validation_exempt_reason: string | null;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -95,6 +101,10 @@ type RoyalDestinationsDetailRecord = DetailRecordBase & {
     source: "pm_royaldestinations";
     external_listing_id: string;
     captured_at: string;
+    validation_exempt: boolean;
+    validation_exempt_reason_code: string | null;
+    validation_exempt_reason: string | null;
+    validation_exempt_evidence: string[];
     has_calendar_widget: boolean;
     booking_restrictions: string[];
     min_night_rules: ParsedRule[];
@@ -159,6 +169,9 @@ const NON_LISTING_SLUGS = new Set([
   "pet-friendly",
   "private-pool",
   "south-30a",
+]);
+const AVAILABILITY_VALIDATION_EXEMPT_LISTING_IDS = new Set([
+  "sandpipers-retreat",
 ]);
 const OUTPUT_ROOT = resolve(
   process.cwd(),
@@ -544,8 +557,9 @@ function parseGalleryImageUrlsFromHtml(html: string): string[] {
 
     try {
       const parsed = new URL(normalized);
-      // Collapse width variants so one asset counts once.
-      parsed.searchParams.delete("width");
+      // Emit canonical gallery URLs without query params/fragments.
+      parsed.search = "";
+      parsed.hash = "";
       candidates.add(parsed.toString());
     } catch {
       candidates.add(normalized);
@@ -1526,6 +1540,19 @@ async function fetchDetail(
         (day) => day.booking_day_state === "unknown",
       ).length,
     };
+    const availabilityValidationExempt =
+      AVAILABILITY_VALIDATION_EXEMPT_LISTING_IDS.has(externalListingId);
+    const availabilityValidationExemptReasonCode = availabilityValidationExempt
+      ? "non_bookable_online"
+      : null;
+    const availabilityValidationExemptReason = availabilityValidationExempt
+      ? "Operator-reviewed listing remains all-unavailable across capture window"
+      : null;
+    const availabilityValidationExemptEvidence = availabilityValidationExempt
+      ? [
+          "normalized_availability.day_codes remains all 'U' after targeted refresh",
+        ]
+      : [];
 
     const description = stripHtml(
       String(
@@ -1547,6 +1574,14 @@ async function fetchDetail(
       detail_url: normalizedDetailUrl,
       fetched_at: new Date().toISOString(),
       html_path: htmlPath,
+      listing_flags: {
+        non_bookable_online: availabilityValidationExempt,
+        availability_validation_exempt: availabilityValidationExempt,
+        availability_validation_exempt_reason_code:
+          availabilityValidationExemptReasonCode,
+        availability_validation_exempt_reason:
+          availabilityValidationExemptReason,
+      },
       title,
       h1,
       canonical_url: canonicalUrl,
@@ -1594,6 +1629,10 @@ async function fetchDetail(
         source: "pm_royaldestinations",
         external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
+        validation_exempt: availabilityValidationExempt,
+        validation_exempt_reason_code: availabilityValidationExemptReasonCode,
+        validation_exempt_reason: availabilityValidationExemptReason,
+        validation_exempt_evidence: availabilityValidationExemptEvidence,
         has_calendar_widget:
           html.includes("Night Available") ||
           html.includes("calendar-wrap") ||

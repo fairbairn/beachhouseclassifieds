@@ -1210,6 +1210,42 @@ function dedupe(values: string[]): string[] {
   return out;
 }
 
+function dedupeByImageBasename(values: string[]): string[] {
+  const out: string[] = [];
+  const seenBasenames = new Set<string>();
+
+  for (const raw of values) {
+    const value = raw.trim();
+    if (!value) {
+      continue;
+    }
+
+    let basename = "";
+    try {
+      const parsed = new URL(value);
+      basename = (parsed.pathname.split("/").pop() ?? "").trim().toLowerCase();
+    } catch {
+      basename =
+        (value.split("/").pop() ?? "").split(/[?#]/)[0]?.trim().toLowerCase() ??
+        "";
+    }
+
+    if (!basename) {
+      out.push(value);
+      continue;
+    }
+
+    if (seenBasenames.has(basename)) {
+      continue;
+    }
+
+    seenBasenames.add(basename);
+    out.push(value);
+  }
+
+  return out;
+}
+
 function parseAvailabilityCalendarFromHtml(
   html: string,
 ): KeycoAvailabilityCalendarDay[] {
@@ -2797,10 +2833,9 @@ async function fetchDetail(
         value.startsWith("https://service-images.key.co/service-images/"),
       );
 
-    const imageUrls = dedupe([
-      ...collectServiceImageUrls(html),
-      ...imageUrlsFromDom,
-    ]);
+    const imageUrls = dedupeByImageBasename(
+      dedupe([...collectServiceImageUrls(html), ...imageUrlsFromDom]),
+    );
 
     const coordinates = extractLatLngFromHtml(html);
     const fallbackCoordinates = inferCoordinatesFromText(
