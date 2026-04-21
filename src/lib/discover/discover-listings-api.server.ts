@@ -89,10 +89,18 @@ function buildMetadataFromListings(input: {
       beaches: {},
       communities: {},
       features: {
-        gulfFront: input.listings.filter((listing) => listing.gulffront).length,
-        privatePool: input.listings.filter((listing) => listing.privatePool)
-          .length,
-        golfCart: input.listings.filter((listing) => listing.golfCart).length,
+        gulf_front: {
+          label: "Gulf Front",
+          count: input.listings.filter((listing) => listing.gulffront).length,
+        },
+        private_pool: {
+          label: "Private Pool",
+          count: input.listings.filter((listing) => listing.privatePool).length,
+        },
+        golf_cart: {
+          label: "Golf Cart",
+          count: input.listings.filter((listing) => listing.golfCart).length,
+        },
       },
     },
   };

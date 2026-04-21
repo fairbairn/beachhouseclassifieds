@@ -233,27 +233,49 @@ export function buildEffectiveDiscoverFacetCounts(input: {
     };
   }
 
+  const areaCountByLabel = new Map(
+    Object.values(metadata.facets.areas).map(
+      (item) => [item.label, item.count] as const,
+    ),
+  );
+  const beachCountByLabel = new Map(
+    Object.values(metadata.facets.beaches).map(
+      (item) => [item.label, item.count] as const,
+    ),
+  );
+  const communityCountByLabel = new Map(
+    Object.values(metadata.facets.communities).map(
+      (item) => [item.label, item.count] as const,
+    ),
+  );
+
   return {
     effectiveListingCount: metadata.totalCount,
     effectiveAreaCounts: input.knownAreas.map((name) => [
       name,
-      metadata.facets.areas[name] ?? 0,
+      areaCountByLabel.get(name) ?? 0,
     ]),
     effectiveBeachCounts: input.knownBeaches.map((name) => [
       name,
-      metadata.facets.beaches[name] ?? 0,
+      beachCountByLabel.get(name) ?? 0,
     ]),
     effectiveCommunityCounts: input.knownCommunities.map((name) => [
       name,
-      metadata.facets.communities[name] ?? 0,
+      communityCountByLabel.get(name) ?? 0,
     ]),
     effectiveFeatureCounts: [
-      { label: "Gulf Front", count: metadata.facets.features.gulfFront ?? 0 },
+      {
+        label: "Gulf Front",
+        count: metadata.facets.features.gulf_front?.count ?? 0,
+      },
       {
         label: "Private Pool",
-        count: metadata.facets.features.privatePool ?? 0,
+        count: metadata.facets.features.private_pool?.count ?? 0,
       },
-      { label: "Golf Cart", count: metadata.facets.features.golfCart ?? 0 },
+      {
+        label: "Golf Cart",
+        count: metadata.facets.features.golf_cart?.count ?? 0,
+      },
     ],
   };
 }

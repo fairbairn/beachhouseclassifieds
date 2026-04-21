@@ -69,6 +69,23 @@ Workarounds used:
 - Adapter-specific extraction modules for quirks.
 - Precision reruns and narrow-scope fixes to avoid collateral churn.
 
+## Discover Beach Area Null Coding (Open Follow-Up)
+
+Observed:
+
+- A subset of listings have `beach_area_name` as null while city/state fields still suggest recognizable 30A-adjacent beach names (for example Inlet Beach, Santa Rosa Beach, Rosemary Beach).
+- Current facet counting intentionally avoids inferring new beach codes from city/state in-query to prevent facet options that may not round-trip cleanly through code-based filters.
+
+Current decision:
+
+- Do not coalesce city/state to beach area facet codes at query time for now.
+- Keep current facet behavior deterministic and aligned to persisted canonical codes.
+
+Follow-up proposal:
+
+- Improve ingest fallback logic so `beach_area_name` is coded at ingest time when confidence is sufficient.
+- Revisit this after defining explicit confidence/eligibility rules and validating that facet filters remain fully reversible to listing queries.
+
 ## Discover Google Maps JS Console Notices
 
 Observed in client console:

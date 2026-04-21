@@ -22,12 +22,7 @@ function resolveAuthGuardPaths(
 }
 
 async function resolveDefaultServerSession() {
-  if (!import.meta.env.SSR) {
-    return null;
-  }
-
-  const { getServerSession } = await import("@/core/auth/session-adapter");
-  return getServerSession();
+  return null;
 }
 
 export function createAuthGuards(options?: {

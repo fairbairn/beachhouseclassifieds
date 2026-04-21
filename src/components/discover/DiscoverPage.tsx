@@ -51,6 +51,10 @@ import {
 } from "@/components/home/homeButtonStyles";
 import { HomeMarketingShell } from "@/components/home/HomeMarketingShell";
 import {
+  fetchDiscoverFacetsProbe,
+  type DiscoverFacetsProbeResult,
+} from "@/lib/discover/discover-facets-query";
+import {
   fetchDiscoverListingDetailPayloadWithCache,
   primeDiscoverListingDetailCache,
   primeDiscoverListingsCache,
@@ -238,6 +242,14 @@ export function DiscoverPage({
     3 | 4
   >(3);
   const [sortOption, setSortOption] = useState<SortOption>("recommended");
+  const [facetsProbe, setFacetsProbe] = useState<DiscoverFacetsProbeResult>({
+    status: 0,
+    clientDurationMs: 0,
+    payloadBytes: 0,
+    payload: null,
+    error: null,
+  });
+  const [isFacetsProbeLoading, setIsFacetsProbeLoading] = useState(false);
   const initialDiscoverListingsSeed =
     !requestedOverlayListingId &&
     Array.isArray(discoverListingsSnapshotCache) &&
@@ -393,6 +405,61 @@ export function DiscoverPage({
   useEffect(() => {
     fetchedListingsRef.current = fetchedListings;
   }, [fetchedListings]);
+
+  useEffect(() => {
+    if (overlayOnlyMode) {
+      return;
+    }
+
+    let isCancelled = false;
+    setIsFacetsProbeLoading(true);
+
+    void fetchDiscoverFacetsProbe({
+      sortOption,
+      locationQuery,
+      minSleeps,
+      minBedrooms,
+      minBathrooms,
+      filterPool,
+      filterGulffront,
+      filterGolfCart,
+      probeReason: "sort_change_probe",
+    })
+      .then((result) => {
+        if (isCancelled) {
+          return;
+        }
+        setFacetsProbe(result);
+        setIsFacetsProbeLoading(false);
+      })
+      .catch(() => {
+        if (isCancelled) {
+          return;
+        }
+        setFacetsProbe({
+          status: 0,
+          clientDurationMs: 0,
+          payloadBytes: 0,
+          payload: null,
+          error: "Failed to fetch facets probe payload.",
+        });
+        setIsFacetsProbeLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    filterGolfCart,
+    filterGulffront,
+    filterPool,
+    locationQuery,
+    minBathrooms,
+    minBedrooms,
+    minSleeps,
+    overlayOnlyMode,
+    sortOption,
+  ]);
 
   useEffect(() => {
     if (requestedOverlayListingId || fetchedListings.length === 0) {
@@ -1478,6 +1545,25 @@ export function DiscoverPage({
               filterGolfCart={filterGolfCart}
               onToggleGolfCart={() => setFilterGolfCart((v) => !v)}
             />
+
+            <details className="rounded-xl border border-cyan-200/70 bg-cyan-50/80 px-3 py-2 text-xs text-slate-700 shadow-sm">
+              <summary className="cursor-pointer font-semibold tracking-[0.03em] text-slate-800">
+                Facets Probe JSON
+              </summary>
+              <div className="mt-2 space-y-2">
+                <p className="font-medium text-slate-700">
+                  {isFacetsProbeLoading
+                    ? "Loading..."
+                    : `status=${facetsProbe.status || "n/a"} client_ms=${facetsProbe.clientDurationMs.toFixed(1)} bytes=${facetsProbe.payloadBytes}`}
+                </p>
+                {facetsProbe.error ? (
+                  <p className="text-rose-700">{facetsProbe.error}</p>
+                ) : null}
+                <pre className="max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-800">
+                  {JSON.stringify(facetsProbe.payload, null, 2)}
+                </pre>
+              </div>
+            </details>
 
             <div
               className={`grid gap-6 xl:min-h-0 xl:flex-1 ${

@@ -21,14 +21,10 @@ const TARGET_LISTING_COUNT = 96;
 export type DiscoverCorpusMetadata = {
   totalCount: number;
   facets: {
-    areas: Record<string, number>;
-    beaches: Record<string, number>;
-    communities: Record<string, number>;
-    features: {
-      gulfFront: number;
-      privatePool: number;
-      golfCart: number;
-    };
+    areas: Record<string, { label: string; count: number }>;
+    beaches: Record<string, { label: string; count: number }>;
+    communities: Record<string, { label: string; count: number }>;
+    features: Record<string, { label: string; count: number }>;
   };
 };
 
@@ -1000,20 +996,23 @@ export async function getDiscoverCorpusMetadata(): Promise<DiscoverCorpusMetadat
         beaches: {},
         communities: {},
         features: {
-          gulfFront: 0,
-          privatePool: 0,
-          golfCart: 0,
+          gulf_front: { label: "Gulf Front", count: 0 },
+          private_pool: { label: "Private Pool", count: 0 },
+          golf_cart: { label: "Golf Cart", count: 0 },
         },
       },
     };
   }
 
-  const toFacetMap = (value: unknown): Record<string, number> => {
+  const toFacetBucket = (
+    value: unknown,
+    toLabel: (code: string) => string,
+  ): Record<string, { label: string; count: number }> => {
     const source = asObject(value);
-    const out: Record<string, number> = {};
+    const out: Record<string, { label: string; count: number }> = {};
     for (const [rawKey, rawCount] of Object.entries(source)) {
-      const key = rawKey.trim();
-      if (!key) {
+      const code = rawKey.trim();
+      if (!code) {
         continue;
       }
 
@@ -1022,7 +1021,11 @@ export async function getDiscoverCorpusMetadata(): Promise<DiscoverCorpusMetadat
         continue;
       }
 
-      out[key] = Math.max(0, Math.round(count));
+      const label = toLabel(code);
+      out[code] = {
+        label,
+        count: Math.max(0, Math.round(count)),
+      };
     }
     return out;
   };
@@ -1030,13 +1033,31 @@ export async function getDiscoverCorpusMetadata(): Promise<DiscoverCorpusMetadat
   return {
     totalCount: metadata.total_count,
     facets: {
-      areas: toFacetMap(metadata.areas),
-      beaches: toFacetMap(metadata.beaches),
-      communities: toFacetMap(metadata.communities),
+      areas: toFacetBucket(
+        metadata.areas,
+        (code) => areaLabelFromCode(code) ?? code,
+      ),
+      beaches: toFacetBucket(
+        metadata.beaches,
+        (code) => beachAreaLabelFromCode(code) ?? code,
+      ),
+      communities: toFacetBucket(
+        metadata.communities,
+        (code) => communityLabelFromCode(code) ?? code,
+      ),
       features: {
-        gulfFront: metadata.gulf_front_count,
-        privatePool: metadata.private_pool_count,
-        golfCart: metadata.golf_cart_count,
+        gulf_front: {
+          label: "Gulf Front",
+          count: metadata.gulf_front_count,
+        },
+        private_pool: {
+          label: "Private Pool",
+          count: metadata.private_pool_count,
+        },
+        golf_cart: {
+          label: "Golf Cart",
+          count: metadata.golf_cart_count,
+        },
       },
     },
   };

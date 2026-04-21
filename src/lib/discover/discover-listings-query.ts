@@ -30,13 +30,101 @@ function emptyMetadata(): DiscoverListingsMetadata {
       areas: {},
       beaches: {},
       communities: {},
-      features: {
-        gulfFront: 0,
-        privatePool: 0,
-        golfCart: 0,
-      },
+      features: {},
     },
   };
+}
+
+function normalizeFacetBucket(
+  value: unknown,
+): DiscoverListingsMetadata["facets"]["areas"] {
+  const out: DiscoverListingsMetadata["facets"]["areas"] = {};
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+
+      const candidate = entry as {
+        code?: unknown;
+        label?: unknown;
+        count?: unknown;
+      };
+      const code =
+        typeof candidate.code === "string" ? candidate.code.trim() : "";
+      const label =
+        typeof candidate.label === "string"
+          ? candidate.label.trim()
+          : undefined;
+      const countValue =
+        typeof candidate.count === "number"
+          ? candidate.count
+          : typeof candidate.count === "string"
+            ? Number(candidate.count)
+            : Number.NaN;
+
+      if (!code || !Number.isFinite(countValue)) {
+        continue;
+      }
+
+      out[code] = {
+        ...(label ? { label } : {}),
+        count: Math.max(0, Math.round(countValue)),
+      };
+    }
+    return out;
+  }
+
+  if (value && typeof value === "object") {
+    for (const [rawCode, rawValue] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      const code = rawCode.trim();
+      if (!code) {
+        continue;
+      }
+
+      if (rawValue && typeof rawValue === "object") {
+        const entry = rawValue as { label?: unknown; count?: unknown };
+        const label =
+          typeof entry.label === "string" ? entry.label.trim() : undefined;
+        const countValue =
+          typeof entry.count === "number"
+            ? entry.count
+            : typeof entry.count === "string"
+              ? Number(entry.count)
+              : Number.NaN;
+        if (!Number.isFinite(countValue)) {
+          continue;
+        }
+
+        out[code] = {
+          ...(label ? { label } : {}),
+          count: Math.max(0, Math.round(countValue)),
+        };
+        continue;
+      }
+
+      const countValue =
+        typeof rawValue === "number"
+          ? rawValue
+          : typeof rawValue === "string"
+            ? Number(rawValue)
+            : Number.NaN;
+      if (!Number.isFinite(countValue)) {
+        continue;
+      }
+
+      out[code] = {
+        count: Math.max(0, Math.round(countValue)),
+      };
+    }
+
+    return out;
+  }
+
+  return out;
 }
 
 function normalizeMetadata(
@@ -62,46 +150,10 @@ function normalizeMetadata(
     facets:
       candidate.facets && typeof candidate.facets === "object"
         ? {
-            areas:
-              candidate.facets.areas &&
-              typeof candidate.facets.areas === "object"
-                ? candidate.facets.areas
-                : {},
-            beaches:
-              candidate.facets.beaches &&
-              typeof candidate.facets.beaches === "object"
-                ? candidate.facets.beaches
-                : {},
-            communities:
-              candidate.facets.communities &&
-              typeof candidate.facets.communities === "object"
-                ? candidate.facets.communities
-                : {},
-            features:
-              candidate.facets.features &&
-              typeof candidate.facets.features === "object"
-                ? {
-                    gulfFront: Number.isFinite(
-                      candidate.facets.features.gulfFront,
-                    )
-                      ? candidate.facets.features.gulfFront
-                      : 0,
-                    privatePool: Number.isFinite(
-                      candidate.facets.features.privatePool,
-                    )
-                      ? candidate.facets.features.privatePool
-                      : 0,
-                    golfCart: Number.isFinite(
-                      candidate.facets.features.golfCart,
-                    )
-                      ? candidate.facets.features.golfCart
-                      : 0,
-                  }
-                : {
-                    gulfFront: 0,
-                    privatePool: 0,
-                    golfCart: 0,
-                  },
+            areas: normalizeFacetBucket(candidate.facets.areas),
+            beaches: normalizeFacetBucket(candidate.facets.beaches),
+            communities: normalizeFacetBucket(candidate.facets.communities),
+            features: normalizeFacetBucket(candidate.facets.features),
           }
         : emptyMetadata().facets,
   };

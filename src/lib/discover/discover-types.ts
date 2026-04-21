@@ -60,17 +60,18 @@ export type DiscoverListing = {
   };
 };
 
-export type DiscoverFeatureFacets = {
-  gulfFront: number;
-  privatePool: number;
-  golfCart: number;
+export type DiscoverFacetBucketEntry = {
+  label?: string;
+  count: number;
 };
 
+export type DiscoverFacetBucket = Record<string, DiscoverFacetBucketEntry>;
+
 export type DiscoverFacetGroups = {
-  areas: Record<string, number>;
-  beaches: Record<string, number>;
-  communities: Record<string, number>;
-  features: DiscoverFeatureFacets;
+  areas: DiscoverFacetBucket;
+  beaches: DiscoverFacetBucket;
+  communities: DiscoverFacetBucket;
+  features: DiscoverFacetBucket;
 };
 
 export type DiscoverMapListing = {
@@ -102,6 +103,18 @@ export type DiscoverSearchRequest = {
   includeMetadata?: boolean;
 };
 
+export type DiscoverFacetsRequest = {
+  sortOption?: string;
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
+  filterPool?: boolean;
+  filterGulffront?: boolean;
+  filterGolfCart?: boolean;
+  probeReason?: string;
+};
+
 export type DiscoverListingsStats = DiscoverPageStats;
 
 export type DiscoverSearchResponse = {
@@ -125,5 +138,18 @@ export type DiscoverListingDetailPayload = {
       imageCount: number;
       previewImageCount: number;
     };
+  };
+};
+
+export type DiscoverFacetsPayload = {
+  totalCount: number;
+  facets: DiscoverFacetGroups;
+};
+
+export type DiscoverFacetsResponse = DiscoverFacetsPayload & {
+  _meta: {
+    generatedAt: string;
+    serverDurationMs: number;
+    request: DiscoverFacetsRequest;
   };
 };

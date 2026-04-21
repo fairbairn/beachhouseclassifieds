@@ -21,6 +21,7 @@ import { Route as ApiLogoutRouteImport } from './routes/api/logout'
 import { Route as ApiLoginRouteImport } from './routes/api/login'
 import { Route as DiscoverListingSlugRouteImport } from './routes/discover.listing.$slug'
 import { Route as ApiDiscoverListingsRouteImport } from './routes/api/discover/listings'
+import { Route as ApiDiscoverFacetsRouteImport } from './routes/api/discover/facets'
 import { Route as ApiDevListingRefinementRouteImport } from './routes/api/dev/listing-refinement'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDiscoverListingsSlugRouteImport } from './routes/api/discover/listings/$slug'
@@ -85,6 +86,11 @@ const ApiDiscoverListingsRoute = ApiDiscoverListingsRouteImport.update({
   path: '/api/discover/listings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDiscoverFacetsRoute = ApiDiscoverFacetsRouteImport.update({
+  id: '/api/discover/facets',
+  path: '/api/discover/facets',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDevListingRefinementRoute = ApiDevListingRefinementRouteImport.update({
   id: '/api/dev/listing-refinement',
   path: '/api/dev/listing-refinement',
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/dev/listing-refinement': typeof DevListingRefinementRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/listing-refinement': typeof ApiDevListingRefinementRoute
+  '/api/discover/facets': typeof ApiDiscoverFacetsRoute
   '/api/discover/listings': typeof ApiDiscoverListingsRouteWithChildren
   '/discover/listing/$slug': typeof DiscoverListingSlugRoute
   '/api/discover/listings/$slug': typeof ApiDiscoverListingsSlugRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/dev/listing-refinement': typeof DevListingRefinementRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/listing-refinement': typeof ApiDevListingRefinementRoute
+  '/api/discover/facets': typeof ApiDiscoverFacetsRoute
   '/api/discover/listings': typeof ApiDiscoverListingsRouteWithChildren
   '/discover/listing/$slug': typeof DiscoverListingSlugRoute
   '/api/discover/listings/$slug': typeof ApiDiscoverListingsSlugRoute
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/dev/listing-refinement': typeof DevListingRefinementRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/listing-refinement': typeof ApiDevListingRefinementRoute
+  '/api/discover/facets': typeof ApiDiscoverFacetsRoute
   '/api/discover/listings': typeof ApiDiscoverListingsRouteWithChildren
   '/discover/listing/$slug': typeof DiscoverListingSlugRoute
   '/api/discover/listings/$slug': typeof ApiDiscoverListingsSlugRoute
@@ -168,6 +177,7 @@ export interface FileRouteTypes {
     | '/dev/listing-refinement'
     | '/api/auth/$'
     | '/api/dev/listing-refinement'
+    | '/api/discover/facets'
     | '/api/discover/listings'
     | '/discover/listing/$slug'
     | '/api/discover/listings/$slug'
@@ -185,6 +195,7 @@ export interface FileRouteTypes {
     | '/dev/listing-refinement'
     | '/api/auth/$'
     | '/api/dev/listing-refinement'
+    | '/api/discover/facets'
     | '/api/discover/listings'
     | '/discover/listing/$slug'
     | '/api/discover/listings/$slug'
@@ -202,6 +213,7 @@ export interface FileRouteTypes {
     | '/dev/listing-refinement'
     | '/api/auth/$'
     | '/api/dev/listing-refinement'
+    | '/api/discover/facets'
     | '/api/discover/listings'
     | '/discover/listing/$slug'
     | '/api/discover/listings/$slug'
@@ -220,6 +232,7 @@ export interface RootRouteChildren {
   DevListingRefinementRoute: typeof DevListingRefinementRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDevListingRefinementRoute: typeof ApiDevListingRefinementRoute
+  ApiDiscoverFacetsRoute: typeof ApiDiscoverFacetsRoute
   ApiDiscoverListingsRoute: typeof ApiDiscoverListingsRouteWithChildren
 }
 
@@ -309,6 +322,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDiscoverListingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/discover/facets': {
+      id: '/api/discover/facets'
+      path: '/api/discover/facets'
+      fullPath: '/api/discover/facets'
+      preLoaderRoute: typeof ApiDiscoverFacetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/dev/listing-refinement': {
       id: '/api/dev/listing-refinement'
       path: '/api/dev/listing-refinement'
@@ -369,6 +389,7 @@ const rootRouteChildren: RootRouteChildren = {
   DevListingRefinementRoute: DevListingRefinementRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDevListingRefinementRoute: ApiDevListingRefinementRoute,
+  ApiDiscoverFacetsRoute: ApiDiscoverFacetsRoute,
   ApiDiscoverListingsRoute: ApiDiscoverListingsRouteWithChildren,
 }
 export const routeTree = rootRouteImport

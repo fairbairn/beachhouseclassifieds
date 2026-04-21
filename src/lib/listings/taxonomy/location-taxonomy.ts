@@ -22,7 +22,7 @@ export const COMMUNITY_LABEL_BY_CODE = {
   prominence: "Prominence",
   watersound_west_beach: "WaterSound West Beach",
   watersound_beach: "WaterSound Beach",
-  seacrest_beach: "Seacrest Beach",
+  seacrest: "Seacrest",
   alys_beach: "Alys Beach",
   rosemary_beach: "Rosemary Beach",
 } as const;
