@@ -101,6 +101,10 @@ export type DiscoverSearchRequest = {
   limit?: number;
   offset?: number;
   includeMetadata?: boolean;
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
 };
 
 export type DiscoverFacetsRequest = {
@@ -109,6 +113,7 @@ export type DiscoverFacetsRequest = {
   minSleeps?: number;
   minBedrooms?: number;
   minBathrooms?: number;
+  selectedFeatures?: string[];
   filterPool?: boolean;
   filterGulffront?: boolean;
   filterGolfCart?: boolean;

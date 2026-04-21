@@ -54,6 +54,22 @@ function buildMetadataFromListings(
 function sanitizeDiscoverFacetsRequest(
   request?: DiscoverFacetsRequest,
 ): DiscoverFacetsRequest {
+  const selectedFeatures = Array.isArray(request?.selectedFeatures)
+    ? request.selectedFeatures
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter((entry) => entry.length > 0)
+    : [];
+
+  if (request?.filterGulffront) {
+    selectedFeatures.push("gulf_front");
+  }
+  if (request?.filterPool) {
+    selectedFeatures.push("private_pool");
+  }
+  if (request?.filterGolfCart) {
+    selectedFeatures.push("golf_cart");
+  }
+
   return {
     sortOption:
       typeof request?.sortOption === "string"
@@ -78,6 +94,10 @@ function sanitizeDiscoverFacetsRequest(
       Number.isFinite(request.minBathrooms)
         ? request.minBathrooms
         : undefined,
+    selectedFeatures:
+      selectedFeatures.length > 0
+        ? Array.from(new Set(selectedFeatures))
+        : undefined,
     filterPool:
       typeof request?.filterPool === "boolean" ? request.filterPool : undefined,
     filterGulffront:
@@ -100,7 +120,9 @@ export async function executeDiscoverFacets(
 ): Promise<DiscoverFacetsResponse> {
   const startedAtMs = Date.now();
   const sanitizedRequest = sanitizeDiscoverFacetsRequest(request);
-  const metadata = await getDiscoverCorpusMetadata().catch(() => null);
+  const metadata = await getDiscoverCorpusMetadata({
+    selectedFeatures: sanitizedRequest.selectedFeatures,
+  }).catch(() => null);
 
   const response: DiscoverFacetsResponse = {
     totalCount: metadata?.totalCount ?? 0,
@@ -147,6 +169,10 @@ export async function executeDiscoverSearch(
     limit: request.limit,
     offset: request.offset,
     includeMetadata: request.includeMetadata,
+    selectedAreas: request.selectedAreas,
+    selectedBeaches: request.selectedBeaches,
+    selectedCommunities: request.selectedCommunities,
+    selectedFeatures: request.selectedFeatures,
   });
 
   return payload;

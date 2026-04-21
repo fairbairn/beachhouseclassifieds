@@ -1,11 +1,5 @@
 import { Heart } from "lucide-react";
-import {
-  type Dispatch,
-  type SetStateAction,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FacetSection } from "@/components/discover/discover-controls";
 
@@ -25,6 +19,18 @@ export function DiscoverFacetSidebar({
   beachCounts,
   communityCounts,
   featureCounts,
+  selectedAreas,
+  selectedBeaches,
+  selectedCommunities,
+  selectedFeatures,
+  onToggleArea,
+  onToggleBeach,
+  onToggleCommunity,
+  onToggleFeature,
+  onClearAreas,
+  onClearBeaches,
+  onClearCommunities,
+  onClearFeatures,
 }: {
   listingCount: number;
   favoriteCount: number;
@@ -32,34 +38,31 @@ export function DiscoverFacetSidebar({
   beachCounts: ReadonlyArray<readonly [string, number]>;
   communityCounts: ReadonlyArray<readonly [string, number]>;
   featureCounts: ReadonlyArray<{ label: string; count: number }>;
+  selectedAreas: ReadonlyArray<string>;
+  selectedBeaches: ReadonlyArray<string>;
+  selectedCommunities: ReadonlyArray<string>;
+  selectedFeatures: ReadonlyArray<string>;
+  onToggleArea: (value: string) => void;
+  onToggleBeach: (value: string) => void;
+  onToggleCommunity: (value: string) => void;
+  onToggleFeature: (value: string) => void;
+  onClearAreas: () => void;
+  onClearBeaches: () => void;
+  onClearCommunities: () => void;
+  onClearFeatures: () => void;
 }) {
   const [isAreasOpen, setIsAreasOpen] = useState(false);
   const [isBeachesOpen, setIsBeachesOpen] = useState(true);
   const [isCommunitiesOpen, setIsCommunitiesOpen] = useState(false);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(true);
-  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
-  const [selectedBeaches, setSelectedBeaches] = useState<string[]>([]);
-  const [selectedCommunities, setSelectedCommunities] = useState<string[]>([]);
-  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
   const [animatedPropertiesCount, setAnimatedPropertiesCount] = useState(
     DEMO_INITIAL_PROPERTIES_COUNT,
   );
   const propertiesCountRef = useRef(DEMO_INITIAL_PROPERTIES_COUNT);
   const animationFrameRef = useRef<number | null>(null);
 
-  const toggleSelectedValue = (
-    value: string,
-    setSelected: Dispatch<SetStateAction<string[]>>,
-  ) => {
-    setSelected((current) =>
-      current.includes(value)
-        ? current.filter((entry) => entry !== value)
-        : [...current, value],
-    );
-  };
-
   const sumSelectedTupleCounts = (
-    selectedValues: string[],
+    selectedValues: ReadonlyArray<string>,
     counts: ReadonlyArray<readonly [string, number]>,
   ) =>
     selectedValues.reduce(
@@ -68,7 +71,7 @@ export function DiscoverFacetSidebar({
       0,
     );
 
-  const sumSelectedFeatureCounts = (selectedValues: string[]) =>
+  const sumSelectedFeatureCounts = (selectedValues: ReadonlyArray<string>) =>
     selectedValues.reduce(
       (total, value) =>
         total +
@@ -86,20 +89,7 @@ export function DiscoverFacetSidebar({
     communityCounts,
   );
   const selectedFeatureTotal = sumSelectedFeatureCounts(selectedFeatures);
-  const selectedSectionTotals = [
-    selectedAreaTotal,
-    selectedBeachTotal,
-    selectedCommunityTotal,
-    selectedFeatureTotal,
-  ];
-  const hasAnySelectedFacets =
-    selectedAreas.length > 0 ||
-    selectedBeaches.length > 0 ||
-    selectedCommunities.length > 0 ||
-    selectedFeatures.length > 0;
-  const propertiesCountTarget = hasAnySelectedFacets
-    ? Math.max(...selectedSectionTotals)
-    : listingCount;
+  const propertiesCountTarget = listingCount;
 
   useEffect(() => {
     if (animationFrameRef.current) {
@@ -226,7 +216,7 @@ export function DiscoverFacetSidebar({
         onToggle={() => setIsAreasOpen((current) => !current)}
         selectedCount={selectedAreaTotal}
         hasSelected={selectedAreas.length > 0}
-        onClearSelected={() => setSelectedAreas([])}
+        onClearSelected={onClearAreas}
         clearSelectedLabel="Clear selected Areas facets"
       >
         <ul className="mt-1.5 space-y-1">
@@ -236,7 +226,7 @@ export function DiscoverFacetSidebar({
               count,
               selectedAreas.includes(name),
               selectedAreas.length > 0,
-              () => toggleSelectedValue(name, setSelectedAreas),
+              () => onToggleArea(name),
             ),
           )}
         </ul>
@@ -247,7 +237,7 @@ export function DiscoverFacetSidebar({
         onToggle={() => setIsBeachesOpen((current) => !current)}
         selectedCount={selectedBeachTotal}
         hasSelected={selectedBeaches.length > 0}
-        onClearSelected={() => setSelectedBeaches([])}
+        onClearSelected={onClearBeaches}
         clearSelectedLabel="Clear selected Beaches facets"
       >
         <ul className="mt-1.5 space-y-1">
@@ -257,7 +247,7 @@ export function DiscoverFacetSidebar({
               count,
               selectedBeaches.includes(name),
               selectedBeaches.length > 0,
-              () => toggleSelectedValue(name, setSelectedBeaches),
+              () => onToggleBeach(name),
             ),
           )}
         </ul>
@@ -268,7 +258,7 @@ export function DiscoverFacetSidebar({
         onToggle={() => setIsCommunitiesOpen((current) => !current)}
         selectedCount={selectedCommunityTotal}
         hasSelected={selectedCommunities.length > 0}
-        onClearSelected={() => setSelectedCommunities([])}
+        onClearSelected={onClearCommunities}
         clearSelectedLabel="Clear selected Communities facets"
       >
         <ul className="mt-1.5 space-y-1">
@@ -278,7 +268,7 @@ export function DiscoverFacetSidebar({
               count,
               selectedCommunities.includes(name),
               selectedCommunities.length > 0,
-              () => toggleSelectedValue(name, setSelectedCommunities),
+              () => onToggleCommunity(name),
             ),
           )}
         </ul>
@@ -289,7 +279,7 @@ export function DiscoverFacetSidebar({
         onToggle={() => setIsFeaturesOpen((current) => !current)}
         selectedCount={selectedFeatureTotal}
         hasSelected={selectedFeatures.length > 0}
-        onClearSelected={() => setSelectedFeatures([])}
+        onClearSelected={onClearFeatures}
         clearSelectedLabel="Clear selected Property Features facets"
       >
         <ul className="mt-1.5 space-y-1">
@@ -299,7 +289,7 @@ export function DiscoverFacetSidebar({
               feature.count,
               selectedFeatures.includes(feature.label),
               selectedFeatures.length > 0,
-              () => toggleSelectedValue(feature.label, setSelectedFeatures),
+              () => onToggleFeature(feature.label),
             ),
           )}
         </ul>

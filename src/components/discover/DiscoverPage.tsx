@@ -21,6 +21,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 
 import beachEntryTexture from "@/assets/images/beach-entry.png";
@@ -86,6 +88,7 @@ const RESET_MAP_ON_CLEAR_PIN = false;
 const BRAND_DISPLAY_FONT_FAMILY = "'Playfair Display', serif";
 const DISCOVER_RESULT_SET_TARGET_COUNT = 96;
 const STANDALONE_CLOSE_FADE_MS = 3000;
+const SHOW_FACETS_PROBE_PANEL = false;
 
 let discoverListingsSnapshotCache: DiscoverListing[] | null = null;
 
@@ -242,6 +245,16 @@ export function DiscoverPage({
     3 | 4
   >(3);
   const [sortOption, setSortOption] = useState<SortOption>("recommended");
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [selectedBeaches, setSelectedBeaches] = useState<string[]>([]);
+  const [selectedCommunities, setSelectedCommunities] = useState<string[]>([]);
+  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
+  const [hasFacetSelectionInteraction, setHasFacetSelectionInteraction] =
+    useState(false);
+  const [serverFilteredListingTotalCount, setServerFilteredListingTotalCount] =
+    useState(
+      initialListingsPage?._stats?.totalCount ?? initialLoadedListings.length,
+    );
   const [facetsProbe, setFacetsProbe] = useState<DiscoverFacetsProbeResult>({
     status: 0,
     clientDurationMs: 0,
@@ -259,6 +272,9 @@ export function DiscoverPage({
   const [fetchedListings, setFetchedListings] = useState<DiscoverListing[]>(
     () => initialDiscoverListingsSeed,
   );
+  const [latestMetadata, setLatestMetadata] = useState<
+    DiscoverListingsPageResponse["metadata"] | undefined
+  >(initialListingsPage?.metadata);
   const [overlayDetailListing, setOverlayDetailListing] = useState<
     DiscoverListing | undefined
   >(() => initialOverlayListing);
@@ -474,6 +490,16 @@ export function DiscoverPage({
       return;
     }
 
+    const hasActiveFacetFilters =
+      selectedAreas.length > 0 ||
+      selectedBeaches.length > 0 ||
+      selectedCommunities.length > 0 ||
+      selectedFeatures.length > 0;
+
+    if (hasFacetSelectionInteraction || hasActiveFacetFilters) {
+      return;
+    }
+
     if (didBackgroundFillRef.current) {
       return;
     }
@@ -545,7 +571,16 @@ export function DiscoverPage({
       didBackgroundFillRef.current = false;
       setIsBackgroundFillLoading(false);
     };
-  }, [initialDiscoverListingsSeed.length, initialListingsPage, isOverlayRoute]);
+  }, [
+    hasFacetSelectionInteraction,
+    initialDiscoverListingsSeed.length,
+    initialListingsPage,
+    isOverlayRoute,
+    selectedAreas.length,
+    selectedBeaches.length,
+    selectedCommunities.length,
+    selectedFeatures.length,
+  ]);
 
   useEffect(() => {
     if (initialLoadedListings.length === 0) {
@@ -721,6 +756,70 @@ export function DiscoverPage({
       ? backgroundFillTargetCount - fetchedListings.length
       : 0;
 
+  const hasSelectedFacetFilters =
+    selectedAreas.length > 0 ||
+    selectedBeaches.length > 0 ||
+    selectedCommunities.length > 0 ||
+    selectedFeatures.length > 0;
+
+  const toggleFacetValue = useCallback(
+    (value: string, setSelected: Dispatch<SetStateAction<string[]>>) => {
+      setHasFacetSelectionInteraction(true);
+      setSelected((current) =>
+        current.includes(value)
+          ? current.filter((entry) => entry !== value)
+          : [...current, value],
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (overlayOnlyMode || isOverlayRoute || !hasFacetSelectionInteraction) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    void fetchDiscoverListingsPage({
+      limit: DISCOVER_RESULT_SET_TARGET_COUNT,
+      offset: 0,
+      includeMetadata: true,
+      selectedAreas,
+      selectedBeaches,
+      selectedCommunities,
+      selectedFeatures,
+    })
+      .then((payload) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setFetchedListings(payload.listings);
+        setLatestMetadata(payload.metadata);
+        setServerFilteredListingTotalCount(
+          Math.max(0, payload._stats?.totalCount ?? payload.listings.length),
+        );
+      })
+      .catch(() => {
+        if (isCancelled) {
+          return;
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    hasFacetSelectionInteraction,
+    isOverlayRoute,
+    overlayOnlyMode,
+    selectedAreas,
+    selectedBeaches,
+    selectedCommunities,
+    selectedFeatures,
+  ]);
+
   const filtered = useMemo(() => {
     return filterDiscoverListings(sourceListings, {
       locationQuery,
@@ -756,14 +855,14 @@ export function DiscoverPage({
     return buildDiscoverMapListings({
       displayListings,
       hasClientSideNarrowing,
-      mapSeedListings: initialListingsPage?.metadata?.mapListings,
+      mapSeedListings: latestMetadata?.mapListings,
       nights,
       getListingGeo: getListingGeoTarget,
     });
   }, [
     displayListings,
     hasClientSideNarrowing,
-    initialListingsPage?.metadata?.mapListings,
+    latestMetadata?.mapListings,
     nights,
   ]);
 
@@ -790,7 +889,18 @@ export function DiscoverPage({
     () =>
       buildEffectiveDiscoverFacetCounts({
         hasClientSideNarrowing,
-        initialListingsPage,
+        initialListingsPage:
+          latestMetadata !== undefined
+            ? ({
+                _stats: initialListingsPage?._stats ?? {
+                  totalCount: displayListings.length,
+                  count: displayListings.length,
+                  requested: displayListings.length,
+                },
+                listings: initialListingsPage?.listings ?? [],
+                metadata: latestMetadata,
+              } as DiscoverListingsPageResponse)
+            : initialListingsPage,
         displayListingsLength: displayListings.length,
         knownAreas: known30AAreas,
         knownBeaches: known30ABeachZones,
@@ -808,8 +918,15 @@ export function DiscoverPage({
       featureCounts,
       hasClientSideNarrowing,
       initialListingsPage,
+      latestMetadata,
     ],
   );
+
+  const propertiesListingCount = hasClientSideNarrowing
+    ? displayListings.length
+    : hasSelectedFacetFilters
+      ? serverFilteredListingTotalCount
+      : effectiveListingCount;
 
   const toggleFavoriteListing = useCallback((listingId: string) => {
     setFavoriteListingIds((current) =>
@@ -1546,24 +1663,26 @@ export function DiscoverPage({
               onToggleGolfCart={() => setFilterGolfCart((v) => !v)}
             />
 
-            <details className="rounded-xl border border-cyan-200/70 bg-cyan-50/80 px-3 py-2 text-xs text-slate-700 shadow-sm">
-              <summary className="cursor-pointer font-semibold tracking-[0.03em] text-slate-800">
-                Facets Probe JSON
-              </summary>
-              <div className="mt-2 space-y-2">
-                <p className="font-medium text-slate-700">
-                  {isFacetsProbeLoading
-                    ? "Loading..."
-                    : `status=${facetsProbe.status || "n/a"} client_ms=${facetsProbe.clientDurationMs.toFixed(1)} bytes=${facetsProbe.payloadBytes}`}
-                </p>
-                {facetsProbe.error ? (
-                  <p className="text-rose-700">{facetsProbe.error}</p>
-                ) : null}
-                <pre className="max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-800">
-                  {JSON.stringify(facetsProbe.payload, null, 2)}
-                </pre>
-              </div>
-            </details>
+            {SHOW_FACETS_PROBE_PANEL ? (
+              <details className="rounded-xl border border-cyan-200/70 bg-cyan-50/80 px-3 py-2 text-xs text-slate-700 shadow-sm">
+                <summary className="cursor-pointer font-semibold tracking-[0.03em] text-slate-800">
+                  Facets Probe JSON
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <p className="font-medium text-slate-700">
+                    {isFacetsProbeLoading
+                      ? "Loading..."
+                      : `status=${facetsProbe.status || "n/a"} client_ms=${facetsProbe.clientDurationMs.toFixed(1)} bytes=${facetsProbe.payloadBytes}`}
+                  </p>
+                  {facetsProbe.error ? (
+                    <p className="text-rose-700">{facetsProbe.error}</p>
+                  ) : null}
+                  <pre className="max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-800">
+                    {JSON.stringify(facetsProbe.payload, null, 2)}
+                  </pre>
+                </div>
+              </details>
+            ) : null}
 
             <div
               className={`grid gap-6 xl:min-h-0 xl:flex-1 ${
@@ -1573,12 +1692,44 @@ export function DiscoverPage({
               }`}
             >
               <DiscoverFacetSidebar
-                listingCount={effectiveListingCount}
+                listingCount={propertiesListingCount}
                 favoriteCount={favoriteListingIds.length}
                 areaCounts={effectiveAreaCounts}
                 beachCounts={effectiveBeachCounts}
                 communityCounts={effectiveCommunityCounts}
                 featureCounts={effectiveFeatureCounts}
+                selectedAreas={selectedAreas}
+                selectedBeaches={selectedBeaches}
+                selectedCommunities={selectedCommunities}
+                selectedFeatures={selectedFeatures}
+                onToggleArea={(value) =>
+                  toggleFacetValue(value, setSelectedAreas)
+                }
+                onToggleBeach={(value) =>
+                  toggleFacetValue(value, setSelectedBeaches)
+                }
+                onToggleCommunity={(value) =>
+                  toggleFacetValue(value, setSelectedCommunities)
+                }
+                onToggleFeature={(value) =>
+                  toggleFacetValue(value, setSelectedFeatures)
+                }
+                onClearAreas={() => {
+                  setHasFacetSelectionInteraction(true);
+                  setSelectedAreas([]);
+                }}
+                onClearBeaches={() => {
+                  setHasFacetSelectionInteraction(true);
+                  setSelectedBeaches([]);
+                }}
+                onClearCommunities={() => {
+                  setHasFacetSelectionInteraction(true);
+                  setSelectedCommunities([]);
+                }}
+                onClearFeatures={() => {
+                  setHasFacetSelectionInteraction(true);
+                  setSelectedFeatures([]);
+                }}
               />
 
               <DiscoverListingsPanel

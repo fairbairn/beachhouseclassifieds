@@ -445,16 +445,156 @@ function normalizeGalleryUrl(rawUrl: string): string {
           decodeURIComponent(source),
           parsed.origin,
         );
-        return `${resolvedSource.origin}${resolvedSource.pathname}`;
+        return normalizeGalleryUrl(resolvedSource.toString());
       } catch {
         // Fall through to normalized Rezfusion URL.
       }
     }
 
-    return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+    const searchWidth = Number(parsed.searchParams.get("width") ?? "");
+    const searchW = Number(parsed.searchParams.get("w") ?? "");
+    const pathWidthMatch = parsed.pathname.match(/\/width=(\d+)/i);
+    const pathWidth = pathWidthMatch ? Number(pathWidthMatch[1]) : NaN;
+    const resolvedWidth = Math.max(
+      Number.isFinite(searchWidth) ? searchWidth : 0,
+      Number.isFinite(searchW) ? searchW : 0,
+      Number.isFinite(pathWidth) ? pathWidth : 0,
+    );
+
+    let canonicalPath = parsed.pathname;
+    if (
+      resolvedWidth > 0 &&
+      (/images\.rezfusion\.com/i.test(parsed.hostname) ||
+        /\/vrm-img\//i.test(parsed.pathname))
+    ) {
+      canonicalPath = canonicalPath.replace(
+        /\/width=\d+/i,
+        `/width=${Math.floor(resolvedWidth)}`,
+      );
+    }
+
+    return `${parsed.origin}${canonicalPath}`;
   } catch {
     return "";
   }
+}
+
+function extractCandidateImageWidth(url: URL): number {
+  const searchWidth = Number(url.searchParams.get("width") ?? "");
+  const searchW = Number(url.searchParams.get("w") ?? "");
+  const pathWidthMatch = url.pathname.match(/\/width=(\d+)/i);
+  const pathWidth = pathWidthMatch ? Number(pathWidthMatch[1]) : NaN;
+
+  return Math.max(
+    Number.isFinite(searchWidth) ? searchWidth : 0,
+    Number.isFinite(searchW) ? searchW : 0,
+    Number.isFinite(pathWidth) ? pathWidth : 0,
+  );
+}
+
+function buildGalleryVariantKey(url: URL): string {
+  const canonicalPath = url.pathname
+    .replace(/\/width=\d+/i, "/width=*")
+    .replace(/\/height=\d+/i, "/height=*")
+    .replace(/,quality=\d+/i, ",quality=*");
+
+  const filtered = new URLSearchParams();
+  const variantParams = new Set([
+    "width",
+    "w",
+    "height",
+    "h",
+    "quality",
+    "q",
+    "dpr",
+    "fit",
+    "crop",
+    "auto",
+    "format",
+    "fm",
+  ]);
+
+  for (const [key, value] of url.searchParams.entries()) {
+    if (variantParams.has(key.toLowerCase())) {
+      continue;
+    }
+    filtered.append(key, value);
+  }
+
+  const query = filtered.toString();
+  return `${url.origin}${canonicalPath}${query ? `?${query}` : ""}`;
+}
+
+function dedupePreferLargestGalleryVariants(values: string[]): string[] {
+  const byKey = new Map<
+    string,
+    {
+      key: string;
+      url: string;
+      width: number;
+      firstSeen: number;
+    }
+  >();
+
+  for (const [index, value] of values.entries()) {
+    const normalized = value.trim();
+    if (!normalized) {
+      continue;
+    }
+
+    try {
+      const parsed = new URL(normalized);
+      const key = buildGalleryVariantKey(parsed);
+      const width = extractCandidateImageWidth(parsed);
+      const existing = byKey.get(key);
+
+      if (!existing) {
+        byKey.set(key, {
+          key,
+          url: normalized,
+          width,
+          firstSeen: index,
+        });
+        continue;
+      }
+
+      if (width > existing.width) {
+        byKey.set(key, {
+          ...existing,
+          url: normalized,
+          width,
+        });
+      }
+    } catch {
+      const existing = byKey.get(normalized);
+      if (!existing) {
+        byKey.set(normalized, {
+          key: normalized,
+          url: normalized,
+          width: 0,
+          firstSeen: index,
+        });
+      }
+    }
+  }
+
+  return Array.from(byKey.values())
+    .sort((left, right) => left.firstSeen - right.firstSeen)
+    .map((entry) => entry.url);
+}
+
+function filterGallerySourceNoise(values: string[]): string[] {
+  const hasDirectImage = values.some(
+    (value) =>
+      /images\.vrmgr\.com/i.test(value) ||
+      /images\.rezfusion\.com/i.test(value) ||
+      /\/vrm-img\//i.test(value),
+  );
+  if (!hasDirectImage) {
+    return values;
+  }
+
+  return values.filter((value) => !/picturehandler\.ashx/i.test(value));
 }
 
 function extractGoogleMapsLlFromHtml(html: string): {
@@ -1314,6 +1454,39 @@ async function fetchDetail(
             return urls;
           }
 
+          const selectBestSrcsetCandidate = (raw: string): string => {
+            const trimmed = raw.trim();
+            if (!trimmed) {
+              return "";
+            }
+
+            const matches = Array.from(
+              trimmed.matchAll(
+                /(https?:\/\/\S+?)(?:\s+(\d+)w)?(?=,\s*https?:\/\/|\s*$)/gi,
+              ),
+            );
+            if (matches.length === 0) {
+              return trimmed.split(/\s+/)[0] ?? "";
+            }
+
+            let bestUrl = "";
+            let bestWidth = 0;
+            for (const match of matches) {
+              const candidateUrl = (match[1] ?? "").trim();
+              const width = Number(match[2] ?? "0");
+              const safeWidth = Number.isFinite(width) ? width : 0;
+              if (!candidateUrl) {
+                continue;
+              }
+              if (!bestUrl || safeWidth >= bestWidth) {
+                bestUrl = candidateUrl;
+                bestWidth = safeWidth;
+              }
+            }
+
+            return bestUrl || (trimmed.split(/\s+/)[0] ?? "");
+          };
+
           const attrValues = Array.from(
             mediaRoot.querySelectorAll(
               "a[href], a[data-srcset], a[data-thumb], img[src], img[srcset], img[data-src], img[data-rstmb], [data-rsbigimg], [data-image]",
@@ -1337,8 +1510,7 @@ async function fetchDetail(
                 continue;
               }
               try {
-                const candidate =
-                  raw.split(",")[0]?.trim().split(/\s+/)[0] ?? "";
+                const candidate = selectBestSrcsetCandidate(raw);
                 const absolute = new URL(
                   candidate,
                   window.location.origin,
@@ -1576,10 +1748,12 @@ async function fetchDetail(
       all: amenitiesAll,
     };
 
-    const mediaUrls = dedupePreserveOrder(
-      extracted.galleryUrls
-        .map((url) => normalizeGalleryUrl(url))
-        .filter(Boolean),
+    const mediaUrls = dedupePreferLargestGalleryVariants(
+      filterGallerySourceNoise(
+        extracted.galleryUrls
+          .map((url) => normalizeGalleryUrl(url))
+          .filter(Boolean),
+      ),
     );
     const mediaGallery: LuxuryDetailRecord["media_gallery"] = {
       image_count: mediaUrls.length,

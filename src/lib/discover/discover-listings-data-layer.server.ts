@@ -1,6 +1,7 @@
 import { queryDiscoverCountAndFacets } from "@/lib/discover/data-layer/queries/discover-count-facets-query.server";
 import { queryDiscoverDetailRow } from "@/lib/discover/data-layer/queries/discover-detail-query.server";
 import {
+  queryDiscoverListingsCount,
   queryDiscoverListingsRows,
   queryDiscoverPricingSummaryRows,
   queryDiscoverSourcePricingRows,
@@ -17,6 +18,20 @@ import {
 } from "@/lib/listings/taxonomy/location-taxonomy";
 
 const TARGET_LISTING_COUNT = 96;
+
+type DiscoverSelectionFilters = {
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
+};
+
+type DiscoverResolvedFilters = {
+  selectedAreaCodes: string[];
+  selectedBeachCodes: string[];
+  selectedCommunityCodes: string[];
+  selectedFeatures: Array<"gulf_front" | "private_pool" | "golf_cart">;
+};
 
 export type DiscoverCorpusMetadata = {
   totalCount: number;
@@ -73,6 +88,118 @@ function unique(values: string[]): string[] {
     out.push(value);
   }
   return out;
+}
+
+function normalizeSelectionValues(values?: string[]): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return unique(
+    values
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter((value) => value.length > 0),
+  );
+}
+
+function resolveAreaCodes(values?: string[]): string[] {
+  const normalized = normalizeSelectionValues(values);
+  const codes: string[] = [];
+
+  for (const value of normalized) {
+    const fromLabel = toAreaCodeFromLabel(value);
+    if (fromLabel) {
+      codes.push(fromLabel);
+      continue;
+    }
+
+    if (areaLabelFromCode(value) !== null) {
+      codes.push(value);
+    }
+  }
+
+  return unique(codes);
+}
+
+function resolveBeachCodes(values?: string[]): string[] {
+  const normalized = normalizeSelectionValues(values);
+  const codes: string[] = [];
+
+  for (const value of normalized) {
+    const fromLabel = toBeachAreaCodeFromLabel(value);
+    if (fromLabel) {
+      codes.push(fromLabel);
+      continue;
+    }
+
+    if (beachAreaLabelFromCode(value) !== null) {
+      codes.push(value);
+    }
+  }
+
+  return unique(codes);
+}
+
+function resolveCommunityCodes(values?: string[]): string[] {
+  const normalized = normalizeSelectionValues(values);
+  const codes: string[] = [];
+
+  for (const value of normalized) {
+    const fromLabel = toCommunityCodeFromLabel(value);
+    if (fromLabel) {
+      codes.push(fromLabel);
+      continue;
+    }
+
+    if (communityLabelFromCode(value) !== null) {
+      codes.push(value);
+    }
+  }
+
+  return unique(codes);
+}
+
+function resolveFeatureFilters(
+  values?: string[],
+): Array<"gulf_front" | "private_pool" | "golf_cart"> {
+  const normalized = normalizeSelectionValues(values)
+    .map((value) =>
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, ""),
+    )
+    .filter(Boolean);
+
+  const out = new Set<"gulf_front" | "private_pool" | "golf_cart">();
+
+  for (const value of normalized) {
+    if (value === "gulf_front" || value === "gulffront") {
+      out.add("gulf_front");
+      continue;
+    }
+    if (value === "private_pool" || value === "privatepool") {
+      out.add("private_pool");
+      continue;
+    }
+    if (value === "golf_cart" || value === "golfcart") {
+      out.add("golf_cart");
+      continue;
+    }
+  }
+
+  return Array.from(out.values());
+}
+
+function resolveDiscoverFilters(
+  input?: DiscoverSelectionFilters,
+): DiscoverResolvedFilters {
+  return {
+    selectedAreaCodes: resolveAreaCodes(input?.selectedAreas),
+    selectedBeachCodes: resolveBeachCodes(input?.selectedBeaches),
+    selectedCommunityCodes: resolveCommunityCodes(input?.selectedCommunities),
+    selectedFeatures: resolveFeatureFilters(input?.selectedFeatures),
+  };
 }
 
 function normalizeForPolicyCheck(value: string): {
@@ -782,6 +909,10 @@ async function loadFromListingTable(input?: {
     demoOrder: number;
     id: string;
   };
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
 }): Promise<DiscoverListing[]> {
   const includeSlug = input?.includeSlug?.trim();
   const onlySlug = Boolean(input?.onlySlug && includeSlug);
@@ -792,6 +923,7 @@ async function loadFromListingTable(input?: {
         ? null
         : TARGET_LISTING_COUNT;
   const afterCursor = input?.afterCursor;
+  const resolvedFilters = resolveDiscoverFilters(input);
   const offset =
     typeof input?.offset === "number" && Number.isFinite(input.offset)
       ? Math.max(0, Math.floor(input.offset))
@@ -807,6 +939,7 @@ async function loadFromListingTable(input?: {
       maxListings,
       offset,
       afterCursor,
+      filters: resolvedFilters,
     });
   }
 
@@ -977,6 +1110,10 @@ export async function getDiscoverListings(input?: {
     demoOrder: number;
     id: string;
   };
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
 }): Promise<DiscoverListing[]> {
   const fromListingTable = await loadFromListingTable(input).catch(() => []);
   if (fromListingTable.length > 0) {
@@ -986,8 +1123,24 @@ export async function getDiscoverListings(input?: {
   return [];
 }
 
-export async function getDiscoverCorpusMetadata(): Promise<DiscoverCorpusMetadata | null> {
-  const metadata = await queryDiscoverCountAndFacets();
+export async function getDiscoverListingsCount(input?: {
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
+}): Promise<number> {
+  const resolvedFilters = resolveDiscoverFilters(input);
+  return queryDiscoverListingsCount({ filters: resolvedFilters }).catch(
+    () => 0,
+  );
+}
+
+export async function getDiscoverCorpusMetadata(input?: {
+  selectedFeatures?: string[];
+}): Promise<DiscoverCorpusMetadata | null> {
+  const metadata = await queryDiscoverCountAndFacets({
+    selectedFeatures: input?.selectedFeatures,
+  });
   if (!metadata) {
     return {
       totalCount: 0,

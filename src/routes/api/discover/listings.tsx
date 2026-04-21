@@ -13,7 +13,23 @@ async function parseSearchRequestFromBody(request: Request) {
     limit?: unknown;
     offset?: unknown;
     includeMetadata?: unknown;
+    selectedAreas?: unknown;
+    selectedBeaches?: unknown;
+    selectedCommunities?: unknown;
+    selectedFeatures?: unknown;
   } | null;
+
+  const asStringArray = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const out = value
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter((entry) => entry.length > 0);
+
+    return out.length > 0 ? out : undefined;
+  };
 
   return {
     includeSlug:
@@ -36,6 +52,10 @@ async function parseSearchRequestFromBody(request: Request) {
       typeof payload?.includeMetadata === "boolean"
         ? payload.includeMetadata
         : true,
+    selectedAreas: asStringArray(payload?.selectedAreas),
+    selectedBeaches: asStringArray(payload?.selectedBeaches),
+    selectedCommunities: asStringArray(payload?.selectedCommunities),
+    selectedFeatures: asStringArray(payload?.selectedFeatures),
   };
 }
 

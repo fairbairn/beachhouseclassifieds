@@ -355,13 +355,35 @@ function normalizeGalleryUrl(rawUrl: string): string {
           decodeURIComponent(source),
           parsed.origin,
         );
-        return `${resolvedSource.origin}${resolvedSource.pathname}${resolvedSource.search}`;
+        return normalizeGalleryUrl(resolvedSource.toString());
       } catch {
         // Fall through to normalized Rezfusion URL.
       }
     }
 
-    return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+    const searchWidth = Number(parsed.searchParams.get("width") ?? "");
+    const searchW = Number(parsed.searchParams.get("w") ?? "");
+    const pathWidthMatch = parsed.pathname.match(/\/width=(\d+)/i);
+    const pathWidth = pathWidthMatch ? Number(pathWidthMatch[1]) : NaN;
+    const resolvedWidth = Math.max(
+      Number.isFinite(searchWidth) ? searchWidth : 0,
+      Number.isFinite(searchW) ? searchW : 0,
+      Number.isFinite(pathWidth) ? pathWidth : 0,
+    );
+
+    let canonicalPath = parsed.pathname;
+    if (
+      resolvedWidth > 0 &&
+      (/images\.rezfusion\.com/i.test(parsed.hostname) ||
+        /\/vrm-img\//i.test(parsed.pathname))
+    ) {
+      canonicalPath = canonicalPath.replace(
+        /\/width=\d+/i,
+        `/width=${Math.floor(resolvedWidth)}`,
+      );
+    }
+
+    return `${parsed.origin}${canonicalPath}`;
   } catch {
     return "";
   }
@@ -381,6 +403,11 @@ function extractCandidateImageWidth(url: URL): number {
 }
 
 function buildGalleryVariantKey(url: URL): string {
+  const canonicalPath = url.pathname
+    .replace(/\/width=\d+/i, "/width=*")
+    .replace(/\/height=\d+/i, "/height=*")
+    .replace(/,quality=\d+/i, ",quality=*");
+
   const filtered = new URLSearchParams();
   const variantParams = new Set([
     "width",
@@ -405,7 +432,7 @@ function buildGalleryVariantKey(url: URL): string {
   }
 
   const query = filtered.toString();
-  return `${url.origin}${url.pathname}${query ? `?${query}` : ""}`;
+  return `${url.origin}${canonicalPath}${query ? `?${query}` : ""}`;
 }
 
 function dedupePreferLargestGalleryVariants(values: string[]): string[] {
@@ -1423,6 +1450,39 @@ async function fetchDetail(
             return urls;
           }
 
+          const selectBestSrcsetCandidate = (raw: string): string => {
+            const trimmed = raw.trim();
+            if (!trimmed) {
+              return "";
+            }
+
+            const matches = Array.from(
+              trimmed.matchAll(
+                /(https?:\/\/\S+?)(?:\s+(\d+)w)?(?=,\s*https?:\/\/|\s*$)/gi,
+              ),
+            );
+            if (matches.length === 0) {
+              return trimmed.split(/\s+/)[0] ?? "";
+            }
+
+            let bestUrl = "";
+            let bestWidth = 0;
+            for (const match of matches) {
+              const candidateUrl = (match[1] ?? "").trim();
+              const width = Number(match[2] ?? "0");
+              const safeWidth = Number.isFinite(width) ? width : 0;
+              if (!candidateUrl) {
+                continue;
+              }
+              if (!bestUrl || safeWidth >= bestWidth) {
+                bestUrl = candidateUrl;
+                bestWidth = safeWidth;
+              }
+            }
+
+            return bestUrl || (trimmed.split(/\s+/)[0] ?? "");
+          };
+
           const attrValues = mediaRoots.flatMap((root) =>
             Array.from(
               root.querySelectorAll(
@@ -1450,7 +1510,7 @@ async function fetchDetail(
               }
               try {
                 const candidate = attr.splitSet
-                  ? (attr.value.split(",")[0]?.trim().split(/\s+/)[0] ?? "")
+                  ? selectBestSrcsetCandidate(attr.value)
                   : attr.value.trim();
                 const absolute = new URL(
                   candidate,

@@ -17,7 +17,7 @@ export const BEACH_AREA_LABEL_BY_CODE = {
 } as const;
 
 export const COMMUNITY_LABEL_BY_CODE = {
-  watercolor: "WaterColor",
+  watercolor: "Watercolor",
   seaside: "Seaside",
   prominence: "Prominence",
   watersound_west_beach: "WaterSound West Beach",

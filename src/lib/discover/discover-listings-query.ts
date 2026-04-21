@@ -177,19 +177,41 @@ function getPageQueryCacheKey(input?: {
   limit?: number;
   offset?: number;
   includeMetadata?: boolean;
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
 }) {
   const limit = Number.isFinite(input?.limit)
     ? String(input?.limit)
     : String(DISCOVER_LISTINGS_PAGE_SIZE);
   const offset = Number.isFinite(input?.offset) ? String(input?.offset) : "0";
   const includeMetadata = input?.includeMetadata === false ? "0" : "1";
-  return `limit=${limit}|offset=${offset}|metadata=${includeMetadata}`;
+  const selectedAreas = (input?.selectedAreas ?? []).slice().sort().join(",");
+  const selectedBeaches = (input?.selectedBeaches ?? [])
+    .slice()
+    .sort()
+    .join(",");
+  const selectedCommunities = (input?.selectedCommunities ?? [])
+    .slice()
+    .sort()
+    .join(",");
+  const selectedFeatures = (input?.selectedFeatures ?? [])
+    .slice()
+    .sort()
+    .join(",");
+
+  return `limit=${limit}|offset=${offset}|metadata=${includeMetadata}|areas=${selectedAreas}|beaches=${selectedBeaches}|communities=${selectedCommunities}|features=${selectedFeatures}`;
 }
 
 export async function fetchDiscoverListingsPage(input?: {
   limit?: number;
   offset?: number;
   includeMetadata?: boolean;
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
 }): Promise<DiscoverListingsPageResponse> {
   const cacheKey = getPageQueryCacheKey(input);
   if (typeof window !== "undefined") {
@@ -208,6 +230,10 @@ export async function fetchDiscoverListingsPage(input?: {
     limit: input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE,
     offset: input?.offset,
     includeMetadata: input?.includeMetadata,
+    selectedAreas: input?.selectedAreas,
+    selectedBeaches: input?.selectedBeaches,
+    selectedCommunities: input?.selectedCommunities,
+    selectedFeatures: input?.selectedFeatures,
   };
   const requestPromise = (async (): Promise<DiscoverListingsPageResponse> => {
     const response = await fetch(resolveDiscoverListingsEndpoint(), {

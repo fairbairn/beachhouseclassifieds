@@ -122,6 +122,63 @@ export type DiscoverListingRecordRow = {
   images?: unknown;
 };
 
+type DiscoverListingFacetFilters = {
+  selectedAreaCodes?: string[];
+  selectedBeachCodes?: string[];
+  selectedCommunityCodes?: string[];
+  selectedFeatures?: Array<"gulf_front" | "private_pool" | "golf_cart">;
+};
+
+function buildDiscoverFacetWhere(filters?: DiscoverListingFacetFilters) {
+  const selectedAreaCodes = filters?.selectedAreaCodes ?? [];
+  const selectedBeachCodes = filters?.selectedBeachCodes ?? [];
+  const selectedCommunityCodes = filters?.selectedCommunityCodes ?? [];
+  const selectedFeatures = filters?.selectedFeatures ?? [];
+
+  const selectedFeatureConditions = selectedFeatures
+    .map((feature) => {
+      if (feature === "gulf_front") {
+        return eq(listing.is_gulf_front, true);
+      }
+
+      if (feature === "private_pool") {
+        return sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'private_pool'`;
+      }
+
+      if (feature === "golf_cart") {
+        return sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'golf_cart'`;
+      }
+
+      return undefined;
+    })
+    .filter((condition): condition is NonNullable<typeof condition> =>
+      Boolean(condition),
+    );
+
+  const locationOrConditions = [
+    selectedAreaCodes.length > 0
+      ? inArray(listing.area_name, selectedAreaCodes)
+      : undefined,
+    selectedBeachCodes.length > 0
+      ? inArray(listing.beach_area_name, selectedBeachCodes)
+      : undefined,
+    selectedCommunityCodes.length > 0
+      ? inArray(listing.community_name, selectedCommunityCodes)
+      : undefined,
+  ].filter((condition): condition is NonNullable<typeof condition> =>
+    Boolean(condition),
+  );
+
+  const locationOrFilter =
+    locationOrConditions.length > 0 ? or(...locationOrConditions) : undefined;
+
+  if (!locationOrFilter && selectedFeatureConditions.length === 0) {
+    return undefined;
+  }
+
+  return and(locationOrFilter, ...selectedFeatureConditions);
+}
+
 export async function queryDiscoverListingsRows(input?: {
   maxListings?: number | null;
   offset?: number;
@@ -129,6 +186,7 @@ export async function queryDiscoverListingsRows(input?: {
     demoOrder: number;
     id: string;
   };
+  filters?: DiscoverListingFacetFilters;
 }): Promise<DiscoverListingRecordRow[]> {
   if (!pgDb) {
     return [];
@@ -156,6 +214,7 @@ export async function queryDiscoverListingsRows(input?: {
         eq(listing.site_id, discoverSiteId),
         eq(listing.status, "active"),
         isNull(listing.visibility_disabled_reason),
+        buildDiscoverFacetWhere(input?.filters),
         afterCursor
           ? or(
               gt(listing.listing_number, afterCursor.demoOrder),
@@ -176,6 +235,34 @@ export async function queryDiscoverListingsRows(input?: {
 
   const rows = offset > 0 ? await query.offset(offset) : await query;
   return rows as DiscoverListingRecordRow[];
+}
+
+export async function queryDiscoverListingsCount(input?: {
+  filters?: DiscoverListingFacetFilters;
+}): Promise<number> {
+  if (!pgDb) {
+    return 0;
+  }
+
+  const discoverSiteId = await resolveDiscoverSiteId();
+  if (!discoverSiteId) {
+    return 0;
+  }
+
+  const rows = await pgDb
+    .select({ count: sql<number>`count(*)::int` })
+    .from(listing)
+    .where(
+      and(
+        eq(listing.site_id, discoverSiteId),
+        eq(listing.status, "active"),
+        isNull(listing.visibility_disabled_reason),
+        buildDiscoverFacetWhere(input?.filters),
+      ),
+    )
+    .limit(1);
+
+  return rows[0]?.count ?? 0;
 }
 
 export async function queryDiscoverListingDetailRowBySlug(input: {

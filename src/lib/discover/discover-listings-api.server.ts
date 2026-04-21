@@ -2,6 +2,7 @@ import { normalizeDiscoverListings } from "@/lib/discover/community-normalizatio
 import {
   getDiscoverCorpusMetadata,
   getDiscoverListings,
+  getDiscoverListingsCount,
 } from "@/lib/discover/discover-listings.server";
 import type {
   DiscoverListing,
@@ -110,6 +111,10 @@ export async function buildDiscoverListingsPagePayload(input?: {
   limit?: number;
   offset?: number;
   includeMetadata?: boolean;
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
 }): Promise<DiscoverListingsPagePayload> {
   const pageSize = resolvePageSize(input?.limit);
   const offset =
@@ -117,18 +122,38 @@ export async function buildDiscoverListingsPagePayload(input?: {
       ? Math.max(0, Math.floor(input.offset))
       : 0;
   const includeMetadata = input?.includeMetadata ?? offset === 0;
-  const [pageItems, corpusMetadata] = await Promise.all([
+  const hasSelectedFacetFilters = Boolean(
+    (input?.selectedAreas?.length ?? 0) > 0 ||
+    (input?.selectedBeaches?.length ?? 0) > 0 ||
+    (input?.selectedCommunities?.length ?? 0) > 0 ||
+    (input?.selectedFeatures?.length ?? 0) > 0,
+  );
+
+  const [pageItems, filteredTotalCount, corpusMetadata] = await Promise.all([
     buildDiscoverListingsPayload({
       maxListings: pageSize,
       offset,
+      selectedAreas: input?.selectedAreas,
+      selectedBeaches: input?.selectedBeaches,
+      selectedCommunities: input?.selectedCommunities,
+      selectedFeatures: input?.selectedFeatures,
     }),
-    includeMetadata ? getDiscoverCorpusMetadata().catch(() => null) : null,
+    getDiscoverListingsCount({
+      selectedAreas: input?.selectedAreas,
+      selectedBeaches: input?.selectedBeaches,
+      selectedCommunities: input?.selectedCommunities,
+      selectedFeatures: input?.selectedFeatures,
+    }).catch(() => 0),
+    includeMetadata
+      ? getDiscoverCorpusMetadata({
+          selectedFeatures: input?.selectedFeatures,
+        }).catch(() => null)
+      : null,
   ]);
 
-  const totalCount = Math.max(
-    corpusMetadata?.totalCount ?? 0,
-    offset + pageItems.length,
-  );
+  const totalCount = hasSelectedFacetFilters
+    ? Math.max(0, filteredTotalCount)
+    : Math.max(corpusMetadata?.totalCount ?? 0, offset + pageItems.length);
 
   let metadataListings = pageItems;
   if (includeMetadata) {
@@ -140,6 +165,10 @@ export async function buildDiscoverListingsPagePayload(input?: {
       metadataListings = await buildDiscoverListingsPayload({
         maxListings: DISCOVER_MAP_SEED_MAX,
         offset: 0,
+        selectedAreas: input?.selectedAreas,
+        selectedBeaches: input?.selectedBeaches,
+        selectedCommunities: input?.selectedCommunities,
+        selectedFeatures: input?.selectedFeatures,
       });
     }
   }
@@ -167,6 +196,10 @@ export async function buildDiscoverListingsPayload(input?: {
   includeSlug?: string;
   maxListings?: number | null;
   offset?: number;
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
 }): Promise<DiscoverListing[]> {
   const includeSlug = input?.includeSlug?.trim() || undefined;
 
@@ -176,6 +209,10 @@ export async function buildDiscoverListingsPayload(input?: {
     disableFallback: true,
     maxListings: includeSlug ? 1 : input?.maxListings,
     offset: includeSlug ? undefined : input?.offset,
+    selectedAreas: input?.selectedAreas,
+    selectedBeaches: input?.selectedBeaches,
+    selectedCommunities: input?.selectedCommunities,
+    selectedFeatures: input?.selectedFeatures,
   }).catch(() => []);
 
   return normalizeDiscoverListingsForApi(sourceListings);

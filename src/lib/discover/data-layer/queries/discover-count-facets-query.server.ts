@@ -5,6 +5,16 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 const DISCOVER_SITE_SLUG = "30acollections";
 let discoverSiteIdCache: string | null | undefined;
 
+type DiscoverCountAndFacetsRow = {
+  total_count: number;
+  gulf_front_count: number;
+  private_pool_count: number;
+  golf_cart_count: number;
+  areas: unknown;
+  beaches: unknown;
+  communities: unknown;
+};
+
 async function resolveDiscoverSiteId(): Promise<string | null> {
   if (!pgDb) {
     return null;
@@ -24,15 +34,32 @@ async function resolveDiscoverSiteId(): Promise<string | null> {
   return discoverSiteIdCache;
 }
 
-export async function queryDiscoverCountAndFacets(): Promise<{
-  total_count: number;
-  gulf_front_count: number;
-  private_pool_count: number;
-  golf_cart_count: number;
-  areas: unknown;
-  beaches: unknown;
-  communities: unknown;
-} | null> {
+function toFeatureSet(input?: string[]): Set<string> {
+  const out = new Set<string>();
+  if (!Array.isArray(input)) {
+    return out;
+  }
+
+  for (const raw of input) {
+    if (typeof raw !== "string") {
+      continue;
+    }
+
+    const normalized = raw
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (normalized) {
+      out.add(normalized);
+    }
+  }
+
+  return out;
+}
+
+export async function queryDiscoverCountAndFacets(input?: {
+  selectedFeatures?: string[];
+}): Promise<DiscoverCountAndFacetsRow | null> {
   if (!pgDb) {
     return null;
   }
@@ -41,6 +68,19 @@ export async function queryDiscoverCountAndFacets(): Promise<{
   if (!discoverSiteId) {
     return null;
   }
+
+  const selectedFeatureSet = toFeatureSet(input?.selectedFeatures);
+  const selectedFeatureWhere = and(
+    selectedFeatureSet.has("gulf_front")
+      ? eq(listing.is_gulf_front, true)
+      : undefined,
+    selectedFeatureSet.has("private_pool")
+      ? sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'private_pool'`
+      : undefined,
+    selectedFeatureSet.has("golf_cart")
+      ? sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'golf_cart'`
+      : undefined,
+  );
 
   const summaryResult = await pgDb.execute<{
     total_count: number;
@@ -62,6 +102,7 @@ export async function queryDiscoverCountAndFacets(): Promise<{
       eq(listing.site_id, discoverSiteId),
       eq(listing.status, "active"),
       isNull(listing.visibility_disabled_reason),
+      selectedFeatureWhere,
     )}
   `);
 
@@ -86,6 +127,7 @@ export async function queryDiscoverCountAndFacets(): Promise<{
         eq(listing.site_id, discoverSiteId),
         eq(listing.status, "active"),
         isNull(listing.visibility_disabled_reason),
+        selectedFeatureWhere,
       )}
     )
     select

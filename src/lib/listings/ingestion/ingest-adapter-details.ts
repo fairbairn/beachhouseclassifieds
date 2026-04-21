@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 
+import { GULF_FRONT_VERIFICATION_POLYGON } from "@/components/discover/gulf-front-polygon";
 import { pgDb } from "@/core/server/db";
 import {
   listing,
@@ -561,57 +562,21 @@ function inferCanonicalPropertyType(input: {
   return "house";
 }
 
-function inferIsGulfFront(detail: CanonicalDetailRecord): boolean {
-  const haystack = [
-    asString(detail.title),
-    asString(detail.h1),
-    asString(detail.description_expanded),
-    asString(detail.meta_description),
-  ]
-    .filter(Boolean)
-    .join("\n")
-    .toLowerCase();
-
-  if (!haystack) {
+function inferIsGulfFront(input: {
+  lat: number | null;
+  lng: number | null;
+}): boolean {
+  if (input.lat === null || input.lng === null) {
     return false;
   }
 
-  const negativePatterns = [
-    /(not|no|non[-\s])\s+(gulf|beach|ocean|water)\s*front/,
-    /not\s+beachfront/,
-    /not\s+on\s+the\s+(beach|gulf|ocean)/,
-  ];
-  if (negativePatterns.some((pattern) => pattern.test(haystack))) {
-    return false;
-  }
-
-  const strongPatterns = [
-    /gulf\s*front/,
-    /beach\s*front/,
-    /ocean\s*front/,
-    /direct\s+(beach|gulf|ocean|water)\s*front/,
-    /waterfront\s+(home|house|property|residence|villa)/,
-    /(home|house|property|residence|villa)\s+on\s+the\s+waterfront/,
-  ];
-  const weakPatterns = [/\bbeachfront\b/, /\bwaterfront\b/];
-  const nearButNotFrontPatterns = [
-    /near\s+the\s+(beach|gulf|ocean|water)/,
-    /close\s+to\s+the\s+(beach|gulf|ocean|water)/,
-    /\d+\s*[- ]?minute\s+(walk|stroll|ride|drive)\s+to\s+(the\s+)?beach/,
-    /public\s+beach\s+access/,
-  ];
-
-  const hasStrong = strongPatterns.some((pattern) => pattern.test(haystack));
-  const hasWeak = weakPatterns.some((pattern) => pattern.test(haystack));
-  const hasNearSignal = nearButNotFrontPatterns.some((pattern) =>
-    pattern.test(haystack),
+  return pointInPolygon(
+    {
+      lat: input.lat,
+      lng: input.lng,
+    },
+    GULF_FRONT_VERIFICATION_POLYGON,
   );
-
-  if (hasNearSignal && !hasStrong) {
-    return false;
-  }
-
-  return hasStrong || hasWeak;
 }
 
 function extractAmenities(detail: CanonicalDetailRecord): string[] {
@@ -1243,7 +1208,7 @@ export async function ingestAdapterDetailsToCanonical(
       area_name: areaCode,
       beach_area_name: beachAreaCode,
       community_name: communityCode,
-      is_gulf_front: inferIsGulfFront(detail),
+      is_gulf_front: inferIsGulfFront({ lat, lng }),
       traits,
       amenities_normalized: amenities,
       updated_at: now,

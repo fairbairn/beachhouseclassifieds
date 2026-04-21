@@ -20,7 +20,7 @@ export const known30ABeachZones = [
 ];
 
 export const known30ACommunities = [
-  "WaterColor",
+  "Watercolor",
   "Seaside",
   "Prominence",
   "WaterSound West Beach",
@@ -32,7 +32,7 @@ export const known30ACommunities = [
 
 export const communityBeachAreaMap: Record<string, string> = {
   Seaside: "Seagrove Beach",
-  WaterColor: "Seagrove Beach",
+  Watercolor: "Seagrove Beach",
   Seacrest: "Seacrest Beach",
   "Rosemary Beach": "Rosemary Beach",
   "Alys Beach": "Alys Beach",
@@ -44,7 +44,7 @@ export const communityBeachAreaMap: Record<string, string> = {
 
 export const geoByCommunity: Record<string, { lat: number; lng: number }> = {
   Seaside: { lat: 30.3234, lng: -86.1388 },
-  WaterColor: { lat: 30.3167, lng: -86.1394 },
+  Watercolor: { lat: 30.3167, lng: -86.1394 },
   Prominence: { lat: 30.2984, lng: -86.0783 },
   "Blue Mountain Beach": { lat: 30.3374, lng: -86.1966 },
   "WaterSound West Beach": { lat: 30.3013, lng: -86.0958 },
@@ -76,7 +76,7 @@ export const geoByArea: Record<string, { lat: number; lng: number }> = {
   "WaterSound Origins": { lat: 30.284, lng: -86.0375 },
   "Kaiya Beach Resort": { lat: 30.2754, lng: -86.0108 },
   Seaside: { lat: 30.3234, lng: -86.1388 },
-  WaterColor: { lat: 30.3167, lng: -86.1394 },
+  Watercolor: { lat: 30.3167, lng: -86.1394 },
 };
 
 export const geoByRegion: Record<string, { lat: number; lng: number }> = {
