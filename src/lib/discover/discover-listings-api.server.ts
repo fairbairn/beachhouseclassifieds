@@ -3,6 +3,8 @@ import {
   getDiscoverCorpusMetadata,
   getDiscoverListings,
   getDiscoverListingsCount,
+  getDiscoverListingsSnapshot,
+  getDiscoverSearchSource,
 } from "@/lib/discover/discover-listings.server";
 import type {
   DiscoverListing,
@@ -115,6 +117,9 @@ export async function buildDiscoverListingsPagePayload(input?: {
   selectedBeaches?: string[];
   selectedCommunities?: string[];
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
 }): Promise<DiscoverListingsPagePayload> {
   const pageSize = resolvePageSize(input?.limit);
   const offset =
@@ -129,6 +134,39 @@ export async function buildDiscoverListingsPagePayload(input?: {
     (input?.selectedFeatures?.length ?? 0) > 0,
   );
 
+  if (includeMetadata && offset === 0) {
+    const snapshot = await getDiscoverListingsSnapshot({
+      pageLimit: pageSize,
+      mapLimit: DISCOVER_MAP_SEED_MAX,
+      selectedAreas: input?.selectedAreas,
+      selectedBeaches: input?.selectedBeaches,
+      selectedCommunities: input?.selectedCommunities,
+      selectedFeatures: input?.selectedFeatures,
+      minKingBeds: input?.minKingBeds,
+      minQueenBeds: input?.minQueenBeds,
+      minBunkBeds: input?.minBunkBeds,
+    });
+    const pageItems = normalizeDiscoverListingsForApi(snapshot.pageListings);
+    const totalCount = hasSelectedFacetFilters
+      ? Math.max(0, snapshot.totalCount)
+      : Math.max(snapshot.totalCount, pageItems.length);
+
+    return {
+      source: "meilisearch",
+      _stats: {
+        totalCount,
+        count: pageItems.length,
+        requested: pageSize,
+      },
+      metadata: {
+        totalCount,
+        mapListings: snapshot.mapListings,
+        facets: snapshot.facets,
+      },
+      listings: pageItems.map(toSummaryListing),
+    };
+  }
+
   const [pageItems, filteredTotalCount, corpusMetadata] = await Promise.all([
     buildDiscoverListingsPayload({
       maxListings: pageSize,
@@ -137,17 +175,26 @@ export async function buildDiscoverListingsPagePayload(input?: {
       selectedBeaches: input?.selectedBeaches,
       selectedCommunities: input?.selectedCommunities,
       selectedFeatures: input?.selectedFeatures,
+      minKingBeds: input?.minKingBeds,
+      minQueenBeds: input?.minQueenBeds,
+      minBunkBeds: input?.minBunkBeds,
     }),
     getDiscoverListingsCount({
       selectedAreas: input?.selectedAreas,
       selectedBeaches: input?.selectedBeaches,
       selectedCommunities: input?.selectedCommunities,
       selectedFeatures: input?.selectedFeatures,
-    }).catch(() => 0),
+      minKingBeds: input?.minKingBeds,
+      minQueenBeds: input?.minQueenBeds,
+      minBunkBeds: input?.minBunkBeds,
+    }),
     includeMetadata
       ? getDiscoverCorpusMetadata({
           selectedFeatures: input?.selectedFeatures,
-        }).catch(() => null)
+          minKingBeds: input?.minKingBeds,
+          minQueenBeds: input?.minQueenBeds,
+          minBunkBeds: input?.minBunkBeds,
+        })
       : null,
   ]);
 
@@ -169,11 +216,15 @@ export async function buildDiscoverListingsPagePayload(input?: {
         selectedBeaches: input?.selectedBeaches,
         selectedCommunities: input?.selectedCommunities,
         selectedFeatures: input?.selectedFeatures,
+        minKingBeds: input?.minKingBeds,
+        minQueenBeds: input?.minQueenBeds,
+        minBunkBeds: input?.minBunkBeds,
       });
     }
   }
 
   return {
+    source: getDiscoverSearchSource(),
     _stats: {
       totalCount,
       count: pageItems.length,
@@ -200,6 +251,9 @@ export async function buildDiscoverListingsPayload(input?: {
   selectedBeaches?: string[];
   selectedCommunities?: string[];
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
 }): Promise<DiscoverListing[]> {
   const includeSlug = input?.includeSlug?.trim() || undefined;
 
@@ -213,7 +267,10 @@ export async function buildDiscoverListingsPayload(input?: {
     selectedBeaches: input?.selectedBeaches,
     selectedCommunities: input?.selectedCommunities,
     selectedFeatures: input?.selectedFeatures,
-  }).catch(() => []);
+    minKingBeds: input?.minKingBeds,
+    minQueenBeds: input?.minQueenBeds,
+    minBunkBeds: input?.minBunkBeds,
+  });
 
   return normalizeDiscoverListingsForApi(sourceListings);
 }

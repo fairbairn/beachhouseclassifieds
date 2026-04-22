@@ -31,13 +31,19 @@ export function DiscoverFacetSidebar({
   onClearBeaches,
   onClearCommunities,
   onClearFeatures,
+  containerClassName,
+  scrollSectionsOnly,
 }: {
   listingCount: number;
   favoriteCount: number;
   areaCounts: ReadonlyArray<readonly [string, number]>;
   beachCounts: ReadonlyArray<readonly [string, number]>;
   communityCounts: ReadonlyArray<readonly [string, number]>;
-  featureCounts: ReadonlyArray<{ label: string; count: number }>;
+  featureCounts: ReadonlyArray<{
+    code: "gulf_front" | "private_pool" | "golf_cart";
+    label: string;
+    count: number;
+  }>;
   selectedAreas: ReadonlyArray<string>;
   selectedBeaches: ReadonlyArray<string>;
   selectedCommunities: ReadonlyArray<string>;
@@ -50,10 +56,12 @@ export function DiscoverFacetSidebar({
   onClearBeaches: () => void;
   onClearCommunities: () => void;
   onClearFeatures: () => void;
+  containerClassName?: string;
+  scrollSectionsOnly?: boolean;
 }) {
   const [isAreasOpen, setIsAreasOpen] = useState(false);
   const [isBeachesOpen, setIsBeachesOpen] = useState(true);
-  const [isCommunitiesOpen, setIsCommunitiesOpen] = useState(false);
+  const [isCommunitiesOpen, setIsCommunitiesOpen] = useState(true);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(true);
   const [animatedPropertiesCount, setAnimatedPropertiesCount] = useState(
     DEMO_INITIAL_PROPERTIES_COUNT,
@@ -71,11 +79,13 @@ export function DiscoverFacetSidebar({
       0,
     );
 
+  const featureCountByCode = new Map<string, number>(
+    featureCounts.map((feature) => [feature.code, feature.count] as const),
+  );
+
   const sumSelectedFeatureCounts = (selectedValues: ReadonlyArray<string>) =>
     selectedValues.reduce(
-      (total, value) =>
-        total +
-        (featureCounts.find((feature) => feature.label === value)?.count ?? 0),
+      (total, value) => total + (featureCountByCode.get(value) ?? 0),
       0,
     );
 
@@ -156,7 +166,9 @@ export function DiscoverFacetSidebar({
         className={`flex h-7 w-full items-center justify-between rounded-lg border px-2 py-1 text-xs ${
           isSelected
             ? "border-teal-300 bg-teal-100 text-teal-900"
-            : "border-transparent bg-slate-50 text-slate-700 hover:bg-teal-50"
+            : hasSelectionInSection
+              ? "border-transparent bg-slate-50 text-slate-600 opacity-60 hover:bg-teal-50 hover:opacity-80"
+              : "border-transparent bg-slate-50 text-slate-700 hover:bg-teal-50"
         }`}
       >
         <span
@@ -181,8 +193,14 @@ export function DiscoverFacetSidebar({
     </li>
   );
 
+  const baseAsideClassName =
+    "discover-cards-scroll self-start rounded-2xl border border-slate-200 bg-white/98 p-4 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] xl:sticky xl:top-28 xl:max-h-[calc(100dvh-8.5rem)] xl:overflow-y-auto xl:overscroll-y-contain";
+  const resolvedAsideClassName = containerClassName
+    ? `${baseAsideClassName} ${containerClassName}`
+    : baseAsideClassName;
+
   return (
-    <aside className="self-start rounded-2xl border border-slate-200 bg-white/98 p-4 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] xl:sticky xl:top-28 xl:max-h-[calc(100dvh-8.5rem)] xl:overflow-y-auto xl:overscroll-y-contain">
+    <aside className={resolvedAsideClassName}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-bold tracking-wide text-slate-700 uppercase">
           Properties
@@ -210,90 +228,98 @@ export function DiscoverFacetSidebar({
           </div>
         </div>
       ) : null}
-      <FacetSection
-        title="Areas"
-        isOpen={isAreasOpen}
-        onToggle={() => setIsAreasOpen((current) => !current)}
-        selectedCount={selectedAreaTotal}
-        hasSelected={selectedAreas.length > 0}
-        onClearSelected={onClearAreas}
-        clearSelectedLabel="Clear selected Areas facets"
+      <div
+        className={
+          scrollSectionsOnly
+            ? "discover-cards-scroll mt-3 min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-y-contain pr-1"
+            : ""
+        }
       >
-        <ul className="mt-1.5 space-y-1">
-          {areaCounts.map(([name, count]) =>
-            renderFacetRow(
-              name,
-              count,
-              selectedAreas.includes(name),
-              selectedAreas.length > 0,
-              () => onToggleArea(name),
-            ),
-          )}
-        </ul>
-      </FacetSection>
-      <FacetSection
-        title="Beaches"
-        isOpen={isBeachesOpen}
-        onToggle={() => setIsBeachesOpen((current) => !current)}
-        selectedCount={selectedBeachTotal}
-        hasSelected={selectedBeaches.length > 0}
-        onClearSelected={onClearBeaches}
-        clearSelectedLabel="Clear selected Beaches facets"
-      >
-        <ul className="mt-1.5 space-y-1">
-          {beachCounts.map(([name, count]) =>
-            renderFacetRow(
-              name,
-              count,
-              selectedBeaches.includes(name),
-              selectedBeaches.length > 0,
-              () => onToggleBeach(name),
-            ),
-          )}
-        </ul>
-      </FacetSection>
-      <FacetSection
-        title="Communities"
-        isOpen={isCommunitiesOpen}
-        onToggle={() => setIsCommunitiesOpen((current) => !current)}
-        selectedCount={selectedCommunityTotal}
-        hasSelected={selectedCommunities.length > 0}
-        onClearSelected={onClearCommunities}
-        clearSelectedLabel="Clear selected Communities facets"
-      >
-        <ul className="mt-1.5 space-y-1">
-          {communityCounts.map(([name, count]) =>
-            renderFacetRow(
-              name,
-              count,
-              selectedCommunities.includes(name),
-              selectedCommunities.length > 0,
-              () => onToggleCommunity(name),
-            ),
-          )}
-        </ul>
-      </FacetSection>
-      <FacetSection
-        title="Features"
-        isOpen={isFeaturesOpen}
-        onToggle={() => setIsFeaturesOpen((current) => !current)}
-        selectedCount={selectedFeatureTotal}
-        hasSelected={selectedFeatures.length > 0}
-        onClearSelected={onClearFeatures}
-        clearSelectedLabel="Clear selected Property Features facets"
-      >
-        <ul className="mt-1.5 space-y-1">
-          {featureCounts.map((feature) =>
-            renderFacetRow(
-              feature.label,
-              feature.count,
-              selectedFeatures.includes(feature.label),
-              selectedFeatures.length > 0,
-              () => onToggleFeature(feature.label),
-            ),
-          )}
-        </ul>
-      </FacetSection>
+        <FacetSection
+          title="Areas"
+          isOpen={isAreasOpen}
+          onToggle={() => setIsAreasOpen((current) => !current)}
+          selectedCount={selectedAreaTotal}
+          hasSelected={selectedAreas.length > 0}
+          onClearSelected={onClearAreas}
+          clearSelectedLabel="Clear selected Areas facets"
+        >
+          <ul className="mt-1.5 space-y-1">
+            {areaCounts.map(([name, count]) =>
+              renderFacetRow(
+                name,
+                count,
+                selectedAreas.includes(name),
+                selectedAreas.length > 0,
+                () => onToggleArea(name),
+              ),
+            )}
+          </ul>
+        </FacetSection>
+        <FacetSection
+          title="Beaches"
+          isOpen={isBeachesOpen}
+          onToggle={() => setIsBeachesOpen((current) => !current)}
+          selectedCount={selectedBeachTotal}
+          hasSelected={selectedBeaches.length > 0}
+          onClearSelected={onClearBeaches}
+          clearSelectedLabel="Clear selected Beaches facets"
+        >
+          <ul className="mt-1.5 space-y-1">
+            {beachCounts.map(([name, count]) =>
+              renderFacetRow(
+                name,
+                count,
+                selectedBeaches.includes(name),
+                selectedBeaches.length > 0,
+                () => onToggleBeach(name),
+              ),
+            )}
+          </ul>
+        </FacetSection>
+        <FacetSection
+          title="Communities"
+          isOpen={isCommunitiesOpen}
+          onToggle={() => setIsCommunitiesOpen((current) => !current)}
+          selectedCount={selectedCommunityTotal}
+          hasSelected={selectedCommunities.length > 0}
+          onClearSelected={onClearCommunities}
+          clearSelectedLabel="Clear selected Communities facets"
+        >
+          <ul className="mt-1.5 space-y-1">
+            {communityCounts.map(([name, count]) =>
+              renderFacetRow(
+                name,
+                count,
+                selectedCommunities.includes(name),
+                selectedCommunities.length > 0,
+                () => onToggleCommunity(name),
+              ),
+            )}
+          </ul>
+        </FacetSection>
+        <FacetSection
+          title="Features"
+          isOpen={isFeaturesOpen}
+          onToggle={() => setIsFeaturesOpen((current) => !current)}
+          selectedCount={selectedFeatureTotal}
+          hasSelected={selectedFeatures.length > 0}
+          onClearSelected={onClearFeatures}
+          clearSelectedLabel="Clear selected Property Features facets"
+        >
+          <ul className="mt-1.5 space-y-1">
+            {featureCounts.map((feature) =>
+              renderFacetRow(
+                feature.label,
+                feature.count,
+                selectedFeatures.includes(feature.code),
+                selectedFeatures.length > 0,
+                () => onToggleFeature(feature.code),
+              ),
+            )}
+          </ul>
+        </FacetSection>
+      </div>
     </aside>
   );
 }

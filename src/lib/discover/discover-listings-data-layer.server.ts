@@ -30,7 +30,14 @@ type DiscoverResolvedFilters = {
   selectedAreaCodes: string[];
   selectedBeachCodes: string[];
   selectedCommunityCodes: string[];
-  selectedFeatures: Array<"gulf_front" | "private_pool" | "golf_cart">;
+  selectedFeatures: Array<
+    | "gulf_front"
+    | "private_pool"
+    | "golf_cart"
+    | "pet_friendly"
+    | "accessible"
+    | "elevator"
+  >;
 };
 
 export type DiscoverCorpusMetadata = {
@@ -161,7 +168,14 @@ function resolveCommunityCodes(values?: string[]): string[] {
 
 function resolveFeatureFilters(
   values?: string[],
-): Array<"gulf_front" | "private_pool" | "golf_cart"> {
+): Array<
+  | "gulf_front"
+  | "private_pool"
+  | "golf_cart"
+  | "pet_friendly"
+  | "accessible"
+  | "elevator"
+> {
   const normalized = normalizeSelectionValues(values)
     .map((value) =>
       value
@@ -171,7 +185,14 @@ function resolveFeatureFilters(
     )
     .filter(Boolean);
 
-  const out = new Set<"gulf_front" | "private_pool" | "golf_cart">();
+  const out = new Set<
+    | "gulf_front"
+    | "private_pool"
+    | "golf_cart"
+    | "pet_friendly"
+    | "accessible"
+    | "elevator"
+  >();
 
   for (const value of normalized) {
     if (value === "gulf_front" || value === "gulffront") {
@@ -184,6 +205,18 @@ function resolveFeatureFilters(
     }
     if (value === "golf_cart" || value === "golfcart") {
       out.add("golf_cart");
+      continue;
+    }
+    if (value === "pet_friendly" || value === "petfriendly") {
+      out.add("pet_friendly");
+      continue;
+    }
+    if (value === "accessible" || value === "accessibility") {
+      out.add("accessible");
+      continue;
+    }
+    if (value === "elevator" || value === "lift") {
+      out.add("elevator");
       continue;
     }
   }
@@ -966,8 +999,8 @@ async function loadFromListingTable(input?: {
   });
 
   const mappedRows: Array<DiscoverListing | null> = rows.map((row, index) => {
-    const amenities = onlySlug ? asStringArray(row.amenities_normalized) : [];
-    const traits = onlySlug ? row.traits : [];
+    const amenities = asStringArray(row.amenities_normalized);
+    const traits = row.traits;
     const sleeps = Math.max(1, Math.round(row.sleeps ?? 0) || 6);
     const bedrooms = Math.max(1, Math.round(row.bedrooms ?? 0) || 3);
     const bathroomNumber = asNumber(row.bathrooms);
@@ -976,7 +1009,7 @@ async function loadFromListingTable(input?: {
         ? Math.max(1, Math.round(bathroomNumber * 2) / 2)
         : Math.max(1, bedrooms - 0.5);
 
-    const summary = onlySlug ? asObject(row.sleeping_summary) : {};
+    const summary = asObject(row.sleeping_summary);
 
     const rawArea =
       asString(row.area_name) ||
@@ -1093,7 +1126,7 @@ async function loadFromListingTable(input?: {
       availabilityCalendarStatus: onlySlug
         ? sourcePricing.availabilityCalendarStatus
         : undefined,
-      sleepingSummary: onlySlug ? summary : undefined,
+      sleepingSummary: summary,
     };
   });
 

@@ -6,6 +6,9 @@ import { formatNights } from "@/components/discover/discover-utils";
 const DEFAULT_MIN_SLEEPS = 0;
 const DEFAULT_MIN_BEDROOMS = 0;
 const DEFAULT_MIN_BATHROOMS = 0;
+const DEFAULT_MIN_KING_BEDS = 0;
+const DEFAULT_MIN_QUEEN_BEDS = 0;
+const DEFAULT_MIN_BUNK_BEDS = 0;
 
 function formatSummaryDate(value: string, fallback: string): string {
   if (!value) {
@@ -44,6 +47,9 @@ export function useDiscoverSearchControls() {
   const [minSleeps, setMinSleeps] = useState(DEFAULT_MIN_SLEEPS);
   const [minBedrooms, setMinBedrooms] = useState(DEFAULT_MIN_BEDROOMS);
   const [minBathrooms, setMinBathrooms] = useState(DEFAULT_MIN_BATHROOMS);
+  const [minKingBeds, setMinKingBeds] = useState(DEFAULT_MIN_KING_BEDS);
+  const [minQueenBeds, setMinQueenBeds] = useState(DEFAULT_MIN_QUEEN_BEDS);
+  const [minBunkBeds, setMinBunkBeds] = useState(DEFAULT_MIN_BUNK_BEDS);
   const [filterPool, setFilterPool] = useState(false);
   const [filterGulffront, setFilterGulffront] = useState(false);
   const [filterGolfCart, setFilterGolfCart] = useState(false);
@@ -55,6 +61,9 @@ export function useDiscoverSearchControls() {
     minSleeps > 0 ||
     minBedrooms > 0 ||
     minBathrooms > 0 ||
+    minKingBeds > 0 ||
+    minQueenBeds > 0 ||
+    minBunkBeds > 0 ||
     filterPool ||
     filterGulffront ||
     filterGolfCart ||
@@ -91,6 +100,9 @@ export function useDiscoverSearchControls() {
     setMinSleeps(DEFAULT_MIN_SLEEPS);
     setMinBedrooms(DEFAULT_MIN_BEDROOMS);
     setMinBathrooms(DEFAULT_MIN_BATHROOMS);
+    setMinKingBeds(DEFAULT_MIN_KING_BEDS);
+    setMinQueenBeds(DEFAULT_MIN_QUEEN_BEDS);
+    setMinBunkBeds(DEFAULT_MIN_BUNK_BEDS);
     setFilterPool(false);
     setFilterGulffront(false);
     setFilterGolfCart(false);
@@ -101,6 +113,9 @@ export function useDiscoverSearchControls() {
       minSleeps > 0 ? `Sleeps ${minSleeps}+` : null,
       minBedrooms > 0 ? `${minBedrooms}BR+` : null,
       minBathrooms > 0 ? `${minBathrooms}BA+` : null,
+      minKingBeds > 0 ? `${minKingBeds}+ Kings` : null,
+      minQueenBeds > 0 ? `${minQueenBeds}+ Queens` : null,
+      minBunkBeds > 0 ? `${minBunkBeds}+ Bunks` : null,
       filterGulffront ? "Gulf Front" : null,
       filterPool ? "Private Pool" : null,
       filterGolfCart ? "Golf Cart" : null,
@@ -113,8 +128,11 @@ export function useDiscoverSearchControls() {
     filterGulffront,
     filterGolfCart,
     filterPool,
+    minBunkBeds,
     minBathrooms,
     minBedrooms,
+    minKingBeds,
+    minQueenBeds,
     minSleeps,
   ]);
 
@@ -147,6 +165,12 @@ export function useDiscoverSearchControls() {
     setMinBedrooms,
     minBathrooms,
     setMinBathrooms,
+    minKingBeds,
+    setMinKingBeds,
+    minQueenBeds,
+    setMinQueenBeds,
+    minBunkBeds,
+    setMinBunkBeds,
     filterPool,
     setFilterPool,
     filterGulffront,

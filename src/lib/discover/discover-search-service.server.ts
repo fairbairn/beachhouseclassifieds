@@ -2,12 +2,16 @@ import {
   buildDiscoverListingsPagePayload,
   buildDiscoverListingsPayload,
 } from "@/lib/discover/discover-listings-api.server";
-import { getDiscoverCorpusMetadata } from "@/lib/discover/discover-listings.server";
+import {
+  getDiscoverCorpusMetadata,
+  getDiscoverSearchSource,
+} from "@/lib/discover/discover-listings.server";
 import type {
   DiscoverFacetsRequest,
   DiscoverFacetsResponse,
   DiscoverListing,
   DiscoverSearchMetadata,
+  DiscoverSearchResponseMeta,
   DiscoverSearchRequest,
   DiscoverSearchResponse,
 } from "@/lib/discover/discover-types";
@@ -115,6 +119,78 @@ function sanitizeDiscoverFacetsRequest(
   };
 }
 
+function sanitizeDiscoverSearchRequest(
+  request?: DiscoverSearchRequest,
+): DiscoverSearchRequest {
+  const toStringArray = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const out = value
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter((entry) => entry.length > 0);
+
+    return out.length > 0 ? out : undefined;
+  };
+
+  const includeSlug =
+    typeof request?.includeSlug === "string"
+      ? request.includeSlug.trim() || undefined
+      : undefined;
+  const limit =
+    typeof request?.limit === "number" && Number.isFinite(request.limit)
+      ? request.limit
+      : undefined;
+  const offset =
+    typeof request?.offset === "number" && Number.isFinite(request.offset)
+      ? request.offset
+      : undefined;
+  const minKingBeds =
+    typeof request?.minKingBeds === "number" &&
+    Number.isFinite(request.minKingBeds)
+      ? request.minKingBeds
+      : undefined;
+  const minQueenBeds =
+    typeof request?.minQueenBeds === "number" &&
+    Number.isFinite(request.minQueenBeds)
+      ? request.minQueenBeds
+      : undefined;
+  const minBunkBeds =
+    typeof request?.minBunkBeds === "number" &&
+    Number.isFinite(request.minBunkBeds)
+      ? request.minBunkBeds
+      : undefined;
+
+  return {
+    includeSlug,
+    limit,
+    offset,
+    includeMetadata:
+      typeof request?.includeMetadata === "boolean"
+        ? request.includeMetadata
+        : undefined,
+    selectedAreas: toStringArray(request?.selectedAreas),
+    selectedBeaches: toStringArray(request?.selectedBeaches),
+    selectedCommunities: toStringArray(request?.selectedCommunities),
+    selectedFeatures: toStringArray(request?.selectedFeatures),
+    minKingBeds,
+    minQueenBeds,
+    minBunkBeds,
+  };
+}
+
+function buildDiscoverSearchMeta(input: {
+  startedAtMs: number;
+  request: DiscoverSearchRequest;
+}): DiscoverSearchResponseMeta {
+  return {
+    generatedAt: new Date().toISOString(),
+    serverDurationMs: Math.max(0, Date.now() - input.startedAtMs),
+    request: sanitizeDiscoverSearchRequest(input.request),
+  };
+}
+
 export async function executeDiscoverFacets(
   request?: DiscoverFacetsRequest,
 ): Promise<DiscoverFacetsResponse> {
@@ -122,9 +198,10 @@ export async function executeDiscoverFacets(
   const sanitizedRequest = sanitizeDiscoverFacetsRequest(request);
   const metadata = await getDiscoverCorpusMetadata({
     selectedFeatures: sanitizedRequest.selectedFeatures,
-  }).catch(() => null);
+  });
 
   const response: DiscoverFacetsResponse = {
+    source: getDiscoverSearchSource(),
     totalCount: metadata?.totalCount ?? 0,
     facets: metadata?.facets ?? {
       areas: {},
@@ -149,12 +226,15 @@ export async function executeDiscoverFacets(
 export async function executeDiscoverSearch(
   request: DiscoverSearchRequest,
 ): Promise<DiscoverSearchResponse> {
+  const startedAtMs = Date.now();
   const includeSlug = request.includeSlug?.trim() || undefined;
 
   if (includeSlug) {
     const listings = await buildDiscoverListingsPayload({ includeSlug });
 
     return {
+      source: "postgres",
+      _meta: buildDiscoverSearchMeta({ startedAtMs, request }),
       _stats: {
         totalCount: listings.length,
         count: listings.length,
@@ -173,7 +253,13 @@ export async function executeDiscoverSearch(
     selectedBeaches: request.selectedBeaches,
     selectedCommunities: request.selectedCommunities,
     selectedFeatures: request.selectedFeatures,
+    minKingBeds: request.minKingBeds,
+    minQueenBeds: request.minQueenBeds,
+    minBunkBeds: request.minBunkBeds,
   });
 
-  return payload;
+  return {
+    ...payload,
+    _meta: buildDiscoverSearchMeta({ startedAtMs, request }),
+  };
 }

@@ -1,18 +1,22 @@
 import {
-  getDiscoverCorpusMetadata as getDiscoverCorpusMetadataFromPostgres,
   getDiscoverListings as getDiscoverListingsFromPostgres,
-  getDiscoverListingsCount as getDiscoverListingsCountFromPostgres,
   type DiscoverCorpusMetadata,
 } from "@/lib/discover/discover-listings-data-layer.server";
 import {
   getDiscoverCorpusMetadata as getDiscoverCorpusMetadataFromMeilisearch,
-  getDiscoverListings as getDiscoverListingsFromMeilisearch,
   getDiscoverListingsCount as getDiscoverListingsCountFromMeilisearch,
+  getDiscoverListings as getDiscoverListingsFromMeilisearch,
+  getDiscoverListingsSnapshot as getDiscoverListingsSnapshotFromMeilisearch,
 } from "@/lib/discover/discover-listings-meilisearch.server";
+import type { DiscoverMapListing } from "@/lib/discover/discover-types";
 import { isMeilisearchBackendEnabled } from "@/lib/discover/meilisearch-client.server";
 
 function shouldUseMeilisearchBackend(): boolean {
   return isMeilisearchBackendEnabled();
+}
+
+export function getDiscoverSearchSource(): "meilisearch" | "postgres" {
+  return shouldUseMeilisearchBackend() ? "meilisearch" : "postgres";
 }
 
 export async function getDiscoverListings(input?: {
@@ -29,14 +33,21 @@ export async function getDiscoverListings(input?: {
   selectedBeaches?: string[];
   selectedCommunities?: string[];
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
 }) {
-  if (shouldUseMeilisearchBackend()) {
-    return getDiscoverListingsFromMeilisearch(input).catch(() =>
-      getDiscoverListingsFromPostgres(input),
+  if (input?.includeSlug?.trim() || input?.onlySlug) {
+    return getDiscoverListingsFromPostgres(input);
+  }
+
+  if (!shouldUseMeilisearchBackend()) {
+    throw new Error(
+      "Discover listings search requires DISCOVER_SEARCH_BACKEND=meilisearch. Postgres fallback is disabled for listings queries.",
     );
   }
 
-  return getDiscoverListingsFromPostgres(input);
+  return getDiscoverListingsFromMeilisearch(input);
 }
 
 export async function getDiscoverListingsCount(input?: {
@@ -44,26 +55,57 @@ export async function getDiscoverListingsCount(input?: {
   selectedBeaches?: string[];
   selectedCommunities?: string[];
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
 }) {
-  if (shouldUseMeilisearchBackend()) {
-    return getDiscoverListingsCountFromMeilisearch(input).catch(() =>
-      getDiscoverListingsCountFromPostgres(input),
+  if (!shouldUseMeilisearchBackend()) {
+    throw new Error(
+      "Discover listings count requires DISCOVER_SEARCH_BACKEND=meilisearch. Postgres fallback is disabled for listings queries.",
     );
   }
 
-  return getDiscoverListingsCountFromPostgres(input);
+  return getDiscoverListingsCountFromMeilisearch(input);
 }
 
 export async function getDiscoverCorpusMetadata(input?: {
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
 }): Promise<DiscoverCorpusMetadata | null> {
-  if (shouldUseMeilisearchBackend()) {
-    return getDiscoverCorpusMetadataFromMeilisearch(input).catch(() =>
-      getDiscoverCorpusMetadataFromPostgres(input),
+  if (!shouldUseMeilisearchBackend()) {
+    throw new Error(
+      "Discover facets metadata requires DISCOVER_SEARCH_BACKEND=meilisearch. Postgres fallback is disabled for listings queries.",
     );
   }
 
-  return getDiscoverCorpusMetadataFromPostgres(input);
+  return getDiscoverCorpusMetadataFromMeilisearch(input);
+}
+
+export async function getDiscoverListingsSnapshot(input?: {
+  pageLimit?: number;
+  mapLimit?: number;
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
+}): Promise<{
+  totalCount: number;
+  facets: DiscoverCorpusMetadata["facets"];
+  pageListings: Awaited<ReturnType<typeof getDiscoverListings>>;
+  mapListings: DiscoverMapListing[];
+}> {
+  if (!shouldUseMeilisearchBackend()) {
+    throw new Error(
+      "Discover listings snapshot requires DISCOVER_SEARCH_BACKEND=meilisearch. Postgres fallback is disabled for listings queries.",
+    );
+  }
+
+  return getDiscoverListingsSnapshotFromMeilisearch(input);
 }
 
 export type { DiscoverCorpusMetadata };

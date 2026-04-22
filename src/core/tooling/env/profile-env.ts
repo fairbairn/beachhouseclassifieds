@@ -26,7 +26,18 @@ export const envOverrideKeys = [
   "APIFY_PROXY_COUNTRY",
   "GOOGLE_MAPS_API_KEY",
   "OPENAI_API_KEY",
+  "DISCOVER_SEARCH_BACKEND",
+  "MEILISEARCH_HOST",
+  "MEILISEARCH_API_KEY",
+  "MEILISEARCH_DISCOVER_INDEX",
 ] as const;
+
+const localProfileFileAuthorityKeys = new Set<string>([
+  "DISCOVER_SEARCH_BACKEND",
+  "MEILISEARCH_HOST",
+  "MEILISEARCH_API_KEY",
+  "MEILISEARCH_DISCOVER_INDEX",
+]);
 
 export function resolveProfile(value: string | undefined): EnvProfile {
   if (!value) {
@@ -80,6 +91,10 @@ export function resolveProfileEnvironment(options?: {
   };
 
   for (const key of envOverrideKeys) {
+    if (profile === "local" && localProfileFileAuthorityKeys.has(key)) {
+      continue;
+    }
+
     const value = explicitOverrides[key];
 
     if (value !== undefined) {

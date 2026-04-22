@@ -1,6 +1,9 @@
 import {
+  Accessibility,
+  ArrowUpDown,
   CarFront,
   ChevronDown,
+  Dog,
   Droplets,
   SlidersHorizontal,
   Waves,
@@ -52,12 +55,14 @@ export function DiscoverSearchPanel({
   onMinBedroomsChange,
   minBathrooms,
   onMinBathroomsChange,
-  filterGulffront,
-  onToggleGulffront,
-  filterPool,
-  onTogglePool,
-  filterGolfCart,
-  onToggleGolfCart,
+  minKingBeds,
+  onMinKingBedsChange,
+  minQueenBeds,
+  onMinQueenBedsChange,
+  minBunkBeds,
+  onMinBunkBedsChange,
+  selectedFeatures,
+  onToggleFeature,
 }: {
   locationQuery: string;
   onLocationQueryChange: (value: string) => void;
@@ -92,13 +97,57 @@ export function DiscoverSearchPanel({
   onMinBedroomsChange: (value: number) => void;
   minBathrooms: number;
   onMinBathroomsChange: (value: number) => void;
-  filterGulffront: boolean;
-  onToggleGulffront: () => void;
-  filterPool: boolean;
-  onTogglePool: () => void;
-  filterGolfCart: boolean;
-  onToggleGolfCart: () => void;
+  minKingBeds: number;
+  onMinKingBedsChange: (value: number) => void;
+  minQueenBeds: number;
+  onMinQueenBedsChange: (value: number) => void;
+  minBunkBeds: number;
+  onMinBunkBedsChange: (value: number) => void;
+  selectedFeatures: ReadonlyArray<string>;
+  onToggleFeature: (featureCode: string) => void;
 }) {
+  const normalizedSelectedFeatures = new Set(
+    selectedFeatures.map((value) =>
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, ""),
+    ),
+  );
+
+  const advancedFeatureOptions = [
+    {
+      code: "gulf_front",
+      label: "Gulf Front",
+      icon: <Waves className="h-5 w-5" />,
+    },
+    {
+      code: "private_pool",
+      label: "Private Pool",
+      icon: <Droplets className="h-5 w-5" />,
+    },
+    {
+      code: "golf_cart",
+      label: "Golf Cart",
+      icon: <CarFront className="h-5 w-5" />,
+    },
+    {
+      code: "pet_friendly",
+      label: "Pet Friendly",
+      icon: <Dog className="h-5 w-5" />,
+    },
+    {
+      code: "elevator",
+      label: "Elevator",
+      icon: <ArrowUpDown className="h-5 w-5" />,
+    },
+    {
+      code: "accessible",
+      label: "Accessible",
+      icon: <Accessibility className="h-5 w-5" />,
+    },
+  ] as const;
+
   return (
     <header className="relative z-20 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)]">
       <div>
@@ -211,7 +260,7 @@ export function DiscoverSearchPanel({
         </div>
 
         <div
-          className={`overflow-hidden transition-all duration-300 ${showAdvanced ? "mt-3 max-h-[72vh] opacity-100" : "max-h-0 opacity-0"}`}
+          className={`overflow-hidden ${showAdvanced ? "mt-3 max-h-[72vh] opacity-100" : "max-h-0 opacity-0"}`}
         >
           <div className="max-h-[68vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4">
             <div className="rounded-lg border border-teal-200 bg-teal-50/70 p-3">
@@ -239,56 +288,79 @@ export function DiscoverSearchPanel({
                   </button>
                 </div>
               </div>
-              <div className="mt-2 flex items-stretch gap-2 overflow-x-auto pb-1">
-                <div className="w-53 shrink-0">
-                  <GuestStepper
-                    controlLabel="minimum sleeps"
-                    pillText={`Sleeps ${minSleeps}+`}
-                    value={minSleeps}
-                    min={0}
-                    max={30}
-                    onChange={onMinSleepsChange}
-                  />
+              <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className="min-w-0">
+                    <GuestStepper
+                      controlLabel="minimum sleeps"
+                      pillText={`Sleeps ${minSleeps}+`}
+                      value={minSleeps}
+                      min={0}
+                      max={30}
+                      onChange={onMinSleepsChange}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <GuestStepper
+                      controlLabel="minimum bedrooms"
+                      pillText={`${minBedrooms}+ Bedrooms`}
+                      value={minBedrooms}
+                      min={0}
+                      max={10}
+                      onChange={onMinBedroomsChange}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <GuestStepper
+                      controlLabel="minimum bathrooms"
+                      pillText={`${minBathrooms}+ Bathrooms`}
+                      value={minBathrooms}
+                      min={0}
+                      max={10}
+                      onChange={onMinBathroomsChange}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <GuestStepper
+                      controlLabel="king beds"
+                      pillText={`${minKingBeds}+ King beds`}
+                      value={minKingBeds}
+                      min={0}
+                      max={20}
+                      onChange={onMinKingBedsChange}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <GuestStepper
+                      controlLabel="queen beds"
+                      pillText={`${minQueenBeds}+ Queen beds`}
+                      value={minQueenBeds}
+                      min={0}
+                      max={20}
+                      onChange={onMinQueenBedsChange}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <GuestStepper
+                      controlLabel="bunk beds"
+                      pillText={`${minBunkBeds}+ Bunk beds`}
+                      value={minBunkBeds}
+                      min={0}
+                      max={20}
+                      onChange={onMinBunkBedsChange}
+                    />
+                  </div>
                 </div>
-                <div className="w-53 shrink-0">
-                  <GuestStepper
-                    controlLabel="minimum bedrooms"
-                    pillText={`${minBedrooms}+ Bedrooms`}
-                    value={minBedrooms}
-                    min={0}
-                    max={10}
-                    onChange={onMinBedroomsChange}
-                  />
-                </div>
-                <div className="w-53 shrink-0">
-                  <GuestStepper
-                    controlLabel="minimum bathrooms"
-                    pillText={`${minBathrooms}+ Bathrooms`}
-                    value={minBathrooms}
-                    min={0}
-                    max={10}
-                    onChange={onMinBathroomsChange}
-                  />
-                </div>
-                <div className="grid min-w-136 flex-1 grid-cols-3 gap-2">
-                  <IconOptionBox
-                    label="Gulf Front"
-                    selected={filterGulffront}
-                    onToggle={onToggleGulffront}
-                    icon={<Waves className="h-5 w-5" />}
-                  />
-                  <IconOptionBox
-                    label="Private Pool"
-                    selected={filterPool}
-                    onToggle={onTogglePool}
-                    icon={<Droplets className="h-5 w-5" />}
-                  />
-                  <IconOptionBox
-                    label="Golf Cart"
-                    selected={filterGolfCart}
-                    onToggle={onToggleGolfCart}
-                    icon={<CarFront className="h-5 w-5" />}
-                  />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {advancedFeatureOptions.map((option) => (
+                    <IconOptionBox
+                      key={option.code}
+                      label={option.label}
+                      selected={normalizedSelectedFeatures.has(option.code)}
+                      onToggle={() => onToggleFeature(option.code)}
+                      icon={option.icon}
+                    />
+                  ))}
                 </div>
               </div>
             </div>

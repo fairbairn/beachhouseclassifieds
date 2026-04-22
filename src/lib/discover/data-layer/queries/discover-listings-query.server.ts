@@ -92,6 +92,9 @@ const discoverListingSummarySelectFields = {
       where src is not null
     ), '[]'::jsonb)`,
   image_count: sql<number>`coalesce(jsonb_array_length(coalesce(${listing.images}, '[]'::jsonb)), 0)::int`,
+  sleeping_summary: listing.sleeping_summary,
+  amenities_normalized: listing.amenities_normalized,
+  traits: listing.traits,
 } as const;
 
 const discoverListingDetailSelectFields = {

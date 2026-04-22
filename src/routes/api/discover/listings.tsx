@@ -17,6 +17,9 @@ async function parseSearchRequestFromBody(request: Request) {
     selectedBeaches?: unknown;
     selectedCommunities?: unknown;
     selectedFeatures?: unknown;
+    minKingBeds?: unknown;
+    minQueenBeds?: unknown;
+    minBunkBeds?: unknown;
   } | null;
 
   const asStringArray = (value: unknown): string[] | undefined => {
@@ -56,6 +59,24 @@ async function parseSearchRequestFromBody(request: Request) {
     selectedBeaches: asStringArray(payload?.selectedBeaches),
     selectedCommunities: asStringArray(payload?.selectedCommunities),
     selectedFeatures: asStringArray(payload?.selectedFeatures),
+    minKingBeds:
+      typeof payload?.minKingBeds === "number"
+        ? payload.minKingBeds
+        : typeof payload?.minKingBeds === "string"
+          ? Number(payload.minKingBeds)
+          : Number.NaN,
+    minQueenBeds:
+      typeof payload?.minQueenBeds === "number"
+        ? payload.minQueenBeds
+        : typeof payload?.minQueenBeds === "string"
+          ? Number(payload.minQueenBeds)
+          : Number.NaN,
+    minBunkBeds:
+      typeof payload?.minBunkBeds === "number"
+        ? payload.minBunkBeds
+        : typeof payload?.minBunkBeds === "string"
+          ? Number(payload.minBunkBeds)
+          : Number.NaN,
   };
 }
 

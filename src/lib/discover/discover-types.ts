@@ -12,6 +12,9 @@ export type DiscoverListing = {
   privatePool: boolean;
   gulffront: boolean;
   golfCart: boolean;
+  petFriendly?: boolean;
+  accessible?: boolean;
+  elevator?: boolean;
   previewImages: string[];
   imageCount?: number;
   typicalPrice?: string;
@@ -88,6 +91,8 @@ export type DiscoverSearchMetadata = {
   facets: DiscoverFacetGroups;
 };
 
+export type DiscoverSearchSource = "meilisearch" | "postgres";
+
 export type DiscoverListingsMetadata = DiscoverSearchMetadata;
 
 export type DiscoverPageStats = {
@@ -105,6 +110,15 @@ export type DiscoverSearchRequest = {
   selectedBeaches?: string[];
   selectedCommunities?: string[];
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
+};
+
+export type DiscoverSearchResponseMeta = {
+  generatedAt: string;
+  serverDurationMs: number;
+  request: DiscoverSearchRequest;
 };
 
 export type DiscoverFacetsRequest = {
@@ -123,12 +137,16 @@ export type DiscoverFacetsRequest = {
 export type DiscoverListingsStats = DiscoverPageStats;
 
 export type DiscoverSearchResponse = {
+  source?: DiscoverSearchSource;
+  _meta?: DiscoverSearchResponseMeta;
   _stats: DiscoverListingsStats;
   metadata?: DiscoverListingsMetadata;
   listings: DiscoverListing[];
 };
 
 export type DiscoverListingsPagePayload = {
+  source?: DiscoverSearchSource;
+  _meta?: DiscoverSearchResponseMeta;
   _stats: DiscoverListingsStats;
   metadata?: DiscoverListingsMetadata;
   listings: DiscoverListing[];
@@ -152,6 +170,7 @@ export type DiscoverFacetsPayload = {
 };
 
 export type DiscoverFacetsResponse = DiscoverFacetsPayload & {
+  source?: DiscoverSearchSource;
   _meta: {
     generatedAt: string;
     serverDurationMs: number;

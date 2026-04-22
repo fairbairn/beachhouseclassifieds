@@ -1,3 +1,5 @@
+import "@/core/tooling/env/load-env-profile";
+
 import { Meilisearch } from "meilisearch";
 
 type MeilisearchConfig = {

@@ -17,6 +17,9 @@ export type DiscoverFilterState = {
   minSleeps: number;
   minBedrooms: number;
   minBathrooms: number;
+  minKingBeds: number;
+  minQueenBeds: number;
+  minBunkBeds: number;
   filterPool: boolean;
   filterGulffront: boolean;
   filterGolfCart: boolean;
@@ -40,6 +43,9 @@ export function filterDiscoverListings(
       listing.sleeps >= filters.minSleeps &&
       listing.bedrooms >= filters.minBedrooms &&
       listing.bathrooms >= filters.minBathrooms &&
+      ((listing.sleepingSummary?.bed_counts?.king ?? 0) >= filters.minKingBeds) &&
+      ((listing.sleepingSummary?.bed_counts?.queen ?? 0) >= filters.minQueenBeds) &&
+      ((listing.sleepingSummary?.bed_counts?.bunk_beds ?? 0) >= filters.minBunkBeds) &&
       (!filters.filterPool || listing.privatePool) &&
       (!filters.filterGulffront || listing.gulffront) &&
       (!filters.filterGolfCart || listing.golfCart)
@@ -130,7 +136,11 @@ export function buildDiscoverMapListings(input: {
   });
 }
 
-export type DiscoverFeatureCount = { label: string; count: number };
+export type DiscoverFeatureCount = {
+  code: "gulf_front" | "private_pool" | "golf_cart";
+  label: string;
+  count: number;
+};
 
 export function buildDiscoverFacetCounts(input: {
   filteredListings: ReadonlyArray<DiscoverListing>;
@@ -195,9 +205,13 @@ export function buildDiscoverFacetCounts(input: {
       communityMap.get(name) ?? 0,
     ]),
     featureCounts: [
-      { label: "Gulf Front", count: beachfrontCount },
-      { label: "Private Pool", count: privatePoolCount },
-      { label: "Golf Cart", count: golfCartCount },
+      { code: "gulf_front", label: "Gulf Front", count: beachfrontCount },
+      {
+        code: "private_pool",
+        label: "Private Pool",
+        count: privatePoolCount,
+      },
+      { code: "golf_cart", label: "Golf Cart", count: golfCartCount },
     ],
   };
 }
@@ -265,14 +279,17 @@ export function buildEffectiveDiscoverFacetCounts(input: {
     ]),
     effectiveFeatureCounts: [
       {
+        code: "gulf_front",
         label: "Gulf Front",
         count: metadata.facets.features.gulf_front?.count ?? 0,
       },
       {
+        code: "private_pool",
         label: "Private Pool",
         count: metadata.facets.features.private_pool?.count ?? 0,
       },
       {
+        code: "golf_cart",
         label: "Golf Cart",
         count: metadata.facets.features.golf_cart?.count ?? 0,
       },

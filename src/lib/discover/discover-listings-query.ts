@@ -181,6 +181,9 @@ function getPageQueryCacheKey(input?: {
   selectedBeaches?: string[];
   selectedCommunities?: string[];
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
 }) {
   const limit = Number.isFinite(input?.limit)
     ? String(input?.limit)
@@ -200,8 +203,17 @@ function getPageQueryCacheKey(input?: {
     .slice()
     .sort()
     .join(",");
+  const minKingBeds = Number.isFinite(input?.minKingBeds)
+    ? String(input?.minKingBeds)
+    : "0";
+  const minQueenBeds = Number.isFinite(input?.minQueenBeds)
+    ? String(input?.minQueenBeds)
+    : "0";
+  const minBunkBeds = Number.isFinite(input?.minBunkBeds)
+    ? String(input?.minBunkBeds)
+    : "0";
 
-  return `limit=${limit}|offset=${offset}|metadata=${includeMetadata}|areas=${selectedAreas}|beaches=${selectedBeaches}|communities=${selectedCommunities}|features=${selectedFeatures}`;
+  return `limit=${limit}|offset=${offset}|metadata=${includeMetadata}|areas=${selectedAreas}|beaches=${selectedBeaches}|communities=${selectedCommunities}|features=${selectedFeatures}|king=${minKingBeds}|queen=${minQueenBeds}|bunk=${minBunkBeds}`;
 }
 
 export async function fetchDiscoverListingsPage(input?: {
@@ -212,6 +224,9 @@ export async function fetchDiscoverListingsPage(input?: {
   selectedBeaches?: string[];
   selectedCommunities?: string[];
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
 }): Promise<DiscoverListingsPageResponse> {
   const cacheKey = getPageQueryCacheKey(input);
   if (typeof window !== "undefined") {
@@ -234,6 +249,9 @@ export async function fetchDiscoverListingsPage(input?: {
     selectedBeaches: input?.selectedBeaches,
     selectedCommunities: input?.selectedCommunities,
     selectedFeatures: input?.selectedFeatures,
+    minKingBeds: input?.minKingBeds,
+    minQueenBeds: input?.minQueenBeds,
+    minBunkBeds: input?.minBunkBeds,
   };
   const requestPromise = (async (): Promise<DiscoverListingsPageResponse> => {
     const response = await fetch(resolveDiscoverListingsEndpoint(), {
@@ -287,6 +305,14 @@ export async function fetchDiscoverListingsPage(input?: {
       : undefined;
 
     const normalizedPayload: DiscoverListingsPageResponse = {
+      source:
+        payload.source === "meilisearch" || payload.source === "postgres"
+          ? payload.source
+          : undefined,
+      _meta:
+        payload._meta && typeof payload._meta === "object"
+          ? payload._meta
+          : undefined,
       _stats: {
         totalCount,
         count,

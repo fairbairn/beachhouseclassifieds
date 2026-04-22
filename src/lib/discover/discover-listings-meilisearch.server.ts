@@ -1,7 +1,4 @@
-import {
-  getDiscoverListings as getDiscoverListingsFromPostgres,
-  type DiscoverCorpusMetadata,
-} from "@/lib/discover/discover-listings-data-layer.server";
+import type { DiscoverMapListing } from "@/lib/discover/discover-types";
 import { getDiscoverMeilisearchIndex } from "@/lib/discover/meilisearch-client.server";
 import {
   discoverSearchDocumentToListing,
@@ -21,13 +18,50 @@ type DiscoverSelectionFilters = {
   selectedBeaches?: string[];
   selectedCommunities?: string[];
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
 };
 
 type DiscoverResolvedFilters = {
   selectedAreaCodes: string[];
   selectedBeachCodes: string[];
   selectedCommunityCodes: string[];
-  selectedFeatures: Array<"gulf_front" | "private_pool" | "golf_cart">;
+  selectedFeatures: Array<
+    | "gulf_front"
+    | "private_pool"
+    | "golf_cart"
+    | "pet_friendly"
+    | "accessible"
+    | "elevator"
+  >;
+  minKingBeds: number;
+  minQueenBeds: number;
+  minBunkBeds: number;
+};
+
+type DiscoverFacetOmitOptions = {
+  omitAreas?: boolean;
+  omitBeaches?: boolean;
+  omitCommunities?: boolean;
+  omitFeatures?: boolean;
+};
+
+type DiscoverCorpusMetadata = {
+  totalCount: number;
+  facets: {
+    areas: Record<string, { label: string; count: number }>;
+    beaches: Record<string, { label: string; count: number }>;
+    communities: Record<string, { label: string; count: number }>;
+    features: Record<string, { label: string; count: number }>;
+  };
+};
+
+type DiscoverListingsSnapshot = {
+  totalCount: number;
+  facets: DiscoverCorpusMetadata["facets"];
+  pageListings: ReturnType<typeof discoverSearchDocumentToListing>[];
+  mapListings: DiscoverMapListing[];
 };
 
 function unique(values: string[]): string[] {
@@ -115,7 +149,14 @@ function resolveCommunityCodes(values?: string[]): string[] {
 
 function resolveFeatureFilters(
   values?: string[],
-): Array<"gulf_front" | "private_pool" | "golf_cart"> {
+): Array<
+  | "gulf_front"
+  | "private_pool"
+  | "golf_cart"
+  | "pet_friendly"
+  | "accessible"
+  | "elevator"
+> {
   const normalized = normalizeSelectionValues(values)
     .map((value) =>
       value
@@ -125,7 +166,14 @@ function resolveFeatureFilters(
     )
     .filter(Boolean);
 
-  const out = new Set<"gulf_front" | "private_pool" | "golf_cart">();
+  const out = new Set<
+    | "gulf_front"
+    | "private_pool"
+    | "golf_cart"
+    | "pet_friendly"
+    | "accessible"
+    | "elevator"
+  >();
 
   for (const value of normalized) {
     if (value === "gulf_front" || value === "gulffront") {
@@ -138,6 +186,18 @@ function resolveFeatureFilters(
     }
     if (value === "golf_cart" || value === "golfcart") {
       out.add("golf_cart");
+      continue;
+    }
+    if (value === "pet_friendly" || value === "petfriendly") {
+      out.add("pet_friendly");
+      continue;
+    }
+    if (value === "accessible" || value === "accessibility") {
+      out.add("accessible");
+      continue;
+    }
+    if (value === "elevator" || value === "lift") {
+      out.add("elevator");
       continue;
     }
   }
@@ -153,6 +213,18 @@ function resolveDiscoverFilters(
     selectedBeachCodes: resolveBeachCodes(input?.selectedBeaches),
     selectedCommunityCodes: resolveCommunityCodes(input?.selectedCommunities),
     selectedFeatures: resolveFeatureFilters(input?.selectedFeatures),
+    minKingBeds:
+      typeof input?.minKingBeds === "number" && Number.isFinite(input.minKingBeds)
+        ? Math.max(0, Math.floor(input.minKingBeds))
+        : 0,
+    minQueenBeds:
+      typeof input?.minQueenBeds === "number" && Number.isFinite(input.minQueenBeds)
+        ? Math.max(0, Math.floor(input.minQueenBeds))
+        : 0,
+    minBunkBeds:
+      typeof input?.minBunkBeds === "number" && Number.isFinite(input.minBunkBeds)
+        ? Math.max(0, Math.floor(input.minBunkBeds))
+        : 0,
   };
 }
 
@@ -176,50 +248,95 @@ function buildAnyOfFilter(fieldName: string, values: string[]): string | null {
 }
 
 function buildFeatureFilter(
-  feature: "gulf_front" | "private_pool" | "golf_cart",
+  feature:
+    | "gulf_front"
+    | "private_pool"
+    | "golf_cart"
+    | "pet_friendly"
+    | "accessible"
+    | "elevator",
 ): string {
   if (feature === "gulf_front") {
-    return "gulffront = true";
+    return "gulf_front = true";
   }
   if (feature === "private_pool") {
-    return "privatePool = true";
+    return "private_pool = true";
   }
-  return "golfCart = true";
+  if (feature === "golf_cart") {
+    return "golf_cart = true";
+  }
+  if (feature === "pet_friendly") {
+    return "pet_friendly = true";
+  }
+  if (feature === "accessible") {
+    return "accessible = true";
+  }
+  return "elevator = true";
+}
+
+function buildDiscoverFilterClausesFromResolved(
+  resolved: DiscoverResolvedFilters,
+  options?: DiscoverFacetOmitOptions,
+): string[] {
+  const omitAreas = options?.omitAreas ?? false;
+  const omitBeaches = options?.omitBeaches ?? false;
+  const omitCommunities = options?.omitCommunities ?? false;
+  const omitFeatures = options?.omitFeatures ?? false;
+
+  const clauses: string[] = [];
+
+  const locationTerms: string[] = [];
+
+  if (!omitAreas) {
+    for (const value of resolved.selectedAreaCodes) {
+      locationTerms.push(`area_name = ${quoteFilterString(value)}`);
+    }
+  }
+
+  if (!omitBeaches) {
+    for (const value of resolved.selectedBeachCodes) {
+      locationTerms.push(`beach_area_name = ${quoteFilterString(value)}`);
+    }
+  }
+
+  if (!omitCommunities) {
+    for (const value of resolved.selectedCommunityCodes) {
+      locationTerms.push(`community_name = ${quoteFilterString(value)}`);
+    }
+  }
+
+  if (locationTerms.length === 1) {
+    clauses.push(locationTerms[0]);
+  } else if (locationTerms.length > 1) {
+    clauses.push(`(${locationTerms.join(" OR ")})`);
+  }
+
+  if (!omitFeatures) {
+    for (const feature of resolved.selectedFeatures) {
+      clauses.push(buildFeatureFilter(feature));
+    }
+  }
+
+  if (resolved.minKingBeds > 0) {
+    clauses.push(`king_bed_count >= ${resolved.minKingBeds}`);
+  }
+  if (resolved.minQueenBeds > 0) {
+    clauses.push(`queen_bed_count >= ${resolved.minQueenBeds}`);
+  }
+  if (resolved.minBunkBeds > 0) {
+    clauses.push(`bunk_bed_count >= ${resolved.minBunkBeds}`);
+  }
+
+  return clauses;
 }
 
 function buildDiscoverFilterClauses(
   input?: DiscoverSelectionFilters,
+  options?: DiscoverFacetOmitOptions,
 ): string[] {
   const resolved = resolveDiscoverFilters(input);
 
-  const clauses: string[] = [];
-
-  const areaClause = buildAnyOfFilter("areaCode", resolved.selectedAreaCodes);
-  if (areaClause) {
-    clauses.push(areaClause);
-  }
-
-  const beachClause = buildAnyOfFilter(
-    "beachCode",
-    resolved.selectedBeachCodes,
-  );
-  if (beachClause) {
-    clauses.push(beachClause);
-  }
-
-  const communityClause = buildAnyOfFilter(
-    "communityCode",
-    resolved.selectedCommunityCodes,
-  );
-  if (communityClause) {
-    clauses.push(communityClause);
-  }
-
-  for (const feature of resolved.selectedFeatures) {
-    clauses.push(buildFeatureFilter(feature));
-  }
-
-  return clauses;
+  return buildDiscoverFilterClausesFromResolved(resolved, options);
 }
 
 function readCountValue(value: unknown): number {
@@ -270,6 +387,155 @@ function toFacetBucket(
   return out;
 }
 
+function toFacetGroupsFromDistribution(
+  facetDistribution: Record<string, unknown>,
+): DiscoverCorpusMetadata["facets"] {
+  const areaCounts = readFacetCounts(facetDistribution.area_name);
+  const beachCounts = readFacetCounts(facetDistribution.beach_area_name);
+  const communityCounts = readFacetCounts(facetDistribution.community_name);
+  const gulfFrontFacet = readFacetCounts(facetDistribution.gulf_front);
+  const privatePoolFacet = readFacetCounts(facetDistribution.private_pool);
+  const golfCartFacet = readFacetCounts(facetDistribution.golf_cart);
+
+  return {
+    areas: toFacetBucket(areaCounts, (code) => areaLabelFromCode(code) ?? code),
+    beaches: toFacetBucket(
+      beachCounts,
+      (code) => beachAreaLabelFromCode(code) ?? code,
+    ),
+    communities: toFacetBucket(
+      communityCounts,
+      (code) => communityLabelFromCode(code) ?? code,
+    ),
+    features: {
+      gulf_front: {
+        label: "Gulf Front",
+        count: readCountValue(gulfFrontFacet.true),
+      },
+      private_pool: {
+        label: "Private Pool",
+        count: readCountValue(privatePoolFacet.true),
+      },
+      golf_cart: {
+        label: "Golf Cart",
+        count: readCountValue(golfCartFacet.true),
+      },
+    },
+  };
+}
+
+async function getFacetDistribution(
+  index: ReturnType<typeof getDiscoverMeilisearchIndex>,
+  input: {
+    resolved: DiscoverResolvedFilters;
+    facets: string[];
+    omit?: DiscoverFacetOmitOptions;
+  },
+): Promise<Record<string, unknown>> {
+  const filter = buildDiscoverFilterClausesFromResolved(
+    input.resolved,
+    input.omit,
+  );
+  const result = await index.search<DiscoverSearchDocument>("", {
+    filter: filter.length > 0 ? filter : undefined,
+    offset: 0,
+    limit: 0,
+    facets: input.facets,
+  });
+
+  return result.facetDistribution ?? {};
+}
+
+async function getDisjunctiveFacetGroups(
+  index: ReturnType<typeof getDiscoverMeilisearchIndex>,
+  resolved: DiscoverResolvedFilters,
+): Promise<DiscoverCorpusMetadata["facets"]> {
+  const [locationDistribution, featuresDistribution] = await Promise.all([
+    getFacetDistribution(index, {
+      resolved,
+      facets: ["area_name", "beach_area_name", "community_name"],
+      omit: {
+        omitAreas: true,
+        omitBeaches: true,
+        omitCommunities: true,
+      },
+    }),
+    getFacetDistribution(index, {
+      resolved,
+      facets: ["gulf_front", "private_pool", "golf_cart"],
+      omit: { omitFeatures: true },
+    }),
+  ]);
+
+  return toFacetGroupsFromDistribution({
+    area_name: locationDistribution.area_name,
+    beach_area_name: locationDistribution.beach_area_name,
+    community_name: locationDistribution.community_name,
+    gulf_front: featuresDistribution.gulf_front,
+    private_pool: featuresDistribution.private_pool,
+    golf_cart: featuresDistribution.golf_cart,
+  });
+}
+
+export async function getDiscoverListingsSnapshot(input?: {
+  pageLimit?: number;
+  mapLimit?: number;
+  selectedAreas?: string[];
+  selectedBeaches?: string[];
+  selectedCommunities?: string[];
+  selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
+}): Promise<DiscoverListingsSnapshot> {
+  const pageLimit =
+    typeof input?.pageLimit === "number" && Number.isFinite(input.pageLimit)
+      ? Math.max(1, Math.floor(input.pageLimit))
+      : 12;
+  const mapLimit =
+    typeof input?.mapLimit === "number" && Number.isFinite(input.mapLimit)
+      ? Math.max(1, Math.floor(input.mapLimit))
+      : 96;
+  const queryLimit = Math.max(pageLimit, mapLimit);
+
+  const resolved = resolveDiscoverFilters(input);
+  const filter = buildDiscoverFilterClausesFromResolved(resolved);
+  const index = getDiscoverMeilisearchIndex();
+  const [result, disjunctiveFacets] = await Promise.all([
+    index.search<DiscoverSearchDocument>("", {
+      filter: filter.length > 0 ? filter : undefined,
+      offset: 0,
+      limit: queryLimit,
+    }),
+    getDisjunctiveFacetGroups(index, resolved),
+  ]);
+
+  const listings = result.hits
+    .map((document) => discoverSearchDocumentToListing(document))
+    .filter((listing) => listing.id.length > 0);
+
+  const mapListings: DiscoverMapListing[] = listings
+    .slice(0, mapLimit)
+    .filter(
+      (listing) =>
+        typeof listing.lat === "number" && typeof listing.lng === "number",
+    )
+    .map((listing) => ({
+      id: listing.id,
+      name: listing.name,
+      lat: listing.lat as number,
+      lng: listing.lng as number,
+      typicalAllInNightly: listing.typicalAllInNightly,
+    }));
+
+  return {
+    totalCount: Math.max(0, result.estimatedTotalHits ?? 0),
+    facets: disjunctiveFacets,
+    pageListings: listings.slice(0, pageLimit),
+    mapListings,
+  };
+}
+
 export async function getDiscoverListings(input?: {
   includeSlug?: string;
   onlySlug?: boolean;
@@ -285,12 +551,6 @@ export async function getDiscoverListings(input?: {
   selectedCommunities?: string[];
   selectedFeatures?: string[];
 }) {
-  const includeSlug = input?.includeSlug?.trim();
-
-  if (includeSlug || input?.onlySlug) {
-    return getDiscoverListingsFromPostgres(input);
-  }
-
   const limit =
     typeof input?.maxListings === "number" && Number.isFinite(input.maxListings)
       ? Math.max(1, Math.floor(input.maxListings))
@@ -334,64 +594,27 @@ export async function getDiscoverListingsCount(input?: {
 
 export async function getDiscoverCorpusMetadata(input?: {
   selectedFeatures?: string[];
+  minKingBeds?: number;
+  minQueenBeds?: number;
+  minBunkBeds?: number;
 }): Promise<DiscoverCorpusMetadata | null> {
-  const featureFilter = buildDiscoverFilterClauses({
+  const resolved = resolveDiscoverFilters({
     selectedFeatures: input?.selectedFeatures,
   });
+  const featureFilter = buildDiscoverFilterClausesFromResolved(resolved);
 
   const index = getDiscoverMeilisearchIndex();
-  const result = await index.search<DiscoverSearchDocument>("", {
-    filter: featureFilter.length > 0 ? featureFilter : undefined,
-    offset: 0,
-    limit: 0,
-    facets: [
-      "areaCode",
-      "beachCode",
-      "communityCode",
-      "gulffront",
-      "privatePool",
-      "golfCart",
-    ],
-  });
-
-  const facetDistribution = result.facetDistribution ?? {};
-
-  const areaCounts = readFacetCounts(facetDistribution.areaCode);
-  const beachCounts = readFacetCounts(facetDistribution.beachCode);
-  const communityCounts = readFacetCounts(facetDistribution.communityCode);
-  const gulfFrontFacet = readFacetCounts(facetDistribution.gulffront);
-  const privatePoolFacet = readFacetCounts(facetDistribution.privatePool);
-  const golfCartFacet = readFacetCounts(facetDistribution.golfCart);
+  const [result, disjunctiveFacets] = await Promise.all([
+    index.search<DiscoverSearchDocument>("", {
+      filter: featureFilter.length > 0 ? featureFilter : undefined,
+      offset: 0,
+      limit: 0,
+    }),
+    getDisjunctiveFacetGroups(index, resolved),
+  ]);
 
   return {
     totalCount: Math.max(0, result.estimatedTotalHits ?? 0),
-    facets: {
-      areas: toFacetBucket(
-        areaCounts,
-        (code) => areaLabelFromCode(code) ?? code,
-      ),
-      beaches: toFacetBucket(
-        beachCounts,
-        (code) => beachAreaLabelFromCode(code) ?? code,
-      ),
-      communities: toFacetBucket(
-        communityCounts,
-        (code) => communityLabelFromCode(code) ?? code,
-      ),
-      features: {
-        gulf_front: {
-          label: "Gulf Front",
-          count: readCountValue(gulfFrontFacet.true),
-        },
-        private_pool: {
-          label: "Private Pool",
-          count: readCountValue(privatePoolFacet.true),
-        },
-        golf_cart: {
-          label: "Golf Cart",
-          count: readCountValue(golfCartFacet.true),
-        },
-      },
-    },
+    facets: disjunctiveFacets,
   };
 }

@@ -89,6 +89,46 @@ const BRAND_DISPLAY_FONT_FAMILY = "'Playfair Display', serif";
 const DISCOVER_RESULT_SET_TARGET_COUNT = 96;
 const STANDALONE_CLOSE_FADE_MS = 3000;
 const SHOW_FACETS_PROBE_PANEL = false;
+const XL_BREAKPOINT_PX = 1280;
+const ORIGINAL_DESIGN_PANEL_MAX_HEIGHT_PX = 928;
+const DISCOVER_SECTION_GAP_PX = 24;
+
+function normalizeFeatureCode(
+  value: string,
+):
+  | "gulf_front"
+  | "private_pool"
+  | "golf_cart"
+  | "pet_friendly"
+  | "elevator"
+  | "accessible"
+  | null {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  if (normalized === "gulf_front" || normalized === "gulffront") {
+    return "gulf_front";
+  }
+  if (normalized === "private_pool" || normalized === "privatepool") {
+    return "private_pool";
+  }
+  if (normalized === "golf_cart" || normalized === "golfcart") {
+    return "golf_cart";
+  }
+  if (normalized === "pet_friendly" || normalized === "petfriendly") {
+    return "pet_friendly";
+  }
+  if (normalized === "elevator" || normalized === "lift") {
+    return "elevator";
+  }
+  if (normalized === "accessible" || normalized === "accessibility") {
+    return "accessible";
+  }
+
+  return null;
+}
 
 let discoverListingsSnapshotCache: DiscoverListing[] | null = null;
 
@@ -222,12 +262,12 @@ export function DiscoverPage({
     setMinBedrooms,
     minBathrooms,
     setMinBathrooms,
-    filterPool,
-    setFilterPool,
-    filterGulffront,
-    setFilterGulffront,
-    filterGolfCart,
-    setFilterGolfCart,
+    minKingBeds,
+    setMinKingBeds,
+    minQueenBeds,
+    setMinQueenBeds,
+    minBunkBeds,
+    setMinBunkBeds,
     guestCount,
     hasClientSideNarrowing,
     dateSummary,
@@ -249,6 +289,22 @@ export function DiscoverPage({
   const [selectedBeaches, setSelectedBeaches] = useState<string[]>([]);
   const [selectedCommunities, setSelectedCommunities] = useState<string[]>([]);
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
+  const normalizedFeatureSet = useMemo(
+    () =>
+      new Set(
+        selectedFeatures.map((value) =>
+          value
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, ""),
+        ),
+      ),
+    [selectedFeatures],
+  );
+
+  const filterPool = normalizedFeatureSet.has("private_pool");
+  const filterGulffront = normalizedFeatureSet.has("gulf_front");
+  const filterGolfCart = normalizedFeatureSet.has("golf_cart");
   const [hasFacetSelectionInteraction, setHasFacetSelectionInteraction] =
     useState(false);
   const [serverFilteredListingTotalCount, setServerFilteredListingTotalCount] =
@@ -263,6 +319,10 @@ export function DiscoverPage({
     error: null,
   });
   const [isFacetsProbeLoading, setIsFacetsProbeLoading] = useState(false);
+  const [isViewportTightForSidePanels, setIsViewportTightForSidePanels] =
+    useState(false);
+  const discoverShellRef = useRef<HTMLElement | null>(null);
+  const discoverSearchRegionRef = useRef<HTMLDivElement | null>(null);
   const initialDiscoverListingsSeed =
     !requestedOverlayListingId &&
     Array.isArray(discoverListingsSnapshotCache) &&
@@ -323,6 +383,33 @@ export function DiscoverPage({
     return desiredTotal > initialDiscoverListingsSeed.length;
   });
 
+  const recomputeViewportPanelConstraint = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (window.innerWidth < XL_BREAKPOINT_PX) {
+      setIsViewportTightForSidePanels(false);
+      return;
+    }
+
+    const shell = discoverShellRef.current;
+    const searchRegion = discoverSearchRegionRef.current;
+
+    if (!shell || !searchRegion) {
+      return;
+    }
+
+    const shellHeight = shell.getBoundingClientRect().height;
+    const searchHeight = searchRegion.getBoundingClientRect().height;
+    const availableRowHeight =
+      shellHeight - searchHeight - DISCOVER_SECTION_GAP_PX;
+
+    setIsViewportTightForSidePanels(
+      availableRowHeight < ORIGINAL_DESIGN_PANEL_MAX_HEIGHT_PX,
+    );
+  }, []);
+
   useEffect(() => {
     const chooseVariant = () => {
       setExpandedSingleCardVariant(window.innerWidth >= 1820 ? 4 : 3);
@@ -335,6 +422,75 @@ export function DiscoverPage({
       window.removeEventListener("resize", chooseVariant);
     };
   }, [requestedOverlayListingId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let frame: number | null = null;
+    const scheduleRecompute = () => {
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        recomputeViewportPanelConstraint();
+      });
+    };
+
+    const handleResize = () => {
+      scheduleRecompute();
+    };
+
+    const shell = discoverShellRef.current;
+    const searchRegion = discoverSearchRegionRef.current;
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            scheduleRecompute();
+          });
+
+    if (observer && shell) {
+      observer.observe(shell);
+    }
+
+    if (observer && searchRegion) {
+      observer.observe(searchRegion);
+    }
+
+    window.addEventListener("resize", handleResize);
+    window.visualViewport?.addEventListener("resize", handleResize);
+    scheduleRecompute();
+
+    return () => {
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+      observer?.disconnect();
+      window.removeEventListener("resize", handleResize);
+      window.visualViewport?.removeEventListener("resize", handleResize);
+    };
+  }, [recomputeViewportPanelConstraint]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      recomputeViewportPanelConstraint();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [showAdvanced, recomputeViewportPanelConstraint]);
+
+  const shouldConstrainSidePanels =
+    showAdvanced || isViewportTightForSidePanels;
 
   const clearPinnedListing = useCallback(() => {
     setActiveListingId(undefined);
@@ -774,6 +930,30 @@ export function DiscoverPage({
     [],
   );
 
+  const toggleFeatureValue = useCallback((value: string) => {
+    const nextCode = normalizeFeatureCode(value);
+    if (!nextCode) {
+      return;
+    }
+
+    setHasFacetSelectionInteraction(true);
+    setSelectedFeatures((current) => {
+      const normalizedCurrent = Array.from(
+        new Set(
+          current
+            .map((entry) => normalizeFeatureCode(entry))
+            .filter((entry): entry is NonNullable<typeof entry> =>
+              Boolean(entry),
+            ),
+        ),
+      );
+
+      return normalizedCurrent.includes(nextCode)
+        ? normalizedCurrent.filter((entry) => entry !== nextCode)
+        : [...normalizedCurrent, nextCode];
+    });
+  }, []);
+
   useEffect(() => {
     if (overlayOnlyMode || isOverlayRoute || !hasFacetSelectionInteraction) {
       return;
@@ -789,6 +969,9 @@ export function DiscoverPage({
       selectedBeaches,
       selectedCommunities,
       selectedFeatures,
+      minKingBeds,
+      minQueenBeds,
+      minBunkBeds,
     })
       .then((payload) => {
         if (isCancelled) {
@@ -818,6 +1001,9 @@ export function DiscoverPage({
     selectedBeaches,
     selectedCommunities,
     selectedFeatures,
+    minBunkBeds,
+    minKingBeds,
+    minQueenBeds,
   ]);
 
   const filtered = useMemo(() => {
@@ -827,6 +1013,9 @@ export function DiscoverPage({
       minSleeps,
       minBedrooms,
       minBathrooms,
+      minKingBeds,
+      minQueenBeds,
+      minBunkBeds,
       filterPool,
       filterGulffront,
       filterGolfCart,
@@ -837,6 +1026,9 @@ export function DiscoverPage({
     minSleeps,
     minBathrooms,
     minBedrooms,
+    minBunkBeds,
+    minKingBeds,
+    minQueenBeds,
     filterGulffront,
     filterGolfCart,
     filterPool,
@@ -1594,7 +1786,7 @@ export function DiscoverPage({
       <div hidden data-overlay-only-mode={overlayOnlyMode ? "true" : "false"} />
       <div hidden data-overlay-listing-id={effectiveOverlayListingId ?? ""} />
 
-      <div className="fixed top-4 left-4 z-30 md:top-6 md:left-8">
+      <div className="pointer-events-none fixed top-4 left-4 z-5 md:top-6 md:left-8">
         <div className="px-2 py-1">
           <div className="flex min-w-32 flex-col items-center">
             <span
@@ -1612,56 +1804,61 @@ export function DiscoverPage({
       </div>
 
       <section
+        ref={discoverShellRef}
         className={`relative z-10 mx-auto w-full max-w-475 space-y-6 xl:flex xl:h-[calc(100dvh-2rem)] xl:flex-col xl:gap-6 xl:space-y-0 ${overlayOnlyMode ? "mt-4 md:mt-6" : "mt-6"}`}
       >
         {!overlayOnlyMode ? (
           <>
-            <DiscoverSearchPanel
-              locationQuery={locationQuery}
-              onLocationQueryChange={setLocationQuery}
-              onClearLocationQuery={() => setLocationQuery("")}
-              earliestDate={earliestDate}
-              latestDate={latestDate}
-              nights={nights}
-              datePanelOpenRequestToken={datePanelOpenRequestToken}
-              onDateRangeChange={({ startDate, endDate }) => {
-                setEarliestDate(startDate);
-                setLatestDate(endDate);
-              }}
-              onNightsChange={setNights}
-              adults={adults}
-              onAdultsChange={setAdults}
-              children={children}
-              onChildrenChange={setChildren}
-              showAdvanced={showAdvanced}
-              onToggleAdvanced={() => setShowAdvanced((current) => !current)}
-              filtersSummary={filtersSummary}
-              onOpenFilters={() => setShowAdvanced(true)}
-              dateSummary={dateSummary}
-              onOpenDateRangePanel={() =>
-                setDatePanelOpenRequestToken((current) => (current ?? 0) + 1)
-              }
-              guestCount={guestCount}
-              sortOption={sortOption}
-              onSortChange={setSortOption}
-              cardsPerRow={cardsPerRow}
-              onCardsPerRowChange={setCardsPerRow}
-              isCardLayoutLocked={isMapExpanded}
-              resetFilters={resetFilters}
-              onCloseAdvanced={() => setShowAdvanced(false)}
-              minSleeps={minSleeps}
-              onMinSleepsChange={setMinSleeps}
-              minBedrooms={minBedrooms}
-              onMinBedroomsChange={setMinBedrooms}
-              minBathrooms={minBathrooms}
-              onMinBathroomsChange={setMinBathrooms}
-              filterGulffront={filterGulffront}
-              onToggleGulffront={() => setFilterGulffront((v) => !v)}
-              filterPool={filterPool}
-              onTogglePool={() => setFilterPool((v) => !v)}
-              filterGolfCart={filterGolfCart}
-              onToggleGolfCart={() => setFilterGolfCart((v) => !v)}
-            />
+            <div ref={discoverSearchRegionRef}>
+              <DiscoverSearchPanel
+                locationQuery={locationQuery}
+                onLocationQueryChange={setLocationQuery}
+                onClearLocationQuery={() => setLocationQuery("")}
+                earliestDate={earliestDate}
+                latestDate={latestDate}
+                nights={nights}
+                datePanelOpenRequestToken={datePanelOpenRequestToken}
+                onDateRangeChange={({ startDate, endDate }) => {
+                  setEarliestDate(startDate);
+                  setLatestDate(endDate);
+                }}
+                onNightsChange={setNights}
+                adults={adults}
+                onAdultsChange={setAdults}
+                children={children}
+                onChildrenChange={setChildren}
+                showAdvanced={showAdvanced}
+                onToggleAdvanced={() => setShowAdvanced((current) => !current)}
+                filtersSummary={filtersSummary}
+                onOpenFilters={() => setShowAdvanced(true)}
+                dateSummary={dateSummary}
+                onOpenDateRangePanel={() =>
+                  setDatePanelOpenRequestToken((current) => (current ?? 0) + 1)
+                }
+                guestCount={guestCount}
+                sortOption={sortOption}
+                onSortChange={setSortOption}
+                cardsPerRow={cardsPerRow}
+                onCardsPerRowChange={setCardsPerRow}
+                isCardLayoutLocked={isMapExpanded}
+                resetFilters={resetFilters}
+                onCloseAdvanced={() => setShowAdvanced(false)}
+                minSleeps={minSleeps}
+                onMinSleepsChange={setMinSleeps}
+                minBedrooms={minBedrooms}
+                onMinBedroomsChange={setMinBedrooms}
+                minBathrooms={minBathrooms}
+                onMinBathroomsChange={setMinBathrooms}
+                minKingBeds={minKingBeds}
+                onMinKingBedsChange={setMinKingBeds}
+                minQueenBeds={minQueenBeds}
+                onMinQueenBedsChange={setMinQueenBeds}
+                minBunkBeds={minBunkBeds}
+                onMinBunkBedsChange={setMinBunkBeds}
+                selectedFeatures={selectedFeatures}
+                onToggleFeature={toggleFeatureValue}
+              />
+            </div>
 
             {SHOW_FACETS_PROBE_PANEL ? (
               <details className="rounded-xl border border-cyan-200/70 bg-cyan-50/80 px-3 py-2 text-xs text-slate-700 shadow-sm">
@@ -1685,52 +1882,58 @@ export function DiscoverPage({
             ) : null}
 
             <div
-              className={`grid gap-6 xl:min-h-0 xl:flex-1 ${
+              className={`grid gap-6 xl:min-h-0 xl:flex-1 ${shouldConstrainSidePanels ? "xl:overflow-hidden" : ""} ${
                 isMapExpanded
                   ? "xl:grid-cols-[240px_minmax(0,0.9fr)_minmax(0,2.1fr)] 2xl:grid-cols-[220px_minmax(0,0.85fr)_minmax(0,2.25fr)]"
                   : "xl:grid-cols-[240px_minmax(0,1.45fr)_400px] 2xl:grid-cols-[220px_minmax(0,1.85fr)_340px]"
               }`}
             >
-              <DiscoverFacetSidebar
-                listingCount={propertiesListingCount}
-                favoriteCount={favoriteListingIds.length}
-                areaCounts={effectiveAreaCounts}
-                beachCounts={effectiveBeachCounts}
-                communityCounts={effectiveCommunityCounts}
-                featureCounts={effectiveFeatureCounts}
-                selectedAreas={selectedAreas}
-                selectedBeaches={selectedBeaches}
-                selectedCommunities={selectedCommunities}
-                selectedFeatures={selectedFeatures}
-                onToggleArea={(value) =>
-                  toggleFacetValue(value, setSelectedAreas)
-                }
-                onToggleBeach={(value) =>
-                  toggleFacetValue(value, setSelectedBeaches)
-                }
-                onToggleCommunity={(value) =>
-                  toggleFacetValue(value, setSelectedCommunities)
-                }
-                onToggleFeature={(value) =>
-                  toggleFacetValue(value, setSelectedFeatures)
-                }
-                onClearAreas={() => {
-                  setHasFacetSelectionInteraction(true);
-                  setSelectedAreas([]);
-                }}
-                onClearBeaches={() => {
-                  setHasFacetSelectionInteraction(true);
-                  setSelectedBeaches([]);
-                }}
-                onClearCommunities={() => {
-                  setHasFacetSelectionInteraction(true);
-                  setSelectedCommunities([]);
-                }}
-                onClearFeatures={() => {
-                  setHasFacetSelectionInteraction(true);
-                  setSelectedFeatures([]);
-                }}
-              />
+              <div className="h-full min-h-0">
+                <DiscoverFacetSidebar
+                  listingCount={propertiesListingCount}
+                  favoriteCount={favoriteListingIds.length}
+                  areaCounts={effectiveAreaCounts}
+                  beachCounts={effectiveBeachCounts}
+                  communityCounts={effectiveCommunityCounts}
+                  featureCounts={effectiveFeatureCounts}
+                  selectedAreas={selectedAreas}
+                  selectedBeaches={selectedBeaches}
+                  selectedCommunities={selectedCommunities}
+                  selectedFeatures={selectedFeatures}
+                  onToggleArea={(value) =>
+                    toggleFacetValue(value, setSelectedAreas)
+                  }
+                  onToggleBeach={(value) =>
+                    toggleFacetValue(value, setSelectedBeaches)
+                  }
+                  onToggleCommunity={(value) =>
+                    toggleFacetValue(value, setSelectedCommunities)
+                  }
+                  onToggleFeature={toggleFeatureValue}
+                  onClearAreas={() => {
+                    setHasFacetSelectionInteraction(true);
+                    setSelectedAreas([]);
+                  }}
+                  onClearBeaches={() => {
+                    setHasFacetSelectionInteraction(true);
+                    setSelectedBeaches([]);
+                  }}
+                  onClearCommunities={() => {
+                    setHasFacetSelectionInteraction(true);
+                    setSelectedCommunities([]);
+                  }}
+                  onClearFeatures={() => {
+                    setHasFacetSelectionInteraction(true);
+                    setSelectedFeatures([]);
+                  }}
+                  containerClassName={
+                    shouldConstrainSidePanels
+                      ? "xl:flex xl:h-full xl:min-h-0 xl:max-h-232 xl:flex-col xl:overflow-hidden"
+                      : undefined
+                  }
+                  scrollSectionsOnly={shouldConstrainSidePanels}
+                />
+              </div>
 
               <DiscoverListingsPanel
                 listings={displayListings}
@@ -1767,6 +1970,16 @@ export function DiscoverPage({
                   isExpanded={isMapExpanded}
                   onToggleExpanded={() =>
                     setIsMapExpanded((current) => !current)
+                  }
+                  panelClassName={
+                    shouldConstrainSidePanels
+                      ? "xl:flex xl:h-full xl:min-h-0 xl:max-h-232 xl:flex-col xl:overflow-hidden"
+                      : undefined
+                  }
+                  mapViewportClassName={
+                    shouldConstrainSidePanels
+                      ? "relative mt-3 h-88 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-104 xl:h-auto xl:min-h-0 xl:flex-1"
+                      : undefined
                   }
                 />
               </div>
