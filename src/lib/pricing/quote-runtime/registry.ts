@@ -1,5 +1,5 @@
 import { execute30ABeachSingleQuote } from "./adapters/30abeach";
-import { execute30beachgirlsSingleQuote } from "./adapters/30beachgirls";
+import { execute30ABeachGirlsSingleQuote } from "./adapters/30abeachgirls";
 import { executeThirtyACottagesSingleQuote } from "./adapters/30acottages";
 import { execute30AEscapesSingleQuote } from "./adapters/30aescapes";
 import { execute30AFivestarSingleQuote } from "./adapters/30afivestar";
@@ -41,7 +41,7 @@ export type QuoteRuntimeExecutor = (
 
 const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   "30abeach": execute30ABeachSingleQuote,
-  "30beachgirls": execute30beachgirlsSingleQuote,
+  "30abeachgirls": execute30ABeachGirlsSingleQuote,
   "30afivestar": execute30AFivestarSingleQuote,
   alysbeach30a: executeAlysBeach30ASingleQuote,
   "30acottages": executeThirtyACottagesSingleQuote,

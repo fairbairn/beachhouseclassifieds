@@ -5,7 +5,13 @@
     "unit_id": "344",
     "detail_url": "https://www.oceanreefresorts.com/vacation-rentals/who-sells-sea-shells"
   },
-  "fetched_at": "2026-04-21T01:48:09.455Z",
+  "listing_flags": {
+    "non_bookable_online": true,
+    "availability_validation_exempt": true,
+    "availability_validation_exempt_reason_code": "non_bookable_online",
+    "availability_validation_exempt_reason": "Listing appears online for marketing but is fully blocked for direct booking across the captured horizon."
+  },
+  "fetched_at": "2026-04-22T02:59:28.409Z",
   "title": "Who Sells Sea Shells on 30A's Santa Rosa Beach | Ocean Reef Resorts",
   "h1": "Who Sells Sea Shells",
   "canonical_url": "https://www.oceanreefresorts.com/vacation-rentals/who-sells-sea-shells",
@@ -48,7 +54,7 @@
     "longitude": -86.221546
   },
   "media_gallery": {
-    "image_count": 23,
+    "image_count": 24,
     "image_urls": [
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/22f87d84-1458-4fa0-84a7-5ab83cca9af3",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/efe2db61-5e2c-4d16-b722-904d6ecb1e55",
@@ -64,6 +70,7 @@
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/682670de-8a8a-449d-bfe3-7f9e42350b31",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/74c67a75-d20a-439e-99a7-77a8fd821710",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/14eae4d1-f9b3-4916-b96f-f3a888c85b25",
+      "https://track-files.s3.amazonaws.com/oceanreefresorts/image/b545fa32-f619-4149-9de3-d4cea603bdd8",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/16f5bb78-44ad-4fd0-ac54-9e246fbd3264",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/81de5a36-51a5-4ce9-b14b-47670726313d",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/db58fd4a-a5b5-4d0a-87ef-156846cb78aa",
@@ -101,8 +108,15 @@
   "normalized_availability": {
     "source": "pm_oceanreef30a",
     "external_listing_id": "who-sells-sea-shells",
-    "captured_at": "2026-04-21T01:48:09.456Z",
-    "window_start": "2026-04-21",
+    "captured_at": "2026-04-22T02:59:28.409Z",
+    "validation_exempt": true,
+    "validation_exempt_reason_code": "non_bookable_online",
+    "validation_exempt_reason": "Listing appears online for marketing but is fully blocked for direct booking across the captured horizon.",
+    "validation_exempt_evidence": [
+      "normalized_availability.day_codes is all 'U' for the captured horizon",
+      "listing is in known oceanreef non-bookable online set"
+    ],
+    "window_start": "2026-04-22",
     "window_end": "2027-03-31",
     "code_legend": {
       "A": "available",
@@ -111,18 +125,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
+    "day_codes": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU",
     "days": [
-      {
-        "date": "2026-04-21",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked"
-      },
       {
         "date": "2026-04-22",
         "day_code": "N",
@@ -3566,34 +3570,22 @@
     ],
     "counts": {
       "available": 0,
-      "unavailable": 345,
+      "unavailable": 344,
       "checkin_only": 0,
       "checkout_only": 0,
       "other": 0,
       "booking_available": 0,
-      "booking_unavailable": 345,
+      "booking_unavailable": 344,
       "booking_unknown": 0
-    },
-    "validation_exempt": true,
-    "validation_exempt_reason_code": "calendar_unavailable",
-    "validation_exempt_reason": "Listing calendar is uniformly unavailable across full captured window (345 days)",
-    "validation_exempt_evidence": [
-      "day_codes_all_u",
-      "window_length_345_days"
-    ]
+    }
   },
   "availability_raw": {
     "expected_listing_count": 0,
-    "observed_day_cell_count": 345,
+    "observed_day_cell_count": 344,
     "observed_status_classes": [
       "booked",
       "booked today"
     ]
   },
-  "html_path": "src/lib/data/external-sources/oceanreef30a/details/html/who-sells-sea-shells.html",
-  "listing_flags": {
-    "availability_validation_exempt": true,
-    "availability_validation_exempt_reason_code": "calendar_unavailable",
-    "availability_validation_exempt_reason": "Listing calendar is uniformly unavailable across full captured window (345 days)"
-  }
+  "html_path": "src/lib/data/external-sources/oceanreef30a/details/html/who-sells-sea-shells.html"
 }

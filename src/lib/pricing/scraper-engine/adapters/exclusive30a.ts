@@ -964,23 +964,25 @@ async function fetchDetail(
       }
     }
 
-    const schemaImages = vacationRentalSchema?.image;
-    if (Array.isArray(schemaImages)) {
-      for (const entry of schemaImages) {
-        if (typeof entry === "string") {
-          pushImage(entry);
+    if (imageUrls.length === 0) {
+      const schemaImages = vacationRentalSchema?.image;
+      if (Array.isArray(schemaImages)) {
+        for (const entry of schemaImages) {
+          if (typeof entry === "string") {
+            pushImage(entry);
+          }
         }
+      } else if (typeof schemaImages === "string") {
+        pushImage(schemaImages);
       }
-    } else if (typeof schemaImages === "string") {
-      pushImage(schemaImages);
-    }
 
-    const ogImage = extractFirst(
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-      html,
-    );
-    if (ogImage) {
-      pushImage(ogImage);
+      const ogImage = extractFirst(
+        /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+        html,
+      );
+      if (ogImage) {
+        pushImage(ogImage);
+      }
     }
 
     const schemaAddress =

@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-04-21T03:13:10.764Z
+Audit date: 2026-04-22T00:32:13.144Z
 
 Data source:
 
@@ -77,14 +77,14 @@ Preferred (non-blocking):
 | exclusive30a            |   104 |  104 |     104 |          104 |          104 |        104 |       104 |    104 |     104 |   5673 |                                                      54.55 |             ✅ |     ✅ |
 | fivestar30a             |    63 |   63 |      63 |           63 |           63 |         63 |        63 |     63 |      63 |   3280 |                                                      52.06 |             ✅ |     ✅ |
 | funvacay30a             |    46 |   46 |      46 |           46 |           46 |         46 |        46 |     46 |      46 |   2497 |                                                      54.28 |             ✅ |     ✅ |
-| grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |      35 |   2151 |                                                      61.46 |             ✅ |     ✅ |
+| grayt30a                |    35 |   35 |      35 |           35 |           35 |         35 |        35 |     35 |      35 |   2096 |                                                      59.89 |             ✅ |     ✅ |
 | homeownerscollection30a |   208 |  208 |     208 |          208 |          208 |        208 |       208 |    208 |     208 |  10774 |                                                      51.80 |             ✅ |     ✅ |
-| keyco30a                |   357 |  357 |     357 |          357 |          357 |        357 |       357 |    357 |     357 |  23651 |                                                      66.25 |             ✅ |     ✅ |
+| keyco30a                |   357 |  357 |     357 |          357 |          357 |        357 |       357 |    357 |     357 |  23650 |                                                      66.25 |             ✅ |     ✅ |
 | localvr30a              |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |      37 |   1542 |                                                      41.68 |             ✅ |     ✅ |
 | luxe30a                 |    12 |   12 |      12 |           12 |           12 |         12 |        12 |     12 |      12 |    786 |                                                      65.50 |             ✅ |     ✅ |
 | oceanreef30a            |   112 |  112 |     112 |          112 |          112 |        112 |       112 |    112 |     112 |   3161 |                                                      28.22 |             ✅ |     ✅ |
 | oversee30a              |   107 |  107 |     107 |          107 |          107 |        107 |       107 |    107 |     107 |   6593 |                                                      61.62 |             ✅ |     ✅ |
-| panhandle30a            |    53 |   53 |      53 |           53 |           53 |         53 |        53 |     53 |      53 |   2677 |                                                      50.51 |             ✅ |     ✅ |
+| panhandle30a            |    56 |   56 |      56 |           56 |           56 |         56 |        56 |     56 |      56 |   2744 |                                                      49.00 |             ✅ |     ✅ |
 | paradise30a             |    89 |   89 |      89 |           89 |           89 |         89 |        89 |     89 |      89 |   4943 |                                                      55.54 |             ✅ |     ✅ |
 | prominence30a           |    58 |   58 |      58 |           58 |           58 |         58 |        58 |     58 |      58 |   3357 |                                                      57.88 |             ✅ |     ✅ |
 | realjoy30a              |   137 |  137 |     137 |          137 |          137 |        137 |       137 |    137 |     137 |   7882 |                                                      57.53 |             ✅ |     ✅ |
@@ -95,14 +95,14 @@ Preferred (non-blocking):
 | scenicstays30a          |    45 |   45 |      45 |           45 |           45 |         45 |        45 |     45 |      45 |   2522 |                                                      56.04 |             ✅ |     ✅ |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |      37 |   2264 |                                                      61.19 |             ✅ |     ✅ |
 | stayon30a               |    83 |   83 |      83 |           83 |           83 |         83 |        83 |     83 |      83 |   4261 |                                                      51.34 |             ✅ |     ✅ |
-| **TOTAL**               |  3816 | 3816 |    3816 |         3816 |         3816 |       3816 |      3816 |   3816 |    3816 | 197302 |                                                      51.70 |             — | 35/35 |
+| **TOTAL**               |  3819 | 3819 |    3819 |         3819 |         3819 |       3819 |      3819 |   3819 |    3819 | 197313 |                                                      51.67 |             — | 35/35 |
 ## Current Snapshot Summary
 
 - 35 adapters audited.
 - All 35 adapters are at full required-core parity for the current captured files.
 - Combined-ready adapters (Ready = ✅): 35 / 35.
 
-- Pricing-records coverage signal: 3816 / 3816 files currently have per-listing pricing JSON records.
+- Pricing-records coverage signal: 3819 / 3819 files currently have per-listing pricing JSON records.
 
 - Quote API capability signal: 35 / 35 adapters expose pre-reservation quote APIs.
 - Geo location minimum (required): 35 / 35 adapters currently have 100% numeric lat/lng coverage.
@@ -112,15 +112,15 @@ Preferred (non-blocking):
 
 Snapshot from canonical listing rows (`status = active`).
 
-- Total canonical listings (active): 3841
-- Visible listings: 3183 (82.9%)
-- Invisible listings: 658 (17.1%)
+- Total canonical listings (active): 3844
+- Visible listings: 3185 (82.9%)
+- Invisible listings: 659 (17.1%)
 
 ### Invisible Reason Breakdown
 
 | Reason | Count | Share of Invisible |
 | :----- | ----: | -----------------: |
-| Missing Area Name | 586 | 89.1% |
+| Missing Area Name | 587 | 89.1% |
 | Missing Active Source Link | 66 | 10.0% |
 | Missing Images | 6 | 0.9% |
 
@@ -131,9 +131,9 @@ This ledger lists every adapter in descending order by Files count. % shows each
 | Order | Adapter                 | Files |      % | Quote Runtime | State    |
 | ----: | ----------------------- | ----: | -----: | :-----------: | -------- |
 |     1 | 360blue                 |   613 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">16.1%</span> |             ✅ | complete |
-|     2 | keyco30a                |   357 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">9.4%</span> |             ✅ | complete |
+|     2 | keyco30a                |   357 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">9.3%</span> |             ✅ | complete |
 |     3 | rosemary30a             |   221 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">5.8%</span> |             ✅ | complete |
-|     4 | homeownerscollection30a |   208 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">5.5%</span> |             ✅ | complete |
+|     4 | homeownerscollection30a |   208 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">5.4%</span> |             ✅ | complete |
 |     5 | 30aescapes              |   168 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">4.4%</span> |             ✅ | complete |
 |     6 | royaldestinations       |   142 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.7%</span> |             ✅ | complete |
 |     7 | realjoy30a              |   137 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.6%</span> |             ✅ | complete |
@@ -144,16 +144,16 @@ This ledger lists every adapter in descending order by Files count. % shows each
 |    12 | oceanreef30a            |   112 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.9%</span> |             ✅ | complete |
 |    13 | oversee30a              |   107 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.8%</span> |             ✅ | complete |
 |    14 | sandpiper30a            |   106 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.8%</span> |             ✅ | complete |
-|    15 | 30aluxury               |   105 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.8%</span> |             ✅ | complete |
+|    15 | 30aluxury               |   105 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.7%</span> |             ✅ | complete |
 |    16 | exclusive30a            |   104 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.7%</span> |             ✅ | complete |
 |    17 | dunevr30a               |    90 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.4%</span> |             ✅ | complete |
 |    18 | paradise30a             |    89 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.3%</span> |             ✅ | complete |
 |    19 | stayon30a               |    83 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.2%</span> |             ✅ | complete |
 |    20 | sandersbeach30a         |    74 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.9%</span> |             ✅ | complete |
 |    21 | alysbeach30a            |    71 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.9%</span> |             ✅ | complete |
-|    22 | fivestar30a             |    63 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.7%</span> |             ✅ | complete |
+|    22 | fivestar30a             |    63 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.6%</span> |             ✅ | complete |
 |    23 | prominence30a           |    58 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.5%</span> |             ✅ | complete |
-|    24 | panhandle30a            |    53 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.4%</span> |             ✅ | complete |
+|    24 | panhandle30a            |    56 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.5%</span> |             ✅ | complete |
 |    25 | funvacay30a             |    46 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.2%</span> |             ✅ | complete |
 |    26 | scenicstays30a          |    45 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.2%</span> |             ✅ | complete |
 |    27 | 30acottages             |    44 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.2%</span> |             ✅ | complete |
@@ -245,6 +245,7 @@ Expected impact:
 
 - As stricter checks roll out, more adapters will likely show warnings initially.
 - That is intended and should be treated as a quality-discovery phase, not validator noise.
+
 
 
 

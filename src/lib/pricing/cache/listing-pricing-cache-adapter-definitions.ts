@@ -113,8 +113,8 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 650,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
-  "30beachgirls": {
-    adapterKey: "30beachgirls",
+  "30abeachgirls": {
+    adapterKey: "30abeachgirls",
     defaultWeeks: 24,
     defaultAssumptions: {
       avgFeePct: 0.03,

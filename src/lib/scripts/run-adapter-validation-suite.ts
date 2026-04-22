@@ -1,6 +1,7 @@
 import { getKnownAdapterKeys } from "@/lib/pricing/scraper-engine/adapter-registry";
 import { runValidateAdapterQuoteSidecarsCli } from "@/lib/pricing/validation/validate-adapter-quote-sidecars";
 import { runValidateAvailabilityStatusCodesCli } from "@/lib/pricing/validation/validate-availability-status-codes";
+import { runValidateMediaGalleryCountCoverageCli } from "@/lib/pricing/validation/validate-media-gallery-count-coverage";
 import { runValidatePricingCacheAlignmentCli } from "@/lib/pricing/validation/validate-pricing-cache-alignment";
 import { runValidateRoomsGuidanceCoverageCli } from "@/lib/pricing/validation/validate-rooms-guidance-coverage";
 import { runValidateScrapeFilenameAlignmentCli } from "@/lib/pricing/validation/validate-scrape-filename-alignment";
@@ -8,10 +9,6 @@ import { runValidateScrapeFilenameAlignmentCli } from "@/lib/pricing/validation/
 type ParsedArgs = {
   adapterKey: string | null;
   showHelp: boolean;
-};
-
-const ADAPTER_KEY_ALIASES: Record<string, string> = {
-  "30abeachgirls": "30beachgirls",
 };
 
 function printUsage(): void {
@@ -23,15 +20,13 @@ function printUsage(): void {
       "",
       "Runs validators in order:",
       "  1) scrape filenames",
-      "  2) rooms guidance",
-      "  3) availability status",
-      "  4) quotes",
-      "  5) pricing cache",
+      "  2) media gallery count (warns when < 10 images)",
+      "  3) rooms guidance",
+      "  4) availability status",
+      "  5) quotes",
+      "  6) pricing cache",
       "",
       `Known adapters: ${known}`,
-      "",
-      "Aliases:",
-      "  30abeachgirls -> 30beachgirls",
     ].join("\n"),
   );
 }
@@ -72,8 +67,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function resolveAdapterKey(input: string): string {
-  const normalized = input.trim().toLowerCase();
-  return ADAPTER_KEY_ALIASES[normalized] ?? normalized;
+  return input.trim().toLowerCase();
 }
 
 async function runStep(input: {
@@ -138,6 +132,10 @@ async function main(argv: string[]): Promise<number> {
     {
       title: "scrape-validator",
       run: runValidateScrapeFilenameAlignmentCli,
+    },
+    {
+      title: "media-gallery-count-validator",
+      run: runValidateMediaGalleryCountCoverageCli,
     },
     {
       title: "rooms-validator",

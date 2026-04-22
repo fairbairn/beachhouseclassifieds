@@ -89,6 +89,12 @@ function normalizeAvailabilityDays(
 }
 
 type LocalVrDetailRecord = DetailRecordBase & {
+  listing_flags?: {
+    non_bookable_online: boolean;
+    availability_validation_exempt: boolean;
+    availability_validation_exempt_reason_code: string | null;
+    availability_validation_exempt_reason: string | null;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -174,6 +180,10 @@ type LocalVrDetailRecord = DetailRecordBase & {
       booking_unavailable: number;
       booking_unknown: number;
     };
+    validation_exempt?: boolean;
+    validation_exempt_reason_code?: string | null;
+    validation_exempt_reason?: string | null;
+    validation_exempt_evidence?: string[];
   };
   availability_raw: {
     expected_listing_count: number;
@@ -205,6 +215,10 @@ const OUTPUT_ROOT = resolve(
   "localvr30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+
+const AVAILABILITY_VALIDATION_EXEMPT_EXTERNAL_LISTING_IDS = new Set<string>([
+  "blue-bird-beach-gulf-view-pool-6779f90068c10f0010a4aba2",
+]);
 
 function normalizeForMatch(value: string): string {
   return value
@@ -411,6 +425,50 @@ function extractPropertySlugAndId(detailUrl: string): {
     externalListingId: slug || "unknown",
     listingId: listingId || slug || "unknown",
   };
+}
+
+type LocalVrPictureEntry = {
+  original: string;
+  caption: string;
+};
+
+function decodeEscapedJsonString(value: string): string {
+  return value
+    .replace(/\\u0026/gi, "&")
+    .replace(/\\\//g, "/")
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, " ")
+    .replace(/\\r/g, " ")
+    .replace(/\\t/g, " ")
+    .trim();
+}
+
+function extractLocalVrPictureEntries(html: string): LocalVrPictureEntry[] {
+  const entries: LocalVrPictureEntry[] = [];
+  const pattern =
+    /"original":"([^"]+)"[\s\S]*?"caption":"([^"]*)"/gi;
+
+  for (const match of html.matchAll(pattern)) {
+    const original = decodeEscapedJsonString(match[1] ?? "");
+    const caption = decodeEscapedJsonString(match[2] ?? "");
+    if (!original) {
+      continue;
+    }
+    entries.push({ original, caption });
+  }
+
+  return entries;
+}
+
+function isSharedLocalVrImageCaption(caption: string): boolean {
+  const normalized = normalizeForMatch(caption);
+  return (
+    normalized.includes("community") ||
+    normalized.includes("shared") ||
+    normalized.includes("playground") ||
+    normalized.includes("pickleball") ||
+    normalized.includes("pool")
+  );
 }
 
 function mapAvailabilityStatus(
@@ -1371,22 +1429,24 @@ async function fetchDetail(
       imageUrls.push(normalized);
     };
 
-    const schemaImages = hotelSchema?.image;
-    if (Array.isArray(schemaImages)) {
-      for (const entry of schemaImages) {
-        if (typeof entry === "string") {
-          pushImage(entry);
-        }
+    const pictureEntries = extractLocalVrPictureEntries(htmlForParsing);
+    for (const picture of pictureEntries) {
+      if (isSharedLocalVrImageCaption(picture.caption)) {
+        continue;
       }
-    } else if (typeof schemaImages === "string") {
-      pushImage(schemaImages);
+      pushImage(picture.original);
     }
 
-    const largeImageHrefPattern =
-      /href=["'](https?:\/\/assets\.guesty\.com\/image\/upload\/[^"']+)["']/gi;
-    for (const match of htmlForParsing.matchAll(largeImageHrefPattern)) {
-      if (match[1]) {
-        pushImage(match[1]);
+    if (imageUrls.length === 0) {
+      const schemaImages = hotelSchema?.image;
+      if (Array.isArray(schemaImages)) {
+        for (const entry of schemaImages) {
+          if (typeof entry === "string") {
+            pushImage(entry);
+          }
+        }
+      } else if (typeof schemaImages === "string") {
+        pushImage(schemaImages);
       }
     }
 
@@ -1453,12 +1513,33 @@ async function fetchDetail(
       unavailable -
       checkinOnly -
       checkoutOnly;
+    const availabilityValidationExempt =
+      AVAILABILITY_VALIDATION_EXEMPT_EXTERNAL_LISTING_IDS.has(
+        externalListingId,
+      );
+    const availabilityValidationExemptReasonCode = availabilityValidationExempt
+      ? "non_bookable_online"
+      : null;
+    const availabilityValidationExemptReason = availabilityValidationExempt
+      ? "Listing remains unavailable for all observed days on source calendar."
+      : null;
+    const availabilityValidationExemptEvidence = availabilityValidationExempt
+      ? [normalizedDetailUrl]
+      : [];
 
     return {
       external_listing_id: externalListingId,
       detail_url: normalizedDetailUrl,
       fetched_at: new Date().toISOString(),
       html_path: htmlPath,
+      listing_flags: {
+        non_bookable_online: availabilityValidationExempt,
+        availability_validation_exempt: availabilityValidationExempt,
+        availability_validation_exempt_reason_code:
+          availabilityValidationExemptReasonCode,
+        availability_validation_exempt_reason:
+          availabilityValidationExemptReason,
+      },
       title,
       h1,
       canonical_url: canonicalUrl,
@@ -1545,6 +1626,10 @@ async function fetchDetail(
             (day) => day.booking_day_state === "unknown",
           ).length,
         },
+        validation_exempt: availabilityValidationExempt,
+        validation_exempt_reason_code: availabilityValidationExemptReasonCode,
+        validation_exempt_reason: availabilityValidationExemptReason,
+        validation_exempt_evidence: availabilityValidationExemptEvidence,
       },
       availability_raw: {
         expected_listing_count: EXPECTED_LISTING_COUNT,

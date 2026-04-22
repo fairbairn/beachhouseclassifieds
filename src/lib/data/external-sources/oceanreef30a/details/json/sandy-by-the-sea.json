@@ -5,7 +5,7 @@
     "unit_id": "209",
     "detail_url": "https://www.oceanreefresorts.com/vacation-rentals/sandy-by-the-sea"
   },
-  "fetched_at": "2026-04-19T16:27:55.104Z",
+  "fetched_at": "2026-04-22T02:54:28.807Z",
   "title": "Sandy By The Sea on 30A's Blue Mountain Beach | Ocean Reef Resorts",
   "h1": "Sandy By The Sea",
   "canonical_url": "https://www.oceanreefresorts.com/vacation-rentals/sandy-by-the-sea",
@@ -54,8 +54,9 @@
     "longitude": -86.201643
   },
   "media_gallery": {
-    "image_count": 22,
+    "image_count": 24,
     "image_urls": [
+      "https://track-files.s3.amazonaws.com/oceanreefresorts/image/f9020e34-5706-4bf7-aa32-1305ab5418ef",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/d0808765-66f5-4164-b9c8-a3d00a4f2e5c",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/7cdcacd1-58e5-4a1c-b4c0-287222dd7803",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/054a3d6c-54ec-49af-9b1c-48b37292e540",
@@ -65,6 +66,7 @@
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/b3ddeed4-46c3-44fc-bfbd-38355a79e8e9",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/dabeb312-b4cf-4f7e-87d3-78adb9d85f5f",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/bc0b6631-7d79-4a33-9a69-a3e4c774596e",
+      "https://track-files.s3.amazonaws.com/oceanreefresorts/image/69e05286-9ea3-41cf-bb0d-d7d5d607622f",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/d80d2706-c82a-4aac-8232-ab2d4ab2b848",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/c72a5846-c11a-4bb7-9d42-17c36f224737",
       "https://track-pm.s3.amazonaws.com/oceanreefresorts/image/c6101d88-c16b-4599-b578-2f7b3a1252ea",
@@ -106,8 +108,8 @@
   "normalized_availability": {
     "source": "pm_oceanreef30a",
     "external_listing_id": "sandy-by-the-sea",
-    "captured_at": "2026-04-19T16:27:55.104Z",
-    "window_start": "2026-04-19",
+    "captured_at": "2026-04-22T02:54:28.807Z",
+    "window_start": "2026-04-22",
     "window_end": "2027-03-31",
     "code_legend": {
       "A": "available",
@@ -116,38 +118,8 @@
       "O": "checkout_only",
       "X": "other"
     },
-    "day_codes": "UUIAAAOUUUUUUUUUUUUIOUUUUUUIAAAAOUUUIOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAOUUUUUUIAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "day_codes": "AAAOUUUUUUUUUUUUIOUUUUUUIAAAAOUUUIOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAOUUUUUUIAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOUUUUUUUUUUUUUUUUUUUUUUUUUUUIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "days": [
-      {
-        "date": "2026-04-19",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked"
-      },
-      {
-        "date": "2026-04-20",
-        "day_code": "N",
-        "status_code": "U",
-        "changeover_code": "X",
-        "is_available": false,
-        "is_available_for_checkin": false,
-        "is_available_for_checkout": false,
-        "booking_day_state": "blocked"
-      },
-      {
-        "date": "2026-04-21",
-        "day_code": "N",
-        "status_code": "I",
-        "changeover_code": "I",
-        "is_available": false,
-        "is_available_for_checkin": true,
-        "is_available_for_checkout": false,
-        "booking_day_state": "unknown"
-      },
       {
         "date": "2026-04-22",
         "day_code": "Y",
@@ -3591,22 +3563,22 @@
     ],
     "counts": {
       "available": 230,
-      "unavailable": 100,
-      "checkin_only": 9,
+      "unavailable": 98,
+      "checkin_only": 8,
       "checkout_only": 8,
       "other": 0,
       "booking_available": 230,
-      "booking_unavailable": 100,
-      "booking_unknown": 17
+      "booking_unavailable": 98,
+      "booking_unknown": 16
     }
   },
   "availability_raw": {
     "expected_listing_count": 0,
-    "observed_day_cell_count": 347,
+    "observed_day_cell_count": 344,
     "observed_status_classes": [
       "available",
+      "available today",
       "booked",
-      "booked today",
       "check-in",
       "check-out"
     ]

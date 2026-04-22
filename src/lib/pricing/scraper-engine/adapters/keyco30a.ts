@@ -1246,6 +1246,77 @@ function dedupeByImageBasename(values: string[]): string[] {
   return out;
 }
 
+function selectDominantImageFamily(values: string[]): string[] {
+  if (values.length < 20) {
+    return values;
+  }
+
+  type FamilyCount = {
+    key: string;
+    count: number;
+  };
+
+  const familyCounts = new Map<string, number>();
+  const valueFamilies = new Map<string, string>();
+
+  const deriveFamilyKey = (value: string): string => {
+    let basename = "";
+    try {
+      const parsed = new URL(value);
+      basename = (parsed.pathname.split("/").pop() ?? "").toLowerCase();
+    } catch {
+      basename =
+        (value.split("/").pop() ?? "").split(/[?#]/)[0]?.toLowerCase() ?? "";
+    }
+
+    const stem = basename.replace(/\.[a-z0-9]{2,5}$/i, "");
+    if (!stem) {
+      return basename;
+    }
+
+    const indexedHashPattern = stem.match(/^(.*?)-\d{1,3}(?:-[a-f0-9]{8,})?$/i);
+    if (indexedHashPattern?.[1]) {
+      return indexedHashPattern[1];
+    }
+
+    const underscoredIndexPattern = stem.match(/^(.*)_\d{1,3}$/i);
+    if (underscoredIndexPattern?.[1]) {
+      return underscoredIndexPattern[1];
+    }
+
+    return stem;
+  };
+
+  for (const value of values) {
+    const key = deriveFamilyKey(value);
+    valueFamilies.set(value, key);
+    familyCounts.set(key, (familyCounts.get(key) ?? 0) + 1);
+  }
+
+  const rankedFamilies: FamilyCount[] = [...familyCounts.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((left, right) => right.count - left.count);
+
+  const dominant = rankedFamilies[0];
+  if (!dominant) {
+    return values;
+  }
+
+  const dominanceRatio = dominant.count / values.length;
+  if (dominant.count < 12 || dominanceRatio < 0.65) {
+    return values;
+  }
+
+  const filtered = values.filter(
+    (value) => valueFamilies.get(value) === dominant.key,
+  );
+  if (filtered.length < 10) {
+    return values;
+  }
+
+  return filtered;
+}
+
 function parseAvailabilityCalendarFromHtml(
   html: string,
 ): KeycoAvailabilityCalendarDay[] {
@@ -1685,21 +1756,6 @@ async function discoverListings(
     }));
 }
 
-function collectServiceImageUrls(html: string): string[] {
-  const matches = Array.from(
-    html.matchAll(
-      /https:\/\/service-images\.key\.co\/service-images\/[^"'\s)]+/g,
-    ),
-  )
-    .map((match) => decodeHtmlEntityString(match[0]))
-    .map((value) => value.replace(/\\+$/, ""))
-    .filter((value) =>
-      value.startsWith("https://service-images.key.co/service-images/"),
-    );
-
-  return dedupe(matches);
-}
-
 function extractLatLngFromHtml(html: string): {
   latitude: number | null;
   longitude: number | null;
@@ -1797,6 +1853,21 @@ async function fetchDetail(
 
       const existingRaw = await readFile(existingDetailJsonPath, "utf8");
       const existing = JSON.parse(existingRaw) as KeycoDetailRecord;
+      const existingGalleryUrls = Array.isArray(
+        existing.media_gallery?.image_urls,
+      )
+        ? existing.media_gallery.image_urls
+            .map((value) => (typeof value === "string" ? value.trim() : ""))
+            .filter((value) =>
+              value.startsWith("https://service-images.key.co/service-images/"),
+            )
+        : [];
+      const mediaGalleryImageUrls =
+        existingGalleryUrls.length > 0
+          ? selectDominantImageFamily(
+              dedupeByImageBasename(dedupe(existingGalleryUrls)),
+            )
+          : [];
       const existingHtmlPath = resolve(
         OUTPUT_DETAILS_HTML_DIR,
         `${externalListingId}.html`,
@@ -2386,6 +2457,10 @@ async function fetchDetail(
         ...existing,
         quote_context: {},
         fetched_at: new Date().toISOString(),
+        media_gallery: {
+          image_count: mediaGalleryImageUrls.length,
+          image_urls: mediaGalleryImageUrls,
+        },
         rooms_guidance: Array.isArray(existing.rooms_guidance)
           ? existing.rooms_guidance
               .map((entry) =>
@@ -2682,38 +2757,51 @@ async function fetchDetail(
         }
       }
 
-      const modalGalleryRoot = document.evaluate(
-        "/html/body/div[6]/div[2]/div",
-        document,
-        null,
-        XPathResult.FIRST_ORDERED_NODE_TYPE,
-        null,
-      ).singleNodeValue as Element | null;
+      const lightboxRoots = Array.from(document.querySelectorAll("body > div"))
+        .filter((node): node is HTMLElement => node instanceof HTMLElement)
+        .filter((node) => {
+          const classes = node.classList;
+          return (
+            classes.contains("fixed") &&
+            classes.contains("inset-0") &&
+            classes.contains("z-[9998]") &&
+            classes.contains("bg-white") &&
+            classes.contains("flex") &&
+            classes.contains("flex-col") &&
+            classes.contains("overflow-y-auto")
+          );
+        });
 
-      const galleryNodes = modalGalleryRoot
-        ? Array.from(modalGalleryRoot.querySelectorAll("img"))
-        : Array.from(document.querySelectorAll('img[alt^="Gallery image"]'));
+      let selectedLightboxSources: string[] = [];
+      for (const root of lightboxRoots) {
+        const sources: string[] = [];
+        const galleryNodes = Array.from(
+          root.querySelectorAll('img[alt^="Gallery image"]'),
+        ).filter((node) => /^Gallery image\s+\d+/i.test(node.alt || ""));
 
-      for (const image of galleryNodes) {
-        const alt = (image.getAttribute("alt") || "").trim();
-        if (!/^Gallery image\s+\d+/i.test(alt)) {
-          continue;
+        for (const node of galleryNodes) {
+          const src = node.getAttribute("src") || "";
+          if (src) {
+            sources.push(src);
+          }
+
+          const srcset = node.getAttribute("srcset") || "";
+          if (srcset) {
+            sources.push(
+              ...srcset
+                .split(",")
+                .map((part) => part.trim().split(/\s+/)[0] || "")
+                .filter(Boolean),
+            );
+          }
         }
 
-        const currentSrc = image.getAttribute("src") || "";
-        if (currentSrc) {
-          galleryImageCandidates.push(currentSrc);
-        }
-
-        const srcset = image.getAttribute("srcset") || "";
-        if (srcset) {
-          const entries = srcset
-            .split(",")
-            .map((part) => part.trim().split(/\s+/)[0] || "")
-            .filter(Boolean);
-          galleryImageCandidates.push(...entries);
+        if (sources.length > selectedLightboxSources.length) {
+          selectedLightboxSources = sources;
         }
       }
+
+      galleryImageCandidates.push(...selectedLightboxSources);
 
       return {
         title,
@@ -2799,10 +2887,7 @@ async function fetchDetail(
 
     const detailUrlObject = new URL(normalizedDetailUrl);
 
-    const sourceImageCandidates =
-      extracted.galleryImageCandidates.length > 0
-        ? extracted.galleryImageCandidates
-        : extracted.imageCandidates;
+    const sourceImageCandidates = extracted.galleryImageCandidates;
 
     const imageUrlsFromDom = sourceImageCandidates
       .map((raw) => {
@@ -2833,8 +2918,9 @@ async function fetchDetail(
         value.startsWith("https://service-images.key.co/service-images/"),
       );
 
-    const imageUrls = dedupeByImageBasename(
-      dedupe([...collectServiceImageUrls(html), ...imageUrlsFromDom]),
+    // Keep image extraction scoped to parsed gallery candidates from the page DOM.
+    const imageUrls = selectDominantImageFamily(
+      dedupeByImageBasename(dedupe(imageUrlsFromDom)),
     );
 
     const coordinates = extractLatLngFromHtml(html);

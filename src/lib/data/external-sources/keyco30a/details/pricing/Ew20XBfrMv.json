@@ -2,7 +2,7 @@
   "adapter_key": "keyco30a",
   "external_listing_id": "Ew20XBfrMv",
   "detail_url": "https://key.co/listings/Ew20XBfrMv",
-  "generated_at": "2026-04-22T00:05:43.332Z",
+  "generated_at": "2026-04-22T03:05:56.834Z",
   "horizon": {
     "from_date": "2026-04-25",
     "to_date": "2026-10-09",
@@ -14,8 +14,8 @@
     "avg_all_in_multiplier": 1.520945
   },
   "source_summary": {
-    "accurate_scrape_days": 107,
-    "derived_interpolated_days": 61,
+    "accurate_scrape_days": 106,
+    "derived_interpolated_days": 62,
     "derived_assumptions_anchor_days": 0,
     "derived_global_default_days": 0
   },
@@ -2378,21 +2378,6 @@
     {
       "date": "2026-09-29",
       "is_available": true,
-      "availability_status_code": "A",
-      "is_available_for_checkin": true,
-      "is_available_for_checkout": true,
-      "min_nights": 4,
-      "base_nightly": 1890,
-      "estimated_fees_nightly": 677.31,
-      "estimated_taxes_nightly": 307.27,
-      "all_in_nightly": 2874.59,
-      "currency": "USD",
-      "source": "accurate_scrape",
-      "confidence": "high"
-    },
-    {
-      "date": "2026-09-30",
-      "is_available": true,
       "availability_status_code": "O",
       "is_available_for_checkin": false,
       "is_available_for_checkout": true,
@@ -2406,9 +2391,24 @@
       "confidence": "high"
     },
     {
-      "date": "2026-10-01",
+      "date": "2026-09-30",
       "is_available": false,
       "availability_status_code": "X",
+      "is_available_for_checkin": false,
+      "is_available_for_checkout": false,
+      "min_nights": 4,
+      "base_nightly": 1890,
+      "estimated_fees_nightly": 677.31,
+      "estimated_taxes_nightly": 307.27,
+      "all_in_nightly": 2874.59,
+      "currency": "USD",
+      "source": "derived_interpolated",
+      "confidence": "medium"
+    },
+    {
+      "date": "2026-10-01",
+      "is_available": false,
+      "availability_status_code": "U",
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": 4,
@@ -2468,7 +2468,7 @@
     {
       "date": "2026-10-05",
       "is_available": false,
-      "availability_status_code": "X",
+      "availability_status_code": "U",
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": 4,
@@ -2483,8 +2483,8 @@
     {
       "date": "2026-10-06",
       "is_available": false,
-      "availability_status_code": "I",
-      "is_available_for_checkin": true,
+      "availability_status_code": "X",
+      "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": 4,
       "base_nightly": 1890,
@@ -2497,10 +2497,10 @@
     },
     {
       "date": "2026-10-07",
-      "is_available": true,
-      "availability_status_code": "O",
-      "is_available_for_checkin": false,
-      "is_available_for_checkout": true,
+      "is_available": false,
+      "availability_status_code": "I",
+      "is_available_for_checkin": true,
+      "is_available_for_checkout": false,
       "min_nights": 4,
       "base_nightly": 1890,
       "estimated_fees_nightly": 677.31,

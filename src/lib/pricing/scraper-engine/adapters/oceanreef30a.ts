@@ -28,6 +28,12 @@ function toChangeoverCodeFromStatus(
 }
 
 type OceanReefDetailRecord = DetailRecordBase & {
+  listing_flags?: {
+    non_bookable_online: boolean;
+    availability_validation_exempt: boolean;
+    availability_validation_exempt_reason_code: string | null;
+    availability_validation_exempt_reason: string | null;
+  };
   quote_context?: {
     unit_id: string;
     detail_url: string;
@@ -111,6 +117,10 @@ type OceanReefDetailRecord = DetailRecordBase & {
       booking_unavailable: number;
       booking_unknown: number;
     };
+    validation_exempt?: boolean;
+    validation_exempt_reason_code?: string | null;
+    validation_exempt_reason?: string | null;
+    validation_exempt_evidence?: string[];
   };
   availability_raw: {
     expected_listing_count: number;
@@ -131,6 +141,12 @@ const OUTPUT_ROOT = resolve(
   "oceanreef30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+
+const AVAILABILITY_VALIDATION_EXEMPT_EXTERNAL_LISTING_IDS = new Set<string>([
+  "key-lime-cottage",
+  "rising-tide",
+  "who-sells-sea-shells",
+]);
 
 function normalizeForMatch(value: string): string {
   return value
@@ -261,6 +277,17 @@ function splitSrcsetCandidates(value: string): string[] {
     .filter(Boolean);
 }
 
+function extractOceanReefGalleryScope(html: string): string {
+  const hiddenGalleryMatch = html.match(
+    /<div[^>]+id=["']pdpHiddenGallery["'][^>]*>[\s\S]*?<\/div>/i,
+  );
+  const widgetAreaMatch = html.match(
+    /<div[^>]+class=["'][^"']*pdp-property-widget-img-area[^"']*["'][^>]*>[\s\S]*?<\/div>\s*<\/div>/i,
+  );
+
+  return `${hiddenGalleryMatch?.[0] ?? ""}\n${widgetAreaMatch?.[0] ?? ""}`;
+}
+
 function unwrapTrackhsImageSource(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -292,7 +319,8 @@ function normalizeOceanReefGalleryUrl(value: string): string | null {
     const path = parsed.pathname;
 
     const isOceanReefImageBucket =
-      host === "track-pm.s3.amazonaws.com" &&
+      (host === "track-pm.s3.amazonaws.com" ||
+        host === "track-files.s3.amazonaws.com") &&
       path.startsWith("/oceanreefresorts/image/");
 
     if (!isOceanReefImageBucket) {
@@ -308,6 +336,8 @@ function normalizeOceanReefGalleryUrl(value: string): string | null {
 function collectMediaUrls(html: string): string[] {
   const urls: string[] = [];
   const seen = new Set<string>();
+  const galleryScope = extractOceanReefGalleryScope(html);
+  const source = galleryScope.trim().length > 0 ? galleryScope : html;
 
   const push = (candidate: string) => {
     const normalized = normalizeOceanReefGalleryUrl(candidate);
@@ -318,25 +348,27 @@ function collectMediaUrls(html: string): string[] {
     urls.push(normalized);
   };
 
-  for (const match of html.matchAll(/data-srcset=["']([^"']+)["']/gi)) {
+  for (const match of source.matchAll(/data-srcset=["']([^"']+)["']/gi)) {
     const srcset = match[1]?.trim() || "";
     for (const candidate of splitSrcsetCandidates(srcset)) {
       push(candidate);
     }
   }
 
-  for (const match of html.matchAll(/srcset=["']([^"']+)["']/gi)) {
+  for (const match of source.matchAll(/srcset=["']([^"']+)["']/gi)) {
     const srcset = match[1]?.trim() || "";
     for (const candidate of splitSrcsetCandidates(srcset)) {
       push(candidate);
     }
   }
 
-  for (const match of html.matchAll(/data-thumb=["']([^"']+)["']/gi)) {
+  for (const match of source.matchAll(/data-thumb=["']([^"']+)["']/gi)) {
     push(match[1] || "");
   }
 
-  for (const match of html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) {
+  for (const match of source.matchAll(
+    /<img[^>]+src=["']([^"']+)["'][^>]*>/gi,
+  )) {
     push(match[1] || "");
   }
 
@@ -905,6 +937,22 @@ async function fetchDetail(
     const mediaUrls = collectMediaUrls(html);
 
     const externalListingId = extractExternalListingId(normalizedDetailUrl);
+    const availabilityValidationExempt =
+      AVAILABILITY_VALIDATION_EXEMPT_EXTERNAL_LISTING_IDS.has(
+        externalListingId,
+      );
+    const availabilityValidationExemptReasonCode = availabilityValidationExempt
+      ? "non_bookable_online"
+      : null;
+    const availabilityValidationExemptReason = availabilityValidationExempt
+      ? "Listing appears online for marketing but is fully blocked for direct booking across the captured horizon."
+      : null;
+    const availabilityValidationExemptEvidence = availabilityValidationExempt
+      ? [
+          "normalized_availability.day_codes is all 'U' for the captured horizon",
+          "listing is in known oceanreef non-bookable online set",
+        ]
+      : [];
     const unitId = extractPropertyUnitId(html);
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
@@ -951,6 +999,14 @@ async function fetchDetail(
             },
           }
         : {}),
+      listing_flags: {
+        non_bookable_online: availabilityValidationExempt,
+        availability_validation_exempt: availabilityValidationExempt,
+        availability_validation_exempt_reason_code:
+          availabilityValidationExemptReasonCode,
+        availability_validation_exempt_reason:
+          availabilityValidationExemptReason,
+      },
       fetched_at: new Date().toISOString(),
       title,
       h1,
@@ -1013,6 +1069,10 @@ async function fetchDetail(
         source: "pm_oceanreef30a",
         external_listing_id: externalListingId,
         captured_at: new Date().toISOString(),
+        validation_exempt: availabilityValidationExempt,
+        validation_exempt_reason_code: availabilityValidationExemptReasonCode,
+        validation_exempt_reason: availabilityValidationExemptReason,
+        validation_exempt_evidence: availabilityValidationExemptEvidence,
         window_start: availability.days[0]?.date ?? "",
         window_end: availability.days[availability.days.length - 1]?.date ?? "",
         code_legend: {
