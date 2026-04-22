@@ -42,6 +42,26 @@ async function resolveDiscoverSiteId(): Promise<string | null> {
   return discoverSiteIdCache;
 }
 
+const hasPrivatePoolExpr = sql<boolean>`(
+  exists (
+    select 1
+    from jsonb_array_elements(coalesce(${listing.traits}, '[]'::jsonb)) as trait
+    where trait ->> 'key' = 'feature.private_pool'
+      and trait ->> 'value_boolean' = 'true'
+  )
+  or coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'private_pool'
+)`;
+
+const hasGolfCartExpr = sql<boolean>`(
+  exists (
+    select 1
+    from jsonb_array_elements(coalesce(${listing.traits}, '[]'::jsonb)) as trait
+    where trait ->> 'key' = 'feature.golf_cart'
+      and trait ->> 'value_boolean' = 'true'
+  )
+  or coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'golf_cart'
+)`;
+
 const discoverListingSummarySelectFields = {
   id: listing.id,
   slug: listing.slug,
@@ -58,8 +78,8 @@ const discoverListingSummarySelectFields = {
   beach_area_name: listing.beach_area_name,
   community_name: listing.community_name,
   is_gulf_front: listing.is_gulf_front,
-  has_private_pool_amenity: sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'private_pool'`,
-  has_golf_cart_amenity: sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'golf_cart'`,
+  has_private_pool_amenity: hasPrivatePoolExpr,
+  has_golf_cart_amenity: hasGolfCartExpr,
   has_gulf_front_amenity: sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'gulf_front'`,
   has_beachfront_amenity: sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'beachfront'`,
   preview_image_urls: sql<unknown>`coalesce((
@@ -142,11 +162,11 @@ function buildDiscoverFacetWhere(filters?: DiscoverListingFacetFilters) {
       }
 
       if (feature === "private_pool") {
-        return sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'private_pool'`;
+        return hasPrivatePoolExpr;
       }
 
       if (feature === "golf_cart") {
-        return sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'golf_cart'`;
+        return hasGolfCartExpr;
       }
 
       return undefined;

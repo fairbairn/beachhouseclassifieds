@@ -69,17 +69,33 @@ export async function queryDiscoverCountAndFacets(input?: {
     return null;
   }
 
+  const hasPrivatePool = sql<boolean>`(
+    exists (
+      select 1
+      from jsonb_array_elements(coalesce(${listing.traits}, '[]'::jsonb)) as trait
+      where trait ->> 'key' = 'feature.private_pool'
+        and trait ->> 'value_boolean' = 'true'
+    )
+    or coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'private_pool'
+  )`;
+
+  const hasGolfCart = sql<boolean>`(
+    exists (
+      select 1
+      from jsonb_array_elements(coalesce(${listing.traits}, '[]'::jsonb)) as trait
+      where trait ->> 'key' = 'feature.golf_cart'
+        and trait ->> 'value_boolean' = 'true'
+    )
+    or coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'golf_cart'
+  )`;
+
   const selectedFeatureSet = toFeatureSet(input?.selectedFeatures);
   const selectedFeatureWhere = and(
     selectedFeatureSet.has("gulf_front")
       ? eq(listing.is_gulf_front, true)
       : undefined,
-    selectedFeatureSet.has("private_pool")
-      ? sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'private_pool'`
-      : undefined,
-    selectedFeatureSet.has("golf_cart")
-      ? sql<boolean>`coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'golf_cart'`
-      : undefined,
+    selectedFeatureSet.has("private_pool") ? hasPrivatePool : undefined,
+    selectedFeatureSet.has("golf_cart") ? hasGolfCart : undefined,
   );
 
   const summaryResult = await pgDb.execute<{
@@ -91,12 +107,8 @@ export async function queryDiscoverCountAndFacets(input?: {
     select
       count(*)::int as total_count,
       count(*) filter (where ${listing.is_gulf_front})::int as gulf_front_count,
-      count(*) filter (
-        where coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'private_pool'
-      )::int as private_pool_count,
-      count(*) filter (
-        where coalesce(${listing.amenities_normalized}, '[]'::jsonb) ? 'golf_cart'
-      )::int as golf_cart_count
+      count(*) filter (where ${hasPrivatePool})::int as private_pool_count,
+      count(*) filter (where ${hasGolfCart})::int as golf_cart_count
     from ${listing}
     where ${and(
       eq(listing.site_id, discoverSiteId),
