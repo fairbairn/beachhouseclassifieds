@@ -423,10 +423,10 @@ function toTableRow(row: AdapterRollup): string[] {
   const seasonalCell =
     seasonal === null
       ? chalk.gray("-")
-      : seasonal >= 70
-        ? chalk.yellow(formatPercent(seasonal))
-        : seasonal < 50
-          ? chalk.red(formatPercent(seasonal))
+      : seasonal < 20
+        ? chalk.red(formatPercent(seasonal))
+        : seasonal > 65
+          ? chalk.hex("#FFA500")(formatPercent(seasonal))
           : chalk.green(formatPercent(seasonal));
 
   return [
