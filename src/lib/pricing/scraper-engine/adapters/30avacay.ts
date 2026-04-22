@@ -833,264 +833,6 @@ async function clickVisibleControlsByLabel(
   return clicked;
 }
 
-function extractJsArrayLiteralByKey(html: string, key: string): string | null {
-  const keyIndex = html.indexOf(`${key}:`);
-  if (keyIndex < 0) {
-    return null;
-  }
-
-  const start = html.indexOf("[", keyIndex);
-  if (start < 0) {
-    return null;
-  }
-
-  let depth = 0;
-  let inString = false;
-  let quote = "";
-  let escapeNext = false;
-
-  for (let index = start; index < html.length; index += 1) {
-    const ch = html[index] ?? "";
-
-    if (escapeNext) {
-      escapeNext = false;
-      continue;
-    }
-
-    if (inString) {
-      if (ch === "\\") {
-        escapeNext = true;
-        continue;
-      }
-      if (ch === quote) {
-        inString = false;
-        quote = "";
-      }
-      continue;
-    }
-
-    if (ch === '"' || ch === "'") {
-      inString = true;
-      quote = ch;
-      continue;
-    }
-
-    if (ch === "[") {
-      depth += 1;
-      continue;
-    }
-
-    if (ch === "]") {
-      depth -= 1;
-      if (depth === 0) {
-        return html.slice(start, index + 1);
-      }
-    }
-  }
-
-  return null;
-}
-
-function parseSlashDateToIso(value: string): string {
-  const raw = value.trim();
-  const match = raw.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
-  if (!match) {
-    return "";
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (
-    !Number.isFinite(year) ||
-    !Number.isFinite(month) ||
-    !Number.isFinite(day) ||
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31
-  ) {
-    return "";
-  }
-
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() + 1 !== month ||
-    date.getUTCDate() !== day
-  ) {
-    return "";
-  }
-
-  return date.toISOString().slice(0, 10);
-}
-
-function addUtcDays(isoDate: string, days: number): string {
-  const date = new Date(`${isoDate}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) {
-    return isoDate;
-  }
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function extractCalendarOffsetDays(
-  html: string,
-  key: string,
-  fallback: number,
-): number {
-  const pattern = new RegExp(
-    `${key}\\s*:\\s*new Date\\([\\s\\S]{0,140}?getDate\\(\\)\\s*\\+\\s*(\\d+)`,
-    "i",
-  );
-  const match = html.match(pattern);
-  const parsed = match?.[1] ? Number(match[1]) : NaN;
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return fallback;
-  }
-  return Math.floor(parsed);
-}
-
-function extractAvailabilityFromRightWidgetHtml(
-  html: string,
-  todayIso: string,
-  horizonIso: string,
-): {
-  hasCalendarWidget: boolean;
-  bookingRestrictions: string[];
-  items: Array<{ date: string; code: LuxuryDayCode; minNights: number | null }>;
-  minNightRules: Array<{
-    start_date: string;
-    end_date: string;
-    min_nights: number;
-    raw_rule: string;
-  }>;
-} {
-  const hasCalendarWidget =
-    html.includes('id="rt-datepick-app"') || html.includes("bookings:");
-  if (!hasCalendarWidget) {
-    return {
-      hasCalendarWidget: false,
-      bookingRestrictions: [],
-      items: [],
-      minNightRules: [],
-    };
-  }
-
-  type BookingRange = { start: string; end: string };
-  type MinDayRule = { startDate: string; endDate: string; minimum: number };
-
-  const parseArray = <T>(key: string): T[] => {
-    const literal = extractJsArrayLiteralByKey(html, key);
-    if (!literal) {
-      return [];
-    }
-
-    try {
-      return JSON.parse(literal.replace(/\\\//g, "/")) as T[];
-    } catch {
-      return [];
-    }
-  };
-
-  const bookings = parseArray<BookingRange>("bookings");
-  const minDays = parseArray<MinDayRule>("minDays");
-
-  const startOffsetDays = extractCalendarOffsetDays(html, "calStartDate", 1);
-  const endOffsetDays = extractCalendarOffsetDays(html, "calEndDate", 365);
-  const preloadStartIso = addUtcDays(todayIso, startOffsetDays);
-  const preloadEndIso = addUtcDays(todayIso, endOffsetDays);
-
-  const statusByDate = new Map<string, LuxuryDayCode>();
-  const minNightsByDate = new Map<string, number>();
-  const codePriority: Record<LuxuryDayCode, number> = {
-    X: 0,
-    A: 1,
-    U: 1,
-    I: 2,
-    O: 2,
-  };
-
-  const minNightRules = minDays
-    .map((rule) => {
-      const start = parseSlashDateToIso(String(rule.startDate ?? ""));
-      const end = parseSlashDateToIso(String(rule.endDate ?? ""));
-      const minNights = Number(rule.minimum);
-      if (!start || !end || !Number.isFinite(minNights) || minNights < 1) {
-        return null;
-      }
-
-      let cursor = start;
-      while (cursor <= end && cursor <= horizonIso) {
-        if (cursor >= todayIso) {
-          minNightsByDate.set(cursor, Math.floor(minNights));
-        }
-        cursor = addUtcDays(cursor, 1);
-      }
-
-      return {
-        start_date: start,
-        end_date: end,
-        min_nights: Math.floor(minNights),
-        raw_rule: `minDays:${start}->${end}=${Math.floor(minNights)}`,
-      };
-    })
-    .filter((rule): rule is NonNullable<typeof rule> => !!rule);
-
-  for (const booking of bookings) {
-    const start = parseSlashDateToIso(String(booking.start ?? ""));
-    const end = parseSlashDateToIso(String(booking.end ?? ""));
-    if (!start || !end || end < start) {
-      continue;
-    }
-
-    let cursor = start;
-    while (cursor <= end) {
-      if (cursor >= todayIso && cursor <= horizonIso) {
-        const code: LuxuryDayCode =
-          cursor === start ? "I" : cursor === end ? "O" : "U";
-        const previous = statusByDate.get(cursor);
-        if (!previous || codePriority[code] > codePriority[previous]) {
-          statusByDate.set(cursor, code);
-        }
-      }
-
-      cursor = addUtcDays(cursor, 1);
-    }
-  }
-
-  const items: Array<{
-    date: string;
-    code: LuxuryDayCode;
-    minNights: number | null;
-  }> = [];
-
-  let cursor = todayIso;
-  while (cursor <= horizonIso) {
-    const inPreloadedWindow =
-      cursor >= preloadStartIso && cursor <= preloadEndIso;
-    const code = inPreloadedWindow ? (statusByDate.get(cursor) ?? "A") : "X";
-    items.push({
-      date: cursor,
-      code,
-      minNights: minNightsByDate.get(cursor) ?? null,
-    });
-    cursor = addUtcDays(cursor, 1);
-  }
-
-  return {
-    hasCalendarWidget,
-    bookingRestrictions: [
-      "Unavailable",
-      "Check-in only",
-      "Check-out only",
-      "Selected",
-    ],
-    items,
-    minNightRules,
-  };
-}
-
 async function discoverListings(
   page: Page,
   anchorUrl: string,
@@ -1409,6 +1151,38 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
   bookingRestrictions: string[];
 }> {
   return page.evaluate(() => {
+    const deriveCodeFromClass = (classBlobRaw: string): LuxuryDayCode => {
+      const classBlob = classBlobRaw.toLowerCase();
+
+      if (
+        classBlob.includes("booked") ||
+        classBlob.includes("unavailable") ||
+        classBlob.includes("unselectable")
+      ) {
+        return "U";
+      }
+      if (classBlob.includes("bookstart") || classBlob.includes("check-in")) {
+        return "I";
+      }
+      if (classBlob.includes("bookend") || classBlob.includes("check-out")) {
+        return "O";
+      }
+      if (classBlob.includes("available")) {
+        return "A";
+      }
+      if (
+        classBlob.includes("unforeseeable") ||
+        classBlob.includes("not-in-month")
+      ) {
+        return "X";
+      }
+      if (classBlob.includes("day")) {
+        return "A";
+      }
+
+      return "X";
+    };
+
     const toIso = (year: number, monthIndex: number, day: number): string => {
       const date = new Date(Date.UTC(year, monthIndex, day));
       if (
@@ -1468,107 +1242,103 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
     };
 
     const items: Array<{ date: string; code: LuxuryDayCode }> = [];
-    const monthHeaders = Array.from(
-      document.querySelectorAll(
-        ".pdp-availability-calendar-container .mb-2 strong, .pdp-availability-calendar-container .mb-2, #availability .month h3, .bookcalendar .month h3",
-      ),
+    const modernCalendarNodes = Array.from(
+      document.querySelectorAll("#rt-availcal-app .calendar"),
+    );
+    const hasModernAvailabilitySection = modernCalendarNodes.length > 0;
+
+    const monthHeaders = (
+      hasModernAvailabilitySection
+        ? Array.from(
+            document.querySelectorAll(
+              "#rt-availcal-app .calendar .header .title",
+            ),
+          )
+        : Array.from(
+            document.querySelectorAll(
+              ".pdp-availability-calendar-container .mb-2 strong, .pdp-availability-calendar-container .mb-2, #availability .month h3, .bookcalendar .month h3",
+            ),
+          )
     )
       .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
       .filter(Boolean);
 
-    for (const cell of Array.from(document.querySelectorAll("td[data-date]"))) {
-      const rawDate = (cell.getAttribute("data-date") ?? "").trim();
-      const match = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (!match) {
-        continue;
-      }
-
-      const month = Number(match[1]);
-      const day = Number(match[2]);
-      const year = Number(match[3]);
-      if (
-        !Number.isFinite(month) ||
-        !Number.isFinite(day) ||
-        !Number.isFinite(year)
-      ) {
-        continue;
-      }
-
-      const isoDate = new Date(Date.UTC(year, month - 1, day))
-        .toISOString()
-        .slice(0, 10);
-
-      const classBlob = String(
-        (cell as HTMLElement).className || "",
-      ).toLowerCase();
-      let code: LuxuryDayCode = "X";
-      if (classBlob.includes("check-in")) {
-        code = "I";
-      } else if (classBlob.includes("check-out")) {
-        code = "O";
-      } else if (classBlob.includes("available")) {
-        code = "A";
-      } else if (
-        classBlob.includes("booked") ||
-        classBlob.includes("unavailable")
-      ) {
-        code = "U";
-      }
-
-      items.push({ date: isoDate, code });
-    }
-
-    if (items.length === 0) {
-      const monthNodes = Array.from(
-        document.querySelectorAll("#availability .month, .bookcalendar .month"),
-      );
-
-      for (const monthNode of monthNodes) {
-        const monthLabel = (monthNode.querySelector("h3")?.textContent ?? "")
-          .replace(/\s+/g, " ")
-          .trim();
-        const parsedMonth = parseMonthHeader(monthLabel);
-        if (!parsedMonth) {
+    if (!hasModernAvailabilitySection) {
+      for (const cell of Array.from(
+        document.querySelectorAll("td[data-date]"),
+      )) {
+        const rawDate = (cell.getAttribute("data-date") ?? "").trim();
+        const match = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (!match) {
           continue;
         }
 
-        for (const dayNode of Array.from(
-          monthNode.querySelectorAll(".week .day"),
-        )) {
-          const dayText = (dayNode.textContent ?? "").replace(/\D+/g, "");
-          const day = Number(dayText);
-          if (!Number.isFinite(day) || day < 1 || day > 31) {
-            continue;
-          }
-
-          const isoDate = toIso(parsedMonth.year, parsedMonth.monthIndex, day);
-          if (!isoDate) {
-            continue;
-          }
-
-          const classBlob = String(
-            (dayNode as HTMLElement).className || "",
-          ).toLowerCase();
-          let code: LuxuryDayCode = "A";
-          if (
-            classBlob.includes("booked") ||
-            classBlob.includes("unavailable")
-          ) {
-            code = "U";
-          } else if (
-            classBlob.includes("start") ||
-            classBlob.includes("check-in")
-          ) {
-            code = "I";
-          } else if (
-            classBlob.includes("bookend") ||
-            classBlob.includes("check-out")
-          ) {
-            code = "O";
-          }
-
-          items.push({ date: isoDate, code });
+        const month = Number(match[1]);
+        const day = Number(match[2]);
+        const year = Number(match[3]);
+        if (
+          !Number.isFinite(month) ||
+          !Number.isFinite(day) ||
+          !Number.isFinite(year)
+        ) {
+          continue;
         }
+
+        const isoDate = new Date(Date.UTC(year, month - 1, day))
+          .toISOString()
+          .slice(0, 10);
+        const code = deriveCodeFromClass(
+          String((cell as HTMLElement).className || ""),
+        );
+
+        items.push({ date: isoDate, code });
+      }
+    }
+
+    const monthNodes = hasModernAvailabilitySection
+      ? modernCalendarNodes
+      : Array.from(
+          document.querySelectorAll(
+            "#availability .month, .bookcalendar .month",
+          ),
+        );
+
+    for (const monthNode of monthNodes) {
+      const monthLabel = (
+        monthNode.querySelector(".header .title")?.textContent ??
+        monthNode.querySelector("h3")?.textContent ??
+        ""
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+      const parsedMonth = parseMonthHeader(monthLabel);
+      if (!parsedMonth) {
+        continue;
+      }
+
+      for (const dayNode of Array.from(
+        monthNode.querySelectorAll(".week .day, .days .day"),
+      )) {
+        const classBlob = String(
+          (dayNode as HTMLElement).className || "",
+        ).toLowerCase();
+        if (classBlob.includes("unforeseeable")) {
+          continue;
+        }
+
+        const dayText = (dayNode.textContent ?? "").replace(/\D+/g, "");
+        const day = Number(dayText);
+        if (!Number.isFinite(day) || day < 1 || day > 31) {
+          continue;
+        }
+
+        const isoDate = toIso(parsedMonth.year, parsedMonth.monthIndex, day);
+        if (!isoDate) {
+          continue;
+        }
+
+        const code = deriveCodeFromClass(classBlob);
+        items.push({ date: isoDate, code });
       }
     }
 
@@ -1587,7 +1357,7 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
 
     return {
       hasCalendarWidget: !!document.querySelector(
-        ".pdp-availability-calendar, .pdp-availability-calendar-table, .ui-datepicker, .ui-datepicker-inline, .rcav-key, #availability .bookcalendar, #availability .month",
+        ".pdp-availability-calendar, .pdp-availability-calendar-table, .ui-datepicker, .ui-datepicker-inline, .rcav-key, #availability .bookcalendar, #availability .month, #rt-availcal-app .calendar",
       ),
       months: Array.from(new Set(monthHeaders)),
       items,
@@ -2056,112 +1826,92 @@ async function fetchDetail(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
     );
-    const html = await page.content();
-    await writeFile(htmlPath, html, "utf8");
+    await clickTab(page, "Availability");
+    await clickVisibleControlsByLabel(page, ["show more months", "show more"]);
 
-    const rightWidgetAvailability = extractAvailabilityFromRightWidgetHtml(
-      html,
-      todayIso,
-      horizonIso,
-    );
+    for (
+      let iteration = 0;
+      iteration < Math.max(1, maxCalendarAdvanceMonths);
+      iteration += 1
+    ) {
+      calendarIterations += 1;
 
-    if (rightWidgetAvailability.items.length > 0) {
-      for (const restriction of rightWidgetAvailability.bookingRestrictions) {
+      const snapshot = await extractAvailabilitySnapshot(page);
+      const monthSignature = snapshot.months.join("|");
+      if (monthSignature && seenMonthSignatures.has(monthSignature)) {
+        stagnantIterations += 1;
+      } else if (monthSignature) {
+        seenMonthSignatures.add(monthSignature);
+        stagnantIterations = 0;
+      }
+
+      for (const restriction of snapshot.bookingRestrictions) {
         bookingRestrictions.add(restriction);
       }
 
-      minNightRules = rightWidgetAvailability.minNightRules;
+      for (const item of snapshot.items) {
+        if (item.date < todayIso || item.date > horizonIso) {
+          continue;
+        }
 
-      for (const item of rightWidgetAvailability.items) {
         const previous = dayCodeByDate.get(item.date);
-        if (!previous || codePriority[item.code] > codePriority[previous]) {
+        if (!previous) {
+          dayCodeByDate.set(item.date, item.code);
+          continue;
+        }
+
+        if (codePriority[item.code] > codePriority[previous]) {
           dayCodeByDate.set(item.date, item.code);
         }
-
-        if (item.minNights !== null && item.minNights > 0) {
-          minNightsByDate.set(item.date, item.minNights);
-        }
       }
-    } else {
-      await clickTab(page, "Availability");
 
-      for (
-        let iteration = 0;
-        iteration < Math.max(1, maxCalendarAdvanceMonths);
-        iteration += 1
-      ) {
-        calendarIterations += 1;
+      const latestDate = Array.from(dayCodeByDate.keys()).sort().at(-1) ?? "";
+      if (latestDate && latestDate >= horizonIso) {
+        break;
+      }
+      if (stagnantIterations >= 2) {
+        break;
+      }
 
-        const snapshot = await extractAvailabilitySnapshot(page);
-        const monthSignature = snapshot.months.join("|");
-        if (monthSignature && seenMonthSignatures.has(monthSignature)) {
-          stagnantIterations += 1;
-        } else if (monthSignature) {
-          seenMonthSignatures.add(monthSignature);
-          stagnantIterations = 0;
-        }
+      const clickedNext = await page.evaluate(() => {
+        const availabilityRoot =
+          document.querySelector("#rt-availcal-app") ??
+          document.querySelector("#availability") ??
+          document;
+        const nodes = Array.from(
+          availabilityRoot.querySelectorAll(
+            "a.ui-datepicker-next, button.next, a.next, .rc-calendar-next, [class*='calendar'] .next, [class*='datepicker'] [title*='Next' i], [class*='datepicker'] [aria-label*='Next' i], button[title*='Next' i], a[title*='Next' i], button[aria-label*='Next' i], a[aria-label*='Next' i]",
+          ),
+        );
 
-        for (const restriction of snapshot.bookingRestrictions) {
-          bookingRestrictions.add(restriction);
-        }
-
-        for (const item of snapshot.items) {
-          if (item.date < todayIso || item.date > horizonIso) {
+        for (const node of nodes) {
+          const element = node as HTMLElement;
+          if (element.offsetParent === null) {
             continue;
           }
-
-          const previous = dayCodeByDate.get(item.date);
-          if (!previous) {
-            dayCodeByDate.set(item.date, item.code);
+          if (
+            element.getAttribute("aria-disabled") === "true" ||
+            element.className.toLowerCase().includes("disabled")
+          ) {
             continue;
           }
-
-          if (codePriority[item.code] > codePriority[previous]) {
-            dayCodeByDate.set(item.date, item.code);
-          }
+          element.click();
+          return true;
         }
 
-        const latestDate = Array.from(dayCodeByDate.keys()).sort().at(-1) ?? "";
-        if (latestDate && latestDate >= horizonIso) {
-          break;
-        }
-        if (stagnantIterations >= 2) {
-          break;
-        }
+        return false;
+      });
 
-        const clickedNext = await page.evaluate(() => {
-          const nodes = Array.from(
-            document.querySelectorAll(
-              "a.ui-datepicker-next, button.next, a.next, .rc-calendar-next, [class*='calendar'] .next, [class*='datepicker'] [title*='Next' i], [class*='datepicker'] [aria-label*='Next' i], button[title*='Next' i], a[title*='Next' i], button[aria-label*='Next' i], a[aria-label*='Next' i]",
-            ),
-          );
-
-          for (const node of nodes) {
-            const element = node as HTMLElement;
-            if (element.offsetParent === null) {
-              continue;
-            }
-            if (
-              element.getAttribute("aria-disabled") === "true" ||
-              element.className.toLowerCase().includes("disabled")
-            ) {
-              continue;
-            }
-            element.click();
-            return true;
-          }
-
-          return false;
-        });
-
-        if (!clickedNext) {
-          break;
-        }
-
-        calendarClicks += 1;
-        await page.waitForTimeout(450);
+      if (!clickedNext) {
+        break;
       }
+
+      calendarClicks += 1;
+      await page.waitForTimeout(450);
     }
+
+    const html = await page.content();
+    await writeFile(htmlPath, html, "utf8");
 
     const normalizedDays = Array.from(dayCodeByDate.entries())
       .sort(([left], [right]) => left.localeCompare(right))
@@ -2198,10 +1948,9 @@ async function fetchDetail(
     const latestKnown = latestKnownDate
       ? new Date(`${latestKnownDate}T00:00:00Z`)
       : null;
-    const targetEnd =
-      latestKnown && latestKnown.getTime() > fallbackEnd.getTime()
-        ? latestKnown
-        : fallbackEnd;
+    // Use observed calendar extent as the source-of-truth window.
+    // If no day rows were parsed, fall back to the configured horizon.
+    const targetEnd = latestKnown ?? fallbackEnd;
 
     while (windowCursor.getTime() <= targetEnd.getTime()) {
       const isoDate = windowCursor.toISOString().slice(0, 10);

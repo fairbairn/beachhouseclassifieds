@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { createAppErrorResponse } from "@/core/errors/app-errors";
+import {
+  createAppErrorResponse,
+  getHttpStatusForAppErrorCode,
+  normalizeToAppErrorPayload,
+} from "@/core/errors/app-errors";
 import { USER_FACING_MESSAGES } from "@/core/errors/user-facing-messages";
 import {
   NullRouteComponent,
@@ -12,11 +16,6 @@ import {
   parseJsonSafely,
 } from "@/core/http/api-http";
 import { isAuthRuntimeEnabled } from "@/core/server/auth-runtime-enabled";
-import {
-  getHttpStatusForAppErrorCode,
-  normalizeToAppErrorPayload,
-} from "@/core/server/guard/server-guard-normalization";
-
 export const Route = createFileRoute("/api/logout")({
   component: NullRouteComponent,
   server: {

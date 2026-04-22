@@ -4,6 +4,8 @@ import { z } from "zod";
 import {
   appErrorDefaultMessages,
   createAppErrorResponse,
+  getHttpStatusForAppErrorCode,
+  normalizeToAppErrorPayload,
 } from "@/core/errors/app-errors";
 import { USER_FACING_MESSAGES } from "@/core/errors/user-facing-messages";
 import {
@@ -16,11 +18,6 @@ import {
   parseJsonSafely,
 } from "@/core/http/api-http";
 import { isAuthRuntimeEnabled } from "@/core/server/auth-runtime-enabled";
-import {
-  getHttpStatusForAppErrorCode,
-  normalizeToAppErrorPayload,
-} from "@/core/server/guard/server-guard-normalization";
-
 const loginPayloadSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(1),

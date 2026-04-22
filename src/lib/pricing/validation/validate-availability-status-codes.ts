@@ -74,6 +74,7 @@ type ValidationIssueCode =
   | "sparse_signal_red_flag"
   | "long_unknown_tail_red_flag"
   | "high_unknown_ratio_red_flag"
+  | "year_split_ax_pattern_red_flag"
   | "implausible_ax_only_shape_red_flag"
   | "missing_turn_day_status"
   | "missing_checkout_turn_day_boundary"
@@ -387,6 +388,73 @@ function analyzeSignalTail(days: AvailabilityDayRecord[]): {
     unknownCount,
     trailingBlockedOrUnknownLength,
     trailingUnknownLength,
+  };
+}
+
+function analyzeYearSplitAxPattern(days: AvailabilityDayRecord[]): {
+  hasTwoYearWindow: boolean;
+  firstYear: {
+    total: number;
+    a: number;
+    x: number;
+    nonAX: number;
+  };
+  secondYear: {
+    total: number;
+    x: number;
+    nonX: number;
+  };
+  isSuspicious: boolean;
+} {
+  const statuses: string[] = [];
+  for (const day of days) {
+    const status = toCanonicalStatusCode(day?.status_code);
+    if (!status || !CANONICAL_STATUS_CODES.has(status)) {
+      continue;
+    }
+    statuses.push(status);
+  }
+
+  const firstYearStatuses = statuses.slice(0, 365);
+  const secondYearStatuses = statuses.slice(365, 730);
+
+  const firstYearA = firstYearStatuses.filter((status) => status === "A").length;
+  const firstYearX = firstYearStatuses.filter((status) => status === "X").length;
+  const firstYearNonAX = firstYearStatuses.filter(
+    (status) => status !== "A" && status !== "X",
+  ).length;
+
+  const secondYearX = secondYearStatuses.filter((status) => status === "X").length;
+  const secondYearNonX = secondYearStatuses.length - secondYearX;
+
+  const hasTwoYearWindow =
+    firstYearStatuses.length >= 350 && secondYearStatuses.length >= 350;
+
+  // User-defined anomaly shape:
+  // - first year is essentially all A, with at most a tiny X/noise footprint
+  // - second year is mostly X (unknown/unresolved)
+  const isFirstYearPredominantlyA =
+    firstYearStatuses.length >= 350 &&
+    firstYearA >= 350 &&
+    firstYearX <= 2 &&
+    firstYearNonAX <= 5;
+  const isSecondYearMostlyX =
+    secondYearStatuses.length >= 350 && secondYearX >= 330;
+
+  return {
+    hasTwoYearWindow,
+    firstYear: {
+      total: firstYearStatuses.length,
+      a: firstYearA,
+      x: firstYearX,
+      nonAX: firstYearNonAX,
+    },
+    secondYear: {
+      total: secondYearStatuses.length,
+      x: secondYearX,
+      nonX: secondYearNonX,
+    },
+    isSuspicious: hasTwoYearWindow && isFirstYearPredominantlyA && isSecondYearMostlyX,
   };
 }
 
@@ -801,6 +869,16 @@ async function validateAdapterAvailabilityStatusCodes(
           issues,
           "implausible_ax_only_shape_red_flag",
           `${fileName}: implausible long-horizon availability shape (A=${statusACount}, X=${statusXCount}, U=${statusUCount}, I=${statusICount}, O=${statusOCount}, total=${canonicalStatusCount}); likely bad scrape/default-filled calendar`,
+          "warning",
+        );
+      }
+
+      const yearSplit = analyzeYearSplitAxPattern(days);
+      if (yearSplit.isSuspicious) {
+        pushIssue(
+          issues,
+          "year_split_ax_pattern_red_flag",
+          `${fileName}: suspicious two-year split pattern detected: year1(A=${yearSplit.firstYear.a}, X=${yearSplit.firstYear.x}, nonAX=${yearSplit.firstYear.nonAX}, total=${yearSplit.firstYear.total}) and year2(X=${yearSplit.secondYear.x}, nonX=${yearSplit.secondYear.nonX}, total=${yearSplit.secondYear.total}); likely mixed-source/truncated availability capture`,
           "warning",
         );
       }

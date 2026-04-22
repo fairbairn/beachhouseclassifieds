@@ -1,18 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { getOptionalSession } from "@/core/auth/auth-guards";
-import { createAppErrorResponse } from "@/core/errors/app-errors";
+import {
+  createAppErrorResponse,
+  getHttpStatusForAppErrorCode,
+  normalizeToAppErrorPayload,
+} from "@/core/errors/app-errors";
 import {
   NullRouteComponent,
   createNoStoreHeaders,
   methodNotAllowedResponse,
   optionsResponse,
 } from "@/core/http/api-http";
-import {
-  getHttpStatusForAppErrorCode,
-  normalizeToAppErrorPayload,
-} from "@/core/server/guard/server-guard-normalization";
-
 export const Route = createFileRoute("/api/session")({
   component: NullRouteComponent,
   server: {
