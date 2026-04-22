@@ -2,10 +2,6 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import "@/core/tooling/env/load-env-profile";
-
-import { sql } from "drizzle-orm";
-
-import { pgDb } from "@/core/server/db";
 import { getKnownAdapterKeys } from "@/lib/pricing/scraper-engine/adapter-registry";
 
 type AdapterMetrics = {
@@ -24,15 +20,10 @@ type AdapterMetrics = {
   hasRuntime: boolean;
 };
 
-type CanonicalVisibilityTotals = {
-  totalActive: number;
-  visibleCount: number;
-  invisibleCount: number;
-};
-
-type CanonicalVisibilityReasonRow = {
-  reason: string;
-  count: number;
+type SourceIndexTotals = {
+  totalIndexEntries: number;
+  adaptersWithIndex: number;
+  adaptersMissingIndex: string[];
 };
 
 function hasText(value: unknown): value is string {
@@ -78,78 +69,35 @@ function findSectionEnd(lines: string[], sectionStartIndex: number): number {
   return lines.length;
 }
 
-function formatReasonLabel(reason: string): string {
-  return reason
-    .split("_")
-    .filter((part) => part.length > 0)
-    .map((part) => part[0].toUpperCase() + part.slice(1))
-    .join(" ");
-}
+async function loadSourceIndexTotals(
+  rootDir: string,
+  adapterKeys: readonly string[],
+): Promise<SourceIndexTotals> {
+  const dataRoot = path.join(rootDir, "src", "lib", "data", "external-sources");
+  let totalIndexEntries = 0;
+  let adaptersWithIndex = 0;
+  const adaptersMissingIndex: string[] = [];
 
-function formatPercentText(part: number, total: number): string {
-  if (total <= 0) {
-    return "0.0%";
-  }
-  return `${((part / total) * 100).toFixed(1)}%`;
-}
-
-async function loadCanonicalVisibilityTotals(): Promise<{
-  totals: CanonicalVisibilityTotals;
-  reasons: CanonicalVisibilityReasonRow[];
-} | null> {
-  if (!pgDb) {
-    return null;
-  }
-
-  const totalsResult = await pgDb.execute<{
-    total_active: number;
-    visible_count: number;
-    invisible_count: number;
-  }>(sql`
-    select
-      count(*)::int as total_active,
-      sum((visibility_disabled_reason is null)::int)::int as visible_count,
-      sum((visibility_disabled_reason is not null)::int)::int as invisible_count
-    from listing
-    where status = 'active'
-  `);
-
-  const reasonRowsResult = await pgDb.execute<{
-    reason: string;
-    count: number;
-  }>(sql`
-    select
-      visibility_disabled_reason as reason,
-      count(*)::int as count
-    from listing
-    where status = 'active'
-      and visibility_disabled_reason is not null
-    group by visibility_disabled_reason
-    order by count(*) desc, visibility_disabled_reason asc
-  `);
-
-  const totalsRow = totalsResult.rows[0];
-  if (!totalsRow) {
-    return {
-      totals: {
-        totalActive: 0,
-        visibleCount: 0,
-        invisibleCount: 0,
-      },
-      reasons: [],
-    };
+  for (const adapter of adapterKeys) {
+    const indexPath = path.join(dataRoot, adapter, "details", "index.json");
+    try {
+      const raw = await fs.readFile(indexPath, "utf8");
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        totalIndexEntries += parsed.length;
+        adaptersWithIndex += 1;
+        continue;
+      }
+      adaptersMissingIndex.push(adapter);
+    } catch {
+      adaptersMissingIndex.push(adapter);
+    }
   }
 
   return {
-    totals: {
-      totalActive: totalsRow.total_active,
-      visibleCount: totalsRow.visible_count,
-      invisibleCount: totalsRow.invisible_count,
-    },
-    reasons: reasonRowsResult.rows.map((row) => ({
-      reason: row.reason,
-      count: row.count,
-    })),
+    totalIndexEntries,
+    adaptersWithIndex,
+    adaptersMissingIndex,
   };
 }
 
@@ -356,7 +304,7 @@ async function main(): Promise<void> {
 
   const apiQuoteAdapters = parseQuotedApiSet(lines);
   const adapterKeys = getKnownAdapterKeys();
-  const canonicalVisibility = await loadCanonicalVisibilityTotals();
+  const sourceIndexTotals = await loadSourceIndexTotals(rootDir, adapterKeys);
 
   const stats: AdapterMetrics[] = [];
   for (const adapterKey of adapterKeys) {
@@ -572,52 +520,38 @@ async function main(): Promise<void> {
     }
   }
 
-  const visibilityHeading = "## Canonical Visibility Totals";
+  const sourceTotalsHeading = "## Source Totals (Adapter Index + Detail Files)";
   const visibilityLines = [
-    visibilityHeading,
+    sourceTotalsHeading,
     "",
-    "Snapshot from canonical listing rows (`status = active`).",
+    "Snapshot from adapter source artifacts under `src/lib/data/external-sources/*/details`.",
     "",
   ];
 
-  if (!canonicalVisibility) {
-    visibilityLines.push(
-      "- Visibility totals are unavailable in this environment (Postgres database is not configured).",
-      "",
-    );
-  } else {
-    visibilityLines.push(
-      `- Total canonical listings (active): ${canonicalVisibility.totals.totalActive}`,
-      `- Visible listings: ${canonicalVisibility.totals.visibleCount} (${formatPercentText(canonicalVisibility.totals.visibleCount, canonicalVisibility.totals.totalActive)})`,
-      `- Invisible listings: ${canonicalVisibility.totals.invisibleCount} (${formatPercentText(canonicalVisibility.totals.invisibleCount, canonicalVisibility.totals.totalActive)})`,
-      "",
-      "### Invisible Reason Breakdown",
-      "",
-    );
-
-    if (canonicalVisibility.totals.invisibleCount <= 0) {
-      visibilityLines.push(
-        "All active canonical listings are currently visible.",
-        "",
-      );
-    } else {
-      visibilityLines.push(
-        "| Reason | Count | Share of Invisible |",
-        "| :----- | ----: | -----------------: |",
-      );
-
-      for (const row of canonicalVisibility.reasons) {
-        visibilityLines.push(
-          `| ${formatReasonLabel(row.reason)} | ${row.count} | ${formatPercentText(row.count, canonicalVisibility.totals.invisibleCount)} |`,
-        );
-      }
-      visibilityLines.push("");
-    }
-  }
-
-  const visibilityStartIdx = lines.findIndex(
-    (line) => line.trim() === visibilityHeading,
+  visibilityLines.push(
+    `- Total listings from adapter detail indexes (` +
+      "`details/index.json`" +
+      `): ${sourceIndexTotals.totalIndexEntries}`,
+    `- Total detail JSON files (matrix total): ${totals.files}`,
+    `- Index vs detail delta: ${sourceIndexTotals.totalIndexEntries - totals.files}`,
+    `- Adapters with index.json: ${sourceIndexTotals.adaptersWithIndex}/${adapterKeys.length}`,
   );
+
+  if (sourceIndexTotals.adaptersMissingIndex.length > 0) {
+    visibilityLines.push(
+      `- Missing index.json adapters: ${sourceIndexTotals.adaptersMissingIndex.join(", ")}`,
+    );
+  }
+  visibilityLines.push("");
+
+  let visibilityStartIdx = lines.findIndex(
+    (line) => line.trim() === sourceTotalsHeading,
+  );
+  if (visibilityStartIdx < 0) {
+    visibilityStartIdx = lines.findIndex(
+      (line) => line.trim() === "## Canonical Visibility Totals",
+    );
+  }
   if (visibilityStartIdx >= 0) {
     const visibilityEndIdx = findSectionEnd(lines, visibilityStartIdx);
     lines.splice(
@@ -685,15 +619,14 @@ async function main(): Promise<void> {
         adaptersInRegistry: adapterKeys.length,
         adaptersRendered: stats.length,
         readyCount,
-        canonicalVisibility:
-          canonicalVisibility === null
-            ? null
-            : {
-                totalActive: canonicalVisibility.totals.totalActive,
-                visibleCount: canonicalVisibility.totals.visibleCount,
-                invisibleCount: canonicalVisibility.totals.invisibleCount,
-                reasons: canonicalVisibility.reasons,
-              },
+        sourceTotals: {
+          indexEntries: sourceIndexTotals.totalIndexEntries,
+          detailJsonFiles: totals.files,
+          indexVsDetailDelta:
+            sourceIndexTotals.totalIndexEntries - totals.files,
+          adaptersWithIndex: sourceIndexTotals.adaptersWithIndex,
+          adaptersMissingIndex: sourceIndexTotals.adaptersMissingIndex,
+        },
         totals: {
           ...totals,
           avgImgList: totalAvg,
