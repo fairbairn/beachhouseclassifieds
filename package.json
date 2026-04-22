@@ -163,6 +163,8 @@
     "listings:fill-null-rooms:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run listings:fill-null-rooms:raw --",
     "occupancy:health:raw": "tsx src/lib/scripts/run-occupancy-health-check.ts",
     "occupancy:health:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run occupancy:health:raw --",
+    "occupancy:rates:raw": "tsx src/lib/scripts/run-occupancy-rates.ts",
+    "occupancy:rates": "npm run occupancy:rates:raw --",
     "pricing:validate:ready-conformance-matrix:raw": "tsx src/lib/scripts/run-ready-conformance-matrix-validation.ts",
     "pricing:validate:ready-conformance-matrix": "npm run pricing:validate:ready-conformance-matrix:raw --",
     "pricing:validate:ready-conformance-matrix:strict": "npm run pricing:validate:ready-conformance-matrix:raw -- --strict",

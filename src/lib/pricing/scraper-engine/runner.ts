@@ -1445,7 +1445,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
           maxCalendarAdvanceMonths,
           refreshMode: options.refreshMode,
           mode: options.mode,
-          existingDetailJsonPath: existingArtifact?.jsonPath ?? null,
+          existingDetailJsonPath: null,
           reportDetailProgress,
         }),
         options.detailTimeoutMs,

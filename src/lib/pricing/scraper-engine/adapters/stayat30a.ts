@@ -82,6 +82,32 @@ function deriveTurnDayStatuses(
   }
 }
 
+function shouldReplaceStatusCode(
+  previous: LuxuryDayCode,
+  next: LuxuryDayCode,
+): boolean {
+  const codePriority: Record<LuxuryDayCode, number> = {
+    X: 0,
+    A: 1,
+    U: 1,
+    I: 2,
+    O: 2,
+  };
+
+  if (codePriority[next] > codePriority[previous]) {
+    return true;
+  }
+
+  // When both are same priority, prefer explicit blocked over assumed available.
+  if (codePriority[next] === codePriority[previous]) {
+    if (previous === "A" && next === "U") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 type StayAt30ADetailRecord = DetailRecordBase & {
   title: string;
   quote_context?: {
@@ -1212,6 +1238,8 @@ function extractAvailabilityFromRightWidgetHtml(
   hasCalendarWidget: boolean;
   bookingRestrictions: string[];
   items: Array<{ date: string; code: LuxuryDayCode; minNights: number | null }>;
+  preloadStartIso: string;
+  preloadEndIso: string;
   minNightRules: Array<{
     start_date: string;
     end_date: string;
@@ -1226,6 +1254,8 @@ function extractAvailabilityFromRightWidgetHtml(
       hasCalendarWidget: false,
       bookingRestrictions: [],
       items: [],
+      preloadStartIso: "",
+      preloadEndIso: "",
       minNightRules: [],
     };
   }
@@ -1340,8 +1370,151 @@ function extractAvailabilityFromRightWidgetHtml(
       "Selected",
     ],
     items,
+    preloadStartIso,
+    preloadEndIso,
     minNightRules,
   };
+}
+
+function extractAvailabilityFromRenderedAvailabilityHtml(html: string): Array<{
+  date: string;
+  code: LuxuryDayCode;
+}> {
+  const parseMonthHeader = (
+    value: string,
+  ): { year: number; monthIndex: number } | null => {
+    const cleaned = value.replace(/\s+/g, " ").trim();
+    const match = cleaned.match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (!match) {
+      return null;
+    }
+
+    const monthName = (match[1] ?? "").toLowerCase();
+    const year = Number(match[2]);
+    const monthLookup: Record<string, number> = {
+      jan: 0,
+      january: 0,
+      feb: 1,
+      february: 1,
+      mar: 2,
+      march: 2,
+      apr: 3,
+      april: 3,
+      may: 4,
+      jun: 5,
+      june: 5,
+      jul: 6,
+      july: 6,
+      aug: 7,
+      august: 7,
+      sep: 8,
+      sept: 8,
+      september: 8,
+      oct: 9,
+      october: 9,
+      nov: 10,
+      november: 10,
+      dec: 11,
+      december: 11,
+    };
+
+    const monthIndex = monthLookup[monthName];
+    if (!Number.isFinite(monthIndex) || !Number.isFinite(year)) {
+      return null;
+    }
+
+    return { year, monthIndex };
+  };
+
+  const toIso = (year: number, monthIndex: number, day: number): string => {
+    const date = new Date(Date.UTC(year, monthIndex, day));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== monthIndex ||
+      date.getUTCDate() !== day
+    ) {
+      return "";
+    }
+
+    return date.toISOString().slice(0, 10);
+  };
+
+  const deriveCodeFromClass = (classBlobRaw: string): LuxuryDayCode => {
+    const classBlob = classBlobRaw.toLowerCase();
+    if (
+      classBlob.includes("booked") ||
+      classBlob.includes("unavailable") ||
+      classBlob.includes("unselectable")
+    ) {
+      return "U";
+    }
+    if (classBlob.includes("bookstart") || classBlob.includes("check-in")) {
+      return "I";
+    }
+    if (classBlob.includes("bookend") || classBlob.includes("check-out")) {
+      return "O";
+    }
+    if (classBlob.includes("available")) {
+      return "A";
+    }
+    if (classBlob.includes("unforeseeable") || classBlob.includes("other")) {
+      return "X";
+    }
+    if (classBlob.includes("day")) {
+      return "A";
+    }
+    return "X";
+  };
+
+  const sectionMatch = html.match(
+    /<section[^>]*id=["']pdavailcal["'][^>]*>[\s\S]*?<\/section>/i,
+  );
+  const source = sectionMatch?.[0] ?? html;
+
+  const items: Array<{ date: string; code: LuxuryDayCode }> = [];
+  const calendarRegex =
+    /<div class="calendar">[\s\S]*?<span class="title">([^<]+)<\/span>[\s\S]*?<\/div>\s*<\/div>/gi;
+  let calendarMatch: RegExpExecArray | null = calendarRegex.exec(source);
+  while (calendarMatch) {
+    const monthLabel = stripHtml(calendarMatch[1] ?? "");
+    const parsedMonth = parseMonthHeader(monthLabel);
+    if (parsedMonth) {
+      const calendarHtml = calendarMatch[0] ?? "";
+      const dayRegex = /<div class="day\s+([^\"]*)">([^<]*)/gi;
+      let dayMatch: RegExpExecArray | null = dayRegex.exec(calendarHtml);
+      while (dayMatch) {
+        const className = (dayMatch[1] ?? "").trim();
+        if (!className || /\bnot-in-month\b/i.test(className)) {
+          dayMatch = dayRegex.exec(calendarHtml);
+          continue;
+        }
+
+        const dayValue = Number((dayMatch[2] ?? "").replace(/\D+/g, ""));
+        if (!Number.isFinite(dayValue) || dayValue < 1 || dayValue > 31) {
+          dayMatch = dayRegex.exec(calendarHtml);
+          continue;
+        }
+
+        const isoDate = toIso(
+          parsedMonth.year,
+          parsedMonth.monthIndex,
+          dayValue,
+        );
+        if (isoDate) {
+          items.push({
+            date: isoDate,
+            code: deriveCodeFromClass(className),
+          });
+        }
+
+        dayMatch = dayRegex.exec(calendarHtml);
+      }
+    }
+
+    calendarMatch = calendarRegex.exec(source);
+  }
+
+  return items;
 }
 
 async function discoverListings(
@@ -1662,6 +1835,37 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
   bookingRestrictions: string[];
 }> {
   return page.evaluate(() => {
+    const deriveCodeFromClass = (classBlobRaw: string): LuxuryDayCode => {
+      const classBlob = classBlobRaw.toLowerCase();
+
+      if (
+        classBlob.includes("booked") ||
+        classBlob.includes("unavailable") ||
+        classBlob.includes("unselectable")
+      ) {
+        return "U";
+      }
+      if (classBlob.includes("bookstart") || classBlob.includes("check-in")) {
+        return "I";
+      }
+      if (classBlob.includes("bookend") || classBlob.includes("check-out")) {
+        return "O";
+      }
+      if (classBlob.includes("available")) {
+        return "A";
+      }
+      if (
+        classBlob.includes("unforeseeable") ||
+        classBlob.includes("not-in-month")
+      ) {
+        return "X";
+      }
+      if (classBlob.includes("day")) {
+        return "A";
+      }
+      return "X";
+    };
+
     const toIso = (year: number, monthIndex: number, day: number): string => {
       const date = new Date(Date.UTC(year, monthIndex, day));
       if (
@@ -1721,107 +1925,100 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
     };
 
     const items: Array<{ date: string; code: LuxuryDayCode }> = [];
-    const monthHeaders = Array.from(
-      document.querySelectorAll(
-        ".pdp-availability-calendar-container .mb-2 strong, .pdp-availability-calendar-container .mb-2, #availability .month h3, .bookcalendar .month h3",
-      ),
+    const modernCalendarNodes = Array.from(
+      document.querySelectorAll("#rt-availcal-app .calendar"),
+    );
+    const hasModernAvailabilitySection = modernCalendarNodes.length > 0;
+
+    const monthHeaders = (
+      hasModernAvailabilitySection
+        ? Array.from(
+            document.querySelectorAll(
+              "#rt-availcal-app .calendar .header .title",
+            ),
+          )
+        : Array.from(
+            document.querySelectorAll(
+              ".pdp-availability-calendar-container .mb-2 strong, .pdp-availability-calendar-container .mb-2, #availability .month h3, .bookcalendar .month h3",
+            ),
+          )
     )
       .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
       .filter(Boolean);
 
-    for (const cell of Array.from(document.querySelectorAll("td[data-date]"))) {
-      const rawDate = (cell.getAttribute("data-date") ?? "").trim();
-      const match = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (!match) {
-        continue;
-      }
-
-      const month = Number(match[1]);
-      const day = Number(match[2]);
-      const year = Number(match[3]);
-      if (
-        !Number.isFinite(month) ||
-        !Number.isFinite(day) ||
-        !Number.isFinite(year)
-      ) {
-        continue;
-      }
-
-      const isoDate = new Date(Date.UTC(year, month - 1, day))
-        .toISOString()
-        .slice(0, 10);
-
-      const classBlob = String(
-        (cell as HTMLElement).className || "",
-      ).toLowerCase();
-      let code: LuxuryDayCode = "X";
-      if (classBlob.includes("check-in")) {
-        code = "I";
-      } else if (classBlob.includes("check-out")) {
-        code = "O";
-      } else if (classBlob.includes("available")) {
-        code = "A";
-      } else if (
-        classBlob.includes("booked") ||
-        classBlob.includes("unavailable")
-      ) {
-        code = "U";
-      }
-
-      items.push({ date: isoDate, code });
-    }
-
-    if (items.length === 0) {
-      const monthNodes = Array.from(
-        document.querySelectorAll("#availability .month, .bookcalendar .month"),
-      );
-
-      for (const monthNode of monthNodes) {
-        const monthLabel = (monthNode.querySelector("h3")?.textContent ?? "")
-          .replace(/\s+/g, " ")
-          .trim();
-        const parsedMonth = parseMonthHeader(monthLabel);
-        if (!parsedMonth) {
+    if (!hasModernAvailabilitySection) {
+      for (const cell of Array.from(
+        document.querySelectorAll("td[data-date]"),
+      )) {
+        const rawDate = (cell.getAttribute("data-date") ?? "").trim();
+        const match = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (!match) {
           continue;
         }
 
-        for (const dayNode of Array.from(
-          monthNode.querySelectorAll(".week .day"),
-        )) {
-          const dayText = (dayNode.textContent ?? "").replace(/\D+/g, "");
-          const day = Number(dayText);
-          if (!Number.isFinite(day) || day < 1 || day > 31) {
-            continue;
-          }
-
-          const isoDate = toIso(parsedMonth.year, parsedMonth.monthIndex, day);
-          if (!isoDate) {
-            continue;
-          }
-
-          const classBlob = String(
-            (dayNode as HTMLElement).className || "",
-          ).toLowerCase();
-          let code: LuxuryDayCode = "A";
-          if (
-            classBlob.includes("booked") ||
-            classBlob.includes("unavailable")
-          ) {
-            code = "U";
-          } else if (
-            classBlob.includes("start") ||
-            classBlob.includes("check-in")
-          ) {
-            code = "I";
-          } else if (
-            classBlob.includes("bookend") ||
-            classBlob.includes("check-out")
-          ) {
-            code = "O";
-          }
-
-          items.push({ date: isoDate, code });
+        const month = Number(match[1]);
+        const day = Number(match[2]);
+        const year = Number(match[3]);
+        if (
+          !Number.isFinite(month) ||
+          !Number.isFinite(day) ||
+          !Number.isFinite(year)
+        ) {
+          continue;
         }
+
+        const isoDate = new Date(Date.UTC(year, month - 1, day))
+          .toISOString()
+          .slice(0, 10);
+
+        const code = deriveCodeFromClass(
+          String((cell as HTMLElement).className || ""),
+        );
+
+        items.push({ date: isoDate, code });
+      }
+    }
+
+    const monthNodes = hasModernAvailabilitySection
+      ? modernCalendarNodes
+      : Array.from(
+          document.querySelectorAll(
+            "#availability .month, .bookcalendar .month",
+          ),
+        );
+
+    for (const monthNode of monthNodes) {
+      const monthLabel = (
+        monthNode.querySelector(".header .title")?.textContent ??
+        monthNode.querySelector("h3")?.textContent ??
+        ""
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+      const parsedMonth = parseMonthHeader(monthLabel);
+      if (!parsedMonth) {
+        continue;
+      }
+
+      for (const dayNode of Array.from(
+        monthNode.querySelectorAll(".week .day, .days .day"),
+      )) {
+        const dayText = (dayNode.textContent ?? "").replace(/\D+/g, "");
+        const day = Number(dayText);
+        if (!Number.isFinite(day) || day < 1 || day > 31) {
+          continue;
+        }
+
+        const isoDate = toIso(parsedMonth.year, parsedMonth.monthIndex, day);
+        if (!isoDate) {
+          continue;
+        }
+
+        const code = deriveCodeFromClass(
+          String((dayNode as HTMLElement).className || ""),
+        );
+
+        items.push({ date: isoDate, code });
       }
     }
 
@@ -1840,7 +2037,7 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
 
     return {
       hasCalendarWidget: !!document.querySelector(
-        ".pdp-availability-calendar, .pdp-availability-calendar-table, .ui-datepicker, .ui-datepicker-inline, .rcav-key, #availability .bookcalendar, #availability .month",
+        ".pdp-availability-calendar, .pdp-availability-calendar-table, .ui-datepicker, .ui-datepicker-inline, .rcav-key, #availability .bookcalendar, #availability .month, #rt-availcal-app .calendar",
       ),
       months: Array.from(new Set(monthHeaders)),
       items,
@@ -2230,14 +2427,6 @@ async function fetchDetail(
 
     const dayCodeByDate = new Map<string, LuxuryDayCode>();
     const minNightsByDate = new Map<string, number>();
-    const codePriority: Record<LuxuryDayCode, number> = {
-      X: 0,
-      A: 1,
-      U: 1,
-      I: 2,
-      O: 2,
-    };
-
     const bookingRestrictions = new Set<string>();
     let minNightRules: Array<{
       start_date: string;
@@ -2281,7 +2470,7 @@ async function fetchDetail(
 
       for (const item of rightWidgetAvailability.items) {
         const previous = dayCodeByDate.get(item.date);
-        if (!previous || codePriority[item.code] > codePriority[previous]) {
+        if (!previous || shouldReplaceStatusCode(previous, item.code)) {
           dayCodeByDate.set(item.date, item.code);
         }
 
@@ -2289,8 +2478,144 @@ async function fetchDetail(
           minNightsByDate.set(item.date, item.minNights);
         }
       }
+
+      const unknownTailCount = (() => {
+        let count = 0;
+        for (let i = rightWidgetAvailability.items.length - 1; i >= 0; i -= 1) {
+          if (rightWidgetAvailability.items[i]?.code === "X") {
+            count += 1;
+            continue;
+          }
+          break;
+        }
+        return count;
+      })();
+
+      const shouldProbeCalendarMonths =
+        unknownTailCount >= 14 ||
+        rightWidgetAvailability.preloadEndIso < horizonIso;
+
+      const renderedAvailabilityItems =
+        extractAvailabilityFromRenderedAvailabilityHtml(html);
+      for (const item of renderedAvailabilityItems) {
+        if (item.date < todayIso || item.date > horizonIso) {
+          continue;
+        }
+
+        const previous = dayCodeByDate.get(item.date);
+        if (!previous || shouldReplaceStatusCode(previous, item.code)) {
+          dayCodeByDate.set(item.date, item.code);
+        }
+      }
+
+      if (shouldProbeCalendarMonths) {
+        const hasRenderedAvailability = await page.evaluate(
+          () =>
+            !!document.querySelector(
+              "#rt-availcal-app .calendar, #availability .month, .bookcalendar .month, td[data-date]",
+            ),
+        );
+        if (!hasRenderedAvailability) {
+          await clickTab(page, "Availability");
+        }
+        await page
+          .waitForSelector(
+            "#rt-availcal-app .calendar, #availability .month, .bookcalendar .month, td[data-date]",
+            { timeout: 2000 },
+          )
+          .catch(() => undefined);
+        await page.waitForTimeout(250);
+
+        for (
+          let iteration = 0;
+          iteration < Math.max(1, maxCalendarAdvanceMonths);
+          iteration += 1
+        ) {
+          calendarIterations += 1;
+
+          const snapshot = await extractAvailabilitySnapshot(page);
+          const monthSignature = snapshot.months.join("|");
+          if (monthSignature && seenMonthSignatures.has(monthSignature)) {
+            stagnantIterations += 1;
+          } else if (monthSignature) {
+            seenMonthSignatures.add(monthSignature);
+            stagnantIterations = 0;
+          }
+
+          for (const restriction of snapshot.bookingRestrictions) {
+            bookingRestrictions.add(restriction);
+          }
+
+          for (const item of snapshot.items) {
+            if (item.date < todayIso || item.date > horizonIso) {
+              continue;
+            }
+
+            const previous = dayCodeByDate.get(item.date);
+            if (!previous || shouldReplaceStatusCode(previous, item.code)) {
+              dayCodeByDate.set(item.date, item.code);
+            }
+          }
+
+          const latestDate =
+            Array.from(dayCodeByDate.keys()).sort().at(-1) ?? "";
+          if (latestDate && latestDate >= horizonIso) {
+            break;
+          }
+          if (stagnantIterations >= 2) {
+            break;
+          }
+
+          const clickedNext = await page.evaluate(() => {
+            const nodes = Array.from(
+              document.querySelectorAll(
+                "a.ui-datepicker-next, button.next, a.next, .rc-calendar-next, [class*='calendar'] .next, [class*='datepicker'] [title*='Next' i], [class*='datepicker'] [aria-label*='Next' i], button[title*='Next' i], a[title*='Next' i], button[aria-label*='Next' i], a[aria-label*='Next' i]",
+              ),
+            );
+
+            for (const node of nodes) {
+              const element = node as HTMLElement;
+              if (element.offsetParent === null) {
+                continue;
+              }
+              if (
+                element.getAttribute("aria-disabled") === "true" ||
+                element.className.toLowerCase().includes("disabled")
+              ) {
+                continue;
+              }
+              element.click();
+              return true;
+            }
+
+            return false;
+          });
+
+          if (!clickedNext) {
+            break;
+          }
+
+          calendarClicks += 1;
+          await page.waitForTimeout(450);
+        }
+      }
     } else {
-      await clickTab(page, "Availability");
+      const hasRenderedAvailability = await page.evaluate(
+        () =>
+          !!document.querySelector(
+            "#rt-availcal-app .calendar, #availability .month, .bookcalendar .month, td[data-date]",
+          ),
+      );
+      if (!hasRenderedAvailability) {
+        await clickTab(page, "Availability");
+      }
+      await page
+        .waitForSelector(
+          "#rt-availcal-app .calendar, #availability .month, .bookcalendar .month, td[data-date]",
+          { timeout: 2000 },
+        )
+        .catch(() => undefined);
+      await page.waitForTimeout(250);
 
       for (
         let iteration = 0;
@@ -2318,12 +2643,7 @@ async function fetchDetail(
           }
 
           const previous = dayCodeByDate.get(item.date);
-          if (!previous) {
-            dayCodeByDate.set(item.date, item.code);
-            continue;
-          }
-
-          if (codePriority[item.code] > codePriority[previous]) {
+          if (!previous || shouldReplaceStatusCode(previous, item.code)) {
             dayCodeByDate.set(item.date, item.code);
           }
         }

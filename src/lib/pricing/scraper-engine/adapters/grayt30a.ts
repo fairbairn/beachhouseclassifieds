@@ -1042,61 +1042,16 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
 }> {
   return page.evaluate(() => {
     const items: Array<{ date: string; code: LuxuryDayCode }> = [];
+    const listingAvailRoot = document.querySelector("#listing-avail");
     const monthHeaders = Array.from(
-      document.querySelectorAll(
-        ".pdp-availability-calendar-container .mb-2 strong, .pdp-availability-calendar-container .mb-2",
-      ),
+      listingAvailRoot?.querySelectorAll("table.rc-calendar caption") ?? [],
     )
       .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
       .filter(Boolean);
 
-    for (const cell of Array.from(document.querySelectorAll("td[data-date]"))) {
-      const rawDate = (cell.getAttribute("data-date") ?? "").trim();
-      const match = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (!match) {
-        continue;
-      }
-
-      const month = Number(match[1]);
-      const day = Number(match[2]);
-      const year = Number(match[3]);
-      if (
-        !Number.isFinite(month) ||
-        !Number.isFinite(day) ||
-        !Number.isFinite(year)
-      ) {
-        continue;
-      }
-
-      const isoDate = new Date(Date.UTC(year, month - 1, day))
-        .toISOString()
-        .slice(0, 10);
-
-      const classBlob = String(
-        (cell as HTMLElement).className || "",
-      ).toLowerCase();
-      let code: LuxuryDayCode = "X";
-      if (classBlob.includes("check-in")) {
-        code = "I";
-      } else if (classBlob.includes("check-out")) {
-        code = "O";
-      } else if (classBlob.includes("available")) {
-        code = "A";
-      } else if (
-        classBlob.includes("booked") ||
-        classBlob.includes("unavailable")
-      ) {
-        code = "U";
-      }
-
-      items.push({ date: isoDate, code });
-    }
-
-    // Legacy rcav calendar tables expose month/day in table captions and td classes.
+    // Grayt availability is authoritative in the on-page #listing-avail rc-calendar.
     for (const table of Array.from(
-      document.querySelectorAll(
-        ".rcav-calendar .rc-calendar, table.rc-calendar",
-      ),
+      listingAvailRoot?.querySelectorAll("table.rc-calendar") ?? [],
     )) {
       const captionText =
         table
@@ -1135,12 +1090,12 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
 
         const classBlob = dayCell.className.toLowerCase();
         let code: LuxuryDayCode = "X";
-        if (classBlob.includes("av-a")) {
-          code = "A";
+        if (classBlob.includes("av-out")) {
+          code = "O";
         } else if (classBlob.includes("av-in")) {
           code = "I";
-        } else if (classBlob.includes("av-out")) {
-          code = "O";
+        } else if (classBlob.includes("av-o")) {
+          code = "A";
         } else if (classBlob.includes("av-x") || classBlob.includes("av-u")) {
           code = "U";
         }
@@ -1150,9 +1105,7 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
     }
 
     const keyText = Array.from(
-      document.querySelectorAll(
-        ".be-calendar-legend-key-text, .rcav-key, .bre-ui-datepicker-extras, .label",
-      ),
+      listingAvailRoot?.querySelectorAll(".rcav-key, .label") ?? [],
     )
       .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
       .filter(Boolean)
@@ -1163,9 +1116,7 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
       );
 
     return {
-      hasCalendarWidget: !!document.querySelector(
-        ".pdp-availability-calendar, .pdp-availability-calendar-table, .ui-datepicker, .ui-datepicker-inline, .rcav-key, .rcav-calendar, table.rc-calendar",
-      ),
+      hasCalendarWidget: !!listingAvailRoot,
       months: Array.from(new Set(monthHeaders)),
       items,
       bookingRestrictions: Array.from(new Set(keyText)).slice(0, 40),
@@ -1615,10 +1566,11 @@ async function fetchDetail(
       }
 
       const clickedNext = await page.evaluate(() => {
+        const listingAvailRoot = document.querySelector("#listing-avail");
         const nodes = Array.from(
-          document.querySelectorAll(
-            "a.ui-datepicker-next, button.next, a.next, .rc-calendar-next, [class*='calendar'] .next, [class*='datepicker'] [title*='Next' i], [class*='datepicker'] [aria-label*='Next' i], button[title*='Next' i], a[title*='Next' i], button[aria-label*='Next' i], a[aria-label*='Next' i]",
-          ),
+          listingAvailRoot?.querySelectorAll(
+            "a.ui-datepicker-next, button.next, a.next, .rc-calendar-next, [title*='Next' i], [aria-label*='Next' i]",
+          ) ?? [],
         );
 
         for (const node of nodes) {
@@ -1704,6 +1656,16 @@ async function fetchDetail(
         },
       );
       windowCursor.setUTCDate(windowCursor.getUTCDate() + 1);
+    }
+
+    const earlyWindow = completeWindowDays.slice(0, 75);
+    const earlyUnknownCount = earlyWindow.filter(
+      (day) => day.status_code === "X",
+    ).length;
+    if (earlyUnknownCount >= 6) {
+      throw new Error(
+        `grayt30a availability parse rejected for ${externalListingId}: early_unknown_days=${earlyUnknownCount} within first_${earlyWindow.length}_days (expected #listing-avail to resolve A/U/I/O without unknowns)`,
+      );
     }
 
     const externalListingId = extractExternalListingId(detailUrl);

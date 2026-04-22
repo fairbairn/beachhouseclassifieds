@@ -70,6 +70,10 @@ type ValidationIssueCode =
   | "missing_checkout_boolean"
   | "uniform_day_codes_red_flag"
   | "uniform_status_code_red_flag"
+  | "sparse_signal_red_flag"
+  | "long_unknown_tail_red_flag"
+  | "high_unknown_ratio_red_flag"
+  | "implausible_ax_only_shape_red_flag"
   | "missing_turn_day_status"
   | "missing_checkout_turn_day_boundary"
   | "missing_checkin_turn_day_boundary"
@@ -327,6 +331,64 @@ function pushIssue(
   issues.push({ severity, code, message });
 }
 
+function analyzeSignalTail(days: AvailabilityDayRecord[]): {
+  signalCount: number;
+  blockedOrUnknownCount: number;
+  unknownCount: number;
+  trailingBlockedOrUnknownLength: number;
+  trailingUnknownLength: number;
+} {
+  let signalCount = 0;
+  let blockedOrUnknownCount = 0;
+  let unknownCount = 0;
+  let lastSignalIndex = -1;
+
+  for (let index = 0; index < days.length; index += 1) {
+    const status = toCanonicalStatusCode(days[index]?.status_code);
+    if (!status || !CANONICAL_STATUS_CODES.has(status)) {
+      continue;
+    }
+
+    if (status === "A" || status === "I" || status === "O") {
+      signalCount += 1;
+      lastSignalIndex = index;
+      continue;
+    }
+
+    if (status === "U" || status === "X") {
+      blockedOrUnknownCount += 1;
+      if (status === "X") {
+        unknownCount += 1;
+      }
+    }
+  }
+
+  let trailingBlockedOrUnknownLength = 0;
+  let trailingUnknownLength = 0;
+  if (lastSignalIndex >= 0) {
+    for (let index = lastSignalIndex + 1; index < days.length; index += 1) {
+      const status = toCanonicalStatusCode(days[index]?.status_code);
+      if (!status) {
+        continue;
+      }
+      if (status === "U" || status === "X") {
+        trailingBlockedOrUnknownLength += 1;
+        if (status === "X") {
+          trailingUnknownLength += 1;
+        }
+      }
+    }
+  }
+
+  return {
+    signalCount,
+    blockedOrUnknownCount,
+    unknownCount,
+    trailingBlockedOrUnknownLength,
+    trailingUnknownLength,
+  };
+}
+
 function printIssues(issues: ValidationIssue[]): void {
   for (const issue of issues.slice(0, 80)) {
     const severityLabel =
@@ -466,7 +528,10 @@ async function validateAdapterAvailabilityStatusCodes(
     let nonCanonicalDayChangeoverCount = 0;
     let inconsistentDayChangeoverCount = 0;
     let canonicalStatusCount = 0;
+    let statusACount = 0;
     let statusUCount = 0;
+    let statusICount = 0;
+    let statusOCount = 0;
     let statusXCount = 0;
 
     for (let index = 0; index < days.length; index += 1) {
@@ -509,8 +574,14 @@ async function validateAdapterAvailabilityStatusCodes(
 
       if (CANONICAL_STATUS_CODES.has(canonicalStatus ?? "")) {
         canonicalStatusCount += 1;
-        if (canonicalStatus === "U") {
+        if (canonicalStatus === "A") {
+          statusACount += 1;
+        } else if (canonicalStatus === "U") {
           statusUCount += 1;
+        } else if (canonicalStatus === "I") {
+          statusICount += 1;
+        } else if (canonicalStatus === "O") {
+          statusOCount += 1;
         } else if (canonicalStatus === "X") {
           statusXCount += 1;
         }
@@ -635,6 +706,77 @@ async function validateAdapterAvailabilityStatusCodes(
         `${fileName}: normalized_availability.days status_code is all 'X' across ${canonicalStatusCount} day(s); this is a red-flag availability signal`,
         "warning",
       );
+    }
+
+    if (canonicalStatusCount >= 120) {
+      const unknownRatio = statusXCount / canonicalStatusCount;
+      if (unknownRatio > 0.75) {
+        pushIssue(
+          issues,
+          "high_unknown_ratio_red_flag",
+          `${fileName}: high unknown-day ratio detected (X=${statusXCount}, total=${canonicalStatusCount}, ratio=${unknownRatio.toFixed(3)}); this often indicates incomplete calendar coverage or scrape/parsing failure`,
+          "warning",
+        );
+      }
+
+      const signalStats = analyzeSignalTail(days);
+      const signalRatio = signalStats.signalCount / canonicalStatusCount;
+      const blockedOrUnknownRatio =
+        signalStats.blockedOrUnknownCount / canonicalStatusCount;
+
+      // Red flag when only a tiny number of A/I/O signal days exist in a long window.
+      if (
+        signalStats.signalCount > 0 &&
+        signalStats.signalCount <= 14 &&
+        signalRatio <= 0.12 &&
+        blockedOrUnknownRatio >= 0.88 &&
+        signalStats.unknownCount >= 60
+      ) {
+        pushIssue(
+          issues,
+          "sparse_signal_red_flag",
+          `${fileName}: sparse availability signal detected (A/I/O days=${signalStats.signalCount}, U/X days=${signalStats.blockedOrUnknownCount}, X days=${signalStats.unknownCount}, total=${canonicalStatusCount}); likely partial/failed capture`,
+          "warning",
+        );
+      }
+
+      // Red flag when a long blocked/unknown tail follows the last observed signal day.
+      if (
+        signalStats.signalCount > 0 &&
+        signalStats.signalCount <= 30 &&
+        signalStats.trailingBlockedOrUnknownLength >= 120 &&
+        signalStats.trailingUnknownLength >= 90
+      ) {
+        pushIssue(
+          issues,
+          "long_unknown_tail_red_flag",
+          `${fileName}: long trailing U/X tail after last availability signal (tail=${signalStats.trailingBlockedOrUnknownLength} days, trailing X=${signalStats.trailingUnknownLength}, A/I/O days=${signalStats.signalCount}); likely capture truncation`,
+          "warning",
+        );
+      }
+
+      // Red flag for implausible long-horizon shape: almost only A/X with no U
+      // and only a tiny amount of turn activity (I/O). This commonly indicates
+      // partial calendar capture where synthetic defaults filled the horizon.
+      const turnCount = statusICount + statusOCount;
+      const axDominantRatio =
+        (statusACount + statusXCount) / canonicalStatusCount;
+      const hasLargeAandXMass = statusACount >= 120 && statusXCount >= 120;
+      if (
+        canonicalStatusCount >= 365 &&
+        statusUCount === 0 &&
+        turnCount > 0 &&
+        turnCount <= 6 &&
+        axDominantRatio >= 0.98 &&
+        hasLargeAandXMass
+      ) {
+        pushIssue(
+          issues,
+          "implausible_ax_only_shape_red_flag",
+          `${fileName}: implausible long-horizon availability shape (A=${statusACount}, X=${statusXCount}, U=${statusUCount}, I=${statusICount}, O=${statusOCount}, total=${canonicalStatusCount}); likely bad scrape/default-filled calendar`,
+          "warning",
+        );
+      }
     }
 
     const ratesDays = parsed.normalized_rates?.days;
