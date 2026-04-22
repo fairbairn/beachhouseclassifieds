@@ -172,6 +172,12 @@ type KeycoRateObservation = {
 };
 
 type KeycoDetailRecord = DetailRecordBase & {
+  listing_flags?: {
+    non_bookable_online: boolean;
+    availability_validation_exempt: boolean;
+    availability_validation_exempt_reason_code: string | null;
+    availability_validation_exempt_reason: string | null;
+  };
   title: string;
   h1: string;
   canonical_url: string;
@@ -253,6 +259,10 @@ type KeycoDetailRecord = DetailRecordBase & {
       booking_unavailable: number;
       booking_unknown: number;
     };
+    validation_exempt?: boolean;
+    validation_exempt_reason_code?: string | null;
+    validation_exempt_reason?: string | null;
+    validation_exempt_evidence?: string[];
   };
   availability_raw: {
     source_note: string;
@@ -303,6 +313,11 @@ const OUTPUT_ROOT = resolve(
   "keyco30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+
+const AVAILABILITY_VALIDATION_EXEMPT_EXTERNAL_LISTING_IDS = new Set<string>([
+  "5PUGI4jzHz",
+  "9gGhRIrUk0",
+]);
 const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
 
 function normalizeLink(url: string): string {
@@ -3490,6 +3505,19 @@ async function fetchDetail(
     deriveTurnDayStatuses(availabilityDays);
 
     const dayCodes = availabilityDays.map((day) => day.status_code).join("");
+    const availabilityValidationExempt =
+      AVAILABILITY_VALIDATION_EXEMPT_EXTERNAL_LISTING_IDS.has(
+        externalListingId,
+      );
+    const availabilityValidationExemptReasonCode = availabilityValidationExempt
+      ? "non_bookable_online"
+      : null;
+    const availabilityValidationExemptReason = availabilityValidationExempt
+      ? "Listing remains unavailable for all observed days on source calendar."
+      : null;
+    const availabilityValidationExemptEvidence = availabilityValidationExempt
+      ? [normalizedDetailUrl]
+      : [];
 
     const counts = {
       available: availabilityDays.filter((day) => day.status_code === "A")
@@ -3531,6 +3559,14 @@ async function fetchDetail(
       detail_url: normalizedDetailUrl,
       quote_context: {},
       fetched_at: new Date().toISOString(),
+      listing_flags: {
+        non_bookable_online: availabilityValidationExempt,
+        availability_validation_exempt: availabilityValidationExempt,
+        availability_validation_exempt_reason_code:
+          availabilityValidationExemptReasonCode,
+        availability_validation_exempt_reason:
+          availabilityValidationExemptReason,
+      },
       title: normalizedTitle,
       h1: normalizedH1,
       canonical_url: canonicalUrl,
@@ -3600,6 +3636,10 @@ async function fetchDetail(
         day_codes: dayCodes,
         days: availabilityDays,
         counts,
+        validation_exempt: availabilityValidationExempt,
+        validation_exempt_reason_code: availabilityValidationExemptReasonCode,
+        validation_exempt_reason: availabilityValidationExemptReason,
+        validation_exempt_evidence: availabilityValidationExemptEvidence,
       },
       availability_raw: {
         source_note: calendarDays.length

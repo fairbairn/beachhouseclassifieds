@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type KeycoPricingContextResponse = {
@@ -42,6 +44,67 @@ type KeycoPricingContextResponse = {
 const ADAPTER_KEY = "keyco30a" as const;
 const BASE_HOST = "https://key.co";
 const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_KEYCO_NON_TAXABLE_SUBTOTAL_MARKUP_RATE = 0.05;
+const KEYCO_ASSUMPTIONS_PATH = resolve(
+  process.cwd(),
+  "src",
+  "lib",
+  "data",
+  "external-sources",
+  "keyco30a",
+  "pricing-assumptions.json",
+);
+
+type KeycoAdapterPricingAssumptionsStore = {
+  assumptions?: {
+    non_taxable_subtotal_markup_pct?: number;
+  } | null;
+};
+
+let cachedKeycoMarkupRate: number | null = null;
+let keycoMarkupRateLoadPromise: Promise<number> | null = null;
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function normalizeMarkupRate(value: unknown): number | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  if (numeric < 0 || numeric > 1) {
+    return null;
+  }
+  return numeric;
+}
+
+async function loadKeycoMarkupRateFromAssumptions(): Promise<number> {
+  try {
+    const raw = await readFile(KEYCO_ASSUMPTIONS_PATH, "utf8");
+    const parsed = JSON.parse(raw) as KeycoAdapterPricingAssumptionsStore;
+    const configuredRate = normalizeMarkupRate(
+      parsed?.assumptions?.non_taxable_subtotal_markup_pct,
+    );
+    return configuredRate ?? DEFAULT_KEYCO_NON_TAXABLE_SUBTOTAL_MARKUP_RATE;
+  } catch {
+    return DEFAULT_KEYCO_NON_TAXABLE_SUBTOTAL_MARKUP_RATE;
+  }
+}
+
+async function getKeycoNonTaxableSubtotalMarkupRate(): Promise<number> {
+  if (cachedKeycoMarkupRate !== null) {
+    return cachedKeycoMarkupRate;
+  }
+
+  if (!keycoMarkupRateLoadPromise) {
+    keycoMarkupRateLoadPromise = loadKeycoMarkupRateFromAssumptions();
+  }
+
+  const resolved = await keycoMarkupRateLoadPromise;
+  cachedKeycoMarkupRate = resolved;
+  return resolved;
+}
 
 function normalizeTimeoutMs(raw: number | undefined): number {
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
@@ -360,11 +423,20 @@ export async function executeKeyco30aSingleQuote(
           .filter((value) => Number.isFinite(value) && value >= 0)
       : [];
 
-    const feesTotalExclTaxes = feeLines.reduce(
+    const providerFeesTotal = feeLines.reduce(
       (sum, value) => sum + Number(value),
       0,
     );
-    const grandTotal = baseTotal + taxesTotal + feesTotalExclTaxes;
+    const keycoMarkupRate = await getKeycoNonTaxableSubtotalMarkupRate();
+    const hiddenSubtotalMarkup = roundCurrency(
+      (baseTotal + providerFeesTotal) * keycoMarkupRate,
+    );
+    const feesTotalExclTaxes = roundCurrency(
+      providerFeesTotal + hiddenSubtotalMarkup,
+    );
+    const grandTotal = roundCurrency(
+      baseTotal + taxesTotal + feesTotalExclTaxes,
+    );
 
     const handoffUrl = resolveHandoffUrl({
       listingId: input.listingId,

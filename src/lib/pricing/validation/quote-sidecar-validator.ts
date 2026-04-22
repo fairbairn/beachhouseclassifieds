@@ -20,6 +20,7 @@ const DEFAULT_EXPECTED_NIGHTS = 7;
 const DEFAULT_MINIMUM_MAX_QUERIES = 24;
 const DEFAULT_MINIMUM_OBSERVATION_COUNT = 24;
 const MIN_VALID_BASE_TOTAL = 100;
+const ADAPTER_ALLOW_FEES_GE_BASE = new Set<string>(["keyco30a"]);
 
 const ADAPTER_EXPECTED_HANDOFF_SIGNATURES: Record<string, string[]> = {
   scenicstays30a: [
@@ -171,6 +172,7 @@ function validateObservationCadence(
 
 function validateAvailableQuoteSanity(
   observation: CanonicalQuoteObservation,
+  adapterKey: string,
 ): QuoteValidationIssue[] {
   const issues: QuoteValidationIssue[] = [];
 
@@ -204,15 +206,17 @@ function validateAvailableQuoteSanity(
     });
   }
 
+  const allowFeesGeBase = ADAPTER_ALLOW_FEES_GE_BASE.has(adapterKey);
   if (
     !isFiniteNumber(feesTotal) ||
     !isFiniteNumber(baseTotal) ||
-    feesTotal >= baseTotal
+    (!allowFeesGeBase && feesTotal >= baseTotal)
   ) {
     issues.push({
       code: "invalid_fees_total",
-      message:
-        "fees_total_excl_taxes must be < base_total when quote_available=true",
+      message: allowFeesGeBase
+        ? "fees_total_excl_taxes must be a finite number when quote_available=true"
+        : "fees_total_excl_taxes must be < base_total when quote_available=true",
     });
   }
 
@@ -395,7 +399,10 @@ export function validateCanonicalQuoteSidecar(
     }
 
     if (observation.quote_available) {
-      for (const issue of validateAvailableQuoteSanity(observation)) {
+      for (const issue of validateAvailableQuoteSanity(
+        observation,
+        sidecar.adapter_key,
+      )) {
         issues.push({
           code: issue.code,
           message: `observation[${index}]: ${issue.message}`,
