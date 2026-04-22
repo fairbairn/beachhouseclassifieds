@@ -1915,9 +1915,14 @@ async function fetchDetail(
       const todayUtc = new Date(
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
       );
+      const ratesWindowDays = Math.max(
+        168,
+        Number(process.env.KEYCO30A_RATES_WINDOW_DAYS ?? "168") || 168,
+      );
       const horizonUtc = new Date(todayUtc);
       horizonUtc.setUTCDate(
-        todayUtc.getUTCDate() + Math.max(availabilityHorizonDays, 365),
+        todayUtc.getUTCDate() +
+          Math.max(availabilityHorizonDays, ratesWindowDays),
       );
 
       const baselineAvailabilityByDate = new Map(
@@ -1958,10 +1963,6 @@ async function fetchDetail(
         });
       }
 
-      const ratesWindowDays = Math.max(
-        168,
-        Number(process.env.KEYCO30A_RATES_WINDOW_DAYS ?? "168") || 168,
-      );
       const ratesSampleStepDays = Math.max(
         7,
         Number(process.env.KEYCO30A_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
@@ -2983,9 +2984,14 @@ async function fetchDetail(
     const todayUtc = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
     );
+    const ratesWindowDays = Math.max(
+      168,
+      Number(process.env.KEYCO30A_RATES_WINDOW_DAYS ?? "168") || 168,
+    );
     const horizonUtc = new Date(todayUtc);
     horizonUtc.setUTCDate(
-      todayUtc.getUTCDate() + Math.max(availabilityHorizonDays, 365),
+      todayUtc.getUTCDate() +
+        Math.max(availabilityHorizonDays, ratesWindowDays),
     );
 
     const calendarDays = parseAvailabilityCalendarFromHtml(html);
@@ -3029,10 +3035,6 @@ async function fetchDetail(
       });
     }
 
-    const ratesWindowDays = Math.max(
-      168,
-      Number(process.env.KEYCO30A_RATES_WINDOW_DAYS ?? "168") || 168,
-    );
     const ratesSampleStepDays = Math.max(
       7,
       Number(process.env.KEYCO30A_RATES_SAMPLE_STEP_DAYS ?? "7") || 7,
@@ -3699,8 +3701,8 @@ export function createKeyco30AAdapter(): ScraperAdapter<KeycoDetailRecord> {
       Number(process.env.KEYCO30A_FETCH_CONCURRENCY ?? "4") || 4,
     ),
     availabilityHorizonDays: Math.max(
-      365,
-      Number(process.env.KEYCO30A_AVAILABILITY_HORIZON_DAYS ?? "730") || 730,
+      168,
+      Number(process.env.KEYCO30A_AVAILABILITY_HORIZON_DAYS ?? "168") || 168,
     ),
     maxCalendarAdvanceMonths: 0,
     isValidDetailUrl(value: string): string | null {

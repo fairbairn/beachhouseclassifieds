@@ -70,6 +70,7 @@ type ValidationIssueCode =
   | "missing_checkout_boolean"
   | "uniform_day_codes_red_flag"
   | "uniform_status_code_red_flag"
+  | "effectively_uniform_unavailable_red_flag"
   | "sparse_signal_red_flag"
   | "long_unknown_tail_red_flag"
   | "high_unknown_ratio_red_flag"
@@ -533,6 +534,7 @@ async function validateAdapterAvailabilityStatusCodes(
     let statusICount = 0;
     let statusOCount = 0;
     let statusXCount = 0;
+    const checkinOnlyDates: string[] = [];
 
     for (let index = 0; index < days.length; index += 1) {
       const day = days[index] ?? {};
@@ -580,6 +582,9 @@ async function validateAdapterAvailabilityStatusCodes(
           statusUCount += 1;
         } else if (canonicalStatus === "I") {
           statusICount += 1;
+          if (typeof day.date === "string") {
+            checkinOnlyDates.push(day.date.trim());
+          }
         } else if (canonicalStatus === "O") {
           statusOCount += 1;
         } else if (canonicalStatus === "X") {
@@ -706,7 +711,27 @@ async function validateAdapterAvailabilityStatusCodes(
         `${fileName}: normalized_availability.days status_code is all 'X' across ${canonicalStatusCount} day(s); this is a red-flag availability signal`,
         "warning",
       );
+    } else if (
+      shouldFlagUniformUnavailable &&
+      canonicalStatusCount > 0 &&
+      statusACount === 0 &&
+      statusOCount === 0 &&
+      statusICount === 1 &&
+      checkinOnlyDates[0]?.endsWith("-12-31")
+    ) {
+      pushIssue(
+        issues,
+        "effectively_uniform_unavailable_red_flag",
+        `${fileName}: normalized availability is effectively fully unavailable (U=${statusUCount}, I=${statusICount} at ${checkinOnlyDates[0]}, A=${statusACount}, O=${statusOCount}, X=${statusXCount}, total=${canonicalStatusCount}); treating single Dec 31 check-in marker as non-bookable boundary noise`,
+        "warning",
+      );
     }
+
+    const effectivelyUniformUnavailableByBoundaryCheckin =
+      statusACount === 0 &&
+      statusOCount === 0 &&
+      statusICount === 1 &&
+      checkinOnlyDates[0]?.endsWith("-12-31");
 
     if (canonicalStatusCount >= 120) {
       const unknownRatio = statusXCount / canonicalStatusCount;
@@ -726,6 +751,7 @@ async function validateAdapterAvailabilityStatusCodes(
 
       // Red flag when only a tiny number of A/I/O signal days exist in a long window.
       if (
+        !effectivelyUniformUnavailableByBoundaryCheckin &&
         signalStats.signalCount > 0 &&
         signalStats.signalCount <= 14 &&
         signalRatio <= 0.12 &&
@@ -742,6 +768,7 @@ async function validateAdapterAvailabilityStatusCodes(
 
       // Red flag when a long blocked/unknown tail follows the last observed signal day.
       if (
+        !effectivelyUniformUnavailableByBoundaryCheckin &&
         signalStats.signalCount > 0 &&
         signalStats.signalCount <= 30 &&
         signalStats.trailingBlockedOrUnknownLength >= 120 &&

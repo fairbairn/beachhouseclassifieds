@@ -16,7 +16,7 @@ function buildUsageText(entryPath: string): string {
     "",
     "Examples:",
     "  npm run managers:scrape:360blue:engine -- --detail-url <url>",
-    "  npm run managers:scrape:adapter:engine -- --adapter-key keyco30a --refresh-known --refresh-mode dynamic",
+    "  npm run managers:scrape:adapter:engine -- --adapter-key royaldestinations --refresh-known --refresh-mode dynamic",
     "",
     `Known adapters: ${adapters}`,
     "",
