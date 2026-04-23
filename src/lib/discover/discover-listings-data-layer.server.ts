@@ -1,9 +1,11 @@
+import { availabilityStatusCodeNightAvailability } from "@/lib/discover/availability-window-index";
 import { queryDiscoverCountAndFacets } from "@/lib/discover/data-layer/queries/discover-count-facets-query.server";
 import { queryDiscoverDetailRow } from "@/lib/discover/data-layer/queries/discover-detail-query.server";
 import {
   queryDiscoverListingsCount,
   queryDiscoverListingsRows,
   queryDiscoverPricingSummaryRows,
+  queryDiscoverSourceAvailabilityRows,
   queryDiscoverSourcePricingRows,
   type DiscoverListingRecordRow,
 } from "@/lib/discover/data-layer/queries/discover-listings-query.server";
@@ -475,6 +477,12 @@ function toIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
+function addDaysToIsoDate(isoDate: string, daysToAdd: number): string {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + daysToAdd);
+  return date.toISOString().slice(0, 10);
+}
+
 function buildNextMonthStartDate(): Date {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -622,13 +630,26 @@ async function loadPricingContextByListingSlug(input: {
       all_in_nightly: string;
     }>
   >();
+  const availabilityStreamByListingId = new Map<
+    string,
+    {
+      window_start_date: string;
+      status_code_string: string;
+      days_count: number;
+    }
+  >();
 
   if (input.includeAvailabilityCalendar) {
-    const pricingRows = await queryDiscoverSourcePricingRows({
-      listingIds,
-      startDateIso: toIsoDate(today),
-      endDateIso: toIsoDate(horizonEnd),
-    });
+    const [pricingRows, availabilityRows] = await Promise.all([
+      queryDiscoverSourcePricingRows({
+        listingIds,
+        startDateIso: toIsoDate(today),
+        endDateIso: toIsoDate(horizonEnd),
+      }),
+      queryDiscoverSourceAvailabilityRows({
+        listingIds,
+      }),
+    ]);
 
     for (const row of pricingRows) {
       const entries = pricingByListingId.get(row.listing_id) ?? [];
@@ -643,18 +664,26 @@ async function loadPricingContextByListingSlug(input: {
       });
       pricingByListingId.set(row.listing_id, entries);
     }
+
+    for (const row of availabilityRows) {
+      if (
+        !row.window_start_date ||
+        !row.status_code_string ||
+        row.days_count < 1
+      ) {
+        continue;
+      }
+
+      availabilityStreamByListingId.set(row.listing_id, {
+        window_start_date: row.window_start_date,
+        status_code_string: row.status_code_string,
+        days_count: row.days_count,
+      });
+    }
   }
 
   for (const listingRow of input.listingRows) {
     const entries = pricingByListingId.get(listingRow.listing_id) ?? [];
-
-    const contiguousAvailableNightsByIndex = new Array<number>(entries.length);
-    let contiguousFromNextDay = 0;
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const isAvailable = entries[index]?.is_available === true;
-      contiguousFromNextDay = isAvailable ? contiguousFromNextDay + 1 : 0;
-      contiguousAvailableNightsByIndex[index] = contiguousFromNextDay;
-    }
 
     const monthStats = new Map<string, { sum: number; count: number }>();
     for (const entry of entries) {
@@ -681,70 +710,49 @@ async function loadPricingContextByListingSlug(input: {
         statusConfidence: "observed" | "derived";
       }
     > = {};
-    for (const [index, entry] of entries.entries()) {
-      const allIn = asNumber(entry.all_in_nightly);
+    const pricingEntryByStayDate = new Map(
+      entries.map((entry) => [entry.stay_date, entry]),
+    );
+    const availabilityStream = availabilityStreamByListingId.get(
+      listingRow.listing_id,
+    );
+    if (availabilityStream) {
+      for (let index = 0; index < availabilityStream.days_count; index += 1) {
+        const code = availabilityStream.status_code_string[index];
+        if (
+          code !== "A" &&
+          code !== "U" &&
+          code !== "I" &&
+          code !== "O" &&
+          code !== "X"
+        ) {
+          continue;
+        }
 
-      const availabilityStatusCode =
-        entry.availability_status_code === "A" ||
-        entry.availability_status_code === "U" ||
-        entry.availability_status_code === "I" ||
-        entry.availability_status_code === "O" ||
-        entry.availability_status_code === "X"
-          ? entry.availability_status_code
+        const stayDate = addDaysToIsoDate(
+          availabilityStream.window_start_date,
+          index,
+        );
+        const pricingEntry = pricingEntryByStayDate.get(stayDate);
+        const allIn = pricingEntry
+          ? asNumber(pricingEntry.all_in_nightly)
           : null;
+        const isNightAvailable =
+          availabilityStatusCodeNightAvailability(code) ?? false;
 
-      const hasObservedAvailabilitySignals =
-        availabilityStatusCode !== null ||
-        typeof entry.is_available_for_checkin === "boolean" ||
-        typeof entry.is_available_for_checkout === "boolean";
-
-      const minNights = Math.max(1, entry.min_nights ?? 1);
-      const contiguousAvailableNights =
-        contiguousAvailableNightsByIndex[index] ?? 0;
-
-      const isNightAvailable = entry.is_available;
-      const derivedIsCheckInAllowed =
-        isNightAvailable && contiguousAvailableNights >= minNights;
-      const derivedIsCheckOutAllowed =
-        (entries[index - 1]?.is_available ?? false) === true;
-
-      const isCheckInAllowed =
-        entry.is_available_for_checkin ??
-        (availabilityStatusCode === "A" || availabilityStatusCode === "I"
-          ? true
-          : availabilityStatusCode === "U" || availabilityStatusCode === "O"
-            ? false
-            : derivedIsCheckInAllowed);
-
-      const isCheckOutAllowed =
-        entry.is_available_for_checkout ??
-        (availabilityStatusCode === "A" || availabilityStatusCode === "O"
-          ? true
-          : availabilityStatusCode === "U" || availabilityStatusCode === "I"
-            ? false
-            : derivedIsCheckOutAllowed);
-
-      availabilityCalendarStatus[entry.stay_date] = {
-        dayType:
-          availabilityStatusCode !== null
-            ? dayTypeFromAvailabilityStatusCode(availabilityStatusCode)
-            : deriveCalendarDayType({
-                isNightAvailable,
-                isCheckInAllowed,
-                isCheckOutAllowed,
-              }),
-        isNightAvailable,
-        isCheckInAllowed,
-        isCheckOutAllowed,
-        minNights: entry.min_nights,
-        allInNightly:
-          isNightAvailable && allIn !== null
-            ? Math.max(1, Math.round(allIn))
-            : null,
-        statusConfidence: hasObservedAvailabilitySignals
-          ? "observed"
-          : "derived",
-      };
+        availabilityCalendarStatus[stayDate] = {
+          dayType: dayTypeFromAvailabilityStatusCode(code),
+          isNightAvailable,
+          isCheckInAllowed: code === "A" || code === "I",
+          isCheckOutAllowed: code === "A" || code === "O",
+          minNights: pricingEntry?.min_nights ?? null,
+          allInNightly:
+            isNightAvailable && allIn !== null
+              ? Math.max(1, Math.round(allIn))
+              : null,
+          statusConfidence: "observed",
+        };
+      }
     }
 
     const summaryByMonth =

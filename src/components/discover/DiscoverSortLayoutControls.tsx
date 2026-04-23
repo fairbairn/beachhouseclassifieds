@@ -82,15 +82,15 @@ export function DiscoverSortLayoutControls({
     setIsHelpMenuOpen((current) => !current);
   };
 
-  const shouldPulseHelp = true;
+  const shouldPulseHelp = !isCardLayoutLocked;
 
   return (
-    <div className="ml-auto flex items-center gap-2">
-      <div ref={sortMenuRef} className="relative">
+    <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div ref={sortMenuRef} className="relative shrink-0">
         <button
           type="button"
           onClick={() => setIsSortMenuOpen((current) => !current)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white pr-1 pl-2 text-xs font-semibold text-slate-700 shadow-[0_6px_18px_-16px_rgba(15,23,42,0.9)] transition hover:border-teal-200 hover:bg-teal-50/40 focus:border-teal-300 focus:ring-2 focus:ring-teal-100 focus:outline-none"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white pr-1 pl-2 text-xs font-semibold whitespace-nowrap text-slate-700 shadow-[0_6px_18px_-16px_rgba(15,23,42,0.9)] transition hover:border-teal-200 hover:bg-teal-50/40 focus:border-teal-300 focus:ring-2 focus:ring-teal-100 focus:outline-none"
           aria-label="Sort listings"
           aria-haspopup="listbox"
           aria-expanded={isSortMenuOpen}
@@ -133,25 +133,11 @@ export function DiscoverSortLayoutControls({
       </div>
       {isCardLayoutLocked ? (
         <div
-          className="relative inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-1"
+          className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-3 text-xs font-semibold whitespace-nowrap text-slate-500"
           aria-disabled="true"
           title="Map expanded: card layout is fixed"
         >
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500">
-            <LayoutGrid className="h-3.5 w-3.5" />
-          </span>
-          {[2, 3, 4].map((count) => (
-            <span
-              key={count}
-              aria-hidden="true"
-              className="inline-flex h-7 items-center justify-center rounded-md px-2.5 text-xs font-semibold whitespace-nowrap text-transparent"
-            >
-              {count}
-            </span>
-          ))}
-          <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center text-xs font-semibold whitespace-nowrap text-slate-500">
-            1 card (map expanded)
-          </span>
+          1 card (map expanded)
         </div>
       ) : (
         <div className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-1">
@@ -176,7 +162,7 @@ export function DiscoverSortLayoutControls({
           })}
         </div>
       )}
-      <div ref={helpMenuRef} className="relative">
+      <div ref={helpMenuRef} className="relative shrink-0">
         {shouldPulseHelp ? (
           <span
             aria-hidden="true"

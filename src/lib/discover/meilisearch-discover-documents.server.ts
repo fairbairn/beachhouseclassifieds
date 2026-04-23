@@ -1,3 +1,8 @@
+import {
+  AVAILABILITY_INDEX_MAX_STAY_NIGHTS,
+  buildAvailabilityStartIndex,
+  dayIntFromIsoDateString,
+} from "@/lib/discover/availability-window-index";
 import type { DiscoverListing } from "@/lib/discover/discover-types";
 import {
   areaLabelFromCode,
@@ -32,11 +37,83 @@ export type DiscoverSearchDocument = {
   queen_bed_count: number;
   bunk_bed_count: number;
   preview_images: string[];
-  thumbnail_image_url: string | null;
+  poster: string | null;
   typical_pricing_month: string;
   typical_base_nightly: number;
   typical_all_in_nightly: number;
-};
+} & Partial<Record<`avail_${number}`, number[]>>;
+
+function utcTodayDayInt(): number {
+  const now = new Date();
+  const year = String(now.getUTCFullYear()).padStart(4, "0");
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(now.getUTCDate()).padStart(2, "0");
+  return Number(`${year}${month}${day}`);
+}
+
+function availabilityFieldNames(
+  maxStayNights = AVAILABILITY_INDEX_MAX_STAY_NIGHTS,
+): string[] {
+  const out: string[] = [];
+  for (let nights = 1; nights <= maxStayNights; nights += 1) {
+    out.push(`avail_${nights}`);
+  }
+  return out;
+}
+
+function buildAvailabilityFields(
+  listing: DiscoverListing,
+): Record<string, number[]> {
+  const fieldNames = availabilityFieldNames(AVAILABILITY_INDEX_MAX_STAY_NIGHTS);
+  const fallback = Object.fromEntries(
+    fieldNames.map((name) => [name, []]),
+  ) as Record<string, number[]>;
+  const calendarStatus = listing.availabilityCalendarStatus;
+  if (!calendarStatus || typeof calendarStatus !== "object") {
+    return fallback;
+  }
+
+  const dayRows = Object.entries(calendarStatus)
+    .map(([rawDate, status]) => {
+      const dayInt = dayIntFromIsoDateString(rawDate);
+      if (dayInt === null) {
+        return null;
+      }
+      return {
+        dayInt,
+        isNightAvailable: status?.isNightAvailable === true,
+      };
+    })
+    .filter(
+      (
+        row,
+      ): row is {
+        dayInt: number;
+        isNightAvailable: boolean;
+      } => row !== null,
+    )
+    .sort((a, b) => a.dayInt - b.dayInt);
+
+  if (dayRows.length === 0) {
+    return fallback;
+  }
+
+  const dayInts = dayRows.map((row) => row.dayInt);
+  const availabilityFlags = dayRows.map((row) =>
+    row.isNightAvailable ? 1 : 0,
+  ) as Array<0 | 1>;
+
+  const index = buildAvailabilityStartIndex({
+    dayInts,
+    availabilityFlags,
+    maxStayNights: AVAILABILITY_INDEX_MAX_STAY_NIGHTS,
+  });
+
+  return {
+    ...fallback,
+    ...index,
+  };
+}
 
 function normalizeCode(value: string): string {
   return value
@@ -169,9 +246,7 @@ export function toDiscoverSearchDocument(
       .join(" "),
   );
 
-  const hasNoPets = /\bno\s+pets?\b|\bpets?\s+not\s+allowed\b/.test(
-    textBlob,
-  );
+  const hasNoPets = /\bno\s+pets?\b|\bpets?\s+not\s+allowed\b/.test(textBlob);
   const petFriendly =
     !hasNoPets &&
     (includesToken(normalizedAmenityTokens, "pet_friendly") ||
@@ -200,6 +275,7 @@ export function toDiscoverSearchDocument(
   const kingBedCount = asBedCount(bedCounts?.king);
   const queenBedCount = asBedCount(bedCounts?.queen);
   const bunkBedCount = asBedCount(bedCounts?.bunk_beds);
+  const availabilityFields = buildAvailabilityFields(listing);
 
   return {
     id: listing.id,
@@ -227,10 +303,11 @@ export function toDiscoverSearchDocument(
     bunk_bed_count: bunkBedCount,
     preview_images: previewImages,
     // Optional MS-only convenience field for Admin UI cards.
-    thumbnail_image_url: previewImages[0] ?? null,
+    poster: previewImages[0] ?? null,
     typical_pricing_month: listing.typicalPricingMonth,
     typical_base_nightly: Math.max(0, listing.typicalBaseNightly),
     typical_all_in_nightly: Math.max(0, listing.typicalAllInNightly),
+    ...availabilityFields,
   };
 }
 

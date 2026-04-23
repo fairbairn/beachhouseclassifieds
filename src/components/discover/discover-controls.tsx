@@ -1,3 +1,4 @@
+import { AVAILABILITY_WINDOW_DAYS_LIMIT } from "@/lib/discover/availability-window-index";
 import {
   addDays,
   addMonths,
@@ -28,6 +29,8 @@ import {
   type ReactNode,
 } from "react";
 import { DayPicker, type DateRange } from "react-day-picker";
+
+const MAX_AVAILABILITY_SPAN_DAYS = AVAILABILITY_WINDOW_DAYS_LIMIT;
 
 const countFormatter = new Intl.NumberFormat("en-US");
 
@@ -164,24 +167,26 @@ export function DateRangeField({
           ? todayStart
           : to;
 
+    const maxAllowedTo = from
+      ? addDays(from, MAX_AVAILABILITY_SPAN_DAYS - 1)
+      : undefined;
+
+    const boundedTo =
+      safeTo && maxAllowedTo && isAfter(safeTo, maxAllowedTo)
+        ? maxAllowedTo
+        : safeTo;
+
     return {
       from,
-      to: safeTo,
+      to: boundedTo,
     };
   }, [startDate, endDate, todayStart]);
 
   const selectedStartDate = useMemo(() => parseIsoDate(startDate), [startDate]);
-  const maxRangeBandStart = useMemo(
-    () =>
-      selectedStartDate
-        ? startOfDay(addMonths(selectedStartDate, -3))
-        : undefined,
-    [selectedStartDate],
-  );
   const maxRangeBandEnd = useMemo(
     () =>
       selectedStartDate
-        ? startOfDay(addMonths(selectedStartDate, 3))
+        ? startOfDay(addDays(selectedStartDate, MAX_AVAILABILITY_SPAN_DAYS - 1))
         : undefined,
     [selectedStartDate],
   );
@@ -192,14 +197,11 @@ export function DateRangeField({
       return true;
     }
 
-    if (!maxRangeBandStart || !maxRangeBandEnd) {
+    if (!maxRangeBandEnd) {
       return false;
     }
 
-    return (
-      isBefore(normalizedDay, maxRangeBandStart) ||
-      isAfter(normalizedDay, maxRangeBandEnd)
-    );
+    return isAfter(normalizedDay, maxRangeBandEnd);
   };
 
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
@@ -288,11 +290,15 @@ export function DateRangeField({
       safePrevious.getTime() < safeClicked.getTime()
         ? [safePrevious, safeClicked]
         : [safeClicked, safePrevious];
+    const boundedTo = (() => {
+      const latestAllowed = addDays(from, MAX_AVAILABILITY_SPAN_DAYS - 1);
+      return isAfter(to, latestAllowed) ? latestAllowed : to;
+    })();
 
     lastClickedDateRef.current = safeClicked;
     onChange({
       startDate: toIsoDate(from),
-      endDate: toIsoDate(to),
+      endDate: toIsoDate(boundedTo),
     });
   };
 
@@ -333,7 +339,10 @@ export function DateRangeField({
   const hasCompleteSelectedRange = Boolean(startDate && endDate);
   const temporarySingleEndDateLabel =
     startDate && !endDate
-      ? format(addDays(parseISO(startDate), 30), "MMM d, yyyy")
+      ? format(
+          addDays(parseISO(startDate), MAX_AVAILABILITY_SPAN_DAYS - 1),
+          "MMM d, yyyy",
+        )
       : "";
 
   const clearSelection = () => {

@@ -1,6 +1,7 @@
 export {
   listing,
   listing_pricing_summary,
+  listing_source_availability,
   listing_source_image,
   listing_source_link,
   listing_source_link_status_enum,

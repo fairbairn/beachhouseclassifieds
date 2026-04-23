@@ -51,6 +51,10 @@ import {
 } from "@/components/home/homeButtonStyles";
 import { HomeMarketingShell } from "@/components/home/HomeMarketingShell";
 import {
+  AVAILABILITY_QUERY_MAX_STAY_NIGHTS,
+  dayIntFromIsoDateString,
+} from "@/lib/discover/availability-window-index";
+import {
   fetchDiscoverListingDetailPayloadWithCache,
   primeDiscoverListingDetailCache,
   primeDiscoverListingsCache,
@@ -290,22 +294,14 @@ export function DiscoverPage({
   const [selectedBeaches, setSelectedBeaches] = useState<string[]>([]);
   const [selectedCommunities, setSelectedCommunities] = useState<string[]>([]);
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
-  const compositeDiscoverInputs = useMemo<DiscoverInputsState>(
-    () =>
-      normalizeDiscoverInputsState({
-        locationQuery,
-        minSleeps,
-        minBedrooms,
-        minBathrooms,
-        selectedAreas,
-        selectedBeaches,
-        selectedCommunities,
-        selectedFeatures,
-        minKingBeds,
-        minQueenBeds,
-        minBunkBeds,
-      }),
-    [
+  const compositeDiscoverInputs = useMemo<DiscoverInputsState>(() => {
+    const availabilityWindowStartDayInt = dayIntFromIsoDateString(earliestDate);
+    const availabilityWindowEndDayInt = dayIntFromIsoDateString(latestDate);
+    const hasCompleteAvailabilityWindow =
+      availabilityWindowStartDayInt !== null &&
+      availabilityWindowEndDayInt !== null;
+
+    return normalizeDiscoverInputsState({
       locationQuery,
       minSleeps,
       minBedrooms,
@@ -317,8 +313,35 @@ export function DiscoverPage({
       minKingBeds,
       minQueenBeds,
       minBunkBeds,
-    ],
-  );
+      availabilityWindowStartDayInt: hasCompleteAvailabilityWindow
+        ? availabilityWindowStartDayInt
+        : undefined,
+      availabilityWindowEndDayInt: hasCompleteAvailabilityWindow
+        ? availabilityWindowEndDayInt
+        : undefined,
+      availabilityStayNights: hasCompleteAvailabilityWindow
+        ? Math.min(
+            AVAILABILITY_QUERY_MAX_STAY_NIGHTS,
+            Math.max(1, Math.floor(nights)),
+          )
+        : undefined,
+    });
+  }, [
+    locationQuery,
+    earliestDate,
+    latestDate,
+    nights,
+    minSleeps,
+    minBedrooms,
+    minBathrooms,
+    selectedAreas,
+    selectedBeaches,
+    selectedCommunities,
+    selectedFeatures,
+    minKingBeds,
+    minQueenBeds,
+    minBunkBeds,
+  ]);
   const compositeDiscoverInputsSignature = useMemo(
     () => buildDiscoverInputsSignature(compositeDiscoverInputs),
     [compositeDiscoverInputs],
@@ -861,6 +884,10 @@ export function DiscoverPage({
       minKingBeds: requestInputs.minKingBeds,
       minQueenBeds: requestInputs.minQueenBeds,
       minBunkBeds: requestInputs.minBunkBeds,
+      availabilityWindowStartDayInt:
+        requestInputs.availabilityWindowStartDayInt,
+      availabilityWindowEndDayInt: requestInputs.availabilityWindowEndDayInt,
+      availabilityStayNights: requestInputs.availabilityStayNights,
     };
 
     const requestFingerprint = JSON.stringify(clientRequest);

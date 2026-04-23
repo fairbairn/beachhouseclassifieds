@@ -350,6 +350,7 @@ export function DiscoverMapPanel({
   const mapEventCleanupRef = useRef<Array<() => void>>([]);
   const previousPinnedListingIdRef = useRef<string | undefined>(undefined);
   const initialMapTargetRef = useRef(mapTarget);
+  const latestMapTargetRef = useRef(mapTarget);
   const activeMapTargetIdRef = useRef<string | undefined>(mapTarget.id);
   const syncSelectedListingCardRef = useRef(onSyncSelectedListingCard);
   const [isMapInResetState, setIsMapInResetState] = useState(true);
@@ -518,6 +519,7 @@ export function DiscoverMapPanel({
 
       if (activeMapTargetIdRef.current) {
         if (resetToInitialTargetView) {
+          const activeMapTarget = latestMapTargetRef.current;
           const zoom = map.getZoom() ?? 19;
           const center = map.getCenter();
           const lat =
@@ -535,10 +537,12 @@ export function DiscoverMapPanel({
           }
 
           const targetZoom =
-            typeof mapTarget.zoom === "number" ? mapTarget.zoom : 19;
+            typeof activeMapTarget.zoom === "number"
+              ? activeMapTarget.zoom
+              : 19;
           const isAtTargetCenter =
-            Math.abs(lat - mapTarget.lat) <= RESET_CENTER_TOLERANCE &&
-            Math.abs(lng - mapTarget.lng) <= RESET_CENTER_TOLERANCE;
+            Math.abs(lat - activeMapTarget.lat) <= RESET_CENTER_TOLERANCE &&
+            Math.abs(lng - activeMapTarget.lng) <= RESET_CENTER_TOLERANCE;
           const isAtTargetZoom = Math.abs(zoom - targetZoom) < 0.01;
 
           setIsMapInResetState(isAtTargetCenter && isAtTargetZoom);
@@ -568,13 +572,14 @@ export function DiscoverMapPanel({
 
       setIsMapInResetState(isAtDefaultCenter && isAtDefaultZoom);
     },
-    [mapTarget.lat, mapTarget.lng, mapTarget.zoom, resetToInitialTargetView],
+    [resetToInitialTargetView],
   );
 
   useEffect(() => {
+    latestMapTargetRef.current = mapTarget;
     activeMapTargetIdRef.current = mapTarget.id;
     updateResetState(googleMapRef.current);
-  }, [mapTarget.id, updateResetState]);
+  }, [mapTarget, updateResetState]);
 
   useEffect(() => {
     syncSelectedListingCardRef.current = onSyncSelectedListingCard;
@@ -989,6 +994,7 @@ export function DiscoverMapPanel({
     if (!mapTarget.id) {
       marker.map = null;
       clearFocusAnimation();
+      previousPinnedListingIdRef.current = undefined;
       return;
     }
 
@@ -1009,6 +1015,24 @@ export function DiscoverMapPanel({
     if (typeof mapTarget.zoom === "number") {
       const currentZoom = map.getZoom() ?? CONTEXT_ZOOM;
       const targetZoom = mapTarget.zoom;
+      const previousPinnedId = previousPinnedListingIdRef.current;
+      const isPinnedToPinnedTransition =
+        typeof previousPinnedId === "string" &&
+        previousPinnedId.length > 0 &&
+        previousPinnedId !== mapTarget.id;
+
+      if (isPinnedToPinnedTransition) {
+        // Keep the current camera scale when hopping between pinned listings.
+        // This avoids the jarring zoom-reset animation for nearby pins.
+        clearFocusAnimation();
+        map.panTo(nextCenter);
+        if (currentZoom !== targetZoom) {
+          map.setZoom(targetZoom);
+        }
+        map.setMapTypeId(getMapTypeForZoom(map.getZoom() ?? targetZoom));
+        previousPinnedListingIdRef.current = mapTarget.id;
+        return;
+      }
 
       const panAndAdjustZoom = () => {
         clearFocusAnimation();

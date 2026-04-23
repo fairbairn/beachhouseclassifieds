@@ -124,6 +124,9 @@ export type DiscoverSearchRequest = {
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
 };
 
 export type DiscoverSearchResponseMeta = {

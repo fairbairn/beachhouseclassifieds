@@ -325,6 +325,45 @@ export const listing_source_pricing = pgTable(
   }),
 );
 
+export const listing_source_availability = pgTable(
+  "listing_source_availability",
+  {
+    id: text("id").primaryKey(),
+    listing_id: text("listing_id")
+      .notNull()
+      .references(() => listing.id, { onDelete: "cascade" }),
+    source_link_id: text("source_link_id")
+      .notNull()
+      .references(() => listing_source_link.id, { onDelete: "cascade" }),
+    window_start_date: text("window_start_date").notNull(),
+    window_end_date: text("window_end_date").notNull(),
+    status_code_string: text("status_code_string").notNull(),
+    days_count: integer("days_count").notNull().default(0),
+    captured_at: timestamp("captured_at", {
+      mode: "string",
+      withTimezone: true,
+    }),
+    ingest_run_id: text("ingest_run_id"),
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    source_link_unique_idx: uniqueIndex(
+      "listing_source_availability_source_link_unique_idx",
+    ).on(table.source_link_id),
+    listing_window_idx: index(
+      "listing_source_availability_listing_window_idx",
+    ).on(table.listing_id, table.window_start_date, table.window_end_date),
+    window_bounds_idx: index(
+      "listing_source_availability_window_bounds_idx",
+    ).on(table.window_start_date, table.window_end_date),
+  }),
+);
+
 export const listing_pricing_summary = pgTable(
   "listing_pricing_summary",
   {

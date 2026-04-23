@@ -1,4 +1,9 @@
 import {
+  AVAILABILITY_WINDOW_DAYS_LIMIT,
+  DEFAULT_MAX_STAY_NIGHTS,
+  validateAvailabilityWindowInput,
+} from "@/lib/discover/availability-window-index";
+import {
   buildDiscoverListingsPagePayload,
   buildDiscoverListingsPayload,
 } from "@/lib/discover/discover-listings-api.server";
@@ -190,6 +195,21 @@ function sanitizeDiscoverSearchRequest(
     request.minBunkBeds > 0
       ? request.minBunkBeds
       : undefined;
+  const availabilityWindowStartDayInt =
+    typeof request?.availabilityWindowStartDayInt === "number" &&
+    Number.isFinite(request.availabilityWindowStartDayInt)
+      ? Math.floor(request.availabilityWindowStartDayInt)
+      : undefined;
+  const availabilityWindowEndDayInt =
+    typeof request?.availabilityWindowEndDayInt === "number" &&
+    Number.isFinite(request.availabilityWindowEndDayInt)
+      ? Math.floor(request.availabilityWindowEndDayInt)
+      : undefined;
+  const availabilityStayNights =
+    typeof request?.availabilityStayNights === "number" &&
+    Number.isFinite(request.availabilityStayNights)
+      ? Math.floor(request.availabilityStayNights)
+      : undefined;
   const includeMapListings =
     typeof request?.includeMapListings === "boolean"
       ? request.includeMapListings
@@ -256,6 +276,28 @@ function sanitizeDiscoverSearchRequest(
   }
   if (minBunkBeds !== undefined) {
     sanitizedRequest.minBunkBeds = minBunkBeds;
+  }
+
+  const availabilityValidation = validateAvailabilityWindowInput({
+    windowStartDayInt: availabilityWindowStartDayInt,
+    windowEndDayInt: availabilityWindowEndDayInt,
+    stayNights: availabilityStayNights,
+    maxWindowDays: AVAILABILITY_WINDOW_DAYS_LIMIT,
+    maxStayNights: DEFAULT_MAX_STAY_NIGHTS,
+  });
+
+  if (availabilityValidation.isValid) {
+    if (availabilityWindowStartDayInt !== undefined) {
+      sanitizedRequest.availabilityWindowStartDayInt =
+        availabilityWindowStartDayInt;
+    }
+    if (availabilityWindowEndDayInt !== undefined) {
+      sanitizedRequest.availabilityWindowEndDayInt =
+        availabilityWindowEndDayInt;
+    }
+    if (availabilityStayNights !== undefined) {
+      sanitizedRequest.availabilityStayNights = availabilityStayNights;
+    }
   }
 
   return sanitizedRequest;
@@ -344,6 +386,10 @@ export async function executeDiscoverSearch(
     minKingBeds: sanitizedRequest.minKingBeds,
     minQueenBeds: sanitizedRequest.minQueenBeds,
     minBunkBeds: sanitizedRequest.minBunkBeds,
+    availabilityWindowStartDayInt:
+      sanitizedRequest.availabilityWindowStartDayInt,
+    availabilityWindowEndDayInt: sanitizedRequest.availabilityWindowEndDayInt,
+    availabilityStayNights: sanitizedRequest.availabilityStayNights,
   });
 
   return {

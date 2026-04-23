@@ -141,6 +141,9 @@ export async function buildDiscoverListingsPagePayload(input?: {
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
 }): Promise<DiscoverListingsPagePayload> {
   const pageSize = resolvePageSize(input?.limit);
   const offset =
@@ -172,6 +175,9 @@ export async function buildDiscoverListingsPagePayload(input?: {
       minKingBeds: input?.minKingBeds,
       minQueenBeds: input?.minQueenBeds,
       minBunkBeds: input?.minBunkBeds,
+      availabilityWindowStartDayInt: input?.availabilityWindowStartDayInt,
+      availabilityWindowEndDayInt: input?.availabilityWindowEndDayInt,
+      availabilityStayNights: input?.availabilityStayNights,
     });
     const pageItems = normalizeDiscoverListingsForApi(snapshot.pageListings);
     const totalCount = hasSelectedFacetFilters
@@ -210,6 +216,9 @@ export async function buildDiscoverListingsPagePayload(input?: {
       minKingBeds: input?.minKingBeds,
       minQueenBeds: input?.minQueenBeds,
       minBunkBeds: input?.minBunkBeds,
+      availabilityWindowStartDayInt: input?.availabilityWindowStartDayInt,
+      availabilityWindowEndDayInt: input?.availabilityWindowEndDayInt,
+      availabilityStayNights: input?.availabilityStayNights,
     }),
     getDiscoverListingsCount({
       locationQuery: input?.locationQuery,
@@ -223,6 +232,9 @@ export async function buildDiscoverListingsPagePayload(input?: {
       minKingBeds: input?.minKingBeds,
       minQueenBeds: input?.minQueenBeds,
       minBunkBeds: input?.minBunkBeds,
+      availabilityWindowStartDayInt: input?.availabilityWindowStartDayInt,
+      availabilityWindowEndDayInt: input?.availabilityWindowEndDayInt,
+      availabilityStayNights: input?.availabilityStayNights,
     }),
     includeMetadata
       ? getDiscoverCorpusMetadata({
@@ -265,6 +277,9 @@ export async function buildDiscoverListingsPagePayload(input?: {
         minKingBeds: input?.minKingBeds,
         minQueenBeds: input?.minQueenBeds,
         minBunkBeds: input?.minBunkBeds,
+        availabilityWindowStartDayInt: input?.availabilityWindowStartDayInt,
+        availabilityWindowEndDayInt: input?.availabilityWindowEndDayInt,
+        availabilityStayNights: input?.availabilityStayNights,
       });
     }
   }
@@ -311,6 +326,9 @@ export async function buildDiscoverListingsPayload(input?: {
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
 }): Promise<DiscoverListing[]> {
   const includeSlug = input?.includeSlug?.trim() || undefined;
 
@@ -332,6 +350,9 @@ export async function buildDiscoverListingsPayload(input?: {
     minKingBeds: input?.minKingBeds,
     minQueenBeds: input?.minQueenBeds,
     minBunkBeds: input?.minBunkBeds,
+    availabilityWindowStartDayInt: input?.availabilityWindowStartDayInt,
+    availabilityWindowEndDayInt: input?.availabilityWindowEndDayInt,
+    availabilityStayNights: input?.availabilityStayNights,
   });
 
   return normalizeDiscoverListingsForApi(sourceListings);

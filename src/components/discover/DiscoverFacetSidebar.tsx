@@ -1,5 +1,12 @@
 import { Heart } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  createElement,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ComponentType,
+} from "react";
 import * as ReactCountUpModule from "react-countup";
 
 import { FacetSection } from "@/components/discover/discover-controls";
@@ -10,7 +17,17 @@ const CountUpComponent =
   ("CountUp" in ReactCountUpModule
     ? (ReactCountUpModule.CountUp as unknown)
     : undefined);
-const hasCountUpComponent = typeof CountUpComponent === "function";
+type CountUpProps = {
+  start: number;
+  end: number;
+  duration: number;
+  formattingFn: (value: number) => string;
+};
+
+const TypedCountUpComponent = CountUpComponent as
+  | ComponentType<CountUpProps>
+  | undefined;
+const hasCountUpComponent = Boolean(TypedCountUpComponent);
 
 function formatCount(value: number): string {
   return countFormatter.format(value);
@@ -177,17 +194,18 @@ export function DiscoverFacetSidebar({
           Properties
         </p>
         <span className="text-xl font-bold text-slate-900 tabular-nums">
-          {hasMounted && hasCountUpComponent ? (
-            <CountUpComponent
-              key={countUpRenderKey}
-              start={countUpStartValue}
-              end={safeListingCount}
-              duration={0.85}
-              formattingFn={formatCount}
-            />
-          ) : (
-            formatCount(safeListingCount)
-          )}
+          {hasMounted && hasCountUpComponent
+            ? createElement(
+                TypedCountUpComponent as ComponentType<CountUpProps>,
+                {
+                  key: countUpRenderKey,
+                  start: countUpStartValue,
+                  end: safeListingCount,
+                  duration: 0.85,
+                  formattingFn: formatCount,
+                },
+              )
+            : formatCount(safeListingCount)}
         </span>
       </div>
       {favoriteCount > 0 ? (

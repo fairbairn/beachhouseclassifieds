@@ -1,3 +1,5 @@
+import { AVAILABILITY_INDEX_MAX_STAY_NIGHTS } from "@/lib/discover/availability-window-index";
+import type { DiscoverListing } from "@/lib/discover/discover-types";
 import {
   getDiscoverMeilisearchIndex,
   getMeilisearchClient,
@@ -8,11 +10,55 @@ import {
 } from "@/lib/discover/meilisearch-discover-documents.server";
 
 const DEFAULT_BATCH_SIZE = 500;
+const DEFAULT_DETAIL_ENRICH_CONCURRENCY = 20;
+const MEILI_TASK_TIMEOUT_MS = 120_000;
 
 type ParsedArgs = {
   batchSize: number;
   dryRun: boolean;
 };
+
+function availabilityFieldNames(
+  maxStayNights = AVAILABILITY_INDEX_MAX_STAY_NIGHTS,
+): string[] {
+  const out: string[] = [];
+  for (let nights = 1; nights <= maxStayNights; nights += 1) {
+    out.push(`avail_${nights}`);
+  }
+  return out;
+}
+
+async function enrichListingsWithAvailability(input: {
+  listings: DiscoverListing[];
+}): Promise<typeof input.listings> {
+  const { getDiscoverListings } =
+    await import("@/lib/discover/discover-listings-data-layer.server");
+
+  const output = [...input.listings];
+  const concurrency = DEFAULT_DETAIL_ENRICH_CONCURRENCY;
+
+  for (let start = 0; start < output.length; start += concurrency) {
+    const slice = output.slice(start, start + concurrency);
+    const enrichedSlice = await Promise.all(
+      slice.map(async (listing) => {
+        const detailRows = await getDiscoverListings({
+          includeSlug: listing.id,
+          onlySlug: true,
+          maxListings: 1,
+          disableFallback: true,
+        });
+        const detail = detailRows.find((row) => row.id === listing.id);
+        return detail ?? listing;
+      }),
+    );
+
+    for (let index = 0; index < enrichedSlice.length; index += 1) {
+      output[start + index] = enrichedSlice[index];
+    }
+  }
+
+  return output;
+}
 
 function printUsage(): void {
   console.log("Sync discover listings into Meilisearch");
@@ -61,6 +107,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 async function ensureIndexSettings(): Promise<void> {
   const index = getDiscoverMeilisearchIndex();
+  const availabilityFields = availabilityFieldNames();
 
   const task = await index.updateSettings({
     pagination: {
@@ -83,6 +130,7 @@ async function ensureIndexSettings(): Promise<void> {
       "bathrooms",
       "sleeps",
       "typical_all_in_nightly",
+      ...availabilityFields,
     ],
     sortableAttributes: [
       "typical_all_in_nightly",
@@ -126,14 +174,17 @@ async function ensureIndexSettings(): Promise<void> {
       "queen_bed_count",
       "bunk_bed_count",
       "preview_images",
-      "thumbnail_image_url",
+      "poster",
       "typical_pricing_month",
       "typical_base_nightly",
       "typical_all_in_nightly",
+      ...availabilityFields,
     ],
   });
 
-  await getMeilisearchClient().tasks.waitForTask(task);
+  await getMeilisearchClient().tasks.waitForTask(task, {
+    timeout: MEILI_TASK_TIMEOUT_MS,
+  });
 }
 
 async function syncDocuments(
@@ -154,7 +205,9 @@ async function syncDocuments(
   }
 
   const deleteTask = await index.deleteAllDocuments();
-  await getMeilisearchClient().tasks.waitForTask(deleteTask);
+  await getMeilisearchClient().tasks.waitForTask(deleteTask, {
+    timeout: MEILI_TASK_TIMEOUT_MS,
+  });
 
   let syncedCount = 0;
   let offset = 0;
@@ -170,12 +223,18 @@ async function syncDocuments(
       break;
     }
 
-    const documents: DiscoverSearchDocument[] = listings.map((listing) =>
-      toDiscoverSearchDocument(listing),
+    const enrichedListings = await enrichListingsWithAvailability({
+      listings,
+    });
+
+    const documents: DiscoverSearchDocument[] = enrichedListings.map(
+      (listing) => toDiscoverSearchDocument(listing),
     );
 
     const task = await index.addDocuments(documents, { primaryKey: "id" });
-    await getMeilisearchClient().tasks.waitForTask(task);
+    await getMeilisearchClient().tasks.waitForTask(task, {
+      timeout: MEILI_TASK_TIMEOUT_MS,
+    });
 
     syncedCount += documents.length;
     offset += listings.length;

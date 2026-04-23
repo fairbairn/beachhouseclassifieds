@@ -6,6 +6,11 @@ import {
   createNoStoreHeaders,
   optionsResponse,
 } from "@/core/http/api-http";
+import {
+  AVAILABILITY_WINDOW_DAYS_LIMIT,
+  DEFAULT_MAX_STAY_NIGHTS,
+  validateAvailabilityWindowInput,
+} from "@/lib/discover/availability-window-index";
 import { executeDiscoverSearch } from "@/lib/discover/discover-search-service.server";
 
 const DISCOVER_API_MAX_LIMIT = 96;
@@ -48,6 +53,9 @@ async function parseSearchRequestFromBody(request: Request) {
     minKingBeds?: unknown;
     minQueenBeds?: unknown;
     minBunkBeds?: unknown;
+    availabilityWindowStartDayInt?: unknown;
+    availabilityWindowEndDayInt?: unknown;
+    availabilityStayNights?: unknown;
   } | null;
 
   const asStringArray = (value: unknown): string[] | undefined => {
@@ -95,12 +103,22 @@ async function parseSearchRequestFromBody(request: Request) {
     minKingBeds: toOptionalNumber(payload?.minKingBeds),
     minQueenBeds: toOptionalNumber(payload?.minQueenBeds),
     minBunkBeds: toOptionalNumber(payload?.minBunkBeds),
+    availabilityWindowStartDayInt: toOptionalNumber(
+      payload?.availabilityWindowStartDayInt,
+    ),
+    availabilityWindowEndDayInt: toOptionalNumber(
+      payload?.availabilityWindowEndDayInt,
+    ),
+    availabilityStayNights: toOptionalNumber(payload?.availabilityStayNights),
   };
 }
 
 function validateDiscoverSearchBounds(input: {
   limit?: number;
   offset?: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
 }) {
   const fieldErrors: Record<string, string[]> = {};
   const normalizedLimit = Number.isFinite(input.limit)
@@ -130,6 +148,23 @@ function validateDiscoverSearchBounds(input: {
     ];
   }
 
+  const availabilityValidation = validateAvailabilityWindowInput({
+    windowStartDayInt: input.availabilityWindowStartDayInt,
+    windowEndDayInt: input.availabilityWindowEndDayInt,
+    stayNights: input.availabilityStayNights,
+    maxWindowDays: AVAILABILITY_WINDOW_DAYS_LIMIT,
+    maxStayNights: DEFAULT_MAX_STAY_NIGHTS,
+  });
+
+  for (const [fieldName, errors] of Object.entries(
+    availabilityValidation.fieldErrors,
+  )) {
+    if (!fieldErrors[fieldName]) {
+      fieldErrors[fieldName] = [];
+    }
+    fieldErrors[fieldName].push(...errors);
+  }
+
   return Object.keys(fieldErrors).length > 0 ? fieldErrors : null;
 }
 
@@ -143,6 +178,11 @@ export const Route = createFileRoute("/api/discover/listings")({
         const boundsErrors = validateDiscoverSearchBounds({
           limit: parsedRequest.limit,
           offset: parsedRequest.offset,
+          availabilityWindowStartDayInt:
+            parsedRequest.availabilityWindowStartDayInt,
+          availabilityWindowEndDayInt:
+            parsedRequest.availabilityWindowEndDayInt,
+          availabilityStayNights: parsedRequest.availabilityStayNights,
         });
 
         if (boundsErrors) {

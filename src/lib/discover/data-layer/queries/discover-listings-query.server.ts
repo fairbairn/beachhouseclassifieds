@@ -2,6 +2,7 @@ import { pgDb } from "@/core/server/db";
 import {
   listing,
   listing_pricing_summary,
+  listing_source_availability,
   listing_source_link,
   listing_source_pricing,
   site,
@@ -446,5 +447,60 @@ export async function queryDiscoverSourcePricingRows(input: {
     is_available_for_checkout: boolean | null;
     min_nights: number | null;
     all_in_nightly: string;
+  }>;
+}
+
+export async function queryDiscoverSourceAvailabilityRows(input: {
+  listingIds: string[];
+}): Promise<
+  Array<{
+    listing_id: string;
+    window_start_date: string;
+    window_end_date: string;
+    status_code_string: string;
+    days_count: number;
+  }>
+> {
+  if (!pgDb || input.listingIds.length === 0) {
+    return [];
+  }
+
+  const primarySourceRows = await pgDb
+    .select({
+      listing_id: listing_source_link.listing_id,
+      source_link_id: listing_source_link.id,
+    })
+    .from(listing_source_link)
+    .where(
+      and(
+        inArray(listing_source_link.listing_id, input.listingIds),
+        eq(listing_source_link.source_status, "active"),
+        eq(listing_source_link.is_primary_source, true),
+        isNull(listing_source_link.active_to),
+      ),
+    );
+
+  const sourceLinkIds = primarySourceRows.map((row) => row.source_link_id);
+  if (sourceLinkIds.length === 0) {
+    return [];
+  }
+
+  const rows = await pgDb
+    .select({
+      listing_id: listing_source_availability.listing_id,
+      window_start_date: listing_source_availability.window_start_date,
+      window_end_date: listing_source_availability.window_end_date,
+      status_code_string: listing_source_availability.status_code_string,
+      days_count: listing_source_availability.days_count,
+    })
+    .from(listing_source_availability)
+    .where(inArray(listing_source_availability.source_link_id, sourceLinkIds));
+
+  return rows as Array<{
+    listing_id: string;
+    window_start_date: string;
+    window_end_date: string;
+    status_code_string: string;
+    days_count: number;
   }>;
 }

@@ -18,7 +18,21 @@ export type DiscoverInputsState = {
   minKingBeds: number;
   minQueenBeds: number;
   minBunkBeds: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
 };
+
+function normalizeOptionalPositiveInteger(
+  value: number | undefined,
+): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  const normalized = Math.floor(value);
+  return normalized > 0 ? normalized : undefined;
+}
 
 export function normalizeDiscoverInputsState(
   input: DiscoverInputsState,
@@ -36,6 +50,15 @@ export function normalizeDiscoverInputsState(
     minKingBeds: Math.max(0, Math.floor(input.minKingBeds)),
     minQueenBeds: Math.max(0, Math.floor(input.minQueenBeds)),
     minBunkBeds: Math.max(0, Math.floor(input.minBunkBeds)),
+    availabilityWindowStartDayInt: normalizeOptionalPositiveInteger(
+      input.availabilityWindowStartDayInt,
+    ),
+    availabilityWindowEndDayInt: normalizeOptionalPositiveInteger(
+      input.availabilityWindowEndDayInt,
+    ),
+    availabilityStayNights: normalizeOptionalPositiveInteger(
+      input.availabilityStayNights,
+    ),
   };
 }
 
@@ -57,6 +80,9 @@ export function buildDiscoverInputsSignature(
     normalized.minKingBeds,
     normalized.minQueenBeds,
     normalized.minBunkBeds,
+    normalized.availabilityWindowStartDayInt,
+    normalized.availabilityWindowEndDayInt,
+    normalized.availabilityStayNights,
   ]);
 }
 
@@ -76,6 +102,9 @@ export function createDiscoverInputsStore(
     minKingBeds: initial?.minKingBeds ?? 0,
     minQueenBeds: initial?.minQueenBeds ?? 0,
     minBunkBeds: initial?.minBunkBeds ?? 0,
+    availabilityWindowStartDayInt: initial?.availabilityWindowStartDayInt,
+    availabilityWindowEndDayInt: initial?.availabilityWindowEndDayInt,
+    availabilityStayNights: initial?.availabilityStayNights,
   });
 
   return new Store<DiscoverInputsState>(state);

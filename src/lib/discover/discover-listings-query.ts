@@ -195,6 +195,9 @@ function getPageQueryCacheKey(input?: {
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
 }) {
   const limit = Number.isFinite(input?.limit)
     ? String(input?.limit)
@@ -236,8 +239,21 @@ function getPageQueryCacheKey(input?: {
   const minBunkBeds = Number.isFinite(input?.minBunkBeds)
     ? String(input?.minBunkBeds)
     : "0";
+  const availabilityWindowStartDayInt = Number.isFinite(
+    input?.availabilityWindowStartDayInt,
+  )
+    ? String(input?.availabilityWindowStartDayInt)
+    : "0";
+  const availabilityWindowEndDayInt = Number.isFinite(
+    input?.availabilityWindowEndDayInt,
+  )
+    ? String(input?.availabilityWindowEndDayInt)
+    : "0";
+  const availabilityStayNights = Number.isFinite(input?.availabilityStayNights)
+    ? String(input?.availabilityStayNights)
+    : "0";
 
-  return `sort=${sortOption}|limit=${limit}|offset=${offset}|metadata=${includeMetadata}|map=${includeMapListings}|q=${locationQuery}|sleeps=${minSleeps}|bedrooms=${minBedrooms}|bathrooms=${minBathrooms}|areas=${selectedAreas}|beaches=${selectedBeaches}|communities=${selectedCommunities}|features=${selectedFeatures}|king=${minKingBeds}|queen=${minQueenBeds}|bunk=${minBunkBeds}`;
+  return `sort=${sortOption}|limit=${limit}|offset=${offset}|metadata=${includeMetadata}|map=${includeMapListings}|q=${locationQuery}|sleeps=${minSleeps}|bedrooms=${minBedrooms}|bathrooms=${minBathrooms}|areas=${selectedAreas}|beaches=${selectedBeaches}|communities=${selectedCommunities}|features=${selectedFeatures}|king=${minKingBeds}|queen=${minQueenBeds}|bunk=${minBunkBeds}|availStart=${availabilityWindowStartDayInt}|availEnd=${availabilityWindowEndDayInt}|availNights=${availabilityStayNights}`;
 }
 
 export async function fetchDiscoverListingsPage(input?: {
@@ -262,6 +278,9 @@ export async function fetchDiscoverListingsPage(input?: {
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
   bypassCache?: boolean;
 }): Promise<DiscoverListingsPageResponse> {
   const cacheKey = getPageQueryCacheKey(input);
@@ -366,6 +385,24 @@ export async function fetchDiscoverListingsPage(input?: {
   const minBunkBeds = normalizePositiveNumber(input?.minBunkBeds);
   if (minBunkBeds !== undefined) {
     requestBody.minBunkBeds = minBunkBeds;
+  }
+  const availabilityWindowStartDayInt = normalizePositiveNumber(
+    input?.availabilityWindowStartDayInt,
+  );
+  if (availabilityWindowStartDayInt !== undefined) {
+    requestBody.availabilityWindowStartDayInt = availabilityWindowStartDayInt;
+  }
+  const availabilityWindowEndDayInt = normalizePositiveNumber(
+    input?.availabilityWindowEndDayInt,
+  );
+  if (availabilityWindowEndDayInt !== undefined) {
+    requestBody.availabilityWindowEndDayInt = availabilityWindowEndDayInt;
+  }
+  const availabilityStayNights = normalizePositiveNumber(
+    input?.availabilityStayNights,
+  );
+  if (availabilityStayNights !== undefined) {
+    requestBody.availabilityStayNights = availabilityStayNights;
   }
 
   const requestPromise = (async (): Promise<DiscoverListingsPageResponse> => {

@@ -46,6 +46,9 @@ export async function getDiscoverListings(input?: {
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
 }) {
   if (input?.includeSlug?.trim() || input?.onlySlug) {
     return getDiscoverListingsFromPostgres(input);
@@ -72,6 +75,9 @@ export async function getDiscoverListingsCount(input?: {
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
 }) {
   if (!shouldUseMeilisearchBackend()) {
     throw new Error(
@@ -121,6 +127,9 @@ export async function getDiscoverListingsSnapshot(input?: {
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
+  availabilityWindowStartDayInt?: number;
+  availabilityWindowEndDayInt?: number;
+  availabilityStayNights?: number;
 }): Promise<{
   totalCount: number;
   facets: DiscoverCorpusMetadata["facets"];
