@@ -20,6 +20,12 @@ export function getDiscoverSearchSource(): "meilisearch" | "postgres" {
 }
 
 export async function getDiscoverListings(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   includeSlug?: string;
   onlySlug?: boolean;
   disableFallback?: boolean;
@@ -29,6 +35,10 @@ export async function getDiscoverListings(input?: {
     demoOrder: number;
     id: string;
   };
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -51,6 +61,10 @@ export async function getDiscoverListings(input?: {
 }
 
 export async function getDiscoverListingsCount(input?: {
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -69,6 +83,10 @@ export async function getDiscoverListingsCount(input?: {
 }
 
 export async function getDiscoverCorpusMetadata(input?: {
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedFeatures?: string[];
   minKingBeds?: number;
   minQueenBeds?: number;
@@ -84,8 +102,18 @@ export async function getDiscoverCorpusMetadata(input?: {
 }
 
 export async function getDiscoverListingsSnapshot(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   pageLimit?: number;
   mapLimit?: number;
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];

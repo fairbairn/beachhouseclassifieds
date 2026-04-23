@@ -14,9 +14,27 @@ export const Route = createFileRoute("/discover")({
   staleTime: 5 * 60 * 1000,
   shouldReload: false,
   loader: async () => {
-    const seedPage = await fetchDiscoverListingsPage({
+    const ssrSeedRequest = {
       limit: DISCOVER_SSR_SEED_COUNT,
-    });
+      includeMapListings: true,
+    };
+
+    if (typeof window === "undefined") {
+      console.info("[discover:ssr] seed request", ssrSeedRequest);
+    }
+
+    const seedPage = await fetchDiscoverListingsPage(ssrSeedRequest);
+
+    if (typeof window === "undefined") {
+      console.info("[discover:ssr] seed response", {
+        source: seedPage.source,
+        stats: seedPage._stats,
+        serverDurationMs: seedPage._meta?.serverDurationMs,
+        effectiveRequest: seedPage._meta?.request,
+        listingsCount: seedPage.listings.length,
+        mapListingsCount: seedPage.metadata?.mapListings?.length ?? 0,
+      });
+    }
 
     return {
       initialListingsPage: seedPage,

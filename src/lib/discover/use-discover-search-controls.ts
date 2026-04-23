@@ -66,9 +66,7 @@ export function useDiscoverSearchControls() {
     minBunkBeds > 0 ||
     filterPool ||
     filterGulffront ||
-    filterGolfCart ||
-    adults !== 2 ||
-    children !== 0;
+    filterGolfCart;
 
   const dateSummary = useMemo(() => {
     const earliestParsed = parseSummaryDate(earliestDate);

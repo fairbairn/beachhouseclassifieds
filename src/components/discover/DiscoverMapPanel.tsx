@@ -17,6 +17,12 @@ type LatLng = { lat: number; lng: number };
 type GoogleMapInstance = {
   panTo: (center: LatLng) => void;
   setZoom: (zoom: number) => void;
+  fitBounds: (
+    bounds: {
+      extend: (point: LatLng) => void;
+    },
+    padding?: number,
+  ) => void;
   getZoom: () => number | undefined;
   getCenter: () =>
     | { lat: () => number; lng: () => number }
@@ -93,6 +99,9 @@ type GoogleMapsNamespace = {
     geodesic?: boolean;
     zIndex?: number;
   }) => GooglePolygonInstance;
+  LatLngBounds?: new () => {
+    extend: (point: LatLng) => void;
+  };
 };
 
 const defaultMapTarget = {
@@ -105,6 +114,8 @@ const CONTEXT_ZOOM = 13;
 const ZOOM_STEP_DELAY_MS = 80;
 const PAN_TO_NEW_PIN_DELAY_MS = 220;
 const RESET_CENTER_TOLERANCE = 0.0004;
+const UNPINNED_FIT_PADDING_PX = 56;
+const SINGLE_LISTING_UNPINNED_ZOOM = 15;
 const DEBUG_WATERCOLOR_BOUNDARY_QUERY_KEY = "debugWatercolorBoundary";
 let mapsLoaderConfigured = false;
 
@@ -572,45 +583,50 @@ export function DiscoverMapPanel({
   }, [onSyncSelectedListingCard]);
 
   const handleResetMapView = useCallback(() => {
-    if (!resetToInitialTargetView) {
-      onResetMapView();
-      return;
-    }
-
     const map = googleMapRef.current;
+    const googleMaps = googleMapsNamespaceRef.current;
     if (!map) {
       return;
     }
 
     clearFocusAnimation();
 
-    const center = {
-      lat: mapTarget.lat,
-      lng: mapTarget.lng,
-    };
-    const targetZoom =
-      typeof mapTarget.zoom === "number"
-        ? mapTarget.zoom
-        : mapTarget.id
-          ? 19
-          : CONTEXT_ZOOM;
-
-    map.panTo(center);
-    map.setZoom(targetZoom);
-    map.setMapTypeId(getMapTypeForZoom(targetZoom));
-
-    if (mapTarget.id && googleMapMarkerRef.current) {
-      googleMapMarkerRef.current.map = map;
-      googleMapMarkerRef.current.position = center;
+    if (mapTarget.id) {
+      onClearPin();
     }
 
+    if (listingsGeometry.length === 0) {
+      updateResetState(map);
+      return;
+    }
+
+    if (listingsGeometry.length === 1) {
+      const onlyListing = listingsGeometry[0];
+      map.panTo({ lat: onlyListing.lat, lng: onlyListing.lng });
+      map.setZoom(SINGLE_LISTING_UNPINNED_ZOOM);
+      map.setMapTypeId(getMapTypeForZoom(SINGLE_LISTING_UNPINNED_ZOOM));
+      updateResetState(map);
+      return;
+    }
+
+    const BoundsCtor = googleMaps?.LatLngBounds;
+    if (!BoundsCtor) {
+      updateResetState(map);
+      return;
+    }
+
+    const bounds = new BoundsCtor();
+    for (const listing of listingsGeometry) {
+      bounds.extend({ lat: listing.lat, lng: listing.lng });
+    }
+
+    map.fitBounds(bounds, UNPINNED_FIT_PADDING_PX);
     updateResetState(map);
   }, [
     clearFocusAnimation,
+    listingsGeometry,
     mapTarget.id,
-    mapTarget.lat,
-    mapTarget.lng,
-    mapTarget.zoom,
+    onClearPin,
     onResetMapView,
     resetToInitialTargetView,
     updateResetState,
@@ -842,6 +858,7 @@ export function DiscoverMapPanel({
   useEffect(() => {
     const map = googleMapRef.current;
     const markerLibrary = googleMapsMarkerNamespaceRef.current;
+    const googleMaps = googleMapsNamespaceRef.current;
     if (!map || !markerLibrary) {
       return;
     }
@@ -869,6 +886,7 @@ export function DiscoverMapPanel({
   useEffect(() => {
     const map = googleMapRef.current;
     const markerLibrary = googleMapsMarkerNamespaceRef.current;
+    const googleMaps = googleMapsNamespaceRef.current;
     if (!map || !markerLibrary) {
       return;
     }
@@ -910,6 +928,33 @@ export function DiscoverMapPanel({
     }
 
     applySecondaryMarkerIcons(map.getZoom());
+
+    if (mapTarget.id) {
+      return;
+    }
+
+    if (listingsGeometry.length === 0) {
+      return;
+    }
+
+    if (listingsGeometry.length === 1) {
+      const onlyListing = listingsGeometry[0];
+      map.panTo({ lat: onlyListing.lat, lng: onlyListing.lng });
+      map.setZoom(SINGLE_LISTING_UNPINNED_ZOOM);
+      return;
+    }
+
+    const BoundsCtor = googleMaps?.LatLngBounds;
+    if (!BoundsCtor) {
+      return;
+    }
+
+    const bounds = new BoundsCtor();
+    for (const listing of listingsGeometry) {
+      bounds.extend({ lat: listing.lat, lng: listing.lng });
+    }
+
+    map.fitBounds(bounds, UNPINNED_FIT_PADDING_PX);
   }, [
     listings,
     listingsGeometry,
@@ -949,8 +994,6 @@ export function DiscoverMapPanel({
     if (!mapTarget.id) {
       marker.map = null;
       clearFocusAnimation();
-      map.panTo({ lat: mapTarget.lat, lng: mapTarget.lng });
-      map.setZoom(mapTarget.zoom ?? CONTEXT_ZOOM);
       return;
     }
 

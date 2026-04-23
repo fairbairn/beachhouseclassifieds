@@ -103,9 +103,20 @@ export type DiscoverPageStats = {
 
 export type DiscoverSearchRequest = {
   includeSlug?: string;
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   limit?: number;
   offset?: number;
   includeMetadata?: boolean;
+  includeMapListings?: boolean;
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];

@@ -1,5 +1,5 @@
 import { Heart, MapPin, Maximize2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { memo } from "react";
 
 import {
   LISTING_ACTION_BUTTON_BASE_STYLES,
@@ -13,89 +13,28 @@ import {
   LISTING_MAP_BUTTON_ACTIVE_STYLES,
   LISTING_MAP_BUTTON_IDLE_STYLES,
 } from "@/components/discover/discover-listing-card-styles";
-import {
-  formatBathrooms,
-  getListingGeoTarget,
-  getLocationPresentation,
-} from "@/components/discover/discover-utils";
+import { formatBathrooms } from "@/components/discover/discover-utils";
 import { cn } from "@/core/ui/cn";
 import type { DiscoverListing } from "@/lib/discover/discover-types";
 
 function DiscoverImageSlot({
-  src,
-  alt,
   containerClassName,
 }: {
-  src?: string;
-  alt: string;
   containerClassName: string;
 }) {
-  const [isLoaded, setIsLoaded] = useState(() => !src);
-  const [retryCount, setRetryCount] = useState(0);
-  const imageRef = useRef<HTMLImageElement | null>(null);
-
-  useEffect(() => {
-    if (!src || isLoaded) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      const image = imageRef.current;
-      const loadedFromCache = Boolean(
-        image && image.complete && image.naturalWidth > 0,
-      );
-      if (loadedFromCache) {
-        setIsLoaded(true);
-        return;
-      }
-
-      setRetryCount((current) => {
-        if (current >= 2) {
-          setIsLoaded(true);
-          return current;
-        }
-        return current + 1;
-      });
-    }, 2200);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [isLoaded, retryCount, src]);
-
   return (
     <div
       className={`relative overflow-hidden bg-slate-200/70 ${containerClassName}`}
     >
       <div
         aria-hidden="true"
-        className={`pointer-events-none absolute inset-0 bg-linear-to-br from-slate-200/80 via-slate-200/55 to-slate-300/65 transition-opacity duration-200 ${!src || isLoaded ? "opacity-0" : "opacity-100"}`}
-      />
-      <img
-        key={`${src ?? ""}-${retryCount}`}
-        ref={imageRef}
-        src={src}
-        alt={alt}
-        loading="lazy"
-        decoding="async"
-        onLoad={() => setIsLoaded(true)}
-        onError={() => {
-          setRetryCount((current) => {
-            if (current >= 2) {
-              setIsLoaded(true);
-              return current;
-            }
-            return current + 1;
-          });
-        }}
-        style={{ display: src ? "block" : "none" }}
-        className={`h-full w-full object-cover transition-opacity duration-200 ${!src || isLoaded ? "opacity-100" : "opacity-0"}`}
+        className="pointer-events-none absolute inset-0 bg-linear-to-br from-slate-200/80 via-slate-200/55 to-slate-300/65"
       />
     </div>
   );
 }
 
-export function DiscoverListingCard({
+export const DiscoverListingCard = memo(function DiscoverListingCard({
   listing,
   isFavorite,
   isPinned,
@@ -126,11 +65,18 @@ export function DiscoverListingCard({
     zoom?: number;
   }) => void;
 }) {
-  const location = getLocationPresentation(listing);
-  const listingTarget = getListingGeoTarget(listing);
-  const communityHighlight = location.isPlannedCommunity
-    ? location.locationChip
-    : null;
+  const beach = listing.beach.trim();
+  const area = listing.area.trim();
+  const community = listing.community.trim();
+  const locationSubline =
+    beach.length > 0 && area.length > 0
+      ? `${beach} • ${area}`
+      : beach.length > 0
+        ? beach
+        : area.length > 0
+          ? area
+          : "30A";
+  const communityHighlight = community.length > 0 ? community : null;
   const previewImages = isFourUpCardLayout
     ? listing.previewImages.slice(0, 1)
     : listing.previewImages.slice(0, 2);
@@ -176,17 +122,11 @@ export function DiscoverListingCard({
               Click to View Property
             </span>
           </div>
-          <DiscoverImageSlot
-            src={leftPreviewImage}
-            alt={`${listing.name} preview 1`}
-            containerClassName="aspect-square w-full rounded-lg"
-          />
+          <DiscoverImageSlot containerClassName="aspect-square w-full rounded-lg" />
           <div className="grid aspect-square grid-cols-2 grid-rows-2 gap-2">
             {rightQuadPreviewImages.map((img, i) => (
               <DiscoverImageSlot
                 key={`${listing.id}-two-up-${i}-${img ?? "none"}`}
-                src={img}
-                alt={`${listing.name} preview ${i + 2}`}
                 containerClassName="h-full w-full rounded-lg"
               />
             ))}
@@ -205,8 +145,6 @@ export function DiscoverListingCard({
           {previewImages.map((img, i) => (
             <DiscoverImageSlot
               key={`${listing.id}-${i}-${img ?? "none"}`}
-              src={img}
-              alt={`${listing.name} preview ${i + 1}`}
               containerClassName={`${isFourUpCardLayout ? "aspect-video w-full" : "aspect-square"} rounded-lg`}
             />
           ))}
@@ -218,7 +156,7 @@ export function DiscoverListingCard({
             {listing.name}
           </h2>
           <p className="mt-0.5 text-xs font-medium text-slate-500">
-            {location.subline}
+            {locationSubline}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -228,8 +166,16 @@ export function DiscoverListingCard({
               event.stopPropagation();
               onFocusMap({
                 id: listing.id,
-                lat: listingTarget.lat,
-                lng: listingTarget.lng,
+                lat:
+                  typeof listing.lat === "number" &&
+                  Number.isFinite(listing.lat)
+                    ? listing.lat
+                    : 30.3158,
+                lng:
+                  typeof listing.lng === "number" &&
+                  Number.isFinite(listing.lng)
+                    ? listing.lng
+                    : -86.1186,
                 label: listing.name,
                 zoom: 19,
               });
@@ -328,4 +274,4 @@ export function DiscoverListingCard({
       </div>
     </article>
   );
-}
+});

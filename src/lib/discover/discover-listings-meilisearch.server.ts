@@ -14,6 +14,16 @@ import {
 } from "@/lib/listings/taxonomy/location-taxonomy";
 
 type DiscoverSelectionFilters = {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -24,6 +34,7 @@ type DiscoverSelectionFilters = {
 };
 
 type DiscoverResolvedFilters = {
+  locationQuery: string;
   selectedAreaCodes: string[];
   selectedBeachCodes: string[];
   selectedCommunityCodes: string[];
@@ -38,6 +49,9 @@ type DiscoverResolvedFilters = {
   minKingBeds: number;
   minQueenBeds: number;
   minBunkBeds: number;
+  minSleeps: number;
+  minBedrooms: number;
+  minBathrooms: number;
 };
 
 type DiscoverFacetOmitOptions = {
@@ -63,6 +77,28 @@ type DiscoverListingsSnapshot = {
   pageListings: ReturnType<typeof discoverSearchDocumentToListing>[];
   mapListings: DiscoverMapListing[];
 };
+
+function resolveMeilisearchSort(
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first",
+): string[] | undefined {
+  if (sortOption === "price-low") {
+    return ["typical_all_in_nightly:asc"];
+  }
+  if (sortOption === "price-high") {
+    return ["typical_all_in_nightly:desc"];
+  }
+  if (sortOption === "sleeps-high") {
+    return ["sleeps:desc"];
+  }
+
+  // Keep recommended and beach-pool-first as relevance/default for now.
+  return undefined;
+}
 
 function unique(values: string[]): string[] {
   const seen = new Set<string>();
@@ -209,21 +245,42 @@ function resolveDiscoverFilters(
   input?: DiscoverSelectionFilters,
 ): DiscoverResolvedFilters {
   return {
+    locationQuery:
+      typeof input?.locationQuery === "string"
+        ? input.locationQuery.trim()
+        : "",
     selectedAreaCodes: resolveAreaCodes(input?.selectedAreas),
     selectedBeachCodes: resolveBeachCodes(input?.selectedBeaches),
     selectedCommunityCodes: resolveCommunityCodes(input?.selectedCommunities),
     selectedFeatures: resolveFeatureFilters(input?.selectedFeatures),
     minKingBeds:
-      typeof input?.minKingBeds === "number" && Number.isFinite(input.minKingBeds)
+      typeof input?.minKingBeds === "number" &&
+      Number.isFinite(input.minKingBeds)
         ? Math.max(0, Math.floor(input.minKingBeds))
         : 0,
     minQueenBeds:
-      typeof input?.minQueenBeds === "number" && Number.isFinite(input.minQueenBeds)
+      typeof input?.minQueenBeds === "number" &&
+      Number.isFinite(input.minQueenBeds)
         ? Math.max(0, Math.floor(input.minQueenBeds))
         : 0,
     minBunkBeds:
-      typeof input?.minBunkBeds === "number" && Number.isFinite(input.minBunkBeds)
+      typeof input?.minBunkBeds === "number" &&
+      Number.isFinite(input.minBunkBeds)
         ? Math.max(0, Math.floor(input.minBunkBeds))
+        : 0,
+    minSleeps:
+      typeof input?.minSleeps === "number" && Number.isFinite(input.minSleeps)
+        ? Math.max(0, Math.floor(input.minSleeps))
+        : 0,
+    minBedrooms:
+      typeof input?.minBedrooms === "number" &&
+      Number.isFinite(input.minBedrooms)
+        ? Math.max(0, Math.floor(input.minBedrooms))
+        : 0,
+    minBathrooms:
+      typeof input?.minBathrooms === "number" &&
+      Number.isFinite(input.minBathrooms)
+        ? Math.max(0, input.minBathrooms)
         : 0,
   };
 }
@@ -325,6 +382,15 @@ function buildDiscoverFilterClausesFromResolved(
   }
   if (resolved.minBunkBeds > 0) {
     clauses.push(`bunk_bed_count >= ${resolved.minBunkBeds}`);
+  }
+  if (resolved.minSleeps > 0) {
+    clauses.push(`sleeps >= ${resolved.minSleeps}`);
+  }
+  if (resolved.minBedrooms > 0) {
+    clauses.push(`bedrooms >= ${resolved.minBedrooms}`);
+  }
+  if (resolved.minBathrooms > 0) {
+    clauses.push(`bathrooms >= ${resolved.minBathrooms}`);
   }
 
   return clauses;
@@ -436,12 +502,15 @@ async function getFacetDistribution(
     input.resolved,
     input.omit,
   );
-  const result = await index.search<DiscoverSearchDocument>("", {
-    filter: filter.length > 0 ? filter : undefined,
-    offset: 0,
-    limit: 0,
-    facets: input.facets,
-  });
+  const result = await index.search<DiscoverSearchDocument>(
+    input.resolved.locationQuery,
+    {
+      filter: filter.length > 0 ? filter : undefined,
+      offset: 0,
+      limit: 0,
+      facets: input.facets,
+    },
+  );
 
   return result.facetDistribution ?? {};
 }
@@ -478,8 +547,18 @@ async function getDisjunctiveFacetGroups(
 }
 
 export async function getDiscoverListingsSnapshot(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   pageLimit?: number;
   mapLimit?: number;
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -500,10 +579,12 @@ export async function getDiscoverListingsSnapshot(input?: {
 
   const resolved = resolveDiscoverFilters(input);
   const filter = buildDiscoverFilterClausesFromResolved(resolved);
+  const sort = resolveMeilisearchSort(input?.sortOption);
   const index = getDiscoverMeilisearchIndex();
   const [result, disjunctiveFacets] = await Promise.all([
-    index.search<DiscoverSearchDocument>("", {
+    index.search<DiscoverSearchDocument>(resolved.locationQuery, {
       filter: filter.length > 0 ? filter : undefined,
+      sort,
       offset: 0,
       limit: queryLimit,
     }),
@@ -537,6 +618,12 @@ export async function getDiscoverListingsSnapshot(input?: {
 }
 
 export async function getDiscoverListings(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   includeSlug?: string;
   onlySlug?: boolean;
   disableFallback?: boolean;
@@ -546,6 +633,10 @@ export async function getDiscoverListings(input?: {
     demoOrder: number;
     id: string;
   };
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -561,13 +652,19 @@ export async function getDiscoverListings(input?: {
       : 0;
 
   const filter = buildDiscoverFilterClauses(input);
+  const sort = resolveMeilisearchSort(input?.sortOption);
 
   const index = getDiscoverMeilisearchIndex();
-  const result = await index.search<DiscoverSearchDocument>("", {
-    filter: filter.length > 0 ? filter : undefined,
-    offset,
-    limit,
-  });
+  const resolved = resolveDiscoverFilters(input);
+  const result = await index.search<DiscoverSearchDocument>(
+    resolved.locationQuery,
+    {
+      filter: filter.length > 0 ? filter : undefined,
+      sort,
+      offset,
+      limit,
+    },
+  );
 
   return result.hits
     .map((document) => discoverSearchDocumentToListing(document))
@@ -575,6 +672,10 @@ export async function getDiscoverListings(input?: {
 }
 
 export async function getDiscoverListingsCount(input?: {
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -583,29 +684,44 @@ export async function getDiscoverListingsCount(input?: {
   const filter = buildDiscoverFilterClauses(input);
 
   const index = getDiscoverMeilisearchIndex();
-  const result = await index.search<DiscoverSearchDocument>("", {
-    filter: filter.length > 0 ? filter : undefined,
-    offset: 0,
-    limit: 0,
-  });
+  const resolved = resolveDiscoverFilters(input);
+  const result = await index.search<DiscoverSearchDocument>(
+    resolved.locationQuery,
+    {
+      filter: filter.length > 0 ? filter : undefined,
+      offset: 0,
+      limit: 0,
+    },
+  );
 
   return Math.max(0, result.estimatedTotalHits ?? 0);
 }
 
 export async function getDiscoverCorpusMetadata(input?: {
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedFeatures?: string[];
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
 }): Promise<DiscoverCorpusMetadata | null> {
   const resolved = resolveDiscoverFilters({
+    locationQuery: input?.locationQuery,
+    minSleeps: input?.minSleeps,
+    minBedrooms: input?.minBedrooms,
+    minBathrooms: input?.minBathrooms,
     selectedFeatures: input?.selectedFeatures,
+    minKingBeds: input?.minKingBeds,
+    minQueenBeds: input?.minQueenBeds,
+    minBunkBeds: input?.minBunkBeds,
   });
   const featureFilter = buildDiscoverFilterClausesFromResolved(resolved);
 
   const index = getDiscoverMeilisearchIndex();
   const [result, disjunctiveFacets] = await Promise.all([
-    index.search<DiscoverSearchDocument>("", {
+    index.search<DiscoverSearchDocument>(resolved.locationQuery, {
       filter: featureFilter.length > 0 ? featureFilter : undefined,
       offset: 0,
       limit: 0,

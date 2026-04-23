@@ -1,12 +1,16 @@
 import { Heart } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import * as ReactCountUpModule from "react-countup";
 
 import { FacetSection } from "@/components/discover/discover-controls";
 
 const countFormatter = new Intl.NumberFormat("en-US");
-
-// TODO: Demo-only bootstrap value. Remove this temporary constant after demo reviews.
-const DEMO_INITIAL_PROPERTIES_COUNT = 3100;
+const CountUpComponent =
+  ("default" in ReactCountUpModule ? ReactCountUpModule.default : undefined) ??
+  ("CountUp" in ReactCountUpModule
+    ? (ReactCountUpModule.CountUp as unknown)
+    : undefined);
+const hasCountUpComponent = typeof CountUpComponent === "function";
 
 function formatCount(value: number): string {
   return countFormatter.format(value);
@@ -63,11 +67,11 @@ export function DiscoverFacetSidebar({
   const [isBeachesOpen, setIsBeachesOpen] = useState(true);
   const [isCommunitiesOpen, setIsCommunitiesOpen] = useState(true);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(true);
-  const [animatedPropertiesCount, setAnimatedPropertiesCount] = useState(
-    DEMO_INITIAL_PROPERTIES_COUNT,
-  );
-  const propertiesCountRef = useRef(DEMO_INITIAL_PROPERTIES_COUNT);
-  const animationFrameRef = useRef<number | null>(null);
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const sumSelectedTupleCounts = (
     selectedValues: ReadonlyArray<string>,
@@ -99,54 +103,14 @@ export function DiscoverFacetSidebar({
     communityCounts,
   );
   const selectedFeatureTotal = sumSelectedFeatureCounts(selectedFeatures);
-  const propertiesCountTarget = listingCount;
+  const safeListingCount = Number.isFinite(listingCount)
+    ? Math.max(0, Math.round(listingCount))
+    : 0;
+  const previousListingCountRef = useRef(safeListingCount);
 
   useEffect(() => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-
-    const start = propertiesCountRef.current;
-    const end = propertiesCountTarget;
-
-    if (start === end) {
-      propertiesCountRef.current = end;
-      animationFrameRef.current = requestAnimationFrame(() => {
-        setAnimatedPropertiesCount(end);
-        animationFrameRef.current = null;
-      });
-      return;
-    }
-
-    const durationMs = 520;
-    const startTime = performance.now();
-
-    const animate = (timestamp: number) => {
-      const elapsed = timestamp - startTime;
-      const progress = Math.min(elapsed / durationMs, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const nextValue = Math.round(start + (end - start) * eased);
-
-      propertiesCountRef.current = nextValue;
-      setAnimatedPropertiesCount(nextValue);
-
-      if (progress < 1) {
-        animationFrameRef.current = requestAnimationFrame(animate);
-      } else {
-        animationFrameRef.current = null;
-      }
-    };
-
-    animationFrameRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-    };
-  }, [propertiesCountTarget]);
+    previousListingCountRef.current = safeListingCount;
+  }, [safeListingCount]);
 
   const formatFacetLabel = (label: string) =>
     label.replaceAll("WaterSound", "Watersound");
@@ -206,7 +170,17 @@ export function DiscoverFacetSidebar({
           Properties
         </p>
         <span className="text-xl font-bold text-slate-900 tabular-nums">
-          {formatCount(animatedPropertiesCount)}
+          {hasMounted && hasCountUpComponent ? (
+            <CountUpComponent
+              key={`${previousListingCountRef.current}-${safeListingCount}`}
+              start={previousListingCountRef.current}
+              end={safeListingCount}
+              duration={0.85}
+              formattingFn={formatCount}
+            />
+          ) : (
+            formatCount(safeListingCount)
+          )}
         </span>
       </div>
       {favoriteCount > 0 ? (

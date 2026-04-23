@@ -174,9 +174,20 @@ function resolveDiscoverListingsEndpoint(): string {
 }
 
 function getPageQueryCacheKey(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   limit?: number;
   offset?: number;
   includeMetadata?: boolean;
+  includeMapListings?: boolean;
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -188,8 +199,21 @@ function getPageQueryCacheKey(input?: {
   const limit = Number.isFinite(input?.limit)
     ? String(input?.limit)
     : String(DISCOVER_LISTINGS_PAGE_SIZE);
+  const sortOption =
+    typeof input?.sortOption === "string" ? input.sortOption : "recommended";
   const offset = Number.isFinite(input?.offset) ? String(input?.offset) : "0";
   const includeMetadata = input?.includeMetadata === false ? "0" : "1";
+  const includeMapListings = input?.includeMapListings === false ? "0" : "1";
+  const locationQuery = (input?.locationQuery ?? "").trim().toLowerCase();
+  const minSleeps = Number.isFinite(input?.minSleeps)
+    ? String(input?.minSleeps)
+    : "0";
+  const minBedrooms = Number.isFinite(input?.minBedrooms)
+    ? String(input?.minBedrooms)
+    : "0";
+  const minBathrooms = Number.isFinite(input?.minBathrooms)
+    ? String(input?.minBathrooms)
+    : "0";
   const selectedAreas = (input?.selectedAreas ?? []).slice().sort().join(",");
   const selectedBeaches = (input?.selectedBeaches ?? [])
     .slice()
@@ -213,13 +237,24 @@ function getPageQueryCacheKey(input?: {
     ? String(input?.minBunkBeds)
     : "0";
 
-  return `limit=${limit}|offset=${offset}|metadata=${includeMetadata}|areas=${selectedAreas}|beaches=${selectedBeaches}|communities=${selectedCommunities}|features=${selectedFeatures}|king=${minKingBeds}|queen=${minQueenBeds}|bunk=${minBunkBeds}`;
+  return `sort=${sortOption}|limit=${limit}|offset=${offset}|metadata=${includeMetadata}|map=${includeMapListings}|q=${locationQuery}|sleeps=${minSleeps}|bedrooms=${minBedrooms}|bathrooms=${minBathrooms}|areas=${selectedAreas}|beaches=${selectedBeaches}|communities=${selectedCommunities}|features=${selectedFeatures}|king=${minKingBeds}|queen=${minQueenBeds}|bunk=${minBunkBeds}`;
 }
 
 export async function fetchDiscoverListingsPage(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   limit?: number;
   offset?: number;
   includeMetadata?: boolean;
+  includeMapListings?: boolean;
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -227,9 +262,12 @@ export async function fetchDiscoverListingsPage(input?: {
   minKingBeds?: number;
   minQueenBeds?: number;
   minBunkBeds?: number;
+  bypassCache?: boolean;
 }): Promise<DiscoverListingsPageResponse> {
   const cacheKey = getPageQueryCacheKey(input);
-  if (typeof window !== "undefined") {
+  const shouldBypassCache = input?.bypassCache === true;
+
+  if (typeof window !== "undefined" && !shouldBypassCache) {
     const cached = discoverListingsPageCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.payload;
@@ -241,18 +279,95 @@ export async function fetchDiscoverListingsPage(input?: {
     }
   }
 
-  const requestBody = {
-    limit: input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE,
-    offset: input?.offset,
-    includeMetadata: input?.includeMetadata,
-    selectedAreas: input?.selectedAreas,
-    selectedBeaches: input?.selectedBeaches,
-    selectedCommunities: input?.selectedCommunities,
-    selectedFeatures: input?.selectedFeatures,
-    minKingBeds: input?.minKingBeds,
-    minQueenBeds: input?.minQueenBeds,
-    minBunkBeds: input?.minBunkBeds,
+  const normalizeSelectionValues = (value?: string[]): string[] | undefined => {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const out = value
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter((entry) => entry.length > 0);
+
+    return out.length > 0 ? out : undefined;
   };
+  const normalizePositiveNumber = (value?: number): number | undefined =>
+    typeof value === "number" && Number.isFinite(value) && value > 0
+      ? value
+      : undefined;
+
+  const requestBody: Record<string, unknown> = {
+    limit: input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE,
+  };
+
+  if (typeof input?.sortOption === "string" && input.sortOption.length > 0) {
+    requestBody.sortOption = input.sortOption;
+  }
+
+  if (
+    typeof input?.offset === "number" &&
+    Number.isFinite(input.offset) &&
+    input.offset > 0
+  ) {
+    requestBody.offset = Math.floor(input.offset);
+  }
+  if (typeof input?.includeMetadata === "boolean") {
+    requestBody.includeMetadata = input.includeMetadata;
+  }
+  if (typeof input?.includeMapListings === "boolean") {
+    requestBody.includeMapListings = input.includeMapListings;
+  }
+
+  const locationQuery =
+    typeof input?.locationQuery === "string" ? input.locationQuery.trim() : "";
+  if (locationQuery.length > 0) {
+    requestBody.locationQuery = locationQuery;
+  }
+
+  const minSleeps = normalizePositiveNumber(input?.minSleeps);
+  if (minSleeps !== undefined) {
+    requestBody.minSleeps = minSleeps;
+  }
+  const minBedrooms = normalizePositiveNumber(input?.minBedrooms);
+  if (minBedrooms !== undefined) {
+    requestBody.minBedrooms = minBedrooms;
+  }
+  const minBathrooms = normalizePositiveNumber(input?.minBathrooms);
+  if (minBathrooms !== undefined) {
+    requestBody.minBathrooms = minBathrooms;
+  }
+
+  const selectedAreas = normalizeSelectionValues(input?.selectedAreas);
+  if (selectedAreas !== undefined) {
+    requestBody.selectedAreas = selectedAreas;
+  }
+  const selectedBeaches = normalizeSelectionValues(input?.selectedBeaches);
+  if (selectedBeaches !== undefined) {
+    requestBody.selectedBeaches = selectedBeaches;
+  }
+  const selectedCommunities = normalizeSelectionValues(
+    input?.selectedCommunities,
+  );
+  if (selectedCommunities !== undefined) {
+    requestBody.selectedCommunities = selectedCommunities;
+  }
+  const selectedFeatures = normalizeSelectionValues(input?.selectedFeatures);
+  if (selectedFeatures !== undefined) {
+    requestBody.selectedFeatures = selectedFeatures;
+  }
+
+  const minKingBeds = normalizePositiveNumber(input?.minKingBeds);
+  if (minKingBeds !== undefined) {
+    requestBody.minKingBeds = minKingBeds;
+  }
+  const minQueenBeds = normalizePositiveNumber(input?.minQueenBeds);
+  if (minQueenBeds !== undefined) {
+    requestBody.minQueenBeds = minQueenBeds;
+  }
+  const minBunkBeds = normalizePositiveNumber(input?.minBunkBeds);
+  if (minBunkBeds !== undefined) {
+    requestBody.minBunkBeds = minBunkBeds;
+  }
+
   const requestPromise = (async (): Promise<DiscoverListingsPageResponse> => {
     const response = await fetch(resolveDiscoverListingsEndpoint(), {
       method: "POST",
@@ -262,14 +377,9 @@ export async function fetchDiscoverListingsPage(input?: {
       body: JSON.stringify(requestBody),
     });
     if (!response.ok) {
-      return {
-        _stats: {
-          totalCount: 0,
-          count: 0,
-          requested: input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE,
-        },
-        listings: [],
-      };
+      throw new Error(
+        `Discover listings request failed with status ${response.status}`,
+      );
     }
 
     const payload = (await response
@@ -277,14 +387,7 @@ export async function fetchDiscoverListingsPage(input?: {
       .catch(() => null)) as DiscoverListingsPageResponse | null;
 
     if (!payload || !Array.isArray(payload.listings)) {
-      return {
-        _stats: {
-          totalCount: 0,
-          count: 0,
-          requested: input?.limit ?? DISCOVER_LISTINGS_PAGE_SIZE,
-        },
-        listings: [],
-      };
+      throw new Error("Discover listings response payload is invalid");
     }
 
     const stats = payload._stats;
@@ -322,7 +425,7 @@ export async function fetchDiscoverListingsPage(input?: {
       listings: payload.listings,
     };
 
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && !shouldBypassCache) {
       discoverListingsPageCache.set(cacheKey, {
         payload: normalizedPayload,
         expiresAt: Date.now() + DISCOVER_LISTINGS_PAGE_CACHE_TTL_MS,
@@ -332,14 +435,14 @@ export async function fetchDiscoverListingsPage(input?: {
     return normalizedPayload;
   })();
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && !shouldBypassCache) {
     discoverListingsPageInFlight.set(cacheKey, requestPromise);
   }
 
   try {
     return await requestPromise;
   } finally {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && !shouldBypassCache) {
       discoverListingsPageInFlight.delete(cacheKey);
     }
   }

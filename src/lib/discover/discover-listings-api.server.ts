@@ -49,6 +49,10 @@ function toSummaryListing(listing: DiscoverListing): DiscoverListing {
     privatePool: listing.privatePool,
     gulffront: listing.gulffront,
     golfCart: listing.golfCart,
+    petFriendly: listing.petFriendly,
+    accessible: listing.accessible,
+    elevator: listing.elevator,
+    sleepingSummary: listing.sleepingSummary,
     previewImages: listing.previewImages,
     typicalPricingMonth: listing.typicalPricingMonth,
     typicalBaseNightly: listing.typicalBaseNightly,
@@ -72,21 +76,27 @@ function buildMetadataFromListings(input: {
   listings: DiscoverListing[];
   totalCount: number;
   facets?: DiscoverListingsMetadata["facets"];
+  includeMapListings?: boolean;
 }): DiscoverListingsMetadata {
+  const includeMapListings = input.includeMapListings !== false;
+
   return {
     totalCount: input.totalCount,
-    mapListings: input.listings
-      .filter(
-        (listing) =>
-          typeof listing.lat === "number" && typeof listing.lng === "number",
-      )
-      .map((listing) => ({
-        id: listing.id,
-        name: listing.name,
-        lat: listing.lat as number,
-        lng: listing.lng as number,
-        typicalAllInNightly: listing.typicalAllInNightly,
-      })),
+    mapListings: includeMapListings
+      ? input.listings
+          .filter(
+            (listing) =>
+              typeof listing.lat === "number" &&
+              typeof listing.lng === "number",
+          )
+          .map((listing) => ({
+            id: listing.id,
+            name: listing.name,
+            lat: listing.lat as number,
+            lng: listing.lng as number,
+            typicalAllInNightly: listing.typicalAllInNightly,
+          }))
+      : [],
     facets: input.facets ?? {
       areas: {},
       beaches: {},
@@ -110,9 +120,20 @@ function buildMetadataFromListings(input: {
 }
 
 export async function buildDiscoverListingsPagePayload(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   limit?: number;
   offset?: number;
   includeMetadata?: boolean;
+  includeMapListings?: boolean;
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -127,6 +148,7 @@ export async function buildDiscoverListingsPagePayload(input?: {
       ? Math.max(0, Math.floor(input.offset))
       : 0;
   const includeMetadata = input?.includeMetadata ?? offset === 0;
+  const includeMapListings = input?.includeMapListings ?? includeMetadata;
   const hasSelectedFacetFilters = Boolean(
     (input?.selectedAreas?.length ?? 0) > 0 ||
     (input?.selectedBeaches?.length ?? 0) > 0 ||
@@ -136,8 +158,13 @@ export async function buildDiscoverListingsPagePayload(input?: {
 
   if (includeMetadata && offset === 0) {
     const snapshot = await getDiscoverListingsSnapshot({
+      sortOption: input?.sortOption,
       pageLimit: pageSize,
-      mapLimit: DISCOVER_MAP_SEED_MAX,
+      mapLimit: includeMapListings ? DISCOVER_MAP_SEED_MAX : pageSize,
+      locationQuery: input?.locationQuery,
+      minSleeps: input?.minSleeps,
+      minBedrooms: input?.minBedrooms,
+      minBathrooms: input?.minBathrooms,
       selectedAreas: input?.selectedAreas,
       selectedBeaches: input?.selectedBeaches,
       selectedCommunities: input?.selectedCommunities,
@@ -160,7 +187,7 @@ export async function buildDiscoverListingsPagePayload(input?: {
       },
       metadata: {
         totalCount,
-        mapListings: snapshot.mapListings,
+        mapListings: includeMapListings ? snapshot.mapListings : [],
         facets: snapshot.facets,
       },
       listings: pageItems.map(toSummaryListing),
@@ -169,8 +196,13 @@ export async function buildDiscoverListingsPagePayload(input?: {
 
   const [pageItems, filteredTotalCount, corpusMetadata] = await Promise.all([
     buildDiscoverListingsPayload({
+      sortOption: input?.sortOption,
       maxListings: pageSize,
       offset,
+      locationQuery: input?.locationQuery,
+      minSleeps: input?.minSleeps,
+      minBedrooms: input?.minBedrooms,
+      minBathrooms: input?.minBathrooms,
       selectedAreas: input?.selectedAreas,
       selectedBeaches: input?.selectedBeaches,
       selectedCommunities: input?.selectedCommunities,
@@ -180,6 +212,10 @@ export async function buildDiscoverListingsPagePayload(input?: {
       minBunkBeds: input?.minBunkBeds,
     }),
     getDiscoverListingsCount({
+      locationQuery: input?.locationQuery,
+      minSleeps: input?.minSleeps,
+      minBedrooms: input?.minBedrooms,
+      minBathrooms: input?.minBathrooms,
       selectedAreas: input?.selectedAreas,
       selectedBeaches: input?.selectedBeaches,
       selectedCommunities: input?.selectedCommunities,
@@ -190,6 +226,10 @@ export async function buildDiscoverListingsPagePayload(input?: {
     }),
     includeMetadata
       ? getDiscoverCorpusMetadata({
+          locationQuery: input?.locationQuery,
+          minSleeps: input?.minSleeps,
+          minBedrooms: input?.minBedrooms,
+          minBathrooms: input?.minBathrooms,
           selectedFeatures: input?.selectedFeatures,
           minKingBeds: input?.minKingBeds,
           minQueenBeds: input?.minQueenBeds,
@@ -205,13 +245,19 @@ export async function buildDiscoverListingsPagePayload(input?: {
   let metadataListings = pageItems;
   if (includeMetadata) {
     const needsMapSeedFetch =
-      offset > 0 ||
-      pageItems.length < Math.min(DISCOVER_MAP_SEED_MAX, totalCount);
+      includeMapListings &&
+      (offset > 0 ||
+        pageItems.length < Math.min(DISCOVER_MAP_SEED_MAX, totalCount));
 
     if (needsMapSeedFetch) {
       metadataListings = await buildDiscoverListingsPayload({
+        sortOption: input?.sortOption,
         maxListings: DISCOVER_MAP_SEED_MAX,
         offset: 0,
+        locationQuery: input?.locationQuery,
+        minSleeps: input?.minSleeps,
+        minBedrooms: input?.minBedrooms,
+        minBathrooms: input?.minBathrooms,
         selectedAreas: input?.selectedAreas,
         selectedBeaches: input?.selectedBeaches,
         selectedCommunities: input?.selectedCommunities,
@@ -236,6 +282,7 @@ export async function buildDiscoverListingsPagePayload(input?: {
             listings: metadataListings,
             totalCount,
             facets: corpusMetadata?.facets,
+            includeMapListings,
           }),
         }
       : {}),
@@ -244,9 +291,19 @@ export async function buildDiscoverListingsPagePayload(input?: {
 }
 
 export async function buildDiscoverListingsPayload(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   includeSlug?: string;
   maxListings?: number | null;
   offset?: number;
+  locationQuery?: string;
+  minSleeps?: number;
+  minBedrooms?: number;
+  minBathrooms?: number;
   selectedAreas?: string[];
   selectedBeaches?: string[];
   selectedCommunities?: string[];
@@ -258,11 +315,16 @@ export async function buildDiscoverListingsPayload(input?: {
   const includeSlug = input?.includeSlug?.trim() || undefined;
 
   const sourceListings = await getDiscoverListings({
+    sortOption: input?.sortOption,
     includeSlug,
     onlySlug: Boolean(includeSlug),
     disableFallback: true,
     maxListings: includeSlug ? 1 : input?.maxListings,
     offset: includeSlug ? undefined : input?.offset,
+    locationQuery: input?.locationQuery,
+    minSleeps: input?.minSleeps,
+    minBedrooms: input?.minBedrooms,
+    minBathrooms: input?.minBathrooms,
     selectedAreas: input?.selectedAreas,
     selectedBeaches: input?.selectedBeaches,
     selectedCommunities: input?.selectedCommunities,

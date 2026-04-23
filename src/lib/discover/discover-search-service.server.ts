@@ -11,9 +11,9 @@ import type {
   DiscoverFacetsResponse,
   DiscoverListing,
   DiscoverSearchMetadata,
-  DiscoverSearchResponseMeta,
   DiscoverSearchRequest,
   DiscoverSearchResponse,
+  DiscoverSearchResponseMeta,
 } from "@/lib/discover/discover-types";
 
 function buildMetadataFromListings(
@@ -138,6 +138,10 @@ function sanitizeDiscoverSearchRequest(
     typeof request?.includeSlug === "string"
       ? request.includeSlug.trim() || undefined
       : undefined;
+  const sortOption =
+    typeof request?.sortOption === "string"
+      ? request.sortOption.trim() || undefined
+      : undefined;
   const limit =
     typeof request?.limit === "number" && Number.isFinite(request.limit)
       ? request.limit
@@ -146,38 +150,115 @@ function sanitizeDiscoverSearchRequest(
     typeof request?.offset === "number" && Number.isFinite(request.offset)
       ? request.offset
       : undefined;
+  const locationQuery =
+    typeof request?.locationQuery === "string"
+      ? request.locationQuery.trim() || undefined
+      : undefined;
+  const minSleeps =
+    typeof request?.minSleeps === "number" &&
+    Number.isFinite(request.minSleeps) &&
+    request.minSleeps > 0
+      ? request.minSleeps
+      : undefined;
+  const minBedrooms =
+    typeof request?.minBedrooms === "number" &&
+    Number.isFinite(request.minBedrooms) &&
+    request.minBedrooms > 0
+      ? request.minBedrooms
+      : undefined;
+  const minBathrooms =
+    typeof request?.minBathrooms === "number" &&
+    Number.isFinite(request.minBathrooms) &&
+    request.minBathrooms > 0
+      ? request.minBathrooms
+      : undefined;
   const minKingBeds =
     typeof request?.minKingBeds === "number" &&
-    Number.isFinite(request.minKingBeds)
+    Number.isFinite(request.minKingBeds) &&
+    request.minKingBeds > 0
       ? request.minKingBeds
       : undefined;
   const minQueenBeds =
     typeof request?.minQueenBeds === "number" &&
-    Number.isFinite(request.minQueenBeds)
+    Number.isFinite(request.minQueenBeds) &&
+    request.minQueenBeds > 0
       ? request.minQueenBeds
       : undefined;
   const minBunkBeds =
     typeof request?.minBunkBeds === "number" &&
-    Number.isFinite(request.minBunkBeds)
+    Number.isFinite(request.minBunkBeds) &&
+    request.minBunkBeds > 0
       ? request.minBunkBeds
       : undefined;
+  const includeMapListings =
+    typeof request?.includeMapListings === "boolean"
+      ? request.includeMapListings
+      : undefined;
+  const includeMetadata =
+    typeof request?.includeMetadata === "boolean"
+      ? request.includeMetadata
+      : undefined;
+  const selectedAreas = toStringArray(request?.selectedAreas);
+  const selectedBeaches = toStringArray(request?.selectedBeaches);
+  const selectedCommunities = toStringArray(request?.selectedCommunities);
+  const selectedFeatures = toStringArray(request?.selectedFeatures);
 
-  return {
-    includeSlug,
-    limit,
-    offset,
-    includeMetadata:
-      typeof request?.includeMetadata === "boolean"
-        ? request.includeMetadata
-        : undefined,
-    selectedAreas: toStringArray(request?.selectedAreas),
-    selectedBeaches: toStringArray(request?.selectedBeaches),
-    selectedCommunities: toStringArray(request?.selectedCommunities),
-    selectedFeatures: toStringArray(request?.selectedFeatures),
-    minKingBeds,
-    minQueenBeds,
-    minBunkBeds,
-  };
+  const sanitizedRequest: DiscoverSearchRequest = {};
+
+  if (includeSlug !== undefined) {
+    sanitizedRequest.includeSlug = includeSlug;
+  }
+  if (sortOption !== undefined) {
+    sanitizedRequest.sortOption =
+      sortOption as DiscoverSearchRequest["sortOption"];
+  }
+  if (limit !== undefined) {
+    sanitizedRequest.limit = limit;
+  }
+  if (offset !== undefined) {
+    sanitizedRequest.offset = offset;
+  }
+  if (locationQuery !== undefined) {
+    sanitizedRequest.locationQuery = locationQuery;
+  }
+  if (minSleeps !== undefined) {
+    sanitizedRequest.minSleeps = minSleeps;
+  }
+  if (minBedrooms !== undefined) {
+    sanitizedRequest.minBedrooms = minBedrooms;
+  }
+  if (minBathrooms !== undefined) {
+    sanitizedRequest.minBathrooms = minBathrooms;
+  }
+  if (includeMapListings !== undefined) {
+    sanitizedRequest.includeMapListings = includeMapListings;
+  }
+  if (includeMetadata !== undefined) {
+    sanitizedRequest.includeMetadata = includeMetadata;
+  }
+  if (selectedAreas !== undefined) {
+    sanitizedRequest.selectedAreas = selectedAreas;
+  }
+  if (selectedBeaches !== undefined) {
+    sanitizedRequest.selectedBeaches = selectedBeaches;
+  }
+  if (selectedCommunities !== undefined) {
+    sanitizedRequest.selectedCommunities = selectedCommunities;
+  }
+  if (selectedFeatures !== undefined) {
+    sanitizedRequest.selectedFeatures = selectedFeatures;
+  }
+  if (minKingBeds !== undefined) {
+    sanitizedRequest.minKingBeds = minKingBeds;
+  }
+  if (minQueenBeds !== undefined) {
+    sanitizedRequest.minQueenBeds = minQueenBeds;
+  }
+  if (minBunkBeds !== undefined) {
+    sanitizedRequest.minBunkBeds = minBunkBeds;
+  }
+
+  return sanitizedRequest;
 }
 
 function buildDiscoverSearchMeta(input: {
@@ -227,7 +308,8 @@ export async function executeDiscoverSearch(
   request: DiscoverSearchRequest,
 ): Promise<DiscoverSearchResponse> {
   const startedAtMs = Date.now();
-  const includeSlug = request.includeSlug?.trim() || undefined;
+  const sanitizedRequest = sanitizeDiscoverSearchRequest(request);
+  const includeSlug = sanitizedRequest.includeSlug?.trim() || undefined;
 
   if (includeSlug) {
     const listings = await buildDiscoverListingsPayload({ includeSlug });
@@ -246,20 +328,26 @@ export async function executeDiscoverSearch(
   }
 
   const payload = await buildDiscoverListingsPagePayload({
-    limit: request.limit,
-    offset: request.offset,
-    includeMetadata: request.includeMetadata,
-    selectedAreas: request.selectedAreas,
-    selectedBeaches: request.selectedBeaches,
-    selectedCommunities: request.selectedCommunities,
-    selectedFeatures: request.selectedFeatures,
-    minKingBeds: request.minKingBeds,
-    minQueenBeds: request.minQueenBeds,
-    minBunkBeds: request.minBunkBeds,
+    sortOption: sanitizedRequest.sortOption,
+    limit: sanitizedRequest.limit,
+    offset: sanitizedRequest.offset,
+    includeMetadata: sanitizedRequest.includeMetadata,
+    includeMapListings: sanitizedRequest.includeMapListings,
+    locationQuery: sanitizedRequest.locationQuery,
+    minSleeps: sanitizedRequest.minSleeps,
+    minBedrooms: sanitizedRequest.minBedrooms,
+    minBathrooms: sanitizedRequest.minBathrooms,
+    selectedAreas: sanitizedRequest.selectedAreas,
+    selectedBeaches: sanitizedRequest.selectedBeaches,
+    selectedCommunities: sanitizedRequest.selectedCommunities,
+    selectedFeatures: sanitizedRequest.selectedFeatures,
+    minKingBeds: sanitizedRequest.minKingBeds,
+    minQueenBeds: sanitizedRequest.minQueenBeds,
+    minBunkBeds: sanitizedRequest.minBunkBeds,
   });
 
   return {
     ...payload,
-    _meta: buildDiscoverSearchMeta({ startedAtMs, request }),
+    _meta: buildDiscoverSearchMeta({ startedAtMs, request: sanitizedRequest }),
   };
 }

@@ -43,9 +43,11 @@ export function filterDiscoverListings(
       listing.sleeps >= filters.minSleeps &&
       listing.bedrooms >= filters.minBedrooms &&
       listing.bathrooms >= filters.minBathrooms &&
-      ((listing.sleepingSummary?.bed_counts?.king ?? 0) >= filters.minKingBeds) &&
-      ((listing.sleepingSummary?.bed_counts?.queen ?? 0) >= filters.minQueenBeds) &&
-      ((listing.sleepingSummary?.bed_counts?.bunk_beds ?? 0) >= filters.minBunkBeds) &&
+      (listing.sleepingSummary?.bed_counts?.king ?? 0) >= filters.minKingBeds &&
+      (listing.sleepingSummary?.bed_counts?.queen ?? 0) >=
+        filters.minQueenBeds &&
+      (listing.sleepingSummary?.bed_counts?.bunk_beds ?? 0) >=
+        filters.minBunkBeds &&
       (!filters.filterPool || listing.privatePool) &&
       (!filters.filterGulffront || listing.gulffront) &&
       (!filters.filterGolfCart || listing.golfCart)
@@ -108,7 +110,11 @@ export function buildDiscoverMapListings(input: {
   lng: number;
   hoverPriceAmount: string;
 }> {
-  if (!input.hasClientSideNarrowing && Array.isArray(input.mapSeedListings)) {
+  if (
+    !input.hasClientSideNarrowing &&
+    Array.isArray(input.mapSeedListings) &&
+    input.mapSeedListings.length > 0
+  ) {
     return input.mapSeedListings.map((listing) => {
       const typicalTotal = Math.ceil(
         listing.typicalAllInNightly * input.nights,

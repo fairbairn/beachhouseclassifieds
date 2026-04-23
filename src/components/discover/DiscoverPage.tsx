@@ -16,11 +16,13 @@ import {
   lazy,
   Suspense,
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -35,11 +37,7 @@ import {
 } from "@/components/discover/discover-data";
 import {
   formatBathrooms,
-  getAreaFromListing,
-  getBeachZoneFromListing,
-  getListingGeoTarget,
   getLocationPresentation,
-  verifyGulfFrontClaim,
 } from "@/components/discover/discover-utils";
 import { DiscoverFacetSidebar } from "@/components/discover/DiscoverFacetSidebar";
 import { DiscoverListingsPanel } from "@/components/discover/DiscoverListingsPanel";
@@ -53,10 +51,6 @@ import {
 } from "@/components/home/homeButtonStyles";
 import { HomeMarketingShell } from "@/components/home/HomeMarketingShell";
 import {
-  fetchDiscoverFacetsProbe,
-  type DiscoverFacetsProbeResult,
-} from "@/lib/discover/discover-facets-query";
-import {
   fetchDiscoverListingDetailPayloadWithCache,
   primeDiscoverListingDetailCache,
   primeDiscoverListingsCache,
@@ -66,13 +60,16 @@ import {
   type DiscoverListingsPageResponse,
 } from "@/lib/discover/discover-listings-query";
 import { markDiscoverModalIntent } from "@/lib/discover/discover-modal-intent";
+import { buildDiscoverMapListings } from "@/lib/discover/discover-page-derived";
 import {
-  buildDiscoverFacetCounts,
-  buildDiscoverMapListings,
-  buildEffectiveDiscoverFacetCounts,
-  filterDiscoverListings,
-  sortDiscoverListings,
-} from "@/lib/discover/discover-page-derived";
+  buildDiscoverInputsSignature,
+  createDiscoverInputsStore,
+  createDiscoverResultsStore,
+  mergeDiscoverListings,
+  normalizeDiscoverInputsState,
+  resolveDiscoverTotalCount,
+  type DiscoverInputsState,
+} from "@/lib/discover/discover-state";
 import type { DiscoverListing } from "@/lib/discover/discover-types";
 import { useDiscoverSearchControls } from "@/lib/discover/use-discover-search-controls";
 
@@ -87,8 +84,9 @@ const defaultMapTarget = {
 const RESET_MAP_ON_CLEAR_PIN = false;
 const BRAND_DISPLAY_FONT_FAMILY = "'Playfair Display', serif";
 const DISCOVER_RESULT_SET_TARGET_COUNT = 96;
+const DISCOVER_SSR_PLACEHOLDER_TARGET_COUNT = 48;
+const ENABLE_DISCOVER_CLIENT_REFETCH = true;
 const STANDALONE_CLOSE_FADE_MS = 3000;
-const SHOW_FACETS_PROBE_PANEL = false;
 const XL_BREAKPOINT_PX = 1280;
 const ORIGINAL_DESIGN_PANEL_MAX_HEIGHT_PX = 928;
 const DISCOVER_SECTION_GAP_PX = 24;
@@ -269,7 +267,6 @@ export function DiscoverPage({
     minBunkBeds,
     setMinBunkBeds,
     guestCount,
-    hasClientSideNarrowing,
     dateSummary,
     filtersSummary,
     resetFilters,
@@ -280,6 +277,10 @@ export function DiscoverPage({
     undefined,
   );
   const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const [hasMountedPrimaryMapPanel, setHasMountedPrimaryMapPanel] = useState(
+    () =>
+      overlayOnlyMode || isOverlayRoute || initialLoadedListings.length === 0,
+  );
   const [cardsPerRow, setCardsPerRow] = useState<2 | 3 | 4>(3);
   const [expandedSingleCardVariant, setExpandedSingleCardVariant] = useState<
     3 | 4
@@ -301,24 +302,43 @@ export function DiscoverPage({
       ),
     [selectedFeatures],
   );
+  const compositeDiscoverInputs = useMemo<DiscoverInputsState>(
+    () =>
+      normalizeDiscoverInputsState({
+        locationQuery,
+        minSleeps,
+        minBedrooms,
+        minBathrooms,
+        selectedAreas,
+        selectedBeaches,
+        selectedCommunities,
+        selectedFeatures,
+        minKingBeds,
+        minQueenBeds,
+        minBunkBeds,
+      }),
+    [
+      locationQuery,
+      minSleeps,
+      minBedrooms,
+      minBathrooms,
+      selectedAreas,
+      selectedBeaches,
+      selectedCommunities,
+      selectedFeatures,
+      minKingBeds,
+      minQueenBeds,
+      minBunkBeds,
+    ],
+  );
+  const compositeDiscoverInputsSignature = useMemo(
+    () => buildDiscoverInputsSignature(compositeDiscoverInputs),
+    [compositeDiscoverInputs],
+  );
 
   const filterPool = normalizedFeatureSet.has("private_pool");
   const filterGulffront = normalizedFeatureSet.has("gulf_front");
   const filterGolfCart = normalizedFeatureSet.has("golf_cart");
-  const [hasFacetSelectionInteraction, setHasFacetSelectionInteraction] =
-    useState(false);
-  const [serverFilteredListingTotalCount, setServerFilteredListingTotalCount] =
-    useState(
-      initialListingsPage?._stats?.totalCount ?? initialLoadedListings.length,
-    );
-  const [facetsProbe, setFacetsProbe] = useState<DiscoverFacetsProbeResult>({
-    status: 0,
-    clientDurationMs: 0,
-    payloadBytes: 0,
-    payload: null,
-    error: null,
-  });
-  const [isFacetsProbeLoading, setIsFacetsProbeLoading] = useState(false);
   const [isViewportTightForSidePanels, setIsViewportTightForSidePanels] =
     useState(false);
   const discoverShellRef = useRef<HTMLElement | null>(null);
@@ -329,16 +349,46 @@ export function DiscoverPage({
     discoverListingsSnapshotCache.length > 0
       ? discoverListingsSnapshotCache
       : initialLoadedListings;
-  const [fetchedListings, setFetchedListings] = useState<DiscoverListing[]>(
-    () => initialDiscoverListingsSeed,
+  const discoverResultsStoreRef =
+    useRef<ReturnType<typeof createDiscoverResultsStore>>();
+  if (!discoverResultsStoreRef.current) {
+    discoverResultsStoreRef.current = createDiscoverResultsStore({
+      initialListings: initialDiscoverListingsSeed,
+      initialMetadata: initialListingsPage?.metadata,
+      initialTotalCount: resolveDiscoverTotalCount({
+        payload: initialListingsPage,
+        fallbackListingsLength: initialLoadedListings.length,
+      }),
+    });
+  }
+  const discoverResultsStore = discoverResultsStoreRef.current;
+  const discoverInputsStoreRef =
+    useRef<ReturnType<typeof createDiscoverInputsStore>>();
+  if (!discoverInputsStoreRef.current) {
+    discoverInputsStoreRef.current = createDiscoverInputsStore(
+      compositeDiscoverInputs,
+    );
+  }
+  const discoverInputsStore = discoverInputsStoreRef.current;
+  const discoverInputsState = useSyncExternalStore(
+    discoverInputsStore.subscribe,
+    () => discoverInputsStore.state,
+    () => discoverInputsStore.state,
   );
-  const [latestMetadata, setLatestMetadata] = useState<
-    DiscoverListingsPageResponse["metadata"] | undefined
-  >(initialListingsPage?.metadata);
+  const discoverInputsSignature = useMemo(
+    () => buildDiscoverInputsSignature(discoverInputsState),
+    [discoverInputsState],
+  );
+  const discoverResultsState = useSyncExternalStore(
+    discoverResultsStore.subscribe,
+    () => discoverResultsStore.state,
+    () => discoverResultsStore.state,
+  );
+  const fetchedListings = discoverResultsState.listings;
+  const latestMetadata = discoverResultsState.metadata;
   const [overlayDetailListing, setOverlayDetailListing] = useState<
     DiscoverListing | undefined
   >(() => initialOverlayListing);
-  const fetchedListingsRef = useRef<DiscoverListing[]>([]);
   const [isOverlayDetailLoading, setIsOverlayDetailLoading] = useState(
     isOverlayRoute && !hasInitialOverlayListing,
   );
@@ -366,22 +416,15 @@ export function DiscoverPage({
   const [lightboxThumbRetryCounts, setLightboxThumbRetryCounts] = useState<
     Record<string, number>
   >({});
-  const didBackgroundFillRef = useRef(false);
-  const [isBackgroundFillLoading, setIsBackgroundFillLoading] = useState(() => {
-    if (isOverlayRoute || !initialListingsPage?._stats) {
-      return false;
-    }
+  const latestDiscoverFetchRequestIdRef = useRef(0);
+  const discoverInFlightRequestKeyRef = useRef<string | undefined>(undefined);
+  const discoverClientRequestSequenceRef = useRef(0);
+  const discoverSeedRequestKeyRef = useRef("discover-seed");
+  const wasOverlayRouteRef = useRef(isOverlayRoute);
 
-    const desiredTotal = Math.min(
-      DISCOVER_RESULT_SET_TARGET_COUNT,
-      Math.max(
-        initialListingsPage._stats.totalCount,
-        initialDiscoverListingsSeed.length,
-      ),
-    );
-
-    return desiredTotal > initialDiscoverListingsSeed.length;
-  });
+  useEffect(() => {
+    wasOverlayRouteRef.current = isOverlayRoute;
+  }, [isOverlayRoute]);
 
   const recomputeViewportPanelConstraint = useCallback(() => {
     if (typeof window === "undefined") {
@@ -575,168 +618,12 @@ export function DiscoverPage({
   );
 
   useEffect(() => {
-    fetchedListingsRef.current = fetchedListings;
-  }, [fetchedListings]);
-
-  useEffect(() => {
-    if (overlayOnlyMode) {
-      return;
-    }
-
-    let isCancelled = false;
-    setIsFacetsProbeLoading(true);
-
-    void fetchDiscoverFacetsProbe({
-      sortOption,
-      locationQuery,
-      minSleeps,
-      minBedrooms,
-      minBathrooms,
-      filterPool,
-      filterGulffront,
-      filterGolfCart,
-      probeReason: "sort_change_probe",
-    })
-      .then((result) => {
-        if (isCancelled) {
-          return;
-        }
-        setFacetsProbe(result);
-        setIsFacetsProbeLoading(false);
-      })
-      .catch(() => {
-        if (isCancelled) {
-          return;
-        }
-        setFacetsProbe({
-          status: 0,
-          clientDurationMs: 0,
-          payloadBytes: 0,
-          payload: null,
-          error: "Failed to fetch facets probe payload.",
-        });
-        setIsFacetsProbeLoading(false);
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [
-    filterGolfCart,
-    filterGulffront,
-    filterPool,
-    locationQuery,
-    minBathrooms,
-    minBedrooms,
-    minSleeps,
-    overlayOnlyMode,
-    sortOption,
-  ]);
-
-  useEffect(() => {
     if (requestedOverlayListingId || fetchedListings.length === 0) {
       return;
     }
 
     discoverListingsSnapshotCache = fetchedListings;
   }, [fetchedListings, requestedOverlayListingId]);
-
-  useEffect(() => {
-    if (isOverlayRoute) {
-      return;
-    }
-
-    const hasActiveFacetFilters =
-      selectedAreas.length > 0 ||
-      selectedBeaches.length > 0 ||
-      selectedCommunities.length > 0 ||
-      selectedFeatures.length > 0;
-
-    if (hasFacetSelectionInteraction || hasActiveFacetFilters) {
-      return;
-    }
-
-    if (didBackgroundFillRef.current) {
-      return;
-    }
-
-    const seedPage = initialListingsPage;
-    if (!seedPage?._stats) {
-      return;
-    }
-
-    const seedCount = Math.max(
-      seedPage.listings.length,
-      initialDiscoverListingsSeed.length,
-      fetchedListingsRef.current.length,
-    );
-    const desiredTotal = Math.min(
-      DISCOVER_RESULT_SET_TARGET_COUNT,
-      Math.max(seedPage._stats.totalCount, seedCount),
-    );
-    const remaining = desiredTotal - seedCount;
-
-    if (remaining <= 0) {
-      return;
-    }
-
-    didBackgroundFillRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsBackgroundFillLoading(true);
-    let isCancelled = false;
-
-    const loadRemainingListings = async () => {
-      const page = await fetchDiscoverListingsPage({
-        offset: seedCount,
-        limit: remaining,
-        includeMetadata: false,
-      }).catch(() => null);
-
-      if (isCancelled) {
-        return;
-      }
-
-      if (!page || page.listings.length === 0) {
-        setIsBackgroundFillLoading(false);
-        return;
-      }
-
-      setFetchedListings((current) => {
-        if (current.length === 0) {
-          return page.listings;
-        }
-
-        const existingIds = new Set(current.map((listing) => listing.id));
-        const additions = page.listings.filter(
-          (listing) => !existingIds.has(listing.id),
-        );
-
-        return additions.length > 0 ? [...current, ...additions] : current;
-      });
-
-      setIsBackgroundFillLoading(false);
-    };
-
-    void loadRemainingListings();
-
-    return () => {
-      isCancelled = true;
-
-      // In React Strict Mode, effects are intentionally mounted/cleaned/re-mounted.
-      // Reset this guard so the replay mount can run the real backfill request.
-      didBackgroundFillRef.current = false;
-      setIsBackgroundFillLoading(false);
-    };
-  }, [
-    hasFacetSelectionInteraction,
-    initialDiscoverListingsSeed.length,
-    initialListingsPage,
-    isOverlayRoute,
-    selectedAreas.length,
-    selectedBeaches.length,
-    selectedCommunities.length,
-    selectedFeatures.length,
-  ]);
 
   useEffect(() => {
     if (initialLoadedListings.length === 0) {
@@ -748,14 +635,17 @@ export function DiscoverPage({
       listings: initialLoadedListings,
     });
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setFetchedListings((current) => {
-      if (current.length > 0) {
+    discoverResultsStore.setState((current) => {
+      if (current.listings.length > 0) {
         return current;
       }
-      return initialLoadedListings;
+
+      return {
+        ...current,
+        listings: initialLoadedListings,
+      };
     });
-  }, [initialLoadedListings, requestedOverlayListingId]);
+  }, [discoverResultsStore, initialLoadedListings, requestedOverlayListingId]);
 
   useEffect(() => {
     if (!initialOverlayListing) {
@@ -883,44 +773,28 @@ export function DiscoverPage({
 
   const sourceListings = useMemo(() => {
     if (fetchedListings.length > 0) {
-      return fetchedListings.map(verifyGulfFrontClaim);
+      return fetchedListings;
     }
 
     return [] as DiscoverListing[];
   }, [fetchedListings]);
   const isDiscoverListingsInitialLoading =
     !isOverlayRoute && fetchedListings.length === 0;
-  const backgroundFillTargetCount = useMemo(() => {
-    if (isOverlayRoute || !initialListingsPage?._stats) {
+  const loadingPlaceholderCount = useMemo(() => {
+    if (isOverlayRoute) {
       return 0;
     }
-    return Math.min(
-      DISCOVER_RESULT_SET_TARGET_COUNT,
-      Math.max(
-        initialListingsPage._stats.totalCount,
-        initialLoadedListings.length,
-      ),
-    );
-  }, [
-    initialListingsPage?._stats,
-    initialLoadedListings.length,
-    isOverlayRoute,
-  ]);
-  const loadingPlaceholderCount =
-    isBackgroundFillLoading &&
-    backgroundFillTargetCount > fetchedListings.length
-      ? backgroundFillTargetCount - fetchedListings.length
-      : 0;
 
-  const hasSelectedFacetFilters =
-    selectedAreas.length > 0 ||
-    selectedBeaches.length > 0 ||
-    selectedCommunities.length > 0 ||
-    selectedFeatures.length > 0;
+    const targetCount = Math.min(
+      DISCOVER_SSR_PLACEHOLDER_TARGET_COUNT,
+      Math.max(discoverResultsState.totalCount, fetchedListings.length),
+    );
+
+    return Math.max(0, targetCount - fetchedListings.length);
+  }, [discoverResultsState.totalCount, fetchedListings.length, isOverlayRoute]);
 
   const toggleFacetValue = useCallback(
     (value: string, setSelected: Dispatch<SetStateAction<string[]>>) => {
-      setHasFacetSelectionInteraction(true);
       setSelected((current) =>
         current.includes(value)
           ? current.filter((entry) => entry !== value)
@@ -936,7 +810,6 @@ export function DiscoverPage({
       return;
     }
 
-    setHasFacetSelectionInteraction(true);
     setSelectedFeatures((current) => {
       const normalizedCurrent = Array.from(
         new Set(
@@ -955,170 +828,215 @@ export function DiscoverPage({
   }, []);
 
   useEffect(() => {
-    if (overlayOnlyMode || isOverlayRoute || !hasFacetSelectionInteraction) {
+    const currentSignature = buildDiscoverInputsSignature(
+      discoverInputsStore.state,
+    );
+    if (currentSignature === compositeDiscoverInputsSignature) {
       return;
     }
 
-    let isCancelled = false;
+    discoverInputsStore.setState(compositeDiscoverInputs);
+  }, [
+    compositeDiscoverInputs,
+    compositeDiscoverInputsSignature,
+    discoverInputsStore,
+  ]);
 
-    void fetchDiscoverListingsPage({
-      limit: DISCOVER_RESULT_SET_TARGET_COUNT,
-      offset: 0,
-      includeMetadata: true,
-      selectedAreas,
-      selectedBeaches,
-      selectedCommunities,
-      selectedFeatures,
-      minKingBeds,
-      minQueenBeds,
-      minBunkBeds,
-    })
+  useEffect(() => {
+    if (!ENABLE_DISCOVER_CLIENT_REFETCH || overlayOnlyMode || isOverlayRoute) {
+      return;
+    }
+
+    const returningFromOverlayRoute =
+      wasOverlayRouteRef.current && !isOverlayRoute;
+    if (
+      returningFromOverlayRoute &&
+      discoverResultsStore.state.listings.length > 0
+    ) {
+      return;
+    }
+
+    const requestSequence = discoverClientRequestSequenceRef.current;
+    const requestKey =
+      requestSequence === 0
+        ? discoverSeedRequestKeyRef.current
+        : `discover-client-${requestSequence}`;
+    const shouldAppendSeedWindow =
+      requestSequence === 0 &&
+      initialLoadedListings.length > 0 &&
+      initialLoadedListings.length < DISCOVER_RESULT_SET_TARGET_COUNT;
+    const requestOffset = shouldAppendSeedWindow
+      ? initialLoadedListings.length
+      : 0;
+    const requestedBackfillCount = shouldAppendSeedWindow
+      ? Math.max(
+          1,
+          DISCOVER_RESULT_SET_TARGET_COUNT - initialLoadedListings.length,
+        )
+      : DISCOVER_RESULT_SET_TARGET_COUNT;
+    const requestLimit = requestedBackfillCount;
+
+    const requestInputs = discoverInputsStore.state;
+    const clientRequest = {
+      sortOption,
+      limit: requestLimit,
+      offset: requestOffset,
+      bypassCache: true,
+      locationQuery: requestInputs.locationQuery,
+      minSleeps: requestInputs.minSleeps,
+      minBedrooms: requestInputs.minBedrooms,
+      minBathrooms: requestInputs.minBathrooms,
+      selectedAreas: requestInputs.selectedAreas,
+      selectedBeaches: requestInputs.selectedBeaches,
+      selectedCommunities: requestInputs.selectedCommunities,
+      selectedFeatures: requestInputs.selectedFeatures,
+      minKingBeds: requestInputs.minKingBeds,
+      minQueenBeds: requestInputs.minQueenBeds,
+      minBunkBeds: requestInputs.minBunkBeds,
+    };
+
+    const requestFingerprint = JSON.stringify(clientRequest);
+    if (discoverInFlightRequestKeyRef.current === requestFingerprint) {
+      return;
+    }
+    discoverInFlightRequestKeyRef.current = requestFingerprint;
+    latestDiscoverFetchRequestIdRef.current += 1;
+    const requestId = latestDiscoverFetchRequestIdRef.current;
+
+    void fetchDiscoverListingsPage(clientRequest)
       .then((payload) => {
-        if (isCancelled) {
+        if (requestId !== latestDiscoverFetchRequestIdRef.current) {
           return;
         }
 
-        setFetchedListings(payload.listings);
-        setLatestMetadata(payload.metadata);
-        setServerFilteredListingTotalCount(
-          Math.max(0, payload._stats?.totalCount ?? payload.listings.length),
-        );
+        discoverClientRequestSequenceRef.current += 1;
+
+        discoverResultsStore.setState((current) => ({
+          ...current,
+          listings: mergeDiscoverListings({
+            current: current.listings,
+            next: payload.listings,
+            mode: shouldAppendSeedWindow ? "append" : "replace",
+          }),
+          metadata: payload.metadata,
+          totalCount: Math.max(
+            0,
+            payload._stats?.totalCount ?? payload.listings.length,
+          ),
+        }));
+
+        setHasMountedPrimaryMapPanel(true);
+
+        if (typeof window === "undefined") {
+          console.info("[discover:client-seq] applied", {
+            requestKey,
+            mode: shouldAppendSeedWindow ? "append" : "replace",
+            request: {
+              limit: requestLimit,
+              offset: requestOffset,
+            },
+          });
+        }
       })
       .catch(() => {
-        if (isCancelled) {
+        if (requestId !== latestDiscoverFetchRequestIdRef.current) {
           return;
+        }
+
+        setHasMountedPrimaryMapPanel(true);
+      })
+      .finally(() => {
+        if (discoverInFlightRequestKeyRef.current === requestFingerprint) {
+          discoverInFlightRequestKeyRef.current = undefined;
         }
       });
 
-    return () => {
-      isCancelled = true;
-    };
+    return () => {};
   }, [
-    hasFacetSelectionInteraction,
+    discoverInputsSignature,
+    sortOption,
+    discoverInputsStore,
     isOverlayRoute,
     overlayOnlyMode,
-    selectedAreas,
-    selectedBeaches,
-    selectedCommunities,
-    selectedFeatures,
-    minBunkBeds,
-    minKingBeds,
-    minQueenBeds,
+    discoverResultsStore,
+    initialLoadedListings.length,
   ]);
 
-  const filtered = useMemo(() => {
-    return filterDiscoverListings(sourceListings, {
-      locationQuery,
-      guestCount,
-      minSleeps,
-      minBedrooms,
-      minBathrooms,
-      minKingBeds,
-      minQueenBeds,
-      minBunkBeds,
-      filterPool,
-      filterGulffront,
-      filterGolfCart,
-    });
-  }, [
-    guestCount,
-    locationQuery,
-    minSleeps,
-    minBathrooms,
-    minBedrooms,
-    minBunkBeds,
-    minKingBeds,
-    minQueenBeds,
-    filterGulffront,
-    filterGolfCart,
-    filterPool,
-    sourceListings,
-  ]);
-
-  const displayListings = useMemo(() => {
-    return sortDiscoverListings({
-      listings: filtered,
-      sortOption,
-      nights,
-    });
-  }, [filtered, nights, sortOption]);
+  const displayListings = sourceListings;
 
   const mapListings = useMemo(() => {
     return buildDiscoverMapListings({
       displayListings,
-      hasClientSideNarrowing,
+      hasClientSideNarrowing: false,
       mapSeedListings: latestMetadata?.mapListings,
       nights,
-      getListingGeo: getListingGeoTarget,
-    });
-  }, [
-    displayListings,
-    hasClientSideNarrowing,
-    latestMetadata?.mapListings,
-    nights,
-  ]);
-
-  const { areaCounts, beachCounts, communityCounts, featureCounts } = useMemo(
-    () =>
-      buildDiscoverFacetCounts({
-        filteredListings: filtered,
-        knownAreas: known30AAreas,
-        knownBeaches: known30ABeachZones,
-        knownCommunities: known30ACommunities,
-        getArea: getAreaFromListing,
-        getBeach: getBeachZoneFromListing,
+      getListingGeo: (listing) => ({
+        lat:
+          typeof listing.lat === "number" && Number.isFinite(listing.lat)
+            ? listing.lat
+            : defaultMapTarget.lat,
+        lng:
+          typeof listing.lng === "number" && Number.isFinite(listing.lng)
+            ? listing.lng
+            : defaultMapTarget.lng,
       }),
-    [filtered],
-  );
+    });
+  }, [displayListings, latestMetadata?.mapListings, nights]);
+  const deferredMapListings = useDeferredValue(mapListings);
 
   const {
-    effectiveListingCount,
     effectiveAreaCounts,
     effectiveBeachCounts,
     effectiveCommunityCounts,
     effectiveFeatureCounts,
-  } = useMemo(
-    () =>
-      buildEffectiveDiscoverFacetCounts({
-        hasClientSideNarrowing,
-        initialListingsPage:
-          latestMetadata !== undefined
-            ? ({
-                _stats: initialListingsPage?._stats ?? {
-                  totalCount: displayListings.length,
-                  count: displayListings.length,
-                  requested: displayListings.length,
-                },
-                listings: initialListingsPage?.listings ?? [],
-                metadata: latestMetadata,
-              } as DiscoverListingsPageResponse)
-            : initialListingsPage,
-        displayListingsLength: displayListings.length,
-        knownAreas: known30AAreas,
-        knownBeaches: known30ABeachZones,
-        knownCommunities: known30ACommunities,
-        areaCounts,
-        beachCounts,
-        communityCounts,
-        featureCounts,
-      }),
-    [
-      areaCounts,
-      beachCounts,
-      communityCounts,
-      displayListings.length,
-      featureCounts,
-      hasClientSideNarrowing,
-      initialListingsPage,
-      latestMetadata,
-    ],
-  );
+  } = useMemo(() => {
+    const metadata = latestMetadata;
 
-  const propertiesListingCount = hasClientSideNarrowing
-    ? displayListings.length
-    : hasSelectedFacetFilters
-      ? serverFilteredListingTotalCount
-      : effectiveListingCount;
+    const byLabel = (
+      bucket?: Record<string, { label?: string; count: number }>,
+    ) =>
+      new Map(
+        Object.values(bucket ?? {}).map((entry) => [
+          (entry.label ?? "").trim(),
+          entry.count,
+        ]),
+      );
+
+    const areaByLabel = byLabel(metadata?.facets.areas);
+    const beachByLabel = byLabel(metadata?.facets.beaches);
+    const communityByLabel = byLabel(metadata?.facets.communities);
+
+    return {
+      effectiveAreaCounts: known30AAreas.map(
+        (name) => [name, areaByLabel.get(name) ?? 0] as const,
+      ),
+      effectiveBeachCounts: known30ABeachZones.map(
+        (name) => [name, beachByLabel.get(name) ?? 0] as const,
+      ),
+      effectiveCommunityCounts: known30ACommunities.map(
+        (name) => [name, communityByLabel.get(name) ?? 0] as const,
+      ),
+      effectiveFeatureCounts: [
+        {
+          code: "gulf_front" as const,
+          label: "Gulf Front",
+          count: metadata?.facets.features.gulf_front?.count ?? 0,
+        },
+        {
+          code: "private_pool" as const,
+          label: "Private Pool",
+          count: metadata?.facets.features.private_pool?.count ?? 0,
+        },
+        {
+          code: "golf_cart" as const,
+          label: "Golf Cart",
+          count: metadata?.facets.features.golf_cart?.count ?? 0,
+        },
+      ],
+    };
+  }, [latestMetadata]);
+
+  const propertiesListingCount = discoverResultsState.totalCount;
 
   const toggleFavoriteListing = useCallback((listingId: string) => {
     setFavoriteListingIds((current) =>
@@ -1140,14 +1058,14 @@ export function DiscoverPage({
       overlayDetailListing &&
       overlayDetailListing.id === effectiveOverlayListingId
     ) {
-      return verifyGulfFrontClaim(overlayDetailListing);
+      return overlayDetailListing;
     }
 
     if (
       initialOverlayListing &&
       initialOverlayListing.id === effectiveOverlayListingId
     ) {
-      return verifyGulfFrontClaim(initialOverlayListing);
+      return initialOverlayListing;
     }
 
     // Avoid painting summary-card data in the detail overlay while
@@ -1317,11 +1235,18 @@ export function DiscoverPage({
       };
     }
 
-    const geoTarget = getListingGeoTarget(overlayListing);
     return {
       id: overlayListing.id,
-      lat: geoTarget.lat,
-      lng: geoTarget.lng,
+      lat:
+        typeof overlayListing.lat === "number" &&
+        Number.isFinite(overlayListing.lat)
+          ? overlayListing.lat
+          : defaultMapTarget.lat,
+      lng:
+        typeof overlayListing.lng === "number" &&
+        Number.isFinite(overlayListing.lng)
+          ? overlayListing.lng
+          : defaultMapTarget.lng,
       label: overlayListing.name,
       zoom: 19,
     };
@@ -1338,14 +1263,21 @@ export function DiscoverPage({
       }>;
     }
 
-    const geoTarget = getListingGeoTarget(overlayListing);
     const total = Math.ceil(overlayListing.typicalAllInNightly * nights);
     return [
       {
         id: overlayListing.id,
         name: overlayListing.name,
-        lat: geoTarget.lat,
-        lng: geoTarget.lng,
+        lat:
+          typeof overlayListing.lat === "number" &&
+          Number.isFinite(overlayListing.lat)
+            ? overlayListing.lat
+            : defaultMapTarget.lat,
+        lng:
+          typeof overlayListing.lng === "number" &&
+          Number.isFinite(overlayListing.lng)
+            ? overlayListing.lng
+            : defaultMapTarget.lng,
         hoverPriceAmount: `$${total.toLocaleString("en-US")}`,
       },
     ];
@@ -1860,27 +1792,6 @@ export function DiscoverPage({
               />
             </div>
 
-            {SHOW_FACETS_PROBE_PANEL ? (
-              <details className="rounded-xl border border-cyan-200/70 bg-cyan-50/80 px-3 py-2 text-xs text-slate-700 shadow-sm">
-                <summary className="cursor-pointer font-semibold tracking-[0.03em] text-slate-800">
-                  Facets Probe JSON
-                </summary>
-                <div className="mt-2 space-y-2">
-                  <p className="font-medium text-slate-700">
-                    {isFacetsProbeLoading
-                      ? "Loading..."
-                      : `status=${facetsProbe.status || "n/a"} client_ms=${facetsProbe.clientDurationMs.toFixed(1)} bytes=${facetsProbe.payloadBytes}`}
-                  </p>
-                  {facetsProbe.error ? (
-                    <p className="text-rose-700">{facetsProbe.error}</p>
-                  ) : null}
-                  <pre className="max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-800">
-                    {JSON.stringify(facetsProbe.payload, null, 2)}
-                  </pre>
-                </div>
-              </details>
-            ) : null}
-
             <div
               className={`grid gap-6 xl:min-h-0 xl:flex-1 ${shouldConstrainSidePanels ? "xl:overflow-hidden" : ""} ${
                 isMapExpanded
@@ -1910,22 +1821,10 @@ export function DiscoverPage({
                     toggleFacetValue(value, setSelectedCommunities)
                   }
                   onToggleFeature={toggleFeatureValue}
-                  onClearAreas={() => {
-                    setHasFacetSelectionInteraction(true);
-                    setSelectedAreas([]);
-                  }}
-                  onClearBeaches={() => {
-                    setHasFacetSelectionInteraction(true);
-                    setSelectedBeaches([]);
-                  }}
-                  onClearCommunities={() => {
-                    setHasFacetSelectionInteraction(true);
-                    setSelectedCommunities([]);
-                  }}
-                  onClearFeatures={() => {
-                    setHasFacetSelectionInteraction(true);
-                    setSelectedFeatures([]);
-                  }}
+                  onClearAreas={() => setSelectedAreas([])}
+                  onClearBeaches={() => setSelectedBeaches([])}
+                  onClearCommunities={() => setSelectedCommunities([])}
+                  onClearFeatures={() => setSelectedFeatures([])}
                   containerClassName={
                     shouldConstrainSidePanels
                       ? "xl:flex xl:h-full xl:min-h-0 xl:max-h-232 xl:flex-col xl:overflow-hidden"
@@ -1957,31 +1856,35 @@ export function DiscoverPage({
                 }
                 aria-hidden={isDetailOverlayOpen}
               >
-                <DiscoverMapPanel
-                  mapTarget={mapTarget}
-                  listings={mapListings}
-                  onClearPin={clearPinnedListing}
-                  onResetMapView={resetMapView}
-                  onSelectListing={handleSelectListingFromMap}
-                  onSyncSelectedListingCard={requestSelectedCardSync}
-                  isSyncSelectedListingCardAvailable={
-                    canSyncSelectedListingCard
-                  }
-                  isExpanded={isMapExpanded}
-                  onToggleExpanded={() =>
-                    setIsMapExpanded((current) => !current)
-                  }
-                  panelClassName={
-                    shouldConstrainSidePanels
-                      ? "xl:flex xl:h-full xl:min-h-0 xl:max-h-232 xl:flex-col xl:overflow-hidden"
-                      : undefined
-                  }
-                  mapViewportClassName={
-                    shouldConstrainSidePanels
-                      ? "relative mt-3 h-88 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-104 xl:h-auto xl:min-h-0 xl:flex-1"
-                      : undefined
-                  }
-                />
+                {hasMountedPrimaryMapPanel ? (
+                  <DiscoverMapPanel
+                    mapTarget={mapTarget}
+                    listings={deferredMapListings}
+                    onClearPin={clearPinnedListing}
+                    onResetMapView={resetMapView}
+                    onSelectListing={handleSelectListingFromMap}
+                    onSyncSelectedListingCard={requestSelectedCardSync}
+                    isSyncSelectedListingCardAvailable={
+                      canSyncSelectedListingCard
+                    }
+                    isExpanded={isMapExpanded}
+                    onToggleExpanded={() =>
+                      setIsMapExpanded((current) => !current)
+                    }
+                    panelClassName={
+                      shouldConstrainSidePanels
+                        ? "xl:flex xl:h-full xl:min-h-0 xl:max-h-232 xl:flex-col xl:overflow-hidden"
+                        : undefined
+                    }
+                    mapViewportClassName={
+                      shouldConstrainSidePanels
+                        ? "relative mt-3 h-88 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-104 xl:h-auto xl:min-h-0 xl:flex-1"
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <div className="mt-3 h-88 rounded-xl border border-slate-200 bg-slate-100 sm:h-104 xl:h-232" />
+                )}
               </div>
             </div>
           </>
