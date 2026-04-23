@@ -290,18 +290,6 @@ export function DiscoverPage({
   const [selectedBeaches, setSelectedBeaches] = useState<string[]>([]);
   const [selectedCommunities, setSelectedCommunities] = useState<string[]>([]);
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
-  const normalizedFeatureSet = useMemo(
-    () =>
-      new Set(
-        selectedFeatures.map((value) =>
-          value
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "_")
-            .replace(/^_+|_+$/g, ""),
-        ),
-      ),
-    [selectedFeatures],
-  );
   const compositeDiscoverInputs = useMemo<DiscoverInputsState>(
     () =>
       normalizeDiscoverInputsState({
@@ -336,9 +324,6 @@ export function DiscoverPage({
     [compositeDiscoverInputs],
   );
 
-  const filterPool = normalizedFeatureSet.has("private_pool");
-  const filterGulffront = normalizedFeatureSet.has("gulf_front");
-  const filterGolfCart = normalizedFeatureSet.has("golf_cart");
   const [isViewportTightForSidePanels, setIsViewportTightForSidePanels] =
     useState(false);
   const discoverShellRef = useRef<HTMLElement | null>(null);
@@ -349,27 +334,19 @@ export function DiscoverPage({
     discoverListingsSnapshotCache.length > 0
       ? discoverListingsSnapshotCache
       : initialLoadedListings;
-  const discoverResultsStoreRef =
-    useRef<ReturnType<typeof createDiscoverResultsStore>>();
-  if (!discoverResultsStoreRef.current) {
-    discoverResultsStoreRef.current = createDiscoverResultsStore({
+  const [discoverResultsStore] = useState(() =>
+    createDiscoverResultsStore({
       initialListings: initialDiscoverListingsSeed,
       initialMetadata: initialListingsPage?.metadata,
       initialTotalCount: resolveDiscoverTotalCount({
         payload: initialListingsPage,
         fallbackListingsLength: initialLoadedListings.length,
       }),
-    });
-  }
-  const discoverResultsStore = discoverResultsStoreRef.current;
-  const discoverInputsStoreRef =
-    useRef<ReturnType<typeof createDiscoverInputsStore>>();
-  if (!discoverInputsStoreRef.current) {
-    discoverInputsStoreRef.current = createDiscoverInputsStore(
-      compositeDiscoverInputs,
-    );
-  }
-  const discoverInputsStore = discoverInputsStoreRef.current;
+    }),
+  );
+  const [discoverInputsStore] = useState(() =>
+    createDiscoverInputsStore(compositeDiscoverInputs),
+  );
   const discoverInputsState = useSyncExternalStore(
     discoverInputsStore.subscribe,
     () => discoverInputsStore.state,
@@ -551,15 +528,6 @@ export function DiscoverPage({
         id: undefined,
       };
     });
-  }, []);
-
-  const resetMapView = useCallback(() => {
-    setActiveListingId(undefined);
-    setMapTarget(() => ({
-      ...defaultMapTarget,
-      id: undefined,
-      zoom: 13,
-    }));
   }, []);
 
   const requestSelectedCardSync = useCallback(() => {
@@ -1861,7 +1829,6 @@ export function DiscoverPage({
                     mapTarget={mapTarget}
                     listings={deferredMapListings}
                     onClearPin={clearPinnedListing}
-                    onResetMapView={resetMapView}
                     onSelectListing={handleSelectListingFromMap}
                     onSyncSelectedListingCard={requestSelectedCardSync}
                     isSyncSelectedListingCardAvailable={
@@ -1996,7 +1963,6 @@ export function DiscoverPage({
                         mapTarget={overlayMapTarget}
                         listings={overlayMapListings}
                         onClearPin={() => {}}
-                        onResetMapView={() => {}}
                         onSelectListing={() => {}}
                         onSyncSelectedListingCard={() => {}}
                         isSyncSelectedListingCardAvailable={false}
@@ -2285,7 +2251,6 @@ export function DiscoverPage({
                         mapTarget={overlayMapTarget}
                         listings={overlayMapListings}
                         onClearPin={() => {}}
-                        onResetMapView={() => {}}
                         onSelectListing={() => {}}
                         onSyncSelectedListingCard={() => {}}
                         isSyncSelectedListingCardAvailable={false}

@@ -289,21 +289,6 @@ function quoteFilterString(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
 }
 
-function buildAnyOfFilter(fieldName: string, values: string[]): string | null {
-  if (values.length === 0) {
-    return null;
-  }
-
-  if (values.length === 1) {
-    return `${fieldName} = ${quoteFilterString(values[0])}`;
-  }
-
-  const terms = values.map(
-    (value) => `${fieldName} = ${quoteFilterString(value)}`,
-  );
-  return `(${terms.join(" OR ")})`;
-}
-
 function buildFeatureFilter(
   feature:
     | "gulf_front"

@@ -1,5 +1,5 @@
 import { Heart } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import * as ReactCountUpModule from "react-countup";
 
 import { FacetSection } from "@/components/discover/discover-controls";
@@ -67,11 +67,11 @@ export function DiscoverFacetSidebar({
   const [isBeachesOpen, setIsBeachesOpen] = useState(true);
   const [isCommunitiesOpen, setIsCommunitiesOpen] = useState(true);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(true);
-  const [hasMounted, setHasMounted] = useState(false);
-
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
+  const hasMounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const sumSelectedTupleCounts = (
     selectedValues: ReadonlyArray<string>,
@@ -107,8 +107,15 @@ export function DiscoverFacetSidebar({
     ? Math.max(0, Math.round(listingCount))
     : 0;
   const previousListingCountRef = useRef(safeListingCount);
+  const [countUpStartValue, setCountUpStartValue] = useState(safeListingCount);
+  const [countUpRenderKey, setCountUpRenderKey] = useState(
+    `${safeListingCount}-${safeListingCount}`,
+  );
 
   useEffect(() => {
+    const previous = previousListingCountRef.current;
+    setCountUpStartValue(previous);
+    setCountUpRenderKey(`${previous}-${safeListingCount}`);
     previousListingCountRef.current = safeListingCount;
   }, [safeListingCount]);
 
@@ -172,8 +179,8 @@ export function DiscoverFacetSidebar({
         <span className="text-xl font-bold text-slate-900 tabular-nums">
           {hasMounted && hasCountUpComponent ? (
             <CountUpComponent
-              key={`${previousListingCountRef.current}-${safeListingCount}`}
-              start={previousListingCountRef.current}
+              key={countUpRenderKey}
+              start={countUpStartValue}
               end={safeListingCount}
               duration={0.85}
               formattingFn={formatCount}

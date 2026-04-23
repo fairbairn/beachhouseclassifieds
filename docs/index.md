@@ -17,6 +17,8 @@ Welcome to the docs site scaffold.
 - Use [Discover Experience Reference](./discover-experience-reference.md) as the implementation contract for Discover panel layout, feature naming, map behavior, and demo data rules.
 - Use [Discover Search Transition Plan](./discover-search-postgres-transition-plan.md) for current Postgres-vs-Meilisearch context and phased Discover query evolution steps.
 - Use [Discover Data Layer Isolation Context](./discover-data-layer-isolation-context.md) as the architectural boundary brief for transport-vs-data-layer separation, contract ownership, and CLI-first performance validation.
+- Use [Discover Search Engine Reference](./discover-search-engine-reference.md) for the canonical reactive fetch model, Meilisearch document schema, ingestion lifecycle, and sort/filter semantics.
+- Use [Discover Availability Window Indexing Spec](./discover-availability-window-indexing-spec.md) for the high-performance `avail_N` precompute/query model for wide date-window stay matching.
 - Use [Discovery Workspace and Planner Vision](./discovery-workspace-and-planner-vision.md) as the living product record for search UX, favoriting flow, route decisions, and planner boundaries.
 - Use [Known Peculiarities and Workarounds](./known-peculiarities-and-workarounds.md) for recurring runtime notices (including Google Maps JS client notices) and current no-change/workaround guidance.
 - Use [Pricing and Conformance System Reference](./pricing-system-reference.md) as the hub for scrape, quote, cache, validation, and readiness workflows.

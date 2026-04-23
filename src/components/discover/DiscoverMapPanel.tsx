@@ -280,7 +280,6 @@ export function DiscoverMapPanel({
   mapTarget,
   listings,
   onClearPin,
-  onResetMapView,
   onSelectListing,
   onSyncSelectedListingCard,
   isSyncSelectedListingCardAvailable,
@@ -309,7 +308,6 @@ export function DiscoverMapPanel({
     hoverPriceAmount: string;
   }>;
   onClearPin: () => void;
-  onResetMapView: () => void;
   onSelectListing: (next: {
     id: string;
     lat: number;
@@ -627,8 +625,6 @@ export function DiscoverMapPanel({
     listingsGeometry,
     mapTarget.id,
     onClearPin,
-    onResetMapView,
-    resetToInitialTargetView,
     updateResetState,
   ]);
 
@@ -858,7 +854,6 @@ export function DiscoverMapPanel({
   useEffect(() => {
     const map = googleMapRef.current;
     const markerLibrary = googleMapsMarkerNamespaceRef.current;
-    const googleMaps = googleMapsNamespaceRef.current;
     if (!map || !markerLibrary) {
       return;
     }
