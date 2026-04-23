@@ -14,6 +14,7 @@ type DetailCacheEntry = {
 };
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
+const DETAIL_CACHE_SCHEMA_VERSION = 2;
 const ALL_LISTINGS_KEY = "__all__";
 const listingsCache = new Map<string, CacheEntry>();
 const listingDetailCache = new Map<string, DetailCacheEntry>();
@@ -41,6 +42,10 @@ function buildDetailImageStats(listing: DiscoverListing) {
 
 function getCacheKey(includeSlug?: string) {
   return includeSlug?.trim() || ALL_LISTINGS_KEY;
+}
+
+function getDetailCacheKey(slug: string) {
+  return `${slug.trim()}::v${DETAIL_CACHE_SCHEMA_VERSION}`;
 }
 
 function isBrowserRuntime() {
@@ -171,7 +176,8 @@ export function primeDiscoverListingDetailCache(input: {
     images: buildDetailImageStats(input.listing),
   };
 
-  listingDetailCache.set(slug, {
+  const detailKey = getDetailCacheKey(slug);
+  listingDetailCache.set(detailKey, {
     payload: {
       listing: input.listing,
       _stats: stats,
@@ -247,12 +253,13 @@ export async function fetchDiscoverListingDetailPayloadWithCache(input: {
     return fetchDiscoverListingDetailFromApi(slug);
   }
 
-  const cached = listingDetailCache.get(slug);
+  const detailKey = getDetailCacheKey(slug);
+  const cached = listingDetailCache.get(detailKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.payload;
   }
 
-  const existingRequest = inFlightDetailRequests.get(slug);
+  const existingRequest = inFlightDetailRequests.get(detailKey);
   if (existingRequest) {
     return existingRequest;
   }
@@ -260,21 +267,21 @@ export async function fetchDiscoverListingDetailPayloadWithCache(input: {
   const request = fetchDiscoverListingDetailFromApi(slug)
     .then((payload) => {
       if (payload.listing) {
-        listingDetailCache.set(slug, {
+        listingDetailCache.set(detailKey, {
           payload,
           expiresAt: Date.now() + ttlMs,
         });
       }
-      inFlightDetailRequests.delete(slug);
+      inFlightDetailRequests.delete(detailKey);
       return payload;
     })
     .catch(() => {
-      inFlightDetailRequests.delete(slug);
+      inFlightDetailRequests.delete(detailKey);
       return {
         listing: null,
       } as DiscoverListingDetailPayload;
     });
 
-  inFlightDetailRequests.set(slug, request);
+  inFlightDetailRequests.set(detailKey, request);
   return request;
 }

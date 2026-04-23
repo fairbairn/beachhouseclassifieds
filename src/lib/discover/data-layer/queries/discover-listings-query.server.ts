@@ -107,6 +107,9 @@ const discoverListingDetailSelectFields = {
   description_headline_plain: listing.description_headline_plain,
   description_short_plain: listing.description_short_plain,
   description_markdown: listing.description_markdown,
+  seo_meta_title: listing.seo_meta_title,
+  seo_meta_description: listing.seo_meta_description,
+  seo_hidden_summary_plain: listing.seo_hidden_summary_plain,
   highlights: listing.highlights,
   helpful_hints: listing.helpful_hints,
   sleeping_arrangements: listing.sleeping_arrangements,
@@ -135,6 +138,9 @@ export type DiscoverListingRecordRow = {
   description_headline_plain?: string | null;
   description_short_plain?: string | null;
   description_markdown?: string | null;
+  seo_meta_title?: string | null;
+  seo_meta_description?: string | null;
+  seo_hidden_summary_plain?: string | null;
   highlights?: unknown;
   helpful_hints?: unknown;
   sleeping_arrangements?: unknown;

@@ -38,6 +38,24 @@ export type DiscoverSearchDocument = {
   bunk_bed_count: number;
   preview_images: string[];
   poster: string | null;
+  images: Array<{ name: string; url: string }>;
+  image_count: number;
+  description_headline: string | null;
+  description_markdown: string | null;
+  description_plain: string | null;
+  highlights_list: string[];
+  helpful_hints: string[];
+  sleeping_arrangements: string[];
+  amenities_list: string[];
+  seo_meta_title: string | null;
+  seo_meta_description: string | null;
+  seo_hidden_summary_plain: string | null;
+  status_code_string: string | null;
+  upcoming_typical_pricing_months: Array<{
+    monthLabel: string;
+    monthStartDate: string;
+    typicalAllInNightly: number;
+  }>;
   typical_pricing_month: string;
   typical_base_nightly: number;
   typical_all_in_nightly: number;
@@ -161,6 +179,64 @@ function asStringArray(value: unknown): string[] {
   return value
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter((entry) => entry.length > 0);
+}
+
+function asImageArray(value: unknown): Array<{ name: string; url: string }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const out: Array<{ name: string; url: string }> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const row = entry as Record<string, unknown>;
+    const url = asString(row.url);
+    if (!url) {
+      continue;
+    }
+    const name = asString(row.name) || `Photo ${out.length + 1}`;
+    out.push({ name, url });
+  }
+
+  return out;
+}
+
+function asUpcomingPricingMonths(value: unknown): Array<{
+  monthLabel: string;
+  monthStartDate: string;
+  typicalAllInNightly: number;
+}> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const out: Array<{
+    monthLabel: string;
+    monthStartDate: string;
+    typicalAllInNightly: number;
+  }> = [];
+
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const row = entry as Record<string, unknown>;
+    const monthLabel = asString(row.monthLabel);
+    const monthStartDate = asString(row.monthStartDate);
+    const nightly = asNumberOrZero(row.typicalAllInNightly);
+    if (!monthLabel || !monthStartDate) {
+      continue;
+    }
+    out.push({
+      monthLabel,
+      monthStartDate,
+      typicalAllInNightly: Math.max(0, Math.round(nightly)),
+    });
+  }
+
+  return out;
 }
 
 function asBoolean(value: unknown): boolean {
@@ -304,6 +380,54 @@ export function toDiscoverSearchDocument(
     preview_images: previewImages,
     // Optional MS-only convenience field for Admin UI cards.
     poster: previewImages[0] ?? null,
+    images: Array.isArray(listing.images)
+      ? listing.images.slice(0, 120)
+      : Array.isArray(listing.imageGallery)
+        ? listing.imageGallery.slice(0, 120)
+        : [],
+    image_count: Math.max(
+      0,
+      Math.round(
+        typeof listing.imageCount === "number"
+          ? listing.imageCount
+          : Array.isArray(listing.images)
+            ? listing.images.length
+            : Array.isArray(listing.imageGallery)
+              ? listing.imageGallery.length
+              : previewImages.length,
+      ),
+    ),
+    description_headline: listing.descriptionHeadline ?? null,
+    description_markdown: listing.descriptionMarkdown ?? null,
+    description_plain: listing.description ?? null,
+    highlights_list: Array.isArray(listing.highlightsList)
+      ? listing.highlightsList
+      : [],
+    helpful_hints: Array.isArray(listing.helpfulHints)
+      ? listing.helpfulHints
+      : [],
+    sleeping_arrangements: Array.isArray(listing.sleepingArrangements)
+      ? listing.sleepingArrangements
+      : [],
+    amenities_list: Array.isArray(listing.amenitiesList)
+      ? listing.amenitiesList
+      : [],
+    seo_meta_title: listing.seoMetaTitle ?? null,
+    seo_meta_description: listing.seoMetaDescription ?? null,
+    seo_hidden_summary_plain: listing.seoHiddenSummaryPlain ?? null,
+    status_code_string: listing.statusCodeString ?? null,
+    upcoming_typical_pricing_months: Array.isArray(
+      listing.upcomingTypicalPricingMonths,
+    )
+      ? listing.upcomingTypicalPricingMonths.slice(0, 6).map((entry) => ({
+          monthLabel: entry.monthLabel,
+          monthStartDate: entry.monthStartDate,
+          typicalAllInNightly: Math.max(
+            0,
+            Math.round(entry.typicalAllInNightly),
+          ),
+        }))
+      : [],
     typical_pricing_month: listing.typicalPricingMonth,
     typical_base_nightly: Math.max(0, listing.typicalBaseNightly),
     typical_all_in_nightly: Math.max(0, listing.typicalAllInNightly),
@@ -345,6 +469,24 @@ export function discoverSearchDocumentToListing(
     accessible: asBoolean(document.accessible),
     elevator: asBoolean(document.elevator),
     previewImages: asStringArray(document.preview_images),
+    images: asImageArray(document.images),
+    imageGallery: asImageArray(document.images),
+    imageCount: Math.max(0, Math.round(asNumberOrZero(document.image_count))),
+    descriptionHeadline: asString(document.description_headline) || undefined,
+    descriptionMarkdown: asString(document.description_markdown) || undefined,
+    description: asString(document.description_plain) || undefined,
+    highlightsList: asStringArray(document.highlights_list),
+    helpfulHints: asStringArray(document.helpful_hints),
+    sleepingArrangements: asStringArray(document.sleeping_arrangements),
+    amenitiesList: asStringArray(document.amenities_list),
+    seoMetaTitle: asString(document.seo_meta_title) || undefined,
+    seoMetaDescription: asString(document.seo_meta_description) || undefined,
+    seoHiddenSummaryPlain:
+      asString(document.seo_hidden_summary_plain) || undefined,
+    statusCodeString: asString(document.status_code_string) || undefined,
+    upcomingTypicalPricingMonths: asUpcomingPricingMonths(
+      document.upcoming_typical_pricing_months,
+    ),
     typicalPricingMonth: asString(document.typical_pricing_month),
     typicalBaseNightly: Math.max(
       0,

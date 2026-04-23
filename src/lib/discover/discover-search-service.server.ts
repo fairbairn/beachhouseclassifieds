@@ -357,7 +357,7 @@ export async function executeDiscoverSearch(
     const listings = await buildDiscoverListingsPayload({ includeSlug });
 
     return {
-      source: "postgres",
+      source: getDiscoverSearchSource(),
       _meta: buildDiscoverSearchMeta({ startedAtMs, request }),
       _stats: {
         totalCount: listings.length,

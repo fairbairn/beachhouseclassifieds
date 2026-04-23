@@ -4,7 +4,10 @@ import {
   buildAvailabilityWindowQuery,
   validateAvailabilityWindowInput,
 } from "@/lib/discover/availability-window-index";
-import type { DiscoverMapListing } from "@/lib/discover/discover-types";
+import type {
+  DiscoverListing,
+  DiscoverMapListing,
+} from "@/lib/discover/discover-types";
 import { getDiscoverMeilisearchIndex } from "@/lib/discover/meilisearch-client.server";
 import {
   discoverSearchDocumentToListing,
@@ -119,6 +122,24 @@ const DISCOVER_LISTING_ATTRIBUTES_TO_RETRIEVE = [
   "typical_all_in_nightly",
 ] as const;
 
+const DISCOVER_DETAIL_ATTRIBUTES_TO_RETRIEVE = [
+  ...DISCOVER_LISTING_ATTRIBUTES_TO_RETRIEVE,
+  "images",
+  "image_count",
+  "description_headline",
+  "description_markdown",
+  "description_plain",
+  "highlights_list",
+  "helpful_hints",
+  "sleeping_arrangements",
+  "amenities_list",
+  "seo_meta_title",
+  "seo_meta_description",
+  "seo_hidden_summary_plain",
+  "status_code_string",
+  "upcoming_typical_pricing_months",
+] as const;
+
 function buildEmptyFacetGroups(): DiscoverCorpusMetadata["facets"] {
   return {
     areas: {},
@@ -133,7 +154,13 @@ function buildEmptyFacetGroups(): DiscoverCorpusMetadata["facets"] {
 }
 
 function logMeilisearchQuery(input: {
-  operation: "facets" | "snapshot" | "listings" | "count" | "corpus-metadata";
+  operation:
+    | "facets"
+    | "snapshot"
+    | "listings"
+    | "count"
+    | "corpus-metadata"
+    | "detail";
   query: string;
   payload: Record<string, unknown>;
 }): void {
@@ -812,6 +839,37 @@ export async function getDiscoverListings(input?: {
   return result.hits
     .map((document) => discoverSearchDocumentToListing(document))
     .filter((listing) => listing.id.length > 0);
+}
+
+export async function getDiscoverListingDetailBySlug(input: {
+  slug: string;
+}): Promise<DiscoverListing | null> {
+  const slug = input.slug.trim();
+  if (!slug) {
+    return null;
+  }
+
+  const index = getDiscoverMeilisearchIndex();
+  const payload = {
+    id: slug,
+    fields: [...DISCOVER_DETAIL_ATTRIBUTES_TO_RETRIEVE],
+  };
+  logMeilisearchQuery({
+    operation: "detail",
+    query: "",
+    payload,
+  });
+
+  try {
+    const document = await index.getDocument<DiscoverSearchDocument>(slug, {
+      fields: [...DISCOVER_DETAIL_ATTRIBUTES_TO_RETRIEVE],
+    });
+
+    const listing = discoverSearchDocumentToListing(document);
+    return listing.id.length > 0 ? listing : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getDiscoverListingsCount(input?: {

@@ -509,6 +509,7 @@ type SourcePricingContext = {
   typicalPricingMonth: string;
   typicalBaseNightly: number;
   typicalAllInNightly: number;
+  statusCodeString: string;
   upcomingTypicalPricingMonths: Array<{
     monthLabel: string;
     monthStartDate: string;
@@ -806,6 +807,7 @@ async function loadPricingContextByListingSlug(input: {
             Math.round(primaryMonthNightly * 0.88),
           ),
           typicalAllInNightly: Math.max(1, Math.round(primaryMonthNightly)),
+          statusCodeString: "",
           upcomingTypicalPricingMonths,
           availabilityCalendarStatus: {},
         });
@@ -861,6 +863,7 @@ async function loadPricingContextByListingSlug(input: {
         }),
         typicalBaseNightly: Math.max(1, Math.round(primaryMonthNightly * 0.88)),
         typicalAllInNightly: Math.max(1, Math.round(primaryMonthNightly)),
+        statusCodeString: availabilityStream?.status_code_string ?? "",
         upcomingTypicalPricingMonths,
         availabilityCalendarStatus,
       });
@@ -891,6 +894,7 @@ async function loadPricingContextByListingSlug(input: {
       }),
       typicalBaseNightly: Math.max(1, Math.round(typicalBase)),
       typicalAllInNightly: Math.max(1, Math.round(typicalAllIn)),
+      statusCodeString: availabilityStream?.status_code_string ?? "",
       upcomingTypicalPricingMonths,
       availabilityCalendarStatus,
     });
@@ -1115,13 +1119,32 @@ async function loadFromListingTable(input?: {
                 url,
               }))
             : undefined,
+      images:
+        onlySlug && imageGalleryFromListing.length > 0
+          ? imageGalleryFromListing
+          : onlySlug
+            ? preview.map((url, imageIndex) => ({
+                name: `Photo ${imageIndex + 1}`,
+                url,
+              }))
+            : undefined,
       typicalPricingMonth: sourcePricing.typicalPricingMonth,
       typicalBaseNightly: sourcePricing.typicalBaseNightly,
       typicalAllInNightly: sourcePricing.typicalAllInNightly,
       upcomingTypicalPricingMonths: sourcePricing.upcomingTypicalPricingMonths,
+      statusCodeString: onlySlug ? sourcePricing.statusCodeString : undefined,
       descriptionHeadline: descriptionHeadline || undefined,
       descriptionMarkdown: description || undefined,
       description: description || undefined,
+      seoMetaTitle: onlySlug
+        ? asString(row.seo_meta_title) || undefined
+        : undefined,
+      seoMetaDescription: onlySlug
+        ? asString(row.seo_meta_description) || undefined
+        : undefined,
+      seoHiddenSummaryPlain: onlySlug
+        ? asString(row.seo_hidden_summary_plain) || undefined
+        : undefined,
       highlightsList,
       helpfulHints,
       sleepingArrangements: onlySlug

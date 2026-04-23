@@ -1362,6 +1362,10 @@ export function DiscoverPage({
       });
     };
 
+    for (const image of overlayListing.images ?? []) {
+      pushImage(image.url, image.name, `${overlayListing.name} photo`);
+    }
+
     for (const image of overlayListing.imageGallery ?? []) {
       pushImage(image.url, image.name, `${overlayListing.name} photo`);
     }
@@ -1911,10 +1915,17 @@ export function DiscoverPage({
                           toggleFavoriteListing(effectiveOverlayListingId);
                         }
                       }}
-                      className={`inline-flex h-12 w-12 items-center justify-center rounded-full shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] backdrop-blur-md transition ${effectiveOverlayListingId && favoriteListingIds.includes(effectiveOverlayListingId) ? "bg-rose-900/65 text-rose-100 hover:bg-rose-100 hover:text-rose-700" : "bg-slate-950/35 text-white hover:bg-white/85 hover:text-slate-900"}`}
+                      className={`relative inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950/35 shadow-[0_14px_28px_-18px_rgba(15,23,42,0.75)] backdrop-blur-md transition hover:bg-white/85 ${effectiveOverlayListingId && favoriteListingIds.includes(effectiveOverlayListingId) ? "text-rose-400 hover:text-rose-600" : "text-white hover:text-slate-900"}`}
                       aria-label="Toggle favorite"
                       title="Toggle favorite"
                     >
+                      {effectiveOverlayListingId &&
+                      favoriteListingIds.includes(effectiveOverlayListingId) ? (
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute -inset-1 animate-ping rounded-full border border-rose-300/80"
+                        />
+                      ) : null}
                       <Heart
                         className="h-6 w-6"
                         fill={
@@ -2316,15 +2327,21 @@ export function DiscoverPage({
                               type="button"
                               onClick={showPreviousOverlayLightboxImage}
                               disabled={isOverlayLightboxAtFirstImage}
-                              className={`absolute top-1/2 left-4 z-20 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border text-white backdrop-blur-sm transition ${
+                              className={`group absolute top-1/2 left-4 z-20 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border text-white backdrop-blur-sm transition duration-150 ease-out ${
                                 isOverlayLightboxAtFirstImage
                                   ? "cursor-not-allowed border-white/25 bg-slate-900/20 text-white/35"
-                                  : "border-white/65 bg-slate-900/45 hover:bg-slate-900/65"
+                                  : "border-white/65 bg-slate-900/45 shadow-[0_10px_20px_-14px_rgba(15,23,42,0.9)] hover:-translate-y-[52%] hover:scale-105 hover:border-white/85 hover:bg-white/15 hover:shadow-[0_18px_30px_-16px_rgba(15,23,42,0.95)] active:scale-95"
                               }`}
                               aria-label="Previous image"
                               title="Previous image"
                             >
-                              <ChevronLeft className="h-6 w-6" />
+                              <ChevronLeft
+                                className={`h-6 w-6 transition-transform duration-150 ease-out ${
+                                  isOverlayLightboxAtFirstImage
+                                    ? ""
+                                    : "group-hover:-translate-x-0.5"
+                                }`}
+                              />
                             </button>
 
                             <div className="flex h-full items-center justify-center">
@@ -2339,7 +2356,7 @@ export function DiscoverPage({
                                     overlayLightboxImageIndexClamped
                                   ]?.label ?? "Listing image"
                                 }
-                                className="max-h-full max-w-full rounded-xl object-contain shadow-[0_24px_60px_-36px_rgba(15,23,42,0.95)]"
+                                className="h-full w-auto max-h-full max-w-full rounded-2xl object-contain shadow-[0_24px_60px_-36px_rgba(15,23,42,0.95)]"
                               />
                             </div>
 
@@ -2347,15 +2364,21 @@ export function DiscoverPage({
                               type="button"
                               onClick={showNextOverlayLightboxImage}
                               disabled={isOverlayLightboxAtLastImage}
-                              className={`absolute top-1/2 right-4 z-20 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border text-white backdrop-blur-sm transition ${
+                              className={`group absolute top-1/2 right-4 z-20 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border text-white backdrop-blur-sm transition duration-150 ease-out ${
                                 isOverlayLightboxAtLastImage
                                   ? "cursor-not-allowed border-white/25 bg-slate-900/20 text-white/35"
-                                  : "border-white/65 bg-slate-900/45 hover:bg-slate-900/65"
+                                  : "border-white/65 bg-slate-900/45 shadow-[0_10px_20px_-14px_rgba(15,23,42,0.9)] hover:-translate-y-[52%] hover:scale-105 hover:border-white/85 hover:bg-white/15 hover:shadow-[0_18px_30px_-16px_rgba(15,23,42,0.95)] active:scale-95"
                               }`}
                               aria-label="Next image"
                               title="Next image"
                             >
-                              <ChevronRight className="h-6 w-6" />
+                              <ChevronRight
+                                className={`h-6 w-6 transition-transform duration-150 ease-out ${
+                                  isOverlayLightboxAtLastImage
+                                    ? ""
+                                    : "group-hover:translate-x-0.5"
+                                }`}
+                              />
                             </button>
                           </div>
 

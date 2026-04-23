@@ -4,6 +4,7 @@ import {
 } from "@/lib/discover/discover-listings-data-layer.server";
 import {
   getDiscoverCorpusMetadata as getDiscoverCorpusMetadataFromMeilisearch,
+  getDiscoverListingDetailBySlug as getDiscoverListingDetailBySlugFromMeilisearch,
   getDiscoverListingsCount as getDiscoverListingsCountFromMeilisearch,
   getDiscoverListings as getDiscoverListingsFromMeilisearch,
   getDiscoverListingsSnapshot as getDiscoverListingsSnapshotFromMeilisearch,
@@ -50,7 +51,15 @@ export async function getDiscoverListings(input?: {
   availabilityWindowEndDayInt?: number;
   availabilityStayNights?: number;
 }) {
-  if (input?.includeSlug?.trim() || input?.onlySlug) {
+  const includeSlug = input?.includeSlug?.trim();
+  if (includeSlug || input?.onlySlug) {
+    if (shouldUseMeilisearchBackend() && includeSlug) {
+      const detail = await getDiscoverListingDetailBySlugFromMeilisearch({
+        slug: includeSlug,
+      });
+      return detail ? [detail] : [];
+    }
+
     return getDiscoverListingsFromPostgres(input);
   }
 

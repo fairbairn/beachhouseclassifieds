@@ -40,6 +40,14 @@ export type DiscoverListing = {
     name: string;
     url: string;
   }>;
+  images?: Array<{
+    name: string;
+    url: string;
+  }>;
+  seoMetaTitle?: string;
+  seoMetaDescription?: string;
+  seoHiddenSummaryPlain?: string;
+  statusCodeString?: string;
   availabilityCalendarStatus?: Record<
     string,
     {
