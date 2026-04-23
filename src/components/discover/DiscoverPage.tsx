@@ -2356,7 +2356,7 @@ export function DiscoverPage({
                                     overlayLightboxImageIndexClamped
                                   ]?.label ?? "Listing image"
                                 }
-                                className="h-full w-auto max-h-full max-w-full rounded-2xl object-contain shadow-[0_24px_60px_-36px_rgba(15,23,42,0.95)]"
+                                className="h-full max-h-full w-auto max-w-full rounded-2xl object-contain shadow-[0_24px_60px_-36px_rgba(15,23,42,0.95)]"
                               />
                             </div>
 
