@@ -65,6 +65,7 @@ type RateQuoteObservation = CanonicalQuoteObservation;
 type DetailRecord360Blue = DetailRecordBase & {
   title: string;
   h1: string;
+  canonical_property_name: string;
   canonical_url: string;
   meta_description: string;
   json_ld_name: string;
@@ -277,6 +278,29 @@ function normalizeForMatch(value: string): string {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractQuotedPropertyName(value: string): string {
+  const quoteMatch = value.match(/"([^"]{2,120})"/);
+  return quoteMatch?.[1]?.trim() ?? "";
+}
+
+function extractBlueMountainNameFromH1(
+  h1: string,
+  externalListingId: string,
+): string {
+  if (!externalListingId.startsWith("blue-mountain-")) {
+    return "";
+  }
+  const trimmed = h1.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const withoutArea = trimmed.replace(/^blue mountain\s+/i, "").trim();
+  if (!withoutArea || withoutArea.toLowerCase() === trimmed.toLowerCase()) {
+    return "";
+  }
+  return withoutArea;
 }
 
 function toTurnDayChangeoverCode(statusCode: string): string {
@@ -2180,9 +2204,16 @@ async function fetchDetail(
       longitude: coordinates.longitude,
     };
 
+    const canonicalPropertyName = (
+      extractQuotedPropertyName(h1) ||
+      extractBlueMountainNameFromH1(h1, externalListingId) ||
+      parsedAddress ||
+      shortAddress
+    ).slice(0, 240);
+
     const description = descriptionExpanded;
     const descriptionNormalized = normalizeForMatch(description);
-    const name = h1 || jsonLd.name || title;
+    const name = canonicalPropertyName || h1 || jsonLd.name || title;
     const titleNormalized = normalizeForMatch(name);
 
     const htmlPath = resolve(
@@ -2242,6 +2273,7 @@ async function fetchDetail(
       fetched_at: new Date().toISOString(),
       title,
       h1,
+      canonical_property_name: canonicalPropertyName,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       json_ld_name: jsonLd.name,

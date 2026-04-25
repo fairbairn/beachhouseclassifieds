@@ -16,6 +16,7 @@ const MEILI_TASK_TIMEOUT_MS = 120_000;
 type ParsedArgs = {
   batchSize: number;
   dryRun: boolean;
+  listingSlug: string | null;
 };
 
 function availabilityFieldNames(
@@ -64,13 +65,14 @@ function printUsage(): void {
   console.log("Sync discover listings into Meilisearch");
   console.log("Usage:");
   console.log(
-    "  tsx src/lib/scripts/run-discover-meilisearch-sync.ts [--batch-size <number>] [--dry-run]",
+    "  tsx src/lib/scripts/run-discover-meilisearch-sync.ts [--batch-size <number>] [--listing-slug <slug>] [--dry-run]",
   );
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
   let batchSize = DEFAULT_BATCH_SIZE;
   let dryRun = false;
+  let listingSlug: string | null = null;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -91,6 +93,16 @@ function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
 
+    if ((arg === "--listing-slug" || arg === "--slug") && next) {
+      const normalized = next.trim();
+      if (!normalized) {
+        throw new Error("--listing-slug must not be empty.");
+      }
+      listingSlug = normalized;
+      index += 1;
+      continue;
+    }
+
     if (arg === "--dry-run") {
       dryRun = true;
       continue;
@@ -102,6 +114,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return {
     batchSize,
     dryRun,
+    listingSlug,
   };
 }
 
@@ -204,12 +217,54 @@ async function ensureIndexSettings(): Promise<void> {
 async function syncDocuments(
   batchSize: number,
   dryRun: boolean,
+  listingSlug: string | null,
 ): Promise<void> {
   const { getDiscoverListings, getDiscoverListingsCount } =
     await import("@/lib/discover/discover-listings-data-layer.server");
 
-  const sourceCount = await getDiscoverListingsCount();
   const index = getDiscoverMeilisearchIndex();
+
+  if (listingSlug) {
+    const listings = await getDiscoverListings({
+      includeSlug: listingSlug,
+      onlySlug: true,
+      maxListings: 1,
+      disableFallback: true,
+    });
+
+    if (listings.length === 0) {
+      throw new Error(
+        `No discover listing found for slug '${listingSlug}'. Nothing was synced.`,
+      );
+    }
+
+    const enrichedListings = await enrichListingsWithAvailability({
+      listings,
+    });
+
+    const documents: DiscoverSearchDocument[] = enrichedListings.map(
+      (listing) => toDiscoverSearchDocument(listing),
+    );
+
+    if (dryRun) {
+      console.log(
+        `discover_meilisearch_sync dry_run=true mode=single listing_slug=${listingSlug} synced=${documents.length}`,
+      );
+      return;
+    }
+
+    const task = await index.addDocuments(documents, { primaryKey: "id" });
+    await getMeilisearchClient().tasks.waitForTask(task, {
+      timeout: MEILI_TASK_TIMEOUT_MS,
+    });
+
+    console.log(
+      `discover_meilisearch_sync complete mode=single listing_slug=${listingSlug} synced=${documents.length}`,
+    );
+    return;
+  }
+
+  const sourceCount = await getDiscoverListingsCount();
 
   if (dryRun) {
     console.log(
@@ -267,7 +322,7 @@ async function run(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
 
   await ensureIndexSettings();
-  await syncDocuments(args.batchSize, args.dryRun);
+  await syncDocuments(args.batchSize, args.dryRun, args.listingSlug);
 
   return 0;
 }

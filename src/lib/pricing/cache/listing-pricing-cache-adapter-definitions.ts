@@ -69,17 +69,6 @@ export const SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS: Record<
     globalDefaultBaseNightly: 750,
     assumptionsAnchorFallbackMultiplier: 0.92,
   },
-  keyco30a: {
-    adapterKey: "keyco30a",
-    defaultWeeks: 24,
-    defaultAssumptions: {
-      avgFeePct: 0.19,
-      avgTaxPct: 0.12,
-      avgAllInMultiplier: 1.31,
-    },
-    globalDefaultBaseNightly: 650,
-    assumptionsAnchorFallbackMultiplier: 0.92,
-  },
   "30aescapes": {
     adapterKey: "30aescapes",
     defaultWeeks: 24,

@@ -14,6 +14,7 @@ type CanonicalChangeoverCode = "C" | "I" | "O" | "X";
 
 type LuxuryDetailRecord = DetailRecordBase & {
   title: string;
+  canonical_property_name: string;
   rooms_guidance: string[];
   quote_context?: {
     unit_id: string;
@@ -228,6 +229,38 @@ function normalizeListingName(value: string): string {
     .trim();
 
   return cleaned.slice(0, 240);
+}
+
+function extractQuotedPropertyName(value: string): string {
+  const quoteMatch = value.match(/["“]([^"”]{2,120})["”]/);
+  return quoteMatch?.[1]?.trim() ?? "";
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripExternalIdPrefixFromName(
+  externalListingId: string,
+  candidateName: string,
+): string {
+  const normalizedCandidate = normalizeListingName(candidateName);
+  if (!normalizedCandidate) {
+    return "";
+  }
+
+  const prefixRaw = externalListingId.split(/-{2,}/)[0]?.trim() ?? "";
+  const prefixLabel = normalizeListingName(prefixRaw.replace(/-/g, " "));
+  if (!prefixLabel) {
+    return normalizedCandidate;
+  }
+
+  const prefixPattern = new RegExp(
+    `^${escapeRegex(prefixLabel)}(?:\\s+|\\s*[-:|]\\s*)`,
+    "i",
+  );
+  const stripped = normalizedCandidate.replace(prefixPattern, "").trim();
+  return stripped || normalizedCandidate;
 }
 
 function dedupePreserveOrder(values: string[]): string[] {
@@ -2105,8 +2138,17 @@ async function fetchDetail(
       longitude,
     };
 
-    const listingName = normalizeListingName(
+    const listingNameBase = normalizeListingName(
       extracted.h1 || extracted.title || externalListingId,
+    );
+    const listingName = stripExternalIdPrefixFromName(
+      externalListingId,
+      listingNameBase,
+    );
+    const canonicalPropertyName = normalizeListingName(
+      extractQuotedPropertyName(extracted.h1) ||
+        extractQuotedPropertyName(extracted.title) ||
+        listingName,
     );
 
     const normalizedMatchingProfile = {
@@ -2152,6 +2194,7 @@ async function fetchDetail(
       fetched_at: new Date().toISOString(),
       title: normalizeListingName(extracted.title || extracted.h1 || ""),
       h1: listingName,
+      canonical_property_name: canonicalPropertyName,
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,

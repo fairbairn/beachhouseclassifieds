@@ -47,8 +47,10 @@ export type CanonicalQuotesSidecarRecord = {
   detail_url: string;
   captured_at: string;
   currency: string;
-  quote_window_cadence: "weekly_sat_to_sat";
-  quote_window_gap_policy: "record_unavailable_without_date_shift";
+  quote_window_cadence: "weekly_sat_to_sat" | "weekly_anchor_adaptive_span";
+  quote_window_gap_policy:
+    | "record_unavailable_without_date_shift"
+    | "probe_longest_available_span";
   quote_window_anchor_date: string;
   quote_window_days: number;
   quote_sample_step_days: number;
@@ -83,12 +85,16 @@ export function assertCanonicalQuotesSidecarRecord(
     throw new Error("Invalid quote sidecar quote_window_anchor_date");
   }
 
-  if (value.quote_window_cadence !== "weekly_sat_to_sat") {
+  if (
+    value.quote_window_cadence !== "weekly_sat_to_sat" &&
+    value.quote_window_cadence !== "weekly_anchor_adaptive_span"
+  ) {
     throw new Error("Invalid quote sidecar quote_window_cadence");
   }
 
   if (
-    value.quote_window_gap_policy !== "record_unavailable_without_date_shift"
+    value.quote_window_gap_policy !== "record_unavailable_without_date_shift" &&
+    value.quote_window_gap_policy !== "probe_longest_available_span"
   ) {
     throw new Error("Invalid quote sidecar quote_window_gap_policy");
   }

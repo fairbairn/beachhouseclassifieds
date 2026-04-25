@@ -18,18 +18,32 @@ import { cn } from "@/core/ui/cn";
 import type { DiscoverListing } from "@/lib/discover/discover-types";
 
 function DiscoverImageSlot({
+  imageUrl,
+  imageAlt,
   containerClassName,
 }: {
+  imageUrl?: string;
+  imageAlt?: string;
   containerClassName: string;
 }) {
   return (
     <div
       className={`relative overflow-hidden bg-slate-200/70 ${containerClassName}`}
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-linear-to-br from-slate-200/80 via-slate-200/55 to-slate-300/65"
-      />
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={imageAlt ?? "Listing preview image"}
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 block h-full w-full object-cover"
+        />
+      ) : (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-linear-to-br from-slate-200/80 via-slate-200/55 to-slate-300/65"
+        />
+      )}
     </div>
   );
 }
@@ -122,11 +136,17 @@ export const DiscoverListingCard = memo(function DiscoverListingCard({
               Click to View Property
             </span>
           </div>
-          <DiscoverImageSlot containerClassName="aspect-square w-full rounded-lg" />
+          <DiscoverImageSlot
+            imageUrl={leftPreviewImage}
+            imageAlt={`${listing.name} preview image 1`}
+            containerClassName="aspect-square w-full rounded-lg"
+          />
           <div className="grid aspect-square grid-cols-2 grid-rows-2 gap-2">
             {rightQuadPreviewImages.map((img, i) => (
               <DiscoverImageSlot
                 key={`${listing.id}-two-up-${i}-${img ?? "none"}`}
+                imageUrl={img}
+                imageAlt={`${listing.name} preview image ${i + 2}`}
                 containerClassName="h-full w-full rounded-lg"
               />
             ))}
@@ -145,6 +165,8 @@ export const DiscoverListingCard = memo(function DiscoverListingCard({
           {previewImages.map((img, i) => (
             <DiscoverImageSlot
               key={`${listing.id}-${i}-${img ?? "none"}`}
+              imageUrl={img}
+              imageAlt={`${listing.name} preview image ${i + 1}`}
               containerClassName={`${isFourUpCardLayout ? "aspect-video w-full" : "aspect-square"} rounded-lg`}
             />
           ))}

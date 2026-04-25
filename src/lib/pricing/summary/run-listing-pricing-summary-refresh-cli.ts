@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 
 import { pgDb } from "@/core/server/db";
 import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
@@ -25,6 +27,8 @@ type SourceLinkPick = {
   id: string;
   listing_id: string;
   is_primary_source: boolean;
+  adapter_key: string;
+  external_listing_id: string;
 };
 
 type SummaryAggregateRow = {
@@ -34,13 +38,50 @@ type SummaryAggregateRow = {
   sample_nights_available: number;
   avg_all_in_nightly: string;
   avg_all_in_nightly_available: string | null;
+  avg_all_in_nightly_high_conf_available: string | null;
   pricing_max_updated_at: string | null;
+};
+
+type QuoteObservation = {
+  check_in_date?: string;
+  check_out_date?: string;
+  nights?: number;
+  quote_available?: boolean;
+  pricing_source?: string;
+  all_in_nightly?: number;
+  grand_total?: number;
+  quoted_total?: number;
+};
+
+type QuoteSidecarRecord = {
+  observations?: QuoteObservation[];
+};
+
+type QuoteMonthSignal = {
+  truth_total: number | null;
+  projected_total: number | null;
 };
 
 type SummaryInsert = typeof listing_pricing_summary.$inferInsert;
 
 const UPSERT_CHUNK_SIZE = 1000;
 const DEFAULT_METHOD = "monthly_forward_avg_v1";
+const MIN_NEAREST_DURATION_RATIO = 0.75;
+const MAX_NEAREST_DURATION_RATIO = 1.35;
+
+function isComparableStayLength(
+  observedNights: number,
+  targetNights: number,
+): boolean {
+  if (observedNights <= 0 || targetNights <= 0) {
+    return false;
+  }
+
+  const ratio = observedNights / targetNights;
+  return (
+    ratio >= MIN_NEAREST_DURATION_RATIO && ratio <= MAX_NEAREST_DURATION_RATIO
+  );
+}
 
 function printUsage(): void {
   console.log("Refresh Listing Pricing Summary");
@@ -177,6 +218,18 @@ function addMonths(start: Date, count: number): Date {
   return out;
 }
 
+function dayOfWeek(isoDate: string): number {
+  return new Date(`${isoDate}T00:00:00.000Z`).getUTCDay();
+}
+
+function isSaturday(isoDate: string): boolean {
+  return dayOfWeek(isoDate) === 6;
+}
+
+function monthStartFromIsoDate(isoDate: string): string {
+  return `${isoDate.slice(0, 7)}-01`;
+}
+
 function startOfMonth(input: Date): Date {
   return new Date(Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), 1));
 }
@@ -204,6 +257,270 @@ function toNumber(value: string | number | null): number | null {
     }
   }
   return null;
+}
+
+function toPositiveNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return value;
+}
+
+function mean(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[middle - 1]! + sorted[middle]!) / 2;
+  }
+  return sorted[middle]!;
+}
+
+function fitLinearRegression(input: Array<{ x: number; y: number }>): {
+  slope: number;
+  intercept: number;
+} | null {
+  if (input.length < 2) {
+    return null;
+  }
+
+  const n = input.length;
+  const sx = input.reduce((sum, point) => sum + point.x, 0);
+  const sy = input.reduce((sum, point) => sum + point.y, 0);
+  const sxx = input.reduce((sum, point) => sum + point.x * point.x, 0);
+  const sxy = input.reduce((sum, point) => sum + point.x * point.y, 0);
+  const denominator = n * sxx - sx * sx;
+
+  if (!Number.isFinite(denominator) || Math.abs(denominator) < 1e-9) {
+    return null;
+  }
+
+  const slope = (n * sxy - sx * sy) / denominator;
+  const intercept = (sy - slope * sx) / n;
+
+  if (!Number.isFinite(slope) || !Number.isFinite(intercept)) {
+    return null;
+  }
+
+  return { slope, intercept };
+}
+
+function firstDefined(...values: Array<number | null>): number | null {
+  for (const value of values) {
+    if (value !== null && Number.isFinite(value) && value > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function robustBlend(
+  primary: number | null,
+  secondary: number | null,
+): number | null {
+  if (primary !== null && secondary !== null) {
+    return primary * 0.65 + secondary * 0.35;
+  }
+  return primary ?? secondary;
+}
+
+function getObservationTotal(observation: QuoteObservation): number | null {
+  const quoted = toPositiveNumber(observation.quoted_total);
+  if (quoted !== null) {
+    return quoted;
+  }
+
+  const grand = toPositiveNumber(observation.grand_total);
+  if (grand !== null) {
+    return grand;
+  }
+
+  const nightly = toPositiveNumber(observation.all_in_nightly);
+  const nights = Math.max(1, Math.floor(observation.nights ?? 0));
+  if (nightly !== null && nights > 0) {
+    return nightly * nights;
+  }
+
+  return null;
+}
+
+function buildQuoteMonthSignals(
+  observations: QuoteObservation[] | undefined,
+  targetNights: number,
+): Map<string, QuoteMonthSignal> {
+  const signals = new Map<string, QuoteMonthSignal>();
+  const available = (observations ?? []).filter(
+    (observation) =>
+      observation.quote_available === true &&
+      observation.pricing_source === "runtime_parsed",
+  );
+
+  const byMonth = new Map<string, QuoteObservation[]>();
+  for (const observation of available) {
+    const checkInDate = observation.check_in_date;
+    if (!checkInDate || checkInDate.length !== 10) {
+      continue;
+    }
+    const monthStart = monthStartFromIsoDate(checkInDate);
+    const bucket = byMonth.get(monthStart) ?? [];
+    bucket.push(observation);
+    byMonth.set(monthStart, bucket);
+  }
+
+  for (const [monthStart, monthObservations] of byMonth.entries()) {
+    const truthTotals: number[] = [];
+    for (const observation of monthObservations) {
+      const nights = Math.max(1, Math.floor(observation.nights ?? 0));
+      const checkInDate = observation.check_in_date;
+      if (!checkInDate) {
+        continue;
+      }
+      if (nights === targetNights && isSaturday(checkInDate)) {
+        const total = getObservationTotal(observation);
+        if (total !== null) {
+          truthTotals.push(total);
+        }
+      }
+    }
+
+    let projectedTotal: number | null = null;
+    if (truthTotals.length === 0) {
+      const byCheckout = new Map<string, QuoteObservation[]>();
+      for (const observation of monthObservations) {
+        const checkOutDate = observation.check_out_date;
+        if (!checkOutDate || checkOutDate.length !== 10) {
+          continue;
+        }
+        const bucket = byCheckout.get(checkOutDate) ?? [];
+        bucket.push(observation);
+        byCheckout.set(checkOutDate, bucket);
+      }
+
+      const projectedCandidates: number[] = [];
+      for (const bucket of byCheckout.values()) {
+        const byNights = new Map<number, number[]>();
+        for (const observation of bucket) {
+          const nights = Math.max(1, Math.floor(observation.nights ?? 0));
+          const total = getObservationTotal(observation);
+          if (total === null) {
+            continue;
+          }
+          const current = byNights.get(nights) ?? [];
+          current.push(total);
+          byNights.set(nights, current);
+        }
+
+        const points = Array.from(byNights.entries())
+          .map(([nights, totals]) => {
+            const averageTotal = mean(totals);
+            if (averageTotal === null) {
+              return null;
+            }
+            return { nights, averageTotal };
+          })
+          .filter(
+            (point): point is { nights: number; averageTotal: number } =>
+              point !== null,
+          )
+          .sort((left, right) => left.nights - right.nights);
+
+        if (points.length === 0) {
+          continue;
+        }
+
+        let projected: number | null = null;
+        const exact = points.find((point) => point.nights === targetNights);
+        if (exact) {
+          projected = exact.averageTotal;
+        } else if (points.length >= 2) {
+          const fit = fitLinearRegression(
+            points.map((point) => ({ x: point.nights, y: point.averageTotal })),
+          );
+          if (fit) {
+            const predicted = fit.intercept + fit.slope * targetNights;
+            if (Number.isFinite(predicted) && predicted > 0) {
+              projected = predicted;
+            }
+          }
+        }
+
+        if (projected === null) {
+          const nearest = [...points].sort(
+            (left, right) =>
+              Math.abs(left.nights - targetNights) -
+              Math.abs(right.nights - targetNights),
+          )[0];
+          if (
+            nearest &&
+            nearest.nights > 0 &&
+            isComparableStayLength(nearest.nights, targetNights)
+          ) {
+            projected = nearest.averageTotal * (targetNights / nearest.nights);
+          }
+        }
+
+        if (projected !== null && projected > 0) {
+          projectedCandidates.push(projected);
+        }
+      }
+
+      projectedTotal = median(projectedCandidates);
+    }
+
+    signals.set(monthStart, {
+      truth_total: median(truthTotals),
+      projected_total: projectedTotal,
+    });
+  }
+
+  return signals;
+}
+
+async function readQuoteMonthSignalsBySource(
+  sourceLinks: SourceLinkPick[],
+  targetNights: number,
+): Promise<Map<string, QuoteMonthSignal>> {
+  const out = new Map<string, QuoteMonthSignal>();
+  const root = process.cwd();
+
+  for (const sourceLink of sourceLinks) {
+    const quotePath = resolve(
+      root,
+      "src",
+      "lib",
+      "data",
+      "external-sources",
+      sourceLink.adapter_key,
+      "details",
+      "quotes",
+      `${sourceLink.external_listing_id}.json`,
+    );
+
+    try {
+      const raw = await readFile(quotePath, "utf8");
+      const parsed = JSON.parse(raw) as QuoteSidecarRecord;
+      const monthSignals = buildQuoteMonthSignals(
+        parsed.observations,
+        targetNights,
+      );
+      for (const [monthStart, signal] of monthSignals.entries()) {
+        out.set(`${sourceLink.id}::${monthStart}`, signal);
+      }
+    } catch {
+      // Quotes are optional and absence should not block summary generation.
+    }
+  }
+
+  return out;
 }
 
 function chunkRows<T>(rows: T[], size: number): T[][] {
@@ -285,6 +602,8 @@ export async function runListingPricingSummaryRefreshCli(
       id: listing_source_link.id,
       listing_id: listing_source_link.listing_id,
       is_primary_source: listing_source_link.is_primary_source,
+      adapter_key: listing_source_link.adapter_key,
+      external_listing_id: listing_source_link.external_listing_id,
     })
     .from(listing_source_link)
     .where(
@@ -318,6 +637,10 @@ export async function runListingPricingSummaryRefreshCli(
   }
 
   const sourceLinkIds = limitedLinks.map((row) => row.id);
+  const quoteSignalsBySourceMonth = await readQuoteMonthSignalsBySource(
+    limitedLinks,
+    options.nights,
+  );
 
   progress.phase("aggregating nightly pricing by month");
 
@@ -332,6 +655,9 @@ export async function runListingPricingSummaryRefreshCli(
       avg_all_in_nightly_available: sql<
         string | null
       >`round(avg(case when ${listing_source_pricing.is_available} then ${listing_source_pricing.all_in_nightly} end), 2)::text`,
+      avg_all_in_nightly_high_conf_available: sql<
+        string | null
+      >`round(avg(case when ${listing_source_pricing.is_available} and ${listing_source_pricing.confidence} = 'high' then ${listing_source_pricing.all_in_nightly} end), 2)::text`,
       pricing_max_updated_at: sql<
         string | null
       >`max(${listing_source_pricing.updated_at})`,
@@ -377,7 +703,49 @@ export async function runListingPricingSummaryRefreshCli(
       const avgAllInAvailable = toNumber(
         aggregate.avg_all_in_nightly_available,
       );
-      const recommended = avgAllInAvailable ?? avgAllIn;
+      const avgAllInHighConfAvailable = toNumber(
+        aggregate.avg_all_in_nightly_high_conf_available,
+      );
+      const robustAvailable = robustBlend(null, avgAllInAvailable);
+      const robustDaily = firstDefined(
+        avgAllInHighConfAvailable,
+        robustAvailable,
+        avgAllInAvailable,
+        avgAllIn,
+      );
+
+      if (robustDaily === null) {
+        continue;
+      }
+
+      const quoteSignal = quoteSignalsBySourceMonth.get(
+        `${sourceLink.id}::${monthStartIso}`,
+      );
+
+      const quoteTruthTotal = quoteSignal?.truth_total ?? null;
+      const quoteProjectedTotal = quoteSignal?.projected_total ?? null;
+      const coverage =
+        aggregate.sample_nights_total > 0
+          ? aggregate.sample_nights_available / aggregate.sample_nights_total
+          : 0;
+      const sparseCoverageDamping =
+        coverage >= 0.4 ? 1 : 0.65 + 0.35 * (coverage / 0.4);
+
+      const recommended =
+        quoteTruthTotal !== null
+          ? quoteTruthTotal / options.nights
+          : quoteProjectedTotal !== null
+            ? (() => {
+                const quoteProjectedDaily =
+                  quoteProjectedTotal / options.nights;
+                const quoteWeight = coverage < 0.4 ? 0.9 : 0.75;
+                return (
+                  quoteProjectedDaily * quoteWeight +
+                  robustDaily * (1 - quoteWeight)
+                );
+              })()
+            : robustDaily * sparseCoverageDamping;
+
       const monthStartDate = new Date(`${monthStartIso}T00:00:00.000Z`);
       const monthEndIso = toIsoDate(endOfMonth(monthStartDate));
 
@@ -398,7 +766,7 @@ export async function runListingPricingSummaryRefreshCli(
           avgAllInAvailable === null ? null : toRoundedCents(avgAllInAvailable),
         recommended_all_in_nightly: toRoundedCents(recommended),
         estimated_total_for_nights: toRoundedCents(
-          recommended * options.nights,
+          quoteTruthTotal ?? recommended * options.nights,
         ),
         pricing_max_updated_at: aggregate.pricing_max_updated_at,
         freshness_status: freshnessStatus(

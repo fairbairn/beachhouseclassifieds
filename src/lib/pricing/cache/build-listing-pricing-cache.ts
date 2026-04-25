@@ -37,6 +37,9 @@ type DetailRecord = {
 };
 
 type QuoteObservation = {
+  start_date?: string;
+  check_out_date?: string;
+  base_total?: number | null;
   check_in_date: string;
   nights: number;
   base_nightly: number | null;
@@ -58,6 +61,10 @@ type PricingAssumptionsStore = {
     nights?: number;
   }>;
 };
+
+const DEFAULT_QUOTE_ANCHOR_TARGET_NIGHTS = 7;
+const MIN_NEAREST_DURATION_RATIO = 0.75;
+const MAX_NEAREST_DURATION_RATIO = 1.35;
 
 export type PricingCacheCliOptions = {
   weeks: number;
@@ -93,6 +100,20 @@ export type BuildListingPricingCacheResult = {
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function isComparableStayLength(
+  observedNights: number,
+  targetNights: number,
+): boolean {
+  if (observedNights <= 0 || targetNights <= 0) {
+    return false;
+  }
+
+  const ratio = observedNights / targetNights;
+  return (
+    ratio >= MIN_NEAREST_DURATION_RATIO && ratio <= MAX_NEAREST_DURATION_RATIO
+  );
 }
 
 function toIsoDate(value: string | Date): string {
@@ -176,29 +197,199 @@ function median(values: number[]): number | null {
   return roundCurrency(sorted[mid]!);
 }
 
+function mean(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  return roundCurrency(
+    values.reduce((sum, value) => sum + value, 0) / values.length,
+  );
+}
+
+function toValidPositiveNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return value;
+}
+
+function fitLinearRegression(input: Array<{ x: number; y: number }>): {
+  slope: number;
+  intercept: number;
+} | null {
+  if (input.length < 2) {
+    return null;
+  }
+
+  const n = input.length;
+  const sx = input.reduce((sum, point) => sum + point.x, 0);
+  const sy = input.reduce((sum, point) => sum + point.y, 0);
+  const sxx = input.reduce((sum, point) => sum + point.x * point.x, 0);
+  const sxy = input.reduce((sum, point) => sum + point.x * point.y, 0);
+  const denominator = n * sxx - sx * sx;
+  if (!Number.isFinite(denominator) || Math.abs(denominator) < 1e-9) {
+    return null;
+  }
+
+  const slope = (n * sxy - sx * sy) / denominator;
+  const intercept = (sy - slope * sx) / n;
+
+  if (!Number.isFinite(slope) || !Number.isFinite(intercept)) {
+    return null;
+  }
+
+  return { slope, intercept };
+}
+
 function readQuoteAnchorsByDate(
   observations: QuoteObservation[] | undefined,
+  targetNights: number,
 ): Map<string, number> {
+  const availableObservations = (observations ?? []).filter(
+    (observation) => observation.quote_available,
+  );
+
   const totalsByDate = new Map<string, { total: number; count: number }>();
-  for (const observation of observations ?? []) {
-    if (!observation.quote_available) {
+  for (const observation of availableObservations) {
+    const nights = Math.max(1, Math.floor(observation.nights));
+    const nightly =
+      toValidPositiveNumber(observation.base_nightly) ??
+      (() => {
+        const baseTotal = toValidPositiveNumber(observation.base_total);
+        if (baseTotal === null || nights <= 0) {
+          return null;
+        }
+        return baseTotal / nights;
+      })();
+
+    if (nightly === null || !Number.isFinite(nightly) || nightly <= 0) {
       continue;
     }
 
-    const nightly = Number(observation.base_nightly);
-    const nights = Number(observation.nights);
-    if (!Number.isFinite(nightly) || nightly <= 0) {
-      continue;
-    }
-    if (!Number.isFinite(nights) || nights <= 0) {
-      continue;
-    }
-
-    const span = Math.max(1, Math.floor(nights));
+    const span = nights;
     for (let offset = 0; offset < span; offset += 1) {
       const date = addDays(observation.check_in_date, offset);
       const existing = totalsByDate.get(date) ?? { total: 0, count: 0 };
       existing.total += nightly;
+      existing.count += 1;
+      totalsByDate.set(date, existing);
+    }
+  }
+
+  // Build same-checkout stay-length ladders and project target-night anchors.
+  const byCheckoutDate = new Map<
+    string,
+    Array<{
+      checkOutDate: string;
+      nights: number;
+      baseTotal: number;
+    }>
+  >();
+
+  for (const observation of availableObservations) {
+    const checkInDate = observation.check_in_date || observation.start_date;
+    if (!checkInDate) {
+      continue;
+    }
+
+    const nights = Math.max(1, Math.floor(observation.nights));
+    const checkOutDate =
+      observation.check_out_date ?? addDays(checkInDate, nights);
+    const baseTotal =
+      toValidPositiveNumber(observation.base_total) ??
+      (() => {
+        const baseNightly = toValidPositiveNumber(observation.base_nightly);
+        if (baseNightly === null) {
+          return null;
+        }
+        return baseNightly * nights;
+      })();
+
+    if (baseTotal === null || !Number.isFinite(baseTotal) || baseTotal <= 0) {
+      continue;
+    }
+
+    const bucket = byCheckoutDate.get(checkOutDate) ?? [];
+    bucket.push({
+      checkOutDate,
+      nights,
+      baseTotal,
+    });
+    byCheckoutDate.set(checkOutDate, bucket);
+  }
+
+  for (const [, bucket] of byCheckoutDate.entries()) {
+    if (bucket.length === 0) {
+      continue;
+    }
+
+    const byNights = new Map<number, number[]>();
+    for (const item of bucket) {
+      const current = byNights.get(item.nights) ?? [];
+      current.push(item.baseTotal);
+      byNights.set(item.nights, current);
+    }
+
+    const points = Array.from(byNights.entries())
+      .map(([nights, totals]) => {
+        const averageTotal = mean(totals);
+        if (averageTotal === null) {
+          return null;
+        }
+        return { nights, averageTotal };
+      })
+      .filter(
+        (point): point is { nights: number; averageTotal: number } =>
+          point !== null,
+      )
+      .sort((left, right) => left.nights - right.nights);
+
+    if (points.length === 0) {
+      continue;
+    }
+
+    let projectedTotal: number | null = null;
+    const exact = points.find((point) => point.nights === targetNights);
+    if (exact) {
+      projectedTotal = exact.averageTotal;
+    } else if (points.length >= 2) {
+      const fit = fitLinearRegression(
+        points.map((point) => ({ x: point.nights, y: point.averageTotal })),
+      );
+      if (fit) {
+        const predicted = fit.intercept + fit.slope * targetNights;
+        if (Number.isFinite(predicted) && predicted > 0) {
+          projectedTotal = predicted;
+        }
+      }
+    }
+
+    if (projectedTotal === null) {
+      const nearest = [...points].sort(
+        (left, right) =>
+          Math.abs(left.nights - targetNights) -
+          Math.abs(right.nights - targetNights),
+      )[0];
+      if (
+        nearest &&
+        nearest.nights > 0 &&
+        isComparableStayLength(nearest.nights, targetNights)
+      ) {
+        projectedTotal = nearest.averageTotal * (targetNights / nearest.nights);
+      }
+    }
+
+    if (projectedTotal === null || projectedTotal <= 0) {
+      continue;
+    }
+
+    const projectedNightly = projectedTotal / targetNights;
+    const anchorCheckOutDate = bucket[0]!.checkOutDate;
+    const projectedStartDate = addDays(anchorCheckOutDate, -targetNights);
+    for (let offset = 0; offset < targetNights; offset += 1) {
+      const date = addDays(projectedStartDate, offset);
+      const existing = totalsByDate.get(date) ?? { total: 0, count: 0 };
+      existing.total += projectedNightly;
       existing.count += 1;
       totalsByDate.set(date, existing);
     }
@@ -276,6 +467,13 @@ export async function buildListingPricingCacheForAdapter(
   const globalDefaultBaseNightly = input.globalDefaultBaseNightly ?? 650;
   const assumptionsAnchorFallbackMultiplier =
     input.assumptionsAnchorFallbackMultiplier ?? 0.92;
+  const quoteAnchorTargetNights = Math.max(
+    1,
+    Number(
+      process.env.PRICING_CACHE_QUOTE_ANCHOR_TARGET_NIGHTS ??
+        DEFAULT_QUOTE_ANCHOR_TARGET_NIGHTS,
+    ) || DEFAULT_QUOTE_ANCHOR_TARGET_NIGHTS,
+  );
 
   const adapterRoot = resolve(
     root,
@@ -381,7 +579,10 @@ export async function buildListingPricingCacheForAdapter(
       const quotePath = resolve(quotesDir, `${listing.fileId}.json`);
       const quoteRaw = await readFile(quotePath, "utf8");
       const quoteSidecar = readJson<QuoteSidecarRecord>(quoteRaw);
-      quoteAnchorsByDate = readQuoteAnchorsByDate(quoteSidecar.observations);
+      quoteAnchorsByDate = readQuoteAnchorsByDate(
+        quoteSidecar.observations,
+        quoteAnchorTargetNights,
+      );
     } catch {
       // Quote sidecars are optional in bootstrap phases.
     }

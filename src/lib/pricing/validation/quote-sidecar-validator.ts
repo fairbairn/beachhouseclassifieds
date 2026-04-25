@@ -170,6 +170,49 @@ function validateObservationCadence(
   return issues;
 }
 
+function validateAdaptiveObservationCadence(
+  observation: CanonicalQuoteObservation,
+  expectedNights: number,
+): QuoteValidationIssue[] {
+  const issues: QuoteValidationIssue[] = [];
+
+  if (observation.check_in_date !== observation.start_date) {
+    issues.push({
+      code: "checkin_mismatch",
+      message: "check_in_date must equal start_date",
+    });
+  }
+
+  if (!isFiniteNumber(observation.nights) || observation.nights <= 0) {
+    issues.push({
+      code: "invalid_nights",
+      message: "nights must be a finite positive number",
+    });
+  } else if (observation.nights > expectedNights) {
+    issues.push({
+      code: "invalid_nights",
+      message: `nights must be <= ${expectedNights}`,
+    });
+  }
+
+  const expectedEndDate = addDays(observation.start_date, observation.nights);
+  if (observation.end_date !== expectedEndDate) {
+    issues.push({
+      code: "end_date_mismatch",
+      message: `end_date must equal ${expectedEndDate}`,
+    });
+  }
+
+  if (observation.check_out_date !== expectedEndDate) {
+    issues.push({
+      code: "checkout_mismatch",
+      message: `check_out_date must equal ${expectedEndDate}`,
+    });
+  }
+
+  return issues;
+}
+
 function validateAvailableQuoteSanity(
   observation: CanonicalQuoteObservation,
   adapterKey: string,
@@ -258,10 +301,16 @@ export function validateCanonicalQuoteSidecar(
     });
   }
 
-  if (sidecar.quote_window_cadence !== "weekly_sat_to_sat") {
+  const isStrictWeeklyCadence =
+    sidecar.quote_window_cadence === "weekly_sat_to_sat";
+  const isAdaptiveWeeklyCadence =
+    sidecar.quote_window_cadence === "weekly_anchor_adaptive_span";
+
+  if (!isStrictWeeklyCadence && !isAdaptiveWeeklyCadence) {
     issues.push({
       code: "invalid_quote_window_cadence",
-      message: 'quote_window_cadence must equal "weekly_sat_to_sat"',
+      message:
+        'quote_window_cadence must equal "weekly_sat_to_sat" or "weekly_anchor_adaptive_span"',
     });
   }
 
@@ -295,7 +344,7 @@ export function validateCanonicalQuoteSidecar(
   const expectedAnchor = firstSaturdayOnOrAfter(captureDate);
   const firstStartDate = observations[0]?.start_date;
 
-  if (firstStartDate !== expectedAnchor) {
+  if (isStrictWeeklyCadence && firstStartDate !== expectedAnchor) {
     issues.push({
       code: "anchor_mismatch",
       message: `first observation start_date must equal next Saturday (${expectedAnchor})`,
@@ -347,13 +396,13 @@ export function validateCanonicalQuoteSidecar(
 
   for (let index = 0; index < observations.length; index += 1) {
     const observation = observations[index]!;
-    const expectedStart = addDays(expectedAnchor, index * expectedNights);
-
-    const cadenceIssues = validateObservationCadence(
-      observation,
-      expectedNights,
-      expectedStart,
-    );
+    const cadenceIssues = isStrictWeeklyCadence
+      ? validateObservationCadence(
+          observation,
+          expectedNights,
+          addDays(expectedAnchor, index * expectedNights),
+        )
+      : validateAdaptiveObservationCadence(observation, expectedNights);
     for (const issue of cadenceIssues) {
       issues.push({
         code: issue.code,

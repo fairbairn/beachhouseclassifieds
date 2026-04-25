@@ -2,6 +2,8 @@ import {
   AVAILABILITY_WINDOW_DAYS_LIMIT,
   DEFAULT_MAX_STAY_NIGHTS,
   buildAvailabilityWindowQuery,
+  calendarDaySpanInclusive,
+  enumerateDayInts,
   validateAvailabilityWindowInput,
 } from "@/lib/discover/availability-window-index";
 import type {
@@ -531,7 +533,22 @@ function buildAvailabilityFilterClause(
     return IMPOSSIBLE_AVAILABILITY_FILTER_TOKEN;
   }
 
-  return query.filterExpression;
+  const candidateStartDays = enumerateDayInts(
+    query.startMin,
+    calendarDaySpanInclusive(query.startMin, query.startMax),
+  );
+
+  if (candidateStartDays.length === 0) {
+    return IMPOSSIBLE_AVAILABILITY_FILTER_TOKEN;
+  }
+
+  if (candidateStartDays.length === 1) {
+    return `${query.fieldName} = ${candidateStartDays[0]}`;
+  }
+
+  return `(${candidateStartDays
+    .map((dayInt) => `${query.fieldName} = ${dayInt}`)
+    .join(" OR ")})`;
 }
 
 function readCountValue(value: unknown): number {

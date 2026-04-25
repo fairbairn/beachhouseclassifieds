@@ -53,6 +53,7 @@ type CanonicalDetailRecord = {
   detail_url?: unknown;
   title?: unknown;
   h1?: unknown;
+  canonical_property_name?: unknown;
   description_expanded?: unknown;
   meta_description?: unknown;
   rooms_guidance?: unknown;
@@ -458,6 +459,64 @@ function extractQuotedPropertyName(input: string): string {
   return quoteMatch?.[1]?.trim() ?? "";
 }
 
+const STREET_SUFFIXES_FOR_NAME_STRIP =
+  "avenue|ave|street|st|road|rd|lane|ln|drive|dr|court|ct|boulevard|blvd|place|pl|way|circle|cir|trail|trl|parkway|pkwy|highway|hwy";
+
+const LEADING_LOCATION_PREFIXES_360BLUE = [
+  "santa rosa beach",
+  "blue mountain beach",
+  "dune allen beach",
+  "seacrest beach",
+  "rosemary beach",
+  "watersound beach",
+  "grayton beach",
+  "seagrove beach",
+  "inlet beach",
+  "alys beach",
+  "watersound",
+  "watercolor",
+  "seagrove",
+  "seaside",
+  "30a",
+];
+
+function stripLeadingLocationPrefix360Blue(input: string): string {
+  const trimmed = input.trim();
+  const lowered = trimmed.toLowerCase();
+
+  for (const prefix of LEADING_LOCATION_PREFIXES_360BLUE) {
+    if (lowered === prefix) {
+      return "";
+    }
+    if (lowered.startsWith(`${prefix} `)) {
+      return trimmed.slice(prefix.length).trim();
+    }
+  }
+
+  return trimmed;
+}
+
+function extractUnquotedPropertyName360Blue(input: string): string {
+  const withoutPrefix = stripLeadingLocationPrefix360Blue(input);
+  if (!withoutPrefix) {
+    return "";
+  }
+
+  const addressSuffixRegex = new RegExp(
+    `\\s+\\d{1,5}\\s+[A-Za-z0-9.#&'/-]+(?:\\s+[A-Za-z0-9.#&'/-]+){0,10}\\s(?:${STREET_SUFFIXES_FOR_NAME_STRIP})\\b.*$`,
+    "i",
+  );
+  const strippedAddress = withoutPrefix.replace(addressSuffixRegex, "").trim();
+  const candidate = strippedAddress || withoutPrefix;
+  const lettersOnly = candidate.replace(/[^A-Za-z]/g, "");
+
+  if (lettersOnly.length < 3) {
+    return "";
+  }
+
+  return candidate;
+}
+
 function buildSlugParts(input: {
   canonicalName: string;
   communityName?: string | null;
@@ -493,18 +552,41 @@ function buildDeterministicListingNumber(stableKey: string): number {
 function buildCanonicalName(
   detail: CanonicalDetailRecord,
   fallbackId: string,
+  adapterKey?: string,
 ): string {
+  const canonicalPropertyName = asString(detail.canonical_property_name);
+  if (canonicalPropertyName) {
+    return normalizeListingName(canonicalPropertyName, fallbackId);
+  }
+
   const h1 = asString(detail.h1);
   const quotedFromH1 = extractQuotedPropertyName(h1);
   if (quotedFromH1) {
     return normalizeListingName(quotedFromH1, fallbackId);
   }
 
+  const title = asString(detail.title);
+  const quotedFromTitle = extractQuotedPropertyName(title);
+  if (quotedFromTitle) {
+    return normalizeListingName(quotedFromTitle, fallbackId);
+  }
+
+  if (adapterKey === "360blue") {
+    const extractedFromH1 = extractUnquotedPropertyName360Blue(h1);
+    if (extractedFromH1) {
+      return normalizeListingName(extractedFromH1, fallbackId);
+    }
+
+    const extractedFromTitle = extractUnquotedPropertyName360Blue(title);
+    if (extractedFromTitle) {
+      return normalizeListingName(extractedFromTitle, fallbackId);
+    }
+  }
+
   if (h1) {
     return normalizeListingName(h1, fallbackId);
   }
 
-  const title = asString(detail.title);
   if (title) {
     return normalizeListingName(title, fallbackId);
   }
@@ -1345,6 +1427,7 @@ export async function ingestAdapterDetailsToCanonical(
     const canonicalName = buildCanonicalName(
       detail,
       candidate.externalListingId,
+      options.adapterKey,
     );
     if (!canonicalName) {
       stats.skippedMissingName += 1;

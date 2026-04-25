@@ -13,6 +13,7 @@ type ReservationQuoteApiResponse = {
 };
 
 const ADAPTER_KEY = "360blue" as const;
+const BASE_HOST = "https://www.360blue.com";
 const DEFAULT_RESERVATION_QUOTES_ENDPOINT =
   "https://www.360blue.com/api/nrbe/reservation-quotes.json";
 const DEFAULT_CART_CREATE_ENDPOINT =
@@ -130,6 +131,25 @@ function buildHandoffUrl(input: {
   return `${input.cartCreateEndpoint}#${params.toString()}`;
 }
 
+function buildFallbackHandoffUrl(input: QuoteExecutionRequest): string {
+  const context =
+    input.quoteContext &&
+    typeof input.quoteContext === "object" &&
+    !Array.isArray(input.quoteContext)
+      ? input.quoteContext
+      : null;
+
+  const detailUrlRaw =
+    context && typeof context.detail_url === "string"
+      ? context.detail_url.trim()
+      : "";
+  if (detailUrlRaw.length > 0) {
+    return canonicalize360BlueHost(detailUrlRaw);
+  }
+
+  return `${BASE_HOST}/destinations/emerald-coast/walton-county/properties/${encodeURIComponent(input.listingId)}`;
+}
+
 function toError(input: {
   code: string;
   message: string;
@@ -158,6 +178,7 @@ export async function execute360BlueSingleQuote(
 ): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
   const timeoutMs = normalizeTimeoutMs(input.options?.timeoutMs);
+  const fallbackHandoffUrl = buildFallbackHandoffUrl(input);
 
   let quoteContext: QuoteRequestContext;
   try {
@@ -174,6 +195,7 @@ export async function execute360BlueSingleQuote(
         listingId: input.listingId,
         checkInIso: input.checkInIso,
         checkOutIso: input.checkOutIso,
+        details: { handoffUrl: fallbackHandoffUrl },
       }),
     };
   }

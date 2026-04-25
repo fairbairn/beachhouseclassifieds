@@ -92,6 +92,7 @@ function normalizeAvailabilityDays(
 type LuxeDetailRecord = DetailRecordBase & {
   title: string;
   h1: string;
+  canonical_property_name: string;
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
@@ -210,6 +211,109 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractNamePrefixBeforePipeOrHyphen(value: string): string {
+  const cleaned = stripHtml(value)
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) {
+    return "";
+  }
+
+  const pipeIndex = cleaned.indexOf("|");
+  const hyphenIndex = cleaned.indexOf("-");
+  const colonIndex = cleaned.indexOf(":");
+  const cutIndex = [pipeIndex, hyphenIndex, colonIndex]
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0];
+  if (cutIndex === undefined) {
+    return "";
+  }
+
+  return cleaned.slice(0, cutIndex).trim();
+}
+
+function extractCanonicalNameFromMetaDescription(
+  metaDescription: string,
+): string {
+  const cleaned = stripHtml(metaDescription)
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) {
+    return "";
+  }
+
+  const escapeRegex = (value: string): string =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  const leadingDashMatch = cleaned.match(
+    /^([^,|.!?]{2,120}?)\s*[\u2013\u2014-]\s+/,
+  );
+  if (leadingDashMatch?.[1]) {
+    const candidate = leadingDashMatch[1].trim();
+    if (candidate) {
+      const repeatedInEscapeTo = new RegExp(
+        `\\bescape to\\s+['\"]?${escapeRegex(candidate)}['\"]?(?:\\b|,)`,
+        "i",
+      );
+      if (repeatedInEscapeTo.test(cleaned)) {
+        return candidate;
+      }
+    }
+  }
+
+  const introMatch = cleaned.match(
+    /(?:^|\b)(?:escape to|welcome to|experience)\s+['"]?([^,'".!?]{2,120}?)['"]?(?:,|\s+(?:a|an|the)\b)/i,
+  );
+  if (introMatch?.[1]) {
+    return introMatch[1].trim();
+  }
+
+  const quotedMatch = cleaned.match(/['"]([^'"]{2,120})['"]/);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1].trim();
+  }
+
+  return "";
+}
+
+function extractStreetAddressPrefix(addressText: string): string {
+  const firstSegment = stripHtml(addressText).split(",")[0] || "";
+  return firstSegment.replace(/\s+/g, " ").trim();
+}
+
+function isLikelyGenericMarketingName(value: string): boolean {
+  const normalized = stripHtml(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return false;
+  }
+
+  const hasLocationToken =
+    normalized.includes("santa rosa") ||
+    normalized.includes("beach") ||
+    normalized.includes("florida") ||
+    normalized.includes("30a") ||
+    normalized.includes("watercolor") ||
+    normalized.includes("seagrove") ||
+    normalized.includes("inlet");
+
+  const hasGenericLodgingToken =
+    normalized.includes("home") ||
+    normalized.includes("house") ||
+    normalized.includes("retreat") ||
+    normalized.includes("vacation") ||
+    normalized.includes("rental") ||
+    normalized.includes("luxury") ||
+    normalized.includes("family");
+
+  return hasLocationToken && hasGenericLodgingToken;
 }
 
 function parseNumberLike(value: unknown): number | null {
@@ -1112,9 +1216,11 @@ async function fetchDetail(
     ).slice(0, 20000);
 
     const description = descriptionExpanded || metaDescription;
-    const name = h1 || title;
+    const metaDerivedName =
+      extractCanonicalNameFromMetaDescription(metaDescription);
+    const h1DerivedName = extractNamePrefixBeforePipeOrHyphen(h1);
+    const titleDerivedName = extractNamePrefixBeforePipeOrHyphen(title);
     const descriptionNormalized = normalizeForMatch(description);
-    const titleNormalized = normalizeForMatch(name);
 
     const imageUrls = dedupePreserve(
       extracted.imageUrls
@@ -1183,6 +1289,16 @@ async function fetchDetail(
       .map((value) => (value || "").trim())
       .filter(Boolean)
       .join(", ");
+    const addressDerivedName = extractStreetAddressPrefix(addressText);
+
+    const canonicalPropertyName = (
+      !metaDerivedName && isLikelyGenericMarketingName(h1DerivedName)
+        ? addressDerivedName || h1DerivedName || titleDerivedName || h1 || title
+        : metaDerivedName || h1DerivedName || titleDerivedName || h1 || title
+    ).slice(0, 240);
+
+    const name = canonicalPropertyName;
+    const titleNormalized = normalizeForMatch(name);
     const directionsDaddr = [locationLabel, "Florida"]
       .filter(Boolean)
       .join(", ");
@@ -1294,6 +1410,7 @@ async function fetchDetail(
       html_path: htmlPath,
       title,
       h1,
+      canonical_property_name: canonicalPropertyName,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,

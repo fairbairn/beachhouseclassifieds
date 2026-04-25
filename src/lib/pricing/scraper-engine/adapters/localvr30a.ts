@@ -97,6 +97,7 @@ type LocalVrDetailRecord = DetailRecordBase & {
   };
   title: string;
   h1: string;
+  canonical_property_name: string;
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
@@ -240,6 +241,27 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractNamePrefixBeforePipeOrHyphen(value: string): string {
+  const cleaned = stripHtml(value)
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) {
+    return "";
+  }
+
+  const pipeIndex = cleaned.indexOf("|");
+  const hyphenIndex = cleaned.indexOf("-");
+  const cutIndex = [pipeIndex, hyphenIndex]
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0];
+  if (cutIndex === undefined) {
+    return "";
+  }
+
+  return cleaned.slice(0, cutIndex).trim();
 }
 
 function extractFirst(regex: RegExp, value: string): string {
@@ -445,8 +467,7 @@ function decodeEscapedJsonString(value: string): string {
 
 function extractLocalVrPictureEntries(html: string): LocalVrPictureEntry[] {
   const entries: LocalVrPictureEntry[] = [];
-  const pattern =
-    /"original":"([^"]+)"[\s\S]*?"caption":"([^"]*)"/gi;
+  const pattern = /"original":"([^"]+)"[\s\S]*?"caption":"([^"]*)"/gi;
 
   for (const match of html.matchAll(pattern)) {
     const original = decodeEscapedJsonString(match[1] ?? "");
@@ -1375,9 +1396,6 @@ async function fetchDetail(
       stripHtml(String(hotelSchema?.description ?? "")).slice(0, 20000) ||
       stripHtml(metaDescription).slice(0, 20000);
     const description = descriptionExpanded;
-    const name = stripHtml(h1 || title).slice(0, 240);
-    const descriptionNormalized = normalizeForMatch(description);
-    const titleNormalized = normalizeForMatch(name);
 
     const amenitiesCategories: Record<string, string[]> = {};
     const amenitiesAll: string[] = [];
@@ -1472,6 +1490,20 @@ async function fetchDetail(
     const latitude = parseNumberLike(schemaGeo?.latitude ?? null);
     const longitude = parseNumberLike(schemaGeo?.longitude ?? null);
 
+    const h1Base = stripHtml(h1);
+    const addressName = stripHtml(address);
+    const canonicalPropertyName = (
+      extractNamePrefixBeforePipeOrHyphen(h1Base) ||
+      (h1Base ? addressName : "") ||
+      extractNamePrefixBeforePipeOrHyphen(title) ||
+      addressName ||
+      h1Base ||
+      stripHtml(title)
+    ).slice(0, 240);
+    const name = canonicalPropertyName;
+    const descriptionNormalized = normalizeForMatch(description);
+    const titleNormalized = normalizeForMatch(name);
+
     const beds = parseNumberLike(hotelSchema?.numberOfBedrooms ?? null);
     const baths = parseNumberLike(hotelSchema?.numberOfBathroomsTotal ?? null);
     const sleeps = parseNumberLike(
@@ -1542,6 +1574,7 @@ async function fetchDetail(
       },
       title,
       h1,
+      canonical_property_name: canonicalPropertyName,
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,

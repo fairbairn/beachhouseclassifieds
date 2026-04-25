@@ -2,11 +2,11 @@
   "adapter_key": "royaldestinations",
   "external_listing_id": "254-yacht-pond-lane",
   "detail_url": "https://www.royaldestinations.com/30a-vacation-rentals/254-yacht-pond-lane?rcav%5Bbegin%5D=07%2F18%2F2026&rcav%5Bend%5D=07%2F25%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=324&rcav%5BIDs%5D%5B8%5D%5B0%5D=1376-279925&eid=324",
-  "captured_at": "2026-04-12T11:56:23.197Z",
+  "captured_at": "2026-04-25T00:47:00.375Z",
   "currency": "USD",
-  "quote_window_cadence": "weekly_sat_to_sat",
-  "quote_window_gap_policy": "record_unavailable_without_date_shift",
-  "quote_window_anchor_date": "2026-04-18",
+  "quote_window_cadence": "weekly_anchor_adaptive_span",
+  "quote_window_gap_policy": "probe_longest_available_span",
+  "quote_window_anchor_date": "2026-04-25",
   "quote_window_days": 168,
   "quote_sample_step_days": 7,
   "quote_nights": 7,
@@ -14,36 +14,8 @@
   "endpoint_path": "/rcapi/item/avail/search",
   "observations": [
     {
-      "sampled_at": "2026-04-12T11:56:23.196Z",
-      "captured_at": "2026-04-12T11:56:23.196Z",
-      "source_listing_id": "254-yacht-pond-lane",
-      "currency": "USD",
-      "start_date": "2026-04-18",
-      "end_date": "2026-04-25",
-      "check_in_date": "2026-04-18",
-      "check_out_date": "2026-04-25",
-      "nights": 7,
-      "base_nightly": 1160.99,
-      "all_in_nightly": 1300.31,
-      "quote_available": false,
-      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Quote unavailable for selected stay window",
-      "base_total": 8126.93,
-      "taxes_total": 975.23,
-      "fees_total_excl_taxes": 0,
-      "fee_lines": [],
-      "grand_total": 9102.16,
-      "quoted_total": 9102.16,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.12,
-      "non_base_pct_of_total": 0.107143,
-      "all_in_multiplier": 1.12,
-      "handoff_url": "https://www.royaldestinations.com/rescms/item/316/buy?rcav%5Bbegin%5D=04%2F18%2F2026&rcav%5Bend%5D=04%2F25%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=316&rcav%5BIDs%5D%5B8%5D%5B%5D=1376-279925&eid=316",
-      "source": "quote_api",
-      "pricing_source": "estimated_unavailable"
-    },
-    {
-      "sampled_at": "2026-04-12T11:56:23.196Z",
-      "captured_at": "2026-04-12T11:56:23.196Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-04-25",
@@ -70,8 +42,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.196Z",
-      "captured_at": "2026-04-12T11:56:23.196Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-05-02",
@@ -98,8 +70,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.196Z",
-      "captured_at": "2026-04-12T11:56:23.196Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-05-09",
@@ -126,8 +98,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.196Z",
-      "captured_at": "2026-04-12T11:56:23.196Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-05-16",
@@ -154,8 +126,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.196Z",
-      "captured_at": "2026-04-12T11:56:23.196Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-05-23",
@@ -182,14 +154,42 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.196Z",
-      "captured_at": "2026-04-12T11:56:23.196Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
-      "start_date": "2026-05-30",
-      "end_date": "2026-06-06",
-      "check_in_date": "2026-05-30",
-      "check_out_date": "2026-06-06",
+      "start_date": "2026-05-24",
+      "end_date": "2026-05-30",
+      "check_in_date": "2026-05-24",
+      "check_out_date": "2026-05-30",
+      "nights": 6,
+      "base_nightly": 1160.99,
+      "all_in_nightly": 1300.31,
+      "quote_available": false,
+      "quote_unavailable_reason": "QUOTE_UNAVAILABLE: Quote unavailable for selected stay window",
+      "base_total": 6965.94,
+      "taxes_total": 835.91,
+      "fees_total_excl_taxes": 0,
+      "fee_lines": [],
+      "grand_total": 7801.85,
+      "quoted_total": 7801.85,
+      "fee_pct_of_base": 0,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.107143,
+      "all_in_multiplier": 1.12,
+      "handoff_url": "https://www.royaldestinations.com/rescms/item/316/buy?rcav%5Bbegin%5D=05%2F24%2F2026&rcav%5Bend%5D=05%2F30%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=316&rcav%5BIDs%5D%5B8%5D%5B%5D=1376-279925&eid=316",
+      "source": "quote_api",
+      "pricing_source": "estimated_unavailable"
+    },
+    {
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
+      "source_listing_id": "254-yacht-pond-lane",
+      "currency": "USD",
+      "start_date": "2026-06-07",
+      "end_date": "2026-06-14",
+      "check_in_date": "2026-06-07",
+      "check_out_date": "2026-06-14",
       "nights": 7,
       "base_nightly": 1160.99,
       "all_in_nightly": 1300.31,
@@ -205,41 +205,13 @@
       "tax_pct_of_base": 0.12,
       "non_base_pct_of_total": 0.107143,
       "all_in_multiplier": 1.12,
-      "handoff_url": "https://www.royaldestinations.com/rescms/item/316/buy?rcav%5Bbegin%5D=05%2F30%2F2026&rcav%5Bend%5D=06%2F06%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=316&rcav%5BIDs%5D%5B8%5D%5B%5D=1376-279925&eid=316",
+      "handoff_url": "https://www.royaldestinations.com/rescms/item/316/buy?rcav%5Bbegin%5D=06%2F07%2F2026&rcav%5Bend%5D=06%2F14%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=316&rcav%5BIDs%5D%5B8%5D%5B%5D=1376-279925&eid=316",
       "source": "quote_api",
       "pricing_source": "estimated_unavailable"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
-      "source_listing_id": "254-yacht-pond-lane",
-      "currency": "USD",
-      "start_date": "2026-06-06",
-      "end_date": "2026-06-13",
-      "check_in_date": "2026-06-06",
-      "check_out_date": "2026-06-13",
-      "nights": 7,
-      "base_nightly": 1424.09,
-      "all_in_nightly": 1594.99,
-      "quote_available": true,
-      "quote_unavailable_reason": null,
-      "base_total": 9968.66,
-      "taxes_total": 1196.24,
-      "fees_total_excl_taxes": 0,
-      "fee_lines": [],
-      "grand_total": 11164.9,
-      "quoted_total": 9968.66,
-      "fee_pct_of_base": 0,
-      "tax_pct_of_base": 0.12,
-      "non_base_pct_of_total": 0.107143,
-      "all_in_multiplier": 1.12,
-      "handoff_url": "https://www.royaldestinations.com/rescms/item/316/buy?rcav%5Bbegin%5D=06%2F06%2F2026&rcav%5Bend%5D=06%2F13%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=316&rcav%5BIDs%5D%5B8%5D%5B%5D=1376-279925&eid=316",
-      "source": "quote_api",
-      "pricing_source": "runtime_parsed"
-    },
-    {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-06-13",
@@ -266,8 +238,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-06-20",
@@ -294,8 +266,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-06-27",
@@ -322,8 +294,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-07-04",
@@ -350,8 +322,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-07-11",
@@ -378,8 +350,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-07-18",
@@ -406,8 +378,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-07-25",
@@ -434,8 +406,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-08-01",
@@ -462,8 +434,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-08-08",
@@ -490,8 +462,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-08-15",
@@ -518,8 +490,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-08-22",
@@ -546,8 +518,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-08-29",
@@ -574,8 +546,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-09-05",
@@ -602,8 +574,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-09-12",
@@ -630,8 +602,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-09-19",
@@ -658,8 +630,8 @@
       "pricing_source": "runtime_parsed"
     },
     {
-      "sampled_at": "2026-04-12T11:56:23.197Z",
-      "captured_at": "2026-04-12T11:56:23.197Z",
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
       "source_listing_id": "254-yacht-pond-lane",
       "currency": "USD",
       "start_date": "2026-09-26",
@@ -682,6 +654,34 @@
       "non_base_pct_of_total": 0.107143,
       "all_in_multiplier": 1.120001,
       "handoff_url": "https://www.royaldestinations.com/rescms/item/316/buy?rcav%5Bbegin%5D=09%2F26%2F2026&rcav%5Bend%5D=10%2F03%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=316&rcav%5BIDs%5D%5B8%5D%5B%5D=1376-279925&eid=316",
+      "source": "quote_api",
+      "pricing_source": "runtime_parsed"
+    },
+    {
+      "sampled_at": "2026-04-25T00:47:00.375Z",
+      "captured_at": "2026-04-25T00:47:00.375Z",
+      "source_listing_id": "254-yacht-pond-lane",
+      "currency": "USD",
+      "start_date": "2026-10-03",
+      "end_date": "2026-10-10",
+      "check_in_date": "2026-10-03",
+      "check_out_date": "2026-10-10",
+      "nights": 7,
+      "base_nightly": 1160.99,
+      "all_in_nightly": 1300.31,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 8126.96,
+      "taxes_total": 975.24,
+      "fees_total_excl_taxes": 0,
+      "fee_lines": [],
+      "grand_total": 9102.2,
+      "quoted_total": 8126.96,
+      "fee_pct_of_base": 0,
+      "tax_pct_of_base": 0.120001,
+      "non_base_pct_of_total": 0.107143,
+      "all_in_multiplier": 1.120001,
+      "handoff_url": "https://www.royaldestinations.com/rescms/item/316/buy?rcav%5Bbegin%5D=10%2F03%2F2026&rcav%5Bend%5D=10%2F10%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=316&rcav%5BIDs%5D%5B8%5D%5B%5D=1376-279925&eid=316",
       "source": "quote_api",
       "pricing_source": "runtime_parsed"
     }

@@ -78,6 +78,15 @@ type EstimatedPricing = {
 type QuoteWindow = {
   startDate: string;
   endDate: string;
+  nights: number;
+};
+
+type AvailabilityDay = {
+  date: string;
+  is_available?: boolean;
+  is_available_for_checkin?: boolean;
+  is_available_for_checkout?: boolean;
+  min_nights_required?: number | null;
 };
 
 function hasPositiveNumber(value: unknown): value is number {
@@ -126,6 +135,7 @@ const DEFAULT_TAX_PCT = 0.12;
 const DEFAULT_BASE_NIGHTLY = 500;
 const DEFAULT_FRESH_HOURS = 24;
 const DEFAULT_BACKFILL_WINDOW_HOURS = 1;
+const DEFAULT_MIN_PROBE_NIGHTS = 3;
 
 function parseArgs(
   argv: string[],
@@ -712,9 +722,181 @@ function buildQuoteWindows(weeks: number, nights: number): QuoteWindow[] {
     windows.push({
       startDate,
       endDate: addDays(startDate, nights),
+      nights,
     });
   }
   return windows;
+}
+
+function normalizeAvailabilityDays(raw: unknown): AvailabilityDay[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const out: AvailabilityDay[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const day = item as Record<string, unknown>;
+    const date =
+      typeof day.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(day.date)
+        ? day.date
+        : null;
+    if (!date) {
+      continue;
+    }
+
+    const minNightsRaw = day.min_nights_required;
+    const minNights =
+      typeof minNightsRaw === "number" &&
+      Number.isFinite(minNightsRaw) &&
+      minNightsRaw > 0
+        ? Math.floor(minNightsRaw)
+        : null;
+
+    out.push({
+      date,
+      is_available:
+        typeof day.is_available === "boolean" ? day.is_available : undefined,
+      is_available_for_checkin:
+        typeof day.is_available_for_checkin === "boolean"
+          ? day.is_available_for_checkin
+          : undefined,
+      is_available_for_checkout:
+        typeof day.is_available_for_checkout === "boolean"
+          ? day.is_available_for_checkout
+          : undefined,
+      min_nights_required: minNights,
+    });
+  }
+
+  return out;
+}
+
+async function loadAvailabilityDays(input: {
+  detailsJsonDir: string;
+  fileId: string;
+}): Promise<AvailabilityDay[]> {
+  const detailPath = resolve(input.detailsJsonDir, `${input.fileId}.json`);
+  try {
+    const raw = await readFile(detailPath, "utf8");
+    const parsed = JSON.parse(raw) as {
+      normalized_availability?: { days?: unknown };
+    };
+    return normalizeAvailabilityDays(parsed.normalized_availability?.days);
+  } catch {
+    return [];
+  }
+}
+
+function canQuoteWindow(input: {
+  byDate: Map<string, AvailabilityDay>;
+  startDate: string;
+  nights: number;
+}): boolean {
+  const { byDate, startDate, nights } = input;
+  const start = byDate.get(startDate);
+  if (!start) {
+    return false;
+  }
+
+  if (start.is_available_for_checkin !== true) {
+    return false;
+  }
+
+  const minNights =
+    typeof start.min_nights_required === "number" &&
+    start.min_nights_required > 0
+      ? start.min_nights_required
+      : 1;
+  if (nights < minNights) {
+    return false;
+  }
+
+  for (let offset = 0; offset < nights; offset += 1) {
+    const stayDate = addDays(startDate, offset);
+    const day = byDate.get(stayDate);
+    if (!day || day.is_available !== true) {
+      return false;
+    }
+  }
+
+  const checkOut = byDate.get(addDays(startDate, nights));
+  if (!checkOut || checkOut.is_available_for_checkout !== true) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildAdaptiveQuoteWindows(input: {
+  weeks: number;
+  targetNights: number;
+  availabilityDays: AvailabilityDay[];
+  defaultMinProbeNights: number;
+}): QuoteWindow[] {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const horizonDays = Math.max(1, input.weeks * 7);
+  const horizonEndIso = addDays(todayIso, horizonDays - 1);
+  const fallback = buildQuoteWindows(input.weeks, input.targetNights);
+  if (input.availabilityDays.length === 0) {
+    return fallback;
+  }
+
+  const byDate = new Map(input.availabilityDays.map((day) => [day.date, day]));
+  const explicitMinNightValues = input.availabilityDays
+    .map((day) =>
+      typeof day.min_nights_required === "number" && day.min_nights_required > 0
+        ? Math.floor(day.min_nights_required)
+        : null,
+    )
+    .filter((value): value is number => value !== null);
+  const inferredMinNights =
+    explicitMinNightValues.length > 0
+      ? Math.max(1, Math.min(...explicitMinNightValues))
+      : Math.max(1, input.defaultMinProbeNights);
+  const minProbeNights = Math.min(
+    input.targetNights,
+    Math.max(input.defaultMinProbeNights, inferredMinNights),
+  );
+
+  const sortedDays = [...input.availabilityDays]
+    .filter((day) => day.date >= todayIso && day.date <= horizonEndIso)
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  const windows: QuoteWindow[] = [];
+  for (const day of sortedDays) {
+    let longestQuoteableNights = -1;
+    for (
+      let nights = input.targetNights;
+      nights >= minProbeNights;
+      nights -= 1
+    ) {
+      if (!canQuoteWindow({ byDate, startDate: day.date, nights })) {
+        continue;
+      }
+
+      longestQuoteableNights = nights;
+      break;
+    }
+
+    if (longestQuoteableNights > 0) {
+      windows.push({
+        startDate: day.date,
+        endDate: addDays(day.date, longestQuoteableNights),
+        nights: longestQuoteableNights,
+      });
+    }
+  }
+
+  if (windows.length === 0) {
+    return fallback;
+  }
+
+  return windows.sort((left, right) =>
+    left.startDate.localeCompare(right.startDate),
+  );
 }
 
 async function executeWithRetries(
@@ -961,6 +1143,8 @@ async function buildSidecarForListing(input: {
   config: RuntimeAdapterQuoteRunnerConfig;
   listing: ListingSeed;
   options: CliOptions;
+  availabilityDays: AvailabilityDay[];
+  defaultMinProbeNights: number;
   progress?: QuoteProgress;
   onWindowResult?: (result: { quoteAvailable: boolean }) => void;
   onListingComplete?: (result: {
@@ -970,7 +1154,12 @@ async function buildSidecarForListing(input: {
   }) => void;
 }): Promise<CanonicalQuotesSidecarRecord> {
   const { config, listing, options } = input;
-  const windows = buildQuoteWindows(options.weeks, options.nights);
+  const windows = buildAdaptiveQuoteWindows({
+    weeks: options.weeks,
+    targetNights: options.nights,
+    availabilityDays: input.availabilityDays,
+    defaultMinProbeNights: input.defaultMinProbeNights,
+  });
 
   const runtimeResults = await runWithConcurrency(
     windows,
@@ -1015,7 +1204,7 @@ async function buildSidecarForListing(input: {
 
   const successBaseNightlies = runtimeResults
     .map((entry) => {
-      if (!entry.result.success || options.nights <= 0) {
+      if (!entry.result.success || entry.window.nights <= 0) {
         return null;
       }
       if (entry.result.observation.baseTotal === null) {
@@ -1023,7 +1212,7 @@ async function buildSidecarForListing(input: {
       }
       return (
         Math.round(
-          (entry.result.observation.baseTotal / options.nights) * 100,
+          (entry.result.observation.baseTotal / entry.window.nights) * 100,
         ) / 100
       );
     })
@@ -1063,14 +1252,14 @@ async function buildSidecarForListing(input: {
         }
         return createSuccessObservation({
           listingId: listing.externalListingId,
-          nights: options.nights,
+          nights: entry.window.nights,
           result: entry.result,
         });
       }
 
       const estimated = createEstimatedPricing({
         baseNightly: fallbackBaseNightly,
-        nights: options.nights,
+        nights: entry.window.nights,
         taxPctOfBase: fallbackTaxPct,
       });
       const reason = toUnavailableReason(entry.result);
@@ -1078,7 +1267,7 @@ async function buildSidecarForListing(input: {
         listingId: listing.externalListingId,
         startDate: entry.window.startDate,
         endDate: entry.window.endDate,
-        nights: options.nights,
+        nights: entry.window.nights,
         reason,
         pricing: estimated,
         handoffUrl: entry.runtimeHandoffUrl,
@@ -1100,15 +1289,15 @@ async function buildSidecarForListing(input: {
     detail_url: listing.detailUrl,
     captured_at: new Date().toISOString(),
     currency: "USD",
-    quote_window_cadence: "weekly_sat_to_sat",
-    quote_window_gap_policy: "record_unavailable_without_date_shift",
+    quote_window_cadence: "weekly_anchor_adaptive_span",
+    quote_window_gap_policy: "probe_longest_available_span",
     quote_window_anchor_date: firstSaturdayOnOrAfter(
       new Date().toISOString().slice(0, 10),
     ),
     quote_window_days: options.weeks * 7,
-    quote_sample_step_days: 7,
+    quote_sample_step_days: 1,
     quote_nights: options.nights,
-    quote_max_queries: options.weeks,
+    quote_max_queries: observations.length,
     endpoint_path: endpointPath,
     observations,
   };
@@ -1152,6 +1341,14 @@ export async function runRuntimeAdapterQuoteCli(
   };
 
   const options = parseArgs(argv, defaults);
+  const minProbeNightsFromEnv = Number(
+    process.env.QUOTE_CAPTURE_MIN_PROBE_NIGHTS ??
+      String(DEFAULT_MIN_PROBE_NIGHTS),
+  );
+  const defaultMinProbeNights =
+    Number.isFinite(minProbeNightsFromEnv) && minProbeNightsFromEnv > 0
+      ? Math.floor(minProbeNightsFromEnv)
+      : DEFAULT_MIN_PROBE_NIGHTS;
 
   progress?.info(
     [
@@ -1165,6 +1362,7 @@ export async function runRuntimeAdapterQuoteCli(
       `skip_fresh_quotes=${options.skipFreshQuotes}`,
       `fresh_hours=${options.freshHours}`,
       `selection=${options.listingId ? `listing:${options.listingId}` : `max-listings:${options.maxListings}`}`,
+      `min_probe_nights=${defaultMinProbeNights}`,
     ].join(" "),
   );
 
@@ -1179,6 +1377,16 @@ export async function runRuntimeAdapterQuoteCli(
     config.adapterKey,
     "details",
     "quotes",
+  );
+  const detailsJsonDir = resolve(
+    process.cwd(),
+    "src",
+    "lib",
+    "data",
+    "external-sources",
+    config.adapterKey,
+    "details",
+    "json",
   );
   await mkdir(quotesDir, { recursive: true });
 
@@ -1308,6 +1516,11 @@ export async function runRuntimeAdapterQuoteCli(
         config,
         listing,
         options,
+        availabilityDays: await loadAvailabilityDays({
+          detailsJsonDir,
+          fileId: listing.fileId,
+        }),
+        defaultMinProbeNights,
         progress,
         onWindowResult: ({ quoteAvailable }) => {
           tracker.onWindowResult(quoteAvailable);

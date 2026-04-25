@@ -145,6 +145,7 @@ export function DiscoverPage({
   initialListings,
   initialListingsPage,
   initialOverlayListing,
+  initialOverlayLookupResolved,
   overlayOnlyMode,
   disableOverlayFromPath,
 }: {
@@ -152,6 +153,7 @@ export function DiscoverPage({
   initialListings?: DiscoverListing[];
   initialListingsPage?: DiscoverListingsPageResponse;
   initialOverlayListing?: DiscoverListing;
+  initialOverlayLookupResolved?: boolean;
   overlayOnlyMode?: boolean;
   disableOverlayFromPath?: boolean;
 }) {
@@ -751,6 +753,13 @@ export function DiscoverPage({
       };
     }
 
+    // Overlay-only detail routes are loader-driven. If the loader completed
+    // and no listing matched, render the dedicated unavailable state.
+    if (overlayOnlyMode && initialOverlayLookupResolved) {
+      setIsOverlayDetailLoading(false);
+      return;
+    }
+
     // Route detail rendering is SSR/loader-driven only.
     // Do not trigger a client-side detail fetch for this route.
     setIsOverlayDetailLoading(!hasRequestedListingAlreadyLoaded);
@@ -758,6 +767,7 @@ export function DiscoverPage({
     overlayOnlyMode,
     overlayDetailListing?.id,
     initialOverlayListing,
+    initialOverlayLookupResolved,
     hasInitialOverlayListing,
     requestedOverlayListingId,
   ]);

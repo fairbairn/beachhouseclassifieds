@@ -54,6 +54,7 @@ function DiscoverListingOverlayRoute() {
         initialOverlayListing={
           initialOverlayDetailPayload?.listing ?? undefined
         }
+        initialOverlayLookupResolved={true}
         overlayOnlyMode={true}
       />
     </>
