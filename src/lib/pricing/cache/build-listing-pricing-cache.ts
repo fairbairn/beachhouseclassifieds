@@ -40,6 +40,8 @@ type QuoteObservation = {
   start_date?: string;
   check_out_date?: string;
   base_total?: number | null;
+  grand_total?: number | null;
+  quoted_total?: number | null;
   check_in_date: string;
   nights: number;
   base_nightly: number | null;
@@ -241,6 +243,162 @@ function fitLinearRegression(input: Array<{ x: number; y: number }>): {
   return { slope, intercept };
 }
 
+function deriveDayOfWeekWeights(observations: QuoteObservation[]): number[] {
+  const stats = Array.from({ length: 7 }, () => ({ total: 0, count: 0 }));
+
+  for (const observation of observations) {
+    const nights = Math.max(1, Math.floor(observation.nights));
+    const nightly =
+      toValidPositiveNumber(observation.base_nightly) ??
+      (() => {
+        const baseTotal = toValidPositiveNumber(observation.base_total);
+        if (baseTotal === null || nights <= 0) {
+          return null;
+        }
+        return baseTotal / nights;
+      })();
+
+    if (nightly === null || !Number.isFinite(nightly) || nightly <= 0) {
+      continue;
+    }
+
+    for (let offset = 0; offset < nights; offset += 1) {
+      const stayDate = addDays(observation.check_in_date, offset);
+      const dow = dayOfWeek(stayDate);
+      const bucket = stats[dow]!;
+      bucket.total += nightly;
+      bucket.count += 1;
+    }
+  }
+
+  const allNightlyMeans = stats
+    .filter((bucket) => bucket.count > 0)
+    .map((bucket) => bucket.total / bucket.count);
+
+  const globalMean = mean(allNightlyMeans) ?? 1;
+  if (!Number.isFinite(globalMean) || globalMean <= 0) {
+    return Array.from({ length: 7 }, () => 1);
+  }
+
+  return stats.map((bucket) => {
+    if (bucket.count <= 0) {
+      return 1;
+    }
+    const ratio = bucket.total / bucket.count / globalMean;
+    const clamped = Math.min(1.35, Math.max(0.75, ratio));
+    return Number.isFinite(clamped) && clamped > 0 ? clamped : 1;
+  });
+}
+
+function distributeTotalAcrossDays(input: {
+  total: number;
+  startDate: string;
+  nights: number;
+  dayOfWeekWeights: number[];
+}): number[] {
+  const factors = Array.from({ length: input.nights }, (_, offset) => {
+    const date = addDays(input.startDate, offset);
+    const dow = dayOfWeek(date);
+    const weight = input.dayOfWeekWeights[dow] ?? 1;
+    return Number.isFinite(weight) && weight > 0 ? weight : 1;
+  });
+
+  const sumFactors = factors.reduce((sum, value) => sum + value, 0);
+  if (!Number.isFinite(sumFactors) || sumFactors <= 0) {
+    const flatNightly = roundCurrency(input.total / input.nights);
+    return Array.from({ length: input.nights }, () => flatNightly);
+  }
+
+  const allocated = factors.map((factor) =>
+    roundCurrency((input.total * factor) / sumFactors),
+  );
+
+  const allocatedTotal = roundCurrency(
+    allocated.reduce((sum, value) => sum + value, 0),
+  );
+  const delta = roundCurrency(input.total - allocatedTotal);
+  if (allocated.length > 0 && Math.abs(delta) > 0) {
+    allocated[allocated.length - 1] = roundCurrency(
+      allocated[allocated.length - 1]! + delta,
+    );
+  }
+
+  return allocated;
+}
+
+type QuoteChargeModel = {
+  sampleCount: number;
+  variablePctOfBase: number;
+  fixedFeeTotal: number;
+};
+
+function deriveQuoteChargeModel(
+  observations: QuoteObservation[] | undefined,
+): QuoteChargeModel | null {
+  const rows = (observations ?? [])
+    .filter((observation) => observation.quote_available)
+    .map((observation) => {
+      const baseTotal = toValidPositiveNumber(observation.base_total);
+      const grandTotal =
+        toValidPositiveNumber(observation.quoted_total) ??
+        toValidPositiveNumber(observation.grand_total);
+      if (baseTotal === null || grandTotal === null || grandTotal < baseTotal) {
+        return null;
+      }
+      return { baseTotal, grandTotal };
+    })
+    .filter(
+      (
+        row,
+      ): row is {
+        baseTotal: number;
+        grandTotal: number;
+      } => row !== null,
+    );
+
+  if (rows.length < 2) {
+    return null;
+  }
+
+  const fit = fitLinearRegression(
+    rows.map((row) => ({ x: row.baseTotal, y: row.grandTotal })),
+  );
+
+  if (fit) {
+    const slope = Number.isFinite(fit.slope) ? fit.slope : 1;
+    const intercept = Number.isFinite(fit.intercept) ? fit.intercept : 0;
+    const variablePctOfBase = Math.max(0, slope - 1);
+    const fixedFeeTotal = Math.max(0, intercept);
+    return {
+      sampleCount: rows.length,
+      variablePctOfBase,
+      fixedFeeTotal,
+    };
+  }
+
+  const variablePcts = rows
+    .map((row) => {
+      if (row.baseTotal <= 0) {
+        return null;
+      }
+      return Math.max(0, (row.grandTotal - row.baseTotal) / row.baseTotal);
+    })
+    .filter(
+      (value): value is number => value !== null && Number.isFinite(value),
+    );
+
+  const variablePctOfBase = median(variablePcts);
+  if (variablePctOfBase === null) {
+    return null;
+  }
+
+  return {
+    sampleCount: rows.length,
+    variablePctOfBase: Math.max(0, variablePctOfBase),
+    fixedFeeTotal: 0,
+  };
+}
+
 function readQuoteAnchorsByDate(
   observations: QuoteObservation[] | undefined,
   targetNights: number,
@@ -248,6 +406,7 @@ function readQuoteAnchorsByDate(
   const availableObservations = (observations ?? []).filter(
     (observation) => observation.quote_available,
   );
+  const dayOfWeekWeights = deriveDayOfWeekWeights(availableObservations);
 
   const totalsByDate = new Map<string, { total: number; count: number }>();
   for (const observation of availableObservations) {
@@ -383,13 +542,18 @@ function readQuoteAnchorsByDate(
       continue;
     }
 
-    const projectedNightly = projectedTotal / targetNights;
     const anchorCheckOutDate = bucket[0]!.checkOutDate;
     const projectedStartDate = addDays(anchorCheckOutDate, -targetNights);
+    const projectedNightlies = distributeTotalAcrossDays({
+      total: projectedTotal,
+      startDate: projectedStartDate,
+      nights: targetNights,
+      dayOfWeekWeights,
+    });
     for (let offset = 0; offset < targetNights; offset += 1) {
       const date = addDays(projectedStartDate, offset);
       const existing = totalsByDate.get(date) ?? { total: 0, count: 0 };
-      existing.total += projectedNightly;
+      existing.total += projectedNightlies[offset] ?? 0;
       existing.count += 1;
       totalsByDate.set(date, existing);
     }
@@ -473,6 +637,10 @@ export async function buildListingPricingCacheForAdapter(
       process.env.PRICING_CACHE_QUOTE_ANCHOR_TARGET_NIGHTS ??
         DEFAULT_QUOTE_ANCHOR_TARGET_NIGHTS,
     ) || DEFAULT_QUOTE_ANCHOR_TARGET_NIGHTS,
+  );
+  const minQuoteChargeModelSamples = Math.max(
+    2,
+    Number(process.env.PRICING_CACHE_MIN_QUOTE_MODEL_SAMPLES ?? 4) || 4,
   );
 
   const adapterRoot = resolve(
@@ -575,6 +743,7 @@ export async function buildListingPricingCacheForAdapter(
     }
 
     let quoteAnchorsByDate = new Map<string, number>();
+    let quoteChargeModel: QuoteChargeModel | null = null;
     try {
       const quotePath = resolve(quotesDir, `${listing.fileId}.json`);
       const quoteRaw = await readFile(quotePath, "utf8");
@@ -583,6 +752,7 @@ export async function buildListingPricingCacheForAdapter(
         quoteSidecar.observations,
         quoteAnchorTargetNights,
       );
+      quoteChargeModel = deriveQuoteChargeModel(quoteSidecar.observations);
     } catch {
       // Quote sidecars are optional in bootstrap phases.
     }
@@ -659,9 +829,23 @@ export async function buildListingPricingCacheForAdapter(
         }
       }
 
-      const estimatedFeesNightly = roundCurrency(baseNightly * avgFeePct);
-      const estimatedTaxesNightly = roundCurrency(baseNightly * avgTaxPct);
-      const allInNightly = roundCurrency(baseNightly * avgAllInMultiplier);
+      const useQuoteChargeModel =
+        quoteChargeModel !== null &&
+        quoteChargeModel.sampleCount >= minQuoteChargeModelSamples;
+
+      const estimatedFeesNightly = useQuoteChargeModel
+        ? roundCurrency(
+            quoteChargeModel.fixedFeeTotal / quoteAnchorTargetNights,
+          )
+        : roundCurrency(baseNightly * avgFeePct);
+      const estimatedTaxesNightly = useQuoteChargeModel
+        ? roundCurrency(baseNightly * quoteChargeModel.variablePctOfBase)
+        : roundCurrency(baseNightly * avgTaxPct);
+      const allInNightly = useQuoteChargeModel
+        ? roundCurrency(
+            baseNightly + estimatedFeesNightly + estimatedTaxesNightly,
+          )
+        : roundCurrency(baseNightly * avgAllInMultiplier);
 
       const isAvailable =
         typeof availability?.is_available === "boolean"

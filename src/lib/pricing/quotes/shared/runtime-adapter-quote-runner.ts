@@ -136,6 +136,7 @@ const DEFAULT_BASE_NIGHTLY = 500;
 const DEFAULT_FRESH_HOURS = 24;
 const DEFAULT_BACKFILL_WINDOW_HOURS = 1;
 const DEFAULT_MIN_PROBE_NIGHTS = 3;
+const DEFAULT_MAX_PROBE_NIGHTS = 7;
 
 function parseArgs(
   argv: string[],
@@ -835,6 +836,7 @@ function buildAdaptiveQuoteWindows(input: {
   targetNights: number;
   availabilityDays: AvailabilityDay[];
   defaultMinProbeNights: number;
+  defaultMaxProbeNights: number;
 }): QuoteWindow[] {
   const todayIso = new Date().toISOString().slice(0, 10);
   const horizonDays = Math.max(1, input.weeks * 7);
@@ -857,8 +859,12 @@ function buildAdaptiveQuoteWindows(input: {
       ? Math.max(1, Math.min(...explicitMinNightValues))
       : Math.max(1, input.defaultMinProbeNights);
   const minProbeNights = Math.min(
-    input.targetNights,
-    Math.max(input.defaultMinProbeNights, inferredMinNights),
+    7,
+    Math.max(3, input.defaultMinProbeNights, inferredMinNights),
+  );
+  const maxProbeNights = Math.max(
+    minProbeNights,
+    Math.min(7, Math.max(input.defaultMaxProbeNights, input.targetNights)),
   );
 
   const sortedDays = [...input.availabilityDays]
@@ -867,25 +873,15 @@ function buildAdaptiveQuoteWindows(input: {
 
   const windows: QuoteWindow[] = [];
   for (const day of sortedDays) {
-    let longestQuoteableNights = -1;
-    for (
-      let nights = input.targetNights;
-      nights >= minProbeNights;
-      nights -= 1
-    ) {
+    for (let nights = minProbeNights; nights <= maxProbeNights; nights += 1) {
       if (!canQuoteWindow({ byDate, startDate: day.date, nights })) {
         continue;
       }
 
-      longestQuoteableNights = nights;
-      break;
-    }
-
-    if (longestQuoteableNights > 0) {
       windows.push({
         startDate: day.date,
-        endDate: addDays(day.date, longestQuoteableNights),
-        nights: longestQuoteableNights,
+        endDate: addDays(day.date, nights),
+        nights,
       });
     }
   }
@@ -1145,6 +1141,7 @@ async function buildSidecarForListing(input: {
   options: CliOptions;
   availabilityDays: AvailabilityDay[];
   defaultMinProbeNights: number;
+  defaultMaxProbeNights: number;
   progress?: QuoteProgress;
   onWindowResult?: (result: { quoteAvailable: boolean }) => void;
   onListingComplete?: (result: {
@@ -1159,6 +1156,7 @@ async function buildSidecarForListing(input: {
     targetNights: options.nights,
     availabilityDays: input.availabilityDays,
     defaultMinProbeNights: input.defaultMinProbeNights,
+    defaultMaxProbeNights: input.defaultMaxProbeNights,
   });
 
   const runtimeResults = await runWithConcurrency(
@@ -1345,10 +1343,18 @@ export async function runRuntimeAdapterQuoteCli(
     process.env.QUOTE_CAPTURE_MIN_PROBE_NIGHTS ??
       String(DEFAULT_MIN_PROBE_NIGHTS),
   );
+  const maxProbeNightsFromEnv = Number(
+    process.env.QUOTE_CAPTURE_MAX_PROBE_NIGHTS ??
+      String(DEFAULT_MAX_PROBE_NIGHTS),
+  );
   const defaultMinProbeNights =
     Number.isFinite(minProbeNightsFromEnv) && minProbeNightsFromEnv > 0
       ? Math.floor(minProbeNightsFromEnv)
       : DEFAULT_MIN_PROBE_NIGHTS;
+  const defaultMaxProbeNights =
+    Number.isFinite(maxProbeNightsFromEnv) && maxProbeNightsFromEnv > 0
+      ? Math.floor(maxProbeNightsFromEnv)
+      : DEFAULT_MAX_PROBE_NIGHTS;
 
   progress?.info(
     [
@@ -1363,6 +1369,7 @@ export async function runRuntimeAdapterQuoteCli(
       `fresh_hours=${options.freshHours}`,
       `selection=${options.listingId ? `listing:${options.listingId}` : `max-listings:${options.maxListings}`}`,
       `min_probe_nights=${defaultMinProbeNights}`,
+      `max_probe_nights=${defaultMaxProbeNights}`,
     ].join(" "),
   );
 
@@ -1500,7 +1507,11 @@ export async function runRuntimeAdapterQuoteCli(
   const tracker = createQuoteCaptureProgressTracker({
     progress,
     totalListings: listingsToProcess.length,
-    windowsPerListing: options.weeks,
+    windowsPerListing:
+      options.weeks *
+      (Math.max(3, Math.min(7, defaultMaxProbeNights)) -
+        Math.max(3, Math.min(7, defaultMinProbeNights)) +
+        1),
     modeLabel: "quote",
     heartbeatMs: Math.max(
       1000,
@@ -1521,6 +1532,7 @@ export async function runRuntimeAdapterQuoteCli(
           fileId: listing.fileId,
         }),
         defaultMinProbeNights,
+        defaultMaxProbeNights,
         progress,
         onWindowResult: ({ quoteAvailable }) => {
           tracker.onWindowResult(quoteAvailable);

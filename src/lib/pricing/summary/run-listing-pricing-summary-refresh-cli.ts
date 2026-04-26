@@ -16,6 +16,7 @@ type CliOptions = {
   adapterKey: string | null;
   listingSlug: string | null;
   dryRun: boolean;
+  requireQuoteMarker: boolean;
   maxListings: number | null;
   nights: number;
   horizonDays: number;
@@ -111,6 +112,9 @@ function printUsage(): void {
   console.log(
     "  --dry-run                Calculate and report only; no DB writes",
   );
+  console.log(
+    "  --allow-unanchored       Allow month summaries without runtime quote markers",
+  );
   console.log("  --help                   Show help");
   console.log("");
   console.log("Exit codes: 0 success, 1 handled failure, 130 cancelled");
@@ -128,6 +132,7 @@ function parseArgs(argv: string[]): CliOptions {
   let adapterKey: string | null = null;
   let listingSlug: string | null = null;
   let dryRun = false;
+  let requireQuoteMarker = true;
   let maxListings: number | null = null;
   let nights = 7;
   let horizonDays = 45;
@@ -157,6 +162,11 @@ function parseArgs(argv: string[]): CliOptions {
 
     if (arg === "--dry-run") {
       dryRun = true;
+      continue;
+    }
+
+    if (arg === "--allow-unanchored") {
+      requireQuoteMarker = false;
       continue;
     }
 
@@ -200,6 +210,7 @@ function parseArgs(argv: string[]): CliOptions {
     adapterKey,
     listingSlug,
     dryRun,
+    requireQuoteMarker,
     maxListings,
     nights,
     horizonDays,
@@ -575,7 +586,7 @@ export async function runListingPricingSummaryRefreshCli(
   );
 
   progress.info(
-    `anchor_date=${anchorDateIso} months_forward=${options.monthsForward} nights=${options.nights} method=${options.method} dry_run=${options.dryRun}`,
+    `anchor_date=${anchorDateIso} months_forward=${options.monthsForward} nights=${options.nights} method=${options.method} dry_run=${options.dryRun} require_quote_marker=${options.requireQuoteMarker}`,
   );
 
   const listingRows = await pgDb
@@ -685,6 +696,7 @@ export async function runListingPricingSummaryRefreshCli(
   const nowMs = Date.now();
   const runId = `pricing_sum_${randomUUID().replace(/-/g, "")}`;
   const summaryRows: SummaryInsert[] = [];
+  let skippedUnanchoredMonths = 0;
 
   for (const sourceLink of limitedLinks) {
     for (const monthStartIso of monthStarts) {
@@ -724,6 +736,13 @@ export async function runListingPricingSummaryRefreshCli(
 
       const quoteTruthTotal = quoteSignal?.truth_total ?? null;
       const quoteProjectedTotal = quoteSignal?.projected_total ?? null;
+      const hasQuoteMarker =
+        quoteTruthTotal !== null || quoteProjectedTotal !== null;
+      if (options.requireQuoteMarker && !hasQuoteMarker) {
+        skippedUnanchoredMonths += 1;
+        continue;
+      }
+
       const coverage =
         aggregate.sample_nights_total > 0
           ? aggregate.sample_nights_available / aggregate.sample_nights_total
@@ -781,7 +800,7 @@ export async function runListingPricingSummaryRefreshCli(
   }
 
   progress.info(
-    `listings_scoped=${limitedLinks.length} aggregates_found=${aggregateRows.length} rows_prepared=${summaryRows.length}`,
+    `listings_scoped=${limitedLinks.length} aggregates_found=${aggregateRows.length} rows_prepared=${summaryRows.length} skipped_unanchored_months=${skippedUnanchoredMonths}`,
   );
 
   if (summaryRows.length === 0) {
@@ -841,6 +860,7 @@ export async function runListingPricingSummaryRefreshCli(
   console.log(`- listings_scoped: ${limitedLinks.length}`);
   console.log(`- rows_prepared: ${summaryRows.length}`);
   console.log(`- rows_upserted: ${rowsUpserted}`);
+  console.log(`- skipped_unanchored_months: ${skippedUnanchoredMonths}`);
   console.log(`- dry_run: ${options.dryRun}`);
   console.log(`- run_id: ${runId}`);
 
