@@ -32,6 +32,26 @@ In this repo, the ordered orchestration is handled by:
 
 The orchestrator executes pricing refresh before pricing cache for the selected adapter.
 
+## Quote Refresh Efficiency Controls (Current)
+
+Quote runtime now supports skip policies to avoid unnecessary re-quote work while preserving quote truth:
+
+1. Fresh listing skip
+
+- `--skip-fresh-quotes`
+- `--fresh-hours <n>`
+
+2. Overlap coverage skip
+
+- skip windows already covered by sufficiently fresh overlapping quote observations
+
+Operational metrics now include skip counts for:
+
+- `skipped_fresh`
+- `skipped_covered`
+
+These controls reduce redundant quote calls and runtime latency while keeping refresh behavior deterministic and auditable.
+
 ## Horizons And Alignment
 
 - Quote sampling: 24 weeks (168 days)

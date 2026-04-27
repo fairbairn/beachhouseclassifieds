@@ -40,6 +40,38 @@ General policy:
 - Use conservative derived defaults last.
 - Keep unavailable windows explicit rather than inventing availability.
 
+## Provenance and Quality Model (Current)
+
+Pricing rows now carry explicit provenance metadata so derived values are distinguishable from quote-grounded values.
+
+Day-level provenance signals include:
+
+- `value_origin`
+- `quote_anchor_scope`
+- `has_any_quote_observations`
+- `nearest_quote_observation_distance_days`
+
+Monthly summary quality/state now includes:
+
+- `pricing_status` (`grounded`, `estimated`, `no_truth`, `not_available`)
+- `recommended_usable_for_ux`
+- quote-foundation and availability booleans
+- `contrived_day_ratio`
+- `quality_band`
+
+These fields are persisted and propagated through ingest, monthly summary refresh, and discover search sync.
+
+## Runtime Storage and Propagation
+
+Current runtime flow for quality metadata:
+
+1. Pricing cache build writes day-level provenance.
+2. Sidecar ingest stores provenance in `listing_source_pricing`.
+3. Summary refresh computes monthly `pricing_status` and usability fields in `listing_pricing_summary`.
+4. Discover query/document sync carries status into search/read models.
+
+This allows UX and sort/query behavior to rely on explicit pricing quality tiers instead of inferring from totals alone.
+
 ## Output
 
 Pricing outputs are stored under each adapter pricing directory:

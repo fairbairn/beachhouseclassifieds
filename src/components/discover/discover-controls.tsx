@@ -532,9 +532,7 @@ export function DateRangeField({
 
   const resolvedPanelTitle =
     panelTitle ??
-    (effectiveMode === "stay"
-      ? "PICK YOUR STAY DATES"
-      : "Date Search Window");
+    (effectiveMode === "stay" ? "PICK YOUR STAY DATES" : "Date Search Window");
 
   const resolvedPanelDescription =
     panelDescription ??

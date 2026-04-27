@@ -12,6 +12,7 @@ Enable a Meilisearch-backed Discover query path while preserving the existing Po
 - Indexing pipeline: implemented in code
 - Query layer: implemented behind backend switch with Postgres fallback
 - Basic query probe: implemented in code
+- Query-formation validator: implemented in code
 
 ## Implemented Components
 
@@ -37,11 +38,39 @@ Fields:
 - Feature facets: `privatePool`, `gulffront`, `golfCart`
 - Pricing: `typicalPricingMonth`, `typicalBaseNightly`, `typicalAllInNightly`
 
+Current pricing-quality/search additions:
+
+- `typical_pricing_status` (quality tier)
+- `typical_pricing_priority` (sort priority for low-price semantics)
+
+Current availability-stream additions for detail reconstruction:
+
+- `status_code_string`
+- `availability_window_start_date`
+- `availability_days_count`
+
+Detail reads reconstruct sequential calendar day status in memory from these fields.
+
 Index settings:
 
 - `filterableAttributes` include location codes, feature booleans, and key numeric fields
 - `sortableAttributes` include nightly price and room capacity numbers
 - `searchableAttributes` include listing/location names
+
+Current required query-time settings include:
+
+- `typical_pricing_status` as filterable
+- `typical_pricing_priority` as sortable
+
+These are validated by CLI before deploy.
+
+## Sort Semantics (Current)
+
+- `price-low` now uses priority-aware ordering:
+  - `typical_pricing_priority:asc`
+  - then `typical_all_in_nightly:asc`
+
+This keeps full result counts while ranking grounded pricing ahead of lower-confidence tiers.
 
 ## Commands
 
@@ -61,6 +90,18 @@ Probe Meilisearch query output:
 
 - `npm run discover:search:probe:meilisearch`
 - With features: `npm run discover:search:probe:meilisearch -- --feature private_pool`
+
+Validate query formation and index-setting compatibility:
+
+- `npm run discover:search:validate:meilisearch`
+- Raw form: `npm run discover:search:validate:meilisearch:raw -- --limit 2`
+
+The validator checks:
+
+- required filterable/sortable attributes
+- listings/count/snapshot execution across sort modes
+- facet and availability query paths
+- population/consistency of priority/status fields used by `price-low`
 
 Enable Meilisearch backend for Discover requests:
 

@@ -2,7 +2,7 @@
 
 This document is the implementation-level reference for the `/discover` experience.
 
-Last updated: 2026-04-21
+Last updated: 2026-04-27
 
 ## Purpose
 
@@ -117,6 +117,61 @@ If copy changes in one place, update all user-visible surfaces to match:
 
 - Includes a guidance CTA panel with practical search hints.
 - Includes return-to-top action for long browse sessions.
+
+## Detail Stay Calendar (Check-In / Check-Out)
+
+The listing detail sidebar now uses a stay-calendar mode (separate from the generic discover date-window mode).
+
+Current intent:
+
+- Show day-state guidance for check-in/out feasibility.
+- Enforce stay-selection constraints without changing the generic discover date-window control behavior.
+
+### Day-State Source and Mapping
+
+Detail day states are resolved from sequential availability stream context:
+
+- `availability_window_start_date`
+- `status_code_string`
+- `availability_days_count`
+
+Status mapping:
+
+- `A` -> available
+- `I` -> check-in only
+- `O` -> check-out only
+- `U`/`X` -> blocked/unavailable
+
+Only dates on/after current date receive day-state styling.
+
+### Selection Constraints
+
+Stay selection follows these rules:
+
+1. Check-in can start only on `I` or `A`.
+2. Check-out can end only on `A` or `O`.
+3. Every day between start and end must be `A`.
+4. Max span is bounded (current config: 30 days in detail stay mode).
+5. Dates before current day are not selectable.
+
+### Styling Semantics (Current)
+
+Legend and day visuals are aligned as:
+
+- Check-In Only: white -> light-blue gradient, bold text
+- Available: solid light-blue background, normal text
+- Check-Out Only: light-blue -> white gradient, normal text
+- Unavailable/Blocked: dim text, no background fill
+
+### Interaction Stability Rules
+
+- Opening the picker may align visible months to the selected start month.
+- During editing/selection, the month viewport should not auto-jump after day clicks.
+- Left/right month navigation remains user-driven.
+
+### Mode Boundary Requirement
+
+All check-in/out-specific logic and styling must remain opt-in for detail stay mode and must not regress discover page date-window behavior.
 
 ## Map View Operation
 
