@@ -95,6 +95,12 @@ const XL_BREAKPOINT_PX = 1280;
 const ORIGINAL_DESIGN_PANEL_MAX_HEIGHT_PX = 928;
 const DISCOVER_SECTION_GAP_PX = 24;
 
+function isUnavailablePricingStatus(
+  status: string | null | undefined,
+): boolean {
+  return status === "no_truth" || status === "not_available";
+}
+
 function normalizeFeatureCode(
   value: string,
 ):
@@ -1288,13 +1294,6 @@ export function DiscoverPage({
     ];
   }, [nights, overlayListing]);
 
-  const overlayTypicalAllInTotal = useMemo(() => {
-    if (!overlayListing) {
-      return null;
-    }
-    return Math.ceil(overlayListing.typicalAllInNightly * nights);
-  }, [nights, overlayListing]);
-
   const overlayUpcomingMonthlyTotals = useMemo(() => {
     if (!overlayListing?.upcomingTypicalPricingMonths?.length) {
       return [] as Array<{
@@ -1307,6 +1306,7 @@ export function DiscoverPage({
       .slice(0, 3)
       .map((item) => ({
         monthLabel: item.monthLabel,
+        isUnavailable: isUnavailablePricingStatus(item.pricingStatus),
         total: Math.ceil(item.typicalAllInNightly * nights),
       }));
   }, [nights, overlayListing]);
@@ -2204,19 +2204,9 @@ export function DiscoverPage({
                               </section>
 
                               <section className="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] md:p-5">
-                                <h3 className="font-sans text-[0.9rem] font-bold tracking-[0.2em] text-cyan-900 uppercase">
-                                  Typical Pricing
+                                <h3 className="font-sans text-[0.9rem] font-bold tracking-[0.08em] text-cyan-900 uppercase">
+                                  Typical Pricing for {nights}-Night Stay
                                 </h3>
-                                <p className="mt-3 text-sm leading-6 text-slate-700">
-                                  Typical all-in price for {nights}{" "}
-                                  {nights === 1 ? "night" : "nights"}:{" "}
-                                  <span className="font-semibold text-slate-900">
-                                    {overlayTypicalAllInTotal !== null
-                                      ? `$${overlayTypicalAllInTotal.toLocaleString("en-US")}`
-                                      : "Loading..."}
-                                  </span>
-                                  .
-                                </p>
                                 <p className="mt-2 text-xs leading-5 text-slate-600">
                                   This is a planning estimate. Once you check
                                   availability and dates are confirmed, we will
@@ -2225,7 +2215,7 @@ export function DiscoverPage({
                                 {overlayUpcomingMonthlyTotals.length > 0 ? (
                                   <div className="mt-3 rounded-xl border border-cyan-200/70 bg-white/70 p-3">
                                     <p className="text-[11px] font-semibold tracking-[0.04em] text-cyan-900 uppercase">
-                                      Next 3 Months
+                                      Estimate By Month
                                     </p>
                                     <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
                                       {overlayUpcomingMonthlyTotals.map(
@@ -2236,9 +2226,12 @@ export function DiscoverPage({
                                           >
                                             <span>{item.monthLabel}</span>
                                             <span className="font-semibold text-slate-900">
-                                              $
-                                              {item.total.toLocaleString(
-                                                "en-US",
+                                              {item.isUnavailable ? (
+                                                <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                                                  Quote Required
+                                                </span>
+                                              ) : (
+                                                `$${item.total.toLocaleString("en-US")}`
                                               )}
                                             </span>
                                           </li>

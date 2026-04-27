@@ -40,6 +40,16 @@ type PricingDay = {
   currency: string;
   price_source: string;
   confidence: string | null;
+  value_origin:
+    | "quote_anchor"
+    | "scraped_rate"
+    | "interpolated"
+    | "assumptions_anchor"
+    | "global_default"
+    | null;
+  quote_anchor_scope: "same_month" | "surrounding_months" | "none" | null;
+  has_any_quote_observations: boolean | null;
+  nearest_quote_observation_distance_days: number | null;
 };
 
 type PricingSidecarFile = {
@@ -218,6 +228,56 @@ function toOptionalBoolean(value: unknown): boolean | null {
   return null;
 }
 
+function toOptionalInteger(value: unknown): number | null {
+  const parsed = toOptionalNumber(value);
+  if (parsed === null) {
+    return null;
+  }
+  return Math.floor(parsed);
+}
+
+function toValueOrigin(
+  value: unknown,
+):
+  | "quote_anchor"
+  | "scraped_rate"
+  | "interpolated"
+  | "assumptions_anchor"
+  | "global_default"
+  | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "quote_anchor" ||
+    normalized === "scraped_rate" ||
+    normalized === "interpolated" ||
+    normalized === "assumptions_anchor" ||
+    normalized === "global_default"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+function toQuoteAnchorScope(
+  value: unknown,
+): "same_month" | "surrounding_months" | "none" | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "same_month" ||
+    normalized === "surrounding_months" ||
+    normalized === "none"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
 function canonicalizeAdapterKey(value: unknown, fallback: string): string {
   const text = typeof value === "string" ? value.trim().toLowerCase() : "";
   return text.length > 0 ? text : fallback;
@@ -283,6 +343,7 @@ function readPricingSidecar(
 
   for (const dayValue of dayValues) {
     const day = toObject(dayValue);
+    const provenance = toObject(day.provenance);
     const date = toIsoDate(day.date);
     const allInNightly = toNullableNumericString(day.all_in_nightly);
     if (!date || !allInNightly) {
@@ -324,6 +385,14 @@ function readPricingSidecar(
         typeof day.confidence === "string" && day.confidence.trim().length > 0
           ? day.confidence.trim()
           : null,
+      value_origin: toValueOrigin(provenance.value_origin),
+      quote_anchor_scope: toQuoteAnchorScope(provenance.quote_anchor_scope),
+      has_any_quote_observations: toOptionalBoolean(
+        provenance.has_any_quote_observations,
+      ),
+      nearest_quote_observation_distance_days: toOptionalInteger(
+        provenance.nearest_quote_observation_distance_days,
+      ),
     });
   }
 
@@ -513,6 +582,11 @@ export async function runPricingSidecarIngestCli(
           currency: day.currency,
           price_source: day.price_source,
           confidence: day.confidence,
+          value_origin: day.value_origin,
+          quote_anchor_scope: day.quote_anchor_scope,
+          has_any_quote_observations: day.has_any_quote_observations,
+          nearest_quote_observation_distance_days:
+            day.nearest_quote_observation_distance_days,
           scrape_observed_at: sidecar.generated_at,
           window_start_date: sidecar.window_start_date,
           window_end_date: sidecar.window_end_date,
@@ -586,6 +660,10 @@ export async function runPricingSidecarIngestCli(
             currency: sql`excluded.currency`,
             price_source: sql`excluded.price_source`,
             confidence: sql`excluded.confidence`,
+            value_origin: sql`excluded.value_origin`,
+            quote_anchor_scope: sql`excluded.quote_anchor_scope`,
+            has_any_quote_observations: sql`excluded.has_any_quote_observations`,
+            nearest_quote_observation_distance_days: sql`excluded.nearest_quote_observation_distance_days`,
             scrape_observed_at: sql`excluded.scrape_observed_at`,
             window_start_date: sql`excluded.window_start_date`,
             window_end_date: sql`excluded.window_end_date`,

@@ -40,6 +40,9 @@ type SummaryAggregateRow = {
   avg_all_in_nightly: string;
   avg_all_in_nightly_available: string | null;
   avg_all_in_nightly_high_conf_available: string | null;
+  quote_anchor_same_month_days: number;
+  quote_anchor_surrounding_month_days: number;
+  contrived_days: number;
   pricing_max_updated_at: string | null;
 };
 
@@ -255,6 +258,10 @@ function endOfMonth(input: Date): Date {
 
 function toRoundedCents(value: number): string {
   return value.toFixed(2);
+}
+
+function toRoundedRatio(value: number): string {
+  return Math.max(0, Math.min(1, value)).toFixed(4);
 }
 
 function toNumber(value: string | number | null): number | null {
@@ -542,6 +549,39 @@ function chunkRows<T>(rows: T[], size: number): T[][] {
   return chunks;
 }
 
+function determinePricingStatus(input: {
+  sampleNightsAvailable: number;
+  hasQuoteSameMonthFoundation: boolean;
+  hasQuoteSurroundingMonthFoundation: boolean;
+}): "grounded" | "estimated" | "no_truth" | "not_available" {
+  if (input.sampleNightsAvailable <= 0) {
+    return "not_available";
+  }
+  if (input.hasQuoteSameMonthFoundation) {
+    return "grounded";
+  }
+  if (input.hasQuoteSurroundingMonthFoundation) {
+    return "estimated";
+  }
+  return "no_truth";
+}
+
+function qualityBandForMonth(input: {
+  pricingStatus: "grounded" | "estimated" | "no_truth" | "not_available";
+  contrivedDayRatio: number;
+}): "high" | "medium" | "low" {
+  if (input.pricingStatus === "grounded") {
+    return "high";
+  }
+  if (input.pricingStatus === "estimated") {
+    return "medium";
+  }
+  if (input.pricingStatus === "not_available") {
+    return input.contrivedDayRatio > 0.25 ? "low" : "medium";
+  }
+  return "low";
+}
+
 function freshnessStatus(maxUpdatedAt: string | null, nowMs: number): string {
   if (!maxUpdatedAt) {
     return "unknown";
@@ -669,6 +709,9 @@ export async function runListingPricingSummaryRefreshCli(
       avg_all_in_nightly_high_conf_available: sql<
         string | null
       >`round(avg(case when ${listing_source_pricing.is_available} and ${listing_source_pricing.confidence} = 'high' then ${listing_source_pricing.all_in_nightly} end), 2)::text`,
+      quote_anchor_same_month_days: sql<number>`sum(case when ${listing_source_pricing.value_origin} = 'quote_anchor' and ${listing_source_pricing.quote_anchor_scope} = 'same_month' then 1 else 0 end)::int`,
+      quote_anchor_surrounding_month_days: sql<number>`sum(case when ${listing_source_pricing.value_origin} = 'quote_anchor' and ${listing_source_pricing.quote_anchor_scope} = 'surrounding_months' then 1 else 0 end)::int`,
+      contrived_days: sql<number>`sum(case when ${listing_source_pricing.value_origin} in ('assumptions_anchor', 'global_default') then 1 else 0 end)::int`,
       pricing_max_updated_at: sql<
         string | null
       >`max(${listing_source_pricing.updated_at})`,
@@ -747,6 +790,30 @@ export async function runListingPricingSummaryRefreshCli(
         aggregate.sample_nights_total > 0
           ? aggregate.sample_nights_available / aggregate.sample_nights_total
           : 0;
+
+      const hasAnyAvailability = aggregate.sample_nights_available > 0;
+      const hasQuoteSameMonthFoundation =
+        aggregate.quote_anchor_same_month_days > 0;
+      const hasQuoteSurroundingMonthFoundation =
+        aggregate.quote_anchor_surrounding_month_days > 0;
+      const hasAnyQuoteFoundation =
+        hasQuoteSameMonthFoundation || hasQuoteSurroundingMonthFoundation;
+      const contrivedDayRatio =
+        aggregate.sample_nights_total > 0
+          ? aggregate.contrived_days / aggregate.sample_nights_total
+          : 0;
+      const pricingStatus = determinePricingStatus({
+        sampleNightsAvailable: aggregate.sample_nights_available,
+        hasQuoteSameMonthFoundation,
+        hasQuoteSurroundingMonthFoundation,
+      });
+      const recommendedUsableForUx =
+        pricingStatus === "grounded" || pricingStatus === "estimated";
+      const qualityBand = qualityBandForMonth({
+        pricingStatus,
+        contrivedDayRatio,
+      });
+
       const sparseCoverageDamping =
         coverage >= 0.4 ? 1 : 0.65 + 0.35 * (coverage / 0.4);
 
@@ -792,6 +859,15 @@ export async function runListingPricingSummaryRefreshCli(
           aggregate.pricing_max_updated_at,
           nowMs,
         ),
+        pricing_status: pricingStatus,
+        recommended_usable_for_ux: recommendedUsableForUx,
+        has_any_availability: hasAnyAvailability,
+        has_any_quote_foundation: hasAnyQuoteFoundation,
+        has_quote_same_month_foundation: hasQuoteSameMonthFoundation,
+        has_quote_surrounding_month_foundation:
+          hasQuoteSurroundingMonthFoundation,
+        contrived_day_ratio: toRoundedRatio(contrivedDayRatio),
+        quality_band: qualityBand,
         run_id: runId,
         computed_at: sql`now()`,
         updated_at: sql`now()`,
@@ -840,6 +916,14 @@ export async function runListingPricingSummaryRefreshCli(
             estimated_total_for_nights: sql`excluded.estimated_total_for_nights`,
             pricing_max_updated_at: sql`excluded.pricing_max_updated_at`,
             freshness_status: sql`excluded.freshness_status`,
+            pricing_status: sql`excluded.pricing_status`,
+            recommended_usable_for_ux: sql`excluded.recommended_usable_for_ux`,
+            has_any_availability: sql`excluded.has_any_availability`,
+            has_any_quote_foundation: sql`excluded.has_any_quote_foundation`,
+            has_quote_same_month_foundation: sql`excluded.has_quote_same_month_foundation`,
+            has_quote_surrounding_month_foundation: sql`excluded.has_quote_surrounding_month_foundation`,
+            contrived_day_ratio: sql`excluded.contrived_day_ratio`,
+            quality_band: sql`excluded.quality_band`,
             run_id: sql`excluded.run_id`,
             computed_at: sql`now()`,
             updated_at: sql`now()`,

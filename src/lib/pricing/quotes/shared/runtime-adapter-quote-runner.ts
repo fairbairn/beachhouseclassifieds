@@ -26,6 +26,8 @@ type CliOptions = {
   maxAttempts: number;
   skipFreshQuotes: boolean;
   freshHours: number;
+  skipCoveredWindows: boolean;
+  minOverlapNights: number;
   backfillOnly: boolean;
   backfillWindowHours: number;
   dryRun: boolean;
@@ -121,6 +123,7 @@ const DEFAULT_ENDPOINT_PATH = "/api/nrbe/reservation-quotes.json";
 const DEFAULT_TAX_PCT = 0.12;
 const DEFAULT_BASE_NIGHTLY = 500;
 const DEFAULT_FRESH_HOURS = 24;
+const DEFAULT_MIN_OVERLAP_NIGHTS = 3;
 const DEFAULT_BACKFILL_WINDOW_HOURS = 1;
 const DEFAULT_MIN_PROBE_NIGHTS = 3;
 const DEFAULT_MAX_PROBE_NIGHTS = 14;
@@ -153,6 +156,15 @@ function parseArgs(
     1,
     Number(process.env.QUOTE_CAPTURE_FRESH_HOURS ?? DEFAULT_FRESH_HOURS) ||
       DEFAULT_FRESH_HOURS,
+  );
+  let skipCoveredWindows =
+    process.env.QUOTE_CAPTURE_SKIP_COVERED_WINDOWS !== "0";
+  let minOverlapNights = Math.max(
+    1,
+    Number(
+      process.env.QUOTE_CAPTURE_MIN_OVERLAP_NIGHTS ??
+        DEFAULT_MIN_OVERLAP_NIGHTS,
+    ) || DEFAULT_MIN_OVERLAP_NIGHTS,
   );
   let backfillOnly =
     process.env.QUOTE_CAPTURE_BACKFILL_ONLY === "1" ||
@@ -283,6 +295,25 @@ function parseArgs(
       continue;
     }
 
+    if (arg === "--skip-covered-windows") {
+      skipCoveredWindows = true;
+      continue;
+    }
+
+    if (arg === "--no-skip-covered-windows") {
+      skipCoveredWindows = false;
+      continue;
+    }
+
+    if (arg === "--min-overlap-nights" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        minOverlapNights = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
+
     if (arg === "--backfill-window-hours" && value) {
       const parsed = Number(value);
       if (Number.isFinite(parsed) && parsed > 0) {
@@ -309,6 +340,8 @@ function parseArgs(
     maxAttempts: Math.max(1, maxAttempts),
     skipFreshQuotes,
     freshHours: Math.max(1, freshHours),
+    skipCoveredWindows,
+    minOverlapNights: Math.max(1, minOverlapNights),
     backfillOnly,
     backfillWindowHours: Math.max(1, backfillWindowHours),
     dryRun,
@@ -1096,6 +1129,104 @@ function parseIsoMs(iso: string | null | undefined): number | null {
   return parsed;
 }
 
+function windowNightsFromDates(startDate: string, endDate: string): number {
+  const startMs = Date.parse(`${startDate}T00:00:00Z`);
+  const endMs = Date.parse(`${endDate}T00:00:00Z`);
+  if (
+    !Number.isFinite(startMs) ||
+    !Number.isFinite(endMs) ||
+    endMs <= startMs
+  ) {
+    return 0;
+  }
+
+  return Math.floor((endMs - startMs) / (24 * 60 * 60 * 1000));
+}
+
+function overlapNights(input: {
+  leftStartDate: string;
+  leftEndDate: string;
+  rightStartDate: string;
+  rightEndDate: string;
+}): number {
+  const leftStart = Date.parse(`${input.leftStartDate}T00:00:00Z`);
+  const leftEnd = Date.parse(`${input.leftEndDate}T00:00:00Z`);
+  const rightStart = Date.parse(`${input.rightStartDate}T00:00:00Z`);
+  const rightEnd = Date.parse(`${input.rightEndDate}T00:00:00Z`);
+
+  if (
+    !Number.isFinite(leftStart) ||
+    !Number.isFinite(leftEnd) ||
+    !Number.isFinite(rightStart) ||
+    !Number.isFinite(rightEnd)
+  ) {
+    return 0;
+  }
+
+  const start = Math.max(leftStart, rightStart);
+  const end = Math.min(leftEnd, rightEnd);
+  if (end <= start) {
+    return 0;
+  }
+
+  return Math.floor((end - start) / (24 * 60 * 60 * 1000));
+}
+
+function observationIsFresh(input: {
+  observation: CanonicalQuoteObservation;
+  freshHours: number;
+}): boolean {
+  const capturedMs = parseIsoMs(input.observation.captured_at);
+  if (capturedMs === null) {
+    return false;
+  }
+
+  const ageMs = Date.now() - capturedMs;
+  return ageMs <= input.freshHours * 60 * 60 * 1000;
+}
+
+function windowCoveredByFreshObservation(input: {
+  window: QuoteWindow;
+  existingObservations: CanonicalQuoteObservation[];
+  freshHours: number;
+  minOverlapNights: number;
+}): boolean {
+  const targetMinOverlap = Math.min(
+    input.window.nights,
+    Math.max(1, input.minOverlapNights),
+  );
+
+  return input.existingObservations.some((observation) => {
+    if (!isRealQuoteObservation(observation)) {
+      return false;
+    }
+
+    if (!observationIsFresh({ observation, freshHours: input.freshHours })) {
+      return false;
+    }
+
+    const observationNights =
+      typeof observation.nights === "number" && observation.nights > 0
+        ? observation.nights
+        : windowNightsFromDates(
+            observation.check_in_date,
+            observation.check_out_date,
+          );
+    if (observationNights < targetMinOverlap) {
+      return false;
+    }
+
+    const overlap = overlapNights({
+      leftStartDate: input.window.startDate,
+      leftEndDate: input.window.endDate,
+      rightStartDate: observation.check_in_date,
+      rightEndDate: observation.check_out_date,
+    });
+
+    return overlap >= targetMinOverlap;
+  });
+}
+
 function observationKey(observation: CanonicalQuoteObservation): string {
   return [
     observation.check_in_date,
@@ -1288,6 +1419,7 @@ async function buildSidecarForListing(input: {
   availabilityDays: AvailabilityDay[];
   defaultMinProbeNights: number;
   defaultMaxProbeNights: number;
+  existingRealQuoteObservations: CanonicalQuoteObservation[];
   progress?: QuoteProgress;
   onWindowsPlanned?: (windows: number) => void;
   onWindowResult?: (result: { quoteAvailable: boolean }) => void;
@@ -1305,10 +1437,62 @@ async function buildSidecarForListing(input: {
     defaultMinProbeNights: input.defaultMinProbeNights,
     defaultMaxProbeNights: input.defaultMaxProbeNights,
   });
-  input.onWindowsPlanned?.(windows.length);
+
+  const windowsToQuery = options.skipCoveredWindows
+    ? windows.filter(
+        (window) =>
+          !windowCoveredByFreshObservation({
+            window,
+            existingObservations: input.existingRealQuoteObservations,
+            freshHours: options.freshHours,
+            minOverlapNights: options.minOverlapNights,
+          }),
+      )
+    : windows;
+  input.onWindowsPlanned?.(windowsToQuery.length);
+
+  if (windowsToQuery.length === 0) {
+    const endpointPathRaw =
+      typeof listing.quoteContext?.endpoint_path === "string"
+        ? listing.quoteContext.endpoint_path.trim()
+        : "";
+    const endpointPath = endpointPathRaw.startsWith("/")
+      ? endpointPathRaw
+      : (config.defaultEndpointPath ?? DEFAULT_ENDPOINT_PATH);
+
+    input.onListingComplete?.({
+      listingId: listing.externalListingId,
+      windows: 0,
+      available: 0,
+    });
+    input.progress?.tick(
+      `quotes listing=${listing.externalListingId} windows=0 available=0 skipped_reason=fresh_overlap`,
+    );
+
+    const sidecar: CanonicalQuotesSidecarRecord = {
+      adapter_key: config.adapterKey,
+      external_listing_id: listing.externalListingId,
+      detail_url: listing.detailUrl,
+      captured_at: new Date().toISOString(),
+      currency: "USD",
+      quote_window_cadence: "weekly_anchor_adaptive_span",
+      quote_window_gap_policy: "probe_longest_available_span",
+      quote_window_anchor_date: firstSaturdayOnOrAfter(
+        new Date().toISOString().slice(0, 10),
+      ),
+      quote_window_days: options.weeks * 7,
+      quote_sample_step_days: 1,
+      quote_nights: options.nights,
+      quote_max_queries: 0,
+      endpoint_path: endpointPath,
+      observations: [],
+    };
+    assertCanonicalQuotesSidecarRecord(sidecar);
+    return sidecar;
+  }
 
   const groupedWindowsByStartDate = new Map<string, QuoteWindow[]>();
-  for (const window of windows) {
+  for (const window of windowsToQuery) {
     const existing = groupedWindowsByStartDate.get(window.startDate) ?? [];
     existing.push(window);
     groupedWindowsByStartDate.set(window.startDate, existing);
@@ -1503,6 +1687,8 @@ export async function runRuntimeAdapterQuoteCli(
       `max_attempts=${options.maxAttempts}`,
       `skip_fresh_quotes=${options.skipFreshQuotes}`,
       `fresh_hours=${options.freshHours}`,
+      `skip_covered_windows=${options.skipCoveredWindows}`,
+      `min_overlap_nights=${options.minOverlapNights}`,
       `selection=${options.listingId ? `listing:${options.listingId}` : `max-listings:${options.maxListings}`}`,
       `min_probe_nights=${defaultMinProbeNights}`,
       `max_probe_nights=${defaultMaxProbeNights}`,
@@ -1650,10 +1836,16 @@ export async function runRuntimeAdapterQuoteCli(
     ),
   });
 
+  let skippedCoveredListings = 0;
   const sidecars = await runWithConcurrency(
     listingsToProcess,
     options.listingConcurrency,
-    async (listing) => {
+    async (listing): Promise<CanonicalQuotesSidecarRecord | null> => {
+      const outputPath = resolve(quotesDir, `${listing.fileId}.json`);
+      const existingObservations = await loadExistingRealQuoteObservations({
+        outputPath,
+      });
+
       const sidecar = await buildSidecarForListing({
         config,
         listing,
@@ -1664,6 +1856,7 @@ export async function runRuntimeAdapterQuoteCli(
         }),
         defaultMinProbeNights,
         defaultMaxProbeNights,
+        existingRealQuoteObservations: existingObservations,
         progress,
         onWindowsPlanned: (windows) => {
           tracker.onWindowsPlanned(windows);
@@ -1680,10 +1873,11 @@ export async function runRuntimeAdapterQuoteCli(
         },
       });
 
-      const outputPath = resolve(quotesDir, `${listing.fileId}.json`);
-      const existingObservations = await loadExistingRealQuoteObservations({
-        outputPath,
-      });
+      if (sidecar.quote_max_queries === 0) {
+        skippedCoveredListings += 1;
+        return null;
+      }
+
       const mergedObservations = mergeRealQuoteObservations({
         existing: existingObservations,
         latest: sidecar.observations,
@@ -1711,11 +1905,15 @@ export async function runRuntimeAdapterQuoteCli(
     tracker.finish();
   });
 
-  const totalObservations = sidecars.reduce(
+  const persistedSidecars = sidecars.filter(
+    (sidecar): sidecar is CanonicalQuotesSidecarRecord => sidecar !== null,
+  );
+
+  const totalObservations = persistedSidecars.reduce(
     (sum, sidecar) => sum + sidecar.observations.length,
     0,
   );
-  const availableObservations = sidecars.reduce(
+  const availableObservations = persistedSidecars.reduce(
     (sum, sidecar) =>
       sum +
       sidecar.observations.filter((observation) => observation.quote_available)
@@ -1724,6 +1922,6 @@ export async function runRuntimeAdapterQuoteCli(
   );
 
   progress?.success(
-    `quote-capture complete listings=${sidecars.length} observations=${totalObservations} available=${availableObservations} skipped_fresh=${skippedFresh}`,
+    `quote-capture complete listings=${persistedSidecars.length} observations=${totalObservations} available=${availableObservations} skipped_fresh=${skippedFresh} skipped_covered=${skippedCoveredListings}`,
   );
 }

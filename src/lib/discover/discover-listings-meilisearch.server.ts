@@ -120,6 +120,7 @@ const DISCOVER_LISTING_ATTRIBUTES_TO_RETRIEVE = [
   "preview_images",
   "poster",
   "typical_pricing_month",
+  "typical_pricing_status",
   "typical_base_nightly",
   "typical_all_in_nightly",
 ] as const;

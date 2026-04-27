@@ -334,6 +334,7 @@ export async function queryDiscoverPricingSummaryRows(input: {
     listing_id: string;
     month_start_date: string;
     recommended_all_in_nightly: string;
+    pricing_status: string;
     computed_at: string;
     anchor_date: string;
   }>
@@ -348,6 +349,7 @@ export async function queryDiscoverPricingSummaryRows(input: {
       month_start_date: listing_pricing_summary.month_start_date,
       recommended_all_in_nightly:
         listing_pricing_summary.recommended_all_in_nightly,
+      pricing_status: listing_pricing_summary.pricing_status,
       computed_at: listing_pricing_summary.computed_at,
       anchor_date: listing_pricing_summary.anchor_date,
     })
@@ -374,6 +376,7 @@ export async function queryDiscoverPricingSummaryRows(input: {
     listing_id: string;
     month_start_date: string;
     recommended_all_in_nightly: string;
+    pricing_status: string;
     computed_at: string;
     anchor_date: string;
   }>;

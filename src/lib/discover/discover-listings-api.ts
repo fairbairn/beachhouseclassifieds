@@ -50,8 +50,10 @@ function toSummaryListing(listing: DiscoverListing): DiscoverListing {
     golfCart: listing.golfCart,
     previewImages: listing.previewImages,
     typicalPricingMonth: listing.typicalPricingMonth,
+    typicalPricingStatus: listing.typicalPricingStatus,
     typicalBaseNightly: listing.typicalBaseNightly,
     typicalAllInNightly: listing.typicalAllInNightly,
+    upcomingTypicalPricingMonths: listing.upcomingTypicalPricingMonths,
   };
 }
 

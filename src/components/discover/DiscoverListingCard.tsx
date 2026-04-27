@@ -105,6 +105,9 @@ export const DiscoverListingCard = memo(function DiscoverListingCard({
 
   const roundedTotal = Math.ceil(listing.typicalAllInNightly * nights);
   const approximateTotal = `$${roundedTotal.toLocaleString("en-US")}`;
+  const isUnavailablePricing =
+    listing.typicalPricingStatus === "no_truth" ||
+    listing.typicalPricingStatus === "not_available";
 
   return (
     <article
@@ -292,7 +295,15 @@ export const DiscoverListingCard = memo(function DiscoverListingCard({
         <span className="text-[11px] text-slate-500">
           {`Typical pricing for ${nights} ${nights === 1 ? "night" : "nights"} in ${listing.typicalPricingMonth}`}
         </span>
-        <strong className="text-xs text-slate-900">{approximateTotal}</strong>
+        <strong className="text-xs text-slate-900">
+          {isUnavailablePricing ? (
+            <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+              Quote Required
+            </span>
+          ) : (
+            approximateTotal
+          )}
+        </strong>
       </div>
     </article>
   );

@@ -506,6 +506,7 @@ function buildMonthStartDateList(input: {
 }
 
 type SourcePricingContext = {
+  typicalPricingStatus: "grounded" | "estimated" | "no_truth" | "not_available";
   typicalPricingMonth: string;
   typicalBaseNightly: number;
   typicalAllInNightly: number;
@@ -514,6 +515,7 @@ type SourcePricingContext = {
     monthLabel: string;
     monthStartDate: string;
     typicalAllInNightly: number;
+    pricingStatus: "grounded" | "estimated" | "no_truth" | "not_available";
   }>;
   availabilityCalendarStatus: Record<
     string,
@@ -528,6 +530,24 @@ type SourcePricingContext = {
     }
   >;
 };
+
+function normalizePricingStatus(
+  value: unknown,
+): "grounded" | "estimated" | "no_truth" | "not_available" {
+  if (typeof value !== "string") {
+    return "no_truth";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "grounded" ||
+    normalized === "estimated" ||
+    normalized === "no_truth" ||
+    normalized === "not_available"
+  ) {
+    return normalized;
+  }
+  return "no_truth";
+}
 
 function dayTypeFromAvailabilityStatusCode(
   code: "A" | "U" | "I" | "O" | "X",
@@ -603,7 +623,16 @@ async function loadPricingContextByListingSlug(input: {
     monthStartDateIsoList,
   });
 
-  const summaryNightlyByListingId = new Map<string, Map<string, number>>();
+  const summaryMonthValueByListingId = new Map<
+    string,
+    Map<
+      string,
+      {
+        nightly: number;
+        pricingStatus: "grounded" | "estimated" | "no_truth" | "not_available";
+      }
+    >
+  >();
   for (const row of summaryRows) {
     const nightly = asNumber(row.recommended_all_in_nightly);
     if (nightly === null) {
@@ -611,12 +640,25 @@ async function loadPricingContextByListingSlug(input: {
     }
 
     const listingSummary =
-      summaryNightlyByListingId.get(row.listing_id) ??
-      new Map<string, number>();
+      summaryMonthValueByListingId.get(row.listing_id) ??
+      new Map<
+        string,
+        {
+          nightly: number;
+          pricingStatus:
+            | "grounded"
+            | "estimated"
+            | "no_truth"
+            | "not_available";
+        }
+      >();
     if (!listingSummary.has(row.month_start_date)) {
-      listingSummary.set(row.month_start_date, nightly);
+      listingSummary.set(row.month_start_date, {
+        nightly,
+        pricingStatus: normalizePricingStatus(row.pricing_status),
+      });
     }
-    summaryNightlyByListingId.set(row.listing_id, listingSummary);
+    summaryMonthValueByListingId.set(row.listing_id, listingSummary);
   }
 
   const pricingByListingId = new Map<
@@ -757,21 +799,40 @@ async function loadPricingContextByListingSlug(input: {
     }
 
     const summaryByMonth =
-      summaryNightlyByListingId.get(listingRow.listing_id) ??
-      new Map<string, number>();
+      summaryMonthValueByListingId.get(listingRow.listing_id) ??
+      new Map<
+        string,
+        {
+          nightly: number;
+          pricingStatus:
+            | "grounded"
+            | "estimated"
+            | "no_truth"
+            | "not_available";
+        }
+      >();
 
     const summaryOnlyMonthlyValues = monthStartDateIsoList
       .map((monthStartIso) => ({
         monthStartIso,
-        nightly: summaryByMonth.get(monthStartIso),
+        monthValue: summaryByMonth.get(monthStartIso),
       }))
       .filter(
         (
           value,
         ): value is {
           monthStartIso: string;
-          nightly: number;
-        } => typeof value.nightly === "number",
+          monthValue: {
+            nightly: number;
+            pricingStatus:
+              | "grounded"
+              | "estimated"
+              | "no_truth"
+              | "not_available";
+          };
+        } =>
+          typeof value.monthValue?.nightly === "number" &&
+          Number.isFinite(value.monthValue.nightly),
       );
 
     if (
@@ -779,7 +840,7 @@ async function loadPricingContextByListingSlug(input: {
       summaryOnlyMonthlyValues.length > 0
     ) {
       const upcomingTypicalPricingMonths = summaryOnlyMonthlyValues.map(
-        ({ monthStartIso, nightly }) => {
+        ({ monthStartIso, monthValue }) => {
           const monthIndex = monthStartDateIsoList.indexOf(monthStartIso);
           const monthDate =
             monthIndex >= 0
@@ -788,25 +849,30 @@ async function loadPricingContextByListingSlug(input: {
           return {
             monthLabel: monthDate.toLocaleString("en-US", { month: "long" }),
             monthStartDate: monthStartIso,
-            typicalAllInNightly: Math.max(1, Math.round(nightly)),
+            typicalAllInNightly: Math.max(1, Math.round(monthValue.nightly)),
+            pricingStatus: monthValue.pricingStatus,
           };
         },
       );
 
-      const primaryMonthNightly =
+      const primaryMonthValue =
         summaryByMonth.get(targetMonthStartDateIso) ??
-        summaryOnlyMonthlyValues[0]?.nightly;
+        summaryOnlyMonthlyValues[0]?.monthValue;
 
-      if (primaryMonthNightly !== undefined) {
+      if (primaryMonthValue !== undefined) {
         out.set(listingRow.slug, {
+          typicalPricingStatus: primaryMonthValue.pricingStatus,
           typicalPricingMonth: nextMonthStartDate.toLocaleString("en-US", {
             month: "long",
           }),
           typicalBaseNightly: Math.max(
             1,
-            Math.round(primaryMonthNightly * 0.88),
+            Math.round(primaryMonthValue.nightly * 0.88),
           ),
-          typicalAllInNightly: Math.max(1, Math.round(primaryMonthNightly)),
+          typicalAllInNightly: Math.max(
+            1,
+            Math.round(primaryMonthValue.nightly),
+          ),
           statusCodeString: "",
           upcomingTypicalPricingMonths,
           availabilityCalendarStatus: {},
@@ -829,17 +895,21 @@ async function loadPricingContextByListingSlug(input: {
     const upcomingTypicalPricingMonths = monthStartDateIsoList
       .map((monthStartIso, index) => {
         const monthlyNightly =
-          summaryByMonth.get(monthStartIso) ??
+          summaryByMonth.get(monthStartIso)?.nightly ??
           monthFallbackAverages.get(monthStartIso);
         if (monthlyNightly === undefined) {
           return null;
         }
+
+        const pricingStatus =
+          summaryByMonth.get(monthStartIso)?.pricingStatus ?? "no_truth";
 
         const monthDate = monthStartDates[index] ?? nextMonthStartDate;
         return {
           monthLabel: monthDate.toLocaleString("en-US", { month: "long" }),
           monthStartDate: monthStartIso,
           typicalAllInNightly: Math.max(1, Math.round(monthlyNightly)),
+          pricingStatus,
         };
       })
       .filter(
@@ -849,15 +919,23 @@ async function loadPricingContextByListingSlug(input: {
           monthLabel: string;
           monthStartDate: string;
           typicalAllInNightly: number;
+          pricingStatus:
+            | "grounded"
+            | "estimated"
+            | "no_truth"
+            | "not_available";
         } => value !== null,
       );
 
     const primaryMonthNightly =
-      summaryByMonth.get(targetMonthStartDateIso) ??
+      summaryByMonth.get(targetMonthStartDateIso)?.nightly ??
       monthFallbackAverages.get(targetMonthStartDateIso);
+    const primaryMonthPricingStatus =
+      summaryByMonth.get(targetMonthStartDateIso)?.pricingStatus ?? "no_truth";
 
     if (primaryMonthNightly !== undefined) {
       out.set(listingRow.slug, {
+        typicalPricingStatus: primaryMonthPricingStatus,
         typicalPricingMonth: nextMonthStartDate.toLocaleString("en-US", {
           month: "long",
         }),
@@ -889,6 +967,7 @@ async function loadPricingContextByListingSlug(input: {
     const typicalBase = Math.ceil(typicalAllIn * 0.88);
 
     out.set(listingRow.slug, {
+      typicalPricingStatus: "no_truth",
       typicalPricingMonth: nextMonthStartDate.toLocaleString("en-US", {
         month: "long",
       }),
@@ -1129,6 +1208,7 @@ async function loadFromListingTable(input?: {
               }))
             : undefined,
       typicalPricingMonth: sourcePricing.typicalPricingMonth,
+      typicalPricingStatus: sourcePricing.typicalPricingStatus,
       typicalBaseNightly: sourcePricing.typicalBaseNightly,
       typicalAllInNightly: sourcePricing.typicalAllInNightly,
       upcomingTypicalPricingMonths: sourcePricing.upcomingTypicalPricingMonths,

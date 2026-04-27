@@ -297,6 +297,12 @@ export const listing_source_pricing = pgTable(
     currency: text("currency").notNull().default("USD"),
     price_source: text("price_source").notNull(),
     confidence: text("confidence"),
+    value_origin: text("value_origin"),
+    quote_anchor_scope: text("quote_anchor_scope"),
+    has_any_quote_observations: boolean("has_any_quote_observations"),
+    nearest_quote_observation_distance_days: integer(
+      "nearest_quote_observation_distance_days",
+    ),
     scrape_observed_at: timestamp("scrape_observed_at", {
       mode: "string",
       withTimezone: true,
@@ -403,6 +409,29 @@ export const listing_pricing_summary = pgTable(
       withTimezone: true,
     }),
     freshness_status: text("freshness_status").notNull().default("fresh"),
+    pricing_status: text("pricing_status").notNull().default("no_truth"),
+    recommended_usable_for_ux: boolean("recommended_usable_for_ux")
+      .notNull()
+      .default(false),
+    has_any_availability: boolean("has_any_availability")
+      .notNull()
+      .default(false),
+    has_any_quote_foundation: boolean("has_any_quote_foundation")
+      .notNull()
+      .default(false),
+    has_quote_same_month_foundation: boolean("has_quote_same_month_foundation")
+      .notNull()
+      .default(false),
+    has_quote_surrounding_month_foundation: boolean(
+      "has_quote_surrounding_month_foundation",
+    )
+      .notNull()
+      .default(false),
+    contrived_day_ratio: numeric("contrived_day_ratio", {
+      precision: 5,
+      scale: 4,
+    }),
+    quality_band: text("quality_band"),
     run_id: text("run_id"),
     computed_at: timestamp("computed_at", {
       mode: "string",

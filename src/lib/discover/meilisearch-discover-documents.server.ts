@@ -55,8 +55,14 @@ export type DiscoverSearchDocument = {
     monthLabel: string;
     monthStartDate: string;
     typicalAllInNightly: number;
+    pricingStatus?: "grounded" | "estimated" | "no_truth" | "not_available";
   }>;
   typical_pricing_month: string;
+  typical_pricing_status:
+    | "grounded"
+    | "estimated"
+    | "no_truth"
+    | "not_available";
   typical_base_nightly: number;
   typical_all_in_nightly: number;
 } & Partial<Record<`avail_${number}`, number[]>>;
@@ -207,6 +213,7 @@ function asUpcomingPricingMonths(value: unknown): Array<{
   monthLabel: string;
   monthStartDate: string;
   typicalAllInNightly: number;
+  pricingStatus?: "grounded" | "estimated" | "no_truth" | "not_available";
 }> {
   if (!Array.isArray(value)) {
     return [];
@@ -226,6 +233,7 @@ function asUpcomingPricingMonths(value: unknown): Array<{
     const monthLabel = asString(row.monthLabel);
     const monthStartDate = asString(row.monthStartDate);
     const nightly = asNumberOrZero(row.typicalAllInNightly);
+    const pricingStatus = asString(row.pricingStatus);
     if (!monthLabel || !monthStartDate) {
       continue;
     }
@@ -233,6 +241,13 @@ function asUpcomingPricingMonths(value: unknown): Array<{
       monthLabel,
       monthStartDate,
       typicalAllInNightly: Math.max(0, Math.round(nightly)),
+      pricingStatus:
+        pricingStatus === "grounded" ||
+        pricingStatus === "estimated" ||
+        pricingStatus === "no_truth" ||
+        pricingStatus === "not_available"
+          ? pricingStatus
+          : undefined,
     });
   }
 
@@ -426,9 +441,11 @@ export function toDiscoverSearchDocument(
             0,
             Math.round(entry.typicalAllInNightly),
           ),
+          pricingStatus: entry.pricingStatus,
         }))
       : [],
     typical_pricing_month: listing.typicalPricingMonth,
+    typical_pricing_status: listing.typicalPricingStatus ?? "no_truth",
     typical_base_nightly: Math.max(0, listing.typicalBaseNightly),
     typical_all_in_nightly: Math.max(0, listing.typicalAllInNightly),
     ...availabilityFields,
@@ -488,6 +505,17 @@ export function discoverSearchDocumentToListing(
       document.upcoming_typical_pricing_months,
     ),
     typicalPricingMonth: asString(document.typical_pricing_month),
+    typicalPricingStatus:
+      asString(document.typical_pricing_status) === "grounded" ||
+      asString(document.typical_pricing_status) === "estimated" ||
+      asString(document.typical_pricing_status) === "no_truth" ||
+      asString(document.typical_pricing_status) === "not_available"
+        ? (asString(document.typical_pricing_status) as
+            | "grounded"
+            | "estimated"
+            | "no_truth"
+            | "not_available")
+        : undefined,
     typicalBaseNightly: Math.max(
       0,
       asNumberOrZero(document.typical_base_nightly),

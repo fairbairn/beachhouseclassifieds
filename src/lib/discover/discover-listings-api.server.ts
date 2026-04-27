@@ -55,8 +55,10 @@ function toSummaryListing(listing: DiscoverListing): DiscoverListing {
     sleepingSummary: listing.sleepingSummary,
     previewImages: listing.previewImages,
     typicalPricingMonth: listing.typicalPricingMonth,
+    typicalPricingStatus: listing.typicalPricingStatus,
     typicalBaseNightly: listing.typicalBaseNightly,
     typicalAllInNightly: listing.typicalAllInNightly,
+    upcomingTypicalPricingMonths: listing.upcomingTypicalPricingMonths,
   };
 }
 

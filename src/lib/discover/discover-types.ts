@@ -21,10 +21,16 @@ export type DiscoverListing = {
   typicalPricingMonth: string;
   typicalBaseNightly: number;
   typicalAllInNightly: number;
+  typicalPricingStatus?:
+    | "grounded"
+    | "estimated"
+    | "no_truth"
+    | "not_available";
   upcomingTypicalPricingMonths?: Array<{
     monthLabel: string;
     monthStartDate: string;
     typicalAllInNightly: number;
+    pricingStatus?: "grounded" | "estimated" | "no_truth" | "not_available";
   }>;
   descriptionHeadline?: string;
   descriptionMarkdown?: string;

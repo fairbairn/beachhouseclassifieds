@@ -203,6 +203,7 @@ async function ensureIndexSettings(): Promise<void> {
       "status_code_string",
       "upcoming_typical_pricing_months",
       "typical_pricing_month",
+      "typical_pricing_status",
       "typical_base_nightly",
       "typical_all_in_nightly",
       ...availabilityFields,
