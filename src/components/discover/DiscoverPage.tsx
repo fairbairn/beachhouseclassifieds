@@ -2170,7 +2170,7 @@ export function DiscoverPage({
                                 <div className="flex items-center gap-2 text-slate-700">
                                   <CalendarDays className="h-4 w-4" />
                                   <p className="text-[10px] font-bold tracking-[0.14em] uppercase">
-                                    Define Your {nights} Night Stay
+                                    PICK YOUR STAY DATES
                                   </p>
                                 </div>
                                 <div className="mt-2">
@@ -2179,6 +2179,14 @@ export function DiscoverPage({
                                     endDate={checkOutDate}
                                     selectedNights={nights}
                                     emptyLabel="Check-In / Check-out"
+                                    mode="stay"
+                                    panelTitle="Booking Window"
+                                    panelDescription="Select your check-in and check-out dates."
+                                    availabilityCalendarStatus={
+                                      overlayListing.availabilityCalendarStatus
+                                    }
+                                    showAvailabilityLegend={true}
+                                    maxSpanDays={30}
                                     openRequestToken={
                                       checkDatePanelOpenRequestToken
                                     }
@@ -2191,12 +2199,16 @@ export function DiscoverPage({
                                 <div className="mt-2">
                                   <button
                                     type="button"
-                                    onClick={() =>
+                                    onClick={() => {
+                                      if (!checkInDate || !checkOutDate) {
+                                        return;
+                                      }
                                       setCheckDatePanelOpenRequestToken(
                                         (current) => (current ?? 0) + 1,
-                                      )
-                                    }
-                                    className="inline-flex h-10 w-full items-center justify-center rounded-md border border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 px-3 text-sm font-semibold whitespace-nowrap text-white shadow-[0_8px_18px_-12px_rgba(13,148,136,0.75)] transition hover:brightness-105"
+                                      );
+                                    }}
+                                    disabled={!checkInDate || !checkOutDate}
+                                    className={`inline-flex h-10 w-full items-center justify-center rounded-md border px-3 text-sm font-semibold whitespace-nowrap transition ${checkInDate && checkOutDate ? "border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 text-white shadow-[0_8px_18px_-12px_rgba(13,148,136,0.75)] hover:brightness-105" : "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400 shadow-none"}`}
                                   >
                                     Check Availability
                                   </button>

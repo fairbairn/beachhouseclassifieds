@@ -223,6 +223,7 @@ export async function buildDiscoverListingsPagePayload(input?: {
       availabilityStayNights: input?.availabilityStayNights,
     }),
     getDiscoverListingsCount({
+      sortOption: input?.sortOption,
       locationQuery: input?.locationQuery,
       minSleeps: input?.minSleeps,
       minBedrooms: input?.minBedrooms,

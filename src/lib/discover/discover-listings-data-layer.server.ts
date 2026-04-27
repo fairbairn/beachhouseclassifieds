@@ -511,6 +511,8 @@ type SourcePricingContext = {
   typicalBaseNightly: number;
   typicalAllInNightly: number;
   statusCodeString: string;
+  availabilityWindowStartDate: string;
+  availabilityDaysCount: number;
   upcomingTypicalPricingMonths: Array<{
     monthLabel: string;
     monthStartDate: string;
@@ -942,6 +944,9 @@ async function loadPricingContextByListingSlug(input: {
         typicalBaseNightly: Math.max(1, Math.round(primaryMonthNightly * 0.88)),
         typicalAllInNightly: Math.max(1, Math.round(primaryMonthNightly)),
         statusCodeString: availabilityStream?.status_code_string ?? "",
+        availabilityWindowStartDate:
+          availabilityStream?.window_start_date ?? "",
+        availabilityDaysCount: availabilityStream?.days_count ?? 0,
         upcomingTypicalPricingMonths,
         availabilityCalendarStatus,
       });
@@ -974,6 +979,8 @@ async function loadPricingContextByListingSlug(input: {
       typicalBaseNightly: Math.max(1, Math.round(typicalBase)),
       typicalAllInNightly: Math.max(1, Math.round(typicalAllIn)),
       statusCodeString: availabilityStream?.status_code_string ?? "",
+      availabilityWindowStartDate: availabilityStream?.window_start_date ?? "",
+      availabilityDaysCount: availabilityStream?.days_count ?? 0,
       upcomingTypicalPricingMonths,
       availabilityCalendarStatus,
     });
@@ -1213,6 +1220,12 @@ async function loadFromListingTable(input?: {
       typicalAllInNightly: sourcePricing.typicalAllInNightly,
       upcomingTypicalPricingMonths: sourcePricing.upcomingTypicalPricingMonths,
       statusCodeString: onlySlug ? sourcePricing.statusCodeString : undefined,
+      availabilityWindowStartDate: onlySlug
+        ? sourcePricing.availabilityWindowStartDate
+        : undefined,
+      availabilityDaysCount: onlySlug
+        ? sourcePricing.availabilityDaysCount
+        : undefined,
       descriptionHeadline: descriptionHeadline || undefined,
       descriptionMarkdown: description || undefined,
       description: description || undefined,

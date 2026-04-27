@@ -73,6 +73,12 @@ export async function getDiscoverListings(input?: {
 }
 
 export async function getDiscoverListingsCount(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   locationQuery?: string;
   minSleeps?: number;
   minBedrooms?: number;

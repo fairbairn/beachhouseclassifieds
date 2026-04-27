@@ -54,6 +54,8 @@ export type DiscoverListing = {
   seoMetaDescription?: string;
   seoHiddenSummaryPlain?: string;
   statusCodeString?: string;
+  availabilityWindowStartDate?: string;
+  availabilityDaysCount?: number;
   availabilityCalendarStatus?: Record<
     string,
     {

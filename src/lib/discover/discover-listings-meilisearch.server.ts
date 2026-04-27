@@ -119,6 +119,9 @@ const DISCOVER_LISTING_ATTRIBUTES_TO_RETRIEVE = [
   "bunk_bed_count",
   "preview_images",
   "poster",
+  "status_code_string",
+  "availability_window_start_date",
+  "availability_days_count",
   "typical_pricing_month",
   "typical_pricing_status",
   "typical_base_nightly",
@@ -139,7 +142,6 @@ const DISCOVER_DETAIL_ATTRIBUTES_TO_RETRIEVE = [
   "seo_meta_title",
   "seo_meta_description",
   "seo_hidden_summary_plain",
-  "status_code_string",
   "upcoming_typical_pricing_months",
 ] as const;
 
@@ -183,7 +185,7 @@ function resolveMeilisearchSort(
     | "beach-pool-first",
 ): string[] | undefined {
   if (sortOption === "price-low") {
-    return ["typical_all_in_nightly:asc"];
+    return ["typical_pricing_priority:asc", "typical_all_in_nightly:asc"];
   }
   if (sortOption === "price-high") {
     return ["typical_all_in_nightly:desc"];
@@ -891,6 +893,12 @@ export async function getDiscoverListingDetailBySlug(input: {
 }
 
 export async function getDiscoverListingsCount(input?: {
+  sortOption?:
+    | "recommended"
+    | "price-low"
+    | "price-high"
+    | "sleeps-high"
+    | "beach-pool-first";
   locationQuery?: string;
   minSleeps?: number;
   minBedrooms?: number;

@@ -51,6 +51,8 @@ export type DiscoverSearchDocument = {
   seo_meta_description: string | null;
   seo_hidden_summary_plain: string | null;
   status_code_string: string | null;
+  availability_window_start_date: string | null;
+  availability_days_count: number | null;
   upcoming_typical_pricing_months: Array<{
     monthLabel: string;
     monthStartDate: string;
@@ -63,9 +65,25 @@ export type DiscoverSearchDocument = {
     | "estimated"
     | "no_truth"
     | "not_available";
+  typical_pricing_priority: number;
   typical_base_nightly: number;
   typical_all_in_nightly: number;
 } & Partial<Record<`avail_${number}`, number[]>>;
+
+function pricingStatusPriority(
+  status: "grounded" | "estimated" | "no_truth" | "not_available",
+): number {
+  if (status === "grounded") {
+    return 0;
+  }
+  if (status === "estimated") {
+    return 1;
+  }
+  if (status === "no_truth") {
+    return 2;
+  }
+  return 3;
+}
 
 function utcTodayDayInt(): number {
   const now = new Date();
@@ -271,6 +289,86 @@ function asBedCount(value: unknown): number {
   return 0;
 }
 
+function addDaysToIsoDate(isoDate: string, days: number): string {
+  const base = new Date(`${isoDate}T00:00:00Z`);
+  if (!Number.isFinite(base.getTime())) {
+    return "";
+  }
+  base.setUTCDate(base.getUTCDate() + days);
+  const year = String(base.getUTCFullYear()).padStart(4, "0");
+  const month = String(base.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(base.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildAvailabilityCalendarStatusFromStream(input: {
+  statusCodeString?: string;
+  windowStartDate?: string;
+  daysCount?: number;
+}): DiscoverListing["availabilityCalendarStatus"] {
+  const statusCodeString = (input.statusCodeString ?? "").trim();
+  const windowStartDate = (input.windowStartDate ?? "").trim();
+  if (!statusCodeString || !windowStartDate) {
+    return undefined;
+  }
+
+  const requestedDays =
+    typeof input.daysCount === "number" && Number.isFinite(input.daysCount)
+      ? Math.max(0, Math.floor(input.daysCount))
+      : 0;
+  const length =
+    requestedDays > 0
+      ? Math.min(statusCodeString.length, requestedDays)
+      : statusCodeString.length;
+
+  if (length === 0) {
+    return undefined;
+  }
+
+  const out: NonNullable<DiscoverListing["availabilityCalendarStatus"]> = {};
+
+  for (let index = 0; index < length; index += 1) {
+    const code = statusCodeString[index];
+    if (
+      code !== "A" &&
+      code !== "I" &&
+      code !== "O" &&
+      code !== "U" &&
+      code !== "X"
+    ) {
+      continue;
+    }
+
+    const stayDate = addDaysToIsoDate(windowStartDate, index);
+    if (!stayDate) {
+      continue;
+    }
+
+    const isNightAvailable = code === "A" || code === "I";
+    const isCheckInAllowed = code === "A" || code === "I";
+    const isCheckOutAllowed = code === "A" || code === "O";
+
+    out[stayDate] = {
+      dayType:
+        code === "A"
+          ? "available"
+          : code === "I"
+            ? "checkin_only"
+            : code === "O"
+              ? "checkout_only"
+              : "unavailable",
+      isNightAvailable,
+      isCheckInAllowed,
+      isCheckOutAllowed,
+      minNights: null,
+      allInNightly: null,
+      statusConfidence: "observed",
+    };
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function normalizeTextForPolicy(value: string): string {
   return value
     .toLowerCase()
@@ -367,6 +465,7 @@ export function toDiscoverSearchDocument(
   const queenBedCount = asBedCount(bedCounts?.queen);
   const bunkBedCount = asBedCount(bedCounts?.bunk_beds);
   const availabilityFields = buildAvailabilityFields(listing);
+  const pricingStatus = listing.typicalPricingStatus ?? "no_truth";
 
   return {
     id: listing.id,
@@ -431,6 +530,12 @@ export function toDiscoverSearchDocument(
     seo_meta_description: listing.seoMetaDescription ?? null,
     seo_hidden_summary_plain: listing.seoHiddenSummaryPlain ?? null,
     status_code_string: listing.statusCodeString ?? null,
+    availability_window_start_date: listing.availabilityWindowStartDate ?? null,
+    availability_days_count:
+      typeof listing.availabilityDaysCount === "number" &&
+      Number.isFinite(listing.availabilityDaysCount)
+        ? Math.max(0, Math.floor(listing.availabilityDaysCount))
+        : null,
     upcoming_typical_pricing_months: Array.isArray(
       listing.upcomingTypicalPricingMonths,
     )
@@ -445,7 +550,8 @@ export function toDiscoverSearchDocument(
         }))
       : [],
     typical_pricing_month: listing.typicalPricingMonth,
-    typical_pricing_status: listing.typicalPricingStatus ?? "no_truth",
+    typical_pricing_status: pricingStatus,
+    typical_pricing_priority: pricingStatusPriority(pricingStatus),
     typical_base_nightly: Math.max(0, listing.typicalBaseNightly),
     typical_all_in_nightly: Math.max(0, listing.typicalAllInNightly),
     ...availabilityFields,
@@ -467,6 +573,21 @@ export function discoverSearchDocumentToListing(
   const resolvedBeach = beachAreaLabelFromCode(beachCode) ?? beachName;
   const resolvedCommunity =
     communityLabelFromCode(communityCode) ?? communityName;
+  const availabilityWindowStartDate =
+    asString(document.availability_window_start_date) || undefined;
+  const availabilityDaysCountRaw = asNumberOrZero(
+    document.availability_days_count,
+  );
+  const availabilityDaysCount =
+    availabilityDaysCountRaw > 0
+      ? Math.floor(availabilityDaysCountRaw)
+      : undefined;
+  const statusCodeString = asString(document.status_code_string) || undefined;
+  const availabilityCalendarStatus = buildAvailabilityCalendarStatusFromStream({
+    statusCodeString,
+    windowStartDate: availabilityWindowStartDate,
+    daysCount: availabilityDaysCount,
+  });
 
   return {
     id: asString(document.id),
@@ -500,7 +621,10 @@ export function discoverSearchDocumentToListing(
     seoMetaDescription: asString(document.seo_meta_description) || undefined,
     seoHiddenSummaryPlain:
       asString(document.seo_hidden_summary_plain) || undefined,
-    statusCodeString: asString(document.status_code_string) || undefined,
+    statusCodeString,
+    availabilityWindowStartDate,
+    availabilityDaysCount,
+    availabilityCalendarStatus,
     upcomingTypicalPricingMonths: asUpcomingPricingMonths(
       document.upcoming_typical_pricing_months,
     ),

@@ -1,4 +1,5 @@
 import { AVAILABILITY_WINDOW_DAYS_LIMIT } from "@/lib/discover/availability-window-index";
+import type { DiscoverListing } from "@/lib/discover/discover-types";
 import {
   addDays,
   addMonths,
@@ -100,6 +101,41 @@ function toIsoDate(value: Date | undefined): string {
   return format(value, "yyyy-MM-dd");
 }
 
+type DayType = "available" | "checkin_only" | "checkout_only" | "unavailable";
+
+type DateRangeFieldMode = "window" | "stay";
+
+type AvailabilityCalendarStatus = DiscoverListing["availabilityCalendarStatus"];
+
+function dayKey(day: Date): string {
+  return format(startOfDay(day), "yyyy-MM-dd");
+}
+
+function resolveDayType(
+  day: Date,
+  availabilityCalendarStatus?: AvailabilityCalendarStatus,
+): DayType | "unknown" {
+  if (!availabilityCalendarStatus) {
+    return "unknown";
+  }
+
+  const status = availabilityCalendarStatus[dayKey(day)];
+  if (!status) {
+    return "unknown";
+  }
+
+  if (
+    status.dayType === "available" ||
+    status.dayType === "checkin_only" ||
+    status.dayType === "checkout_only" ||
+    status.dayType === "unavailable"
+  ) {
+    return status.dayType;
+  }
+
+  return "unknown";
+}
+
 export function DateRangeField({
   startDate,
   endDate,
@@ -107,6 +143,12 @@ export function DateRangeField({
   openRequestToken,
   selectedNights,
   emptyLabel,
+  mode,
+  panelTitle,
+  panelDescription,
+  availabilityCalendarStatus,
+  showAvailabilityLegend,
+  maxSpanDays,
 }: {
   startDate: string;
   endDate: string;
@@ -114,7 +156,20 @@ export function DateRangeField({
   openRequestToken?: number | null;
   selectedNights?: number;
   emptyLabel?: string;
+  mode?: DateRangeFieldMode;
+  panelTitle?: string;
+  panelDescription?: string;
+  availabilityCalendarStatus?: AvailabilityCalendarStatus;
+  showAvailabilityLegend?: boolean;
+  maxSpanDays?: number;
 }) {
+  const effectiveMode = mode ?? "window";
+  const effectiveMaxSpanDays =
+    typeof maxSpanDays === "number" && Number.isFinite(maxSpanDays)
+      ? Math.max(1, Math.floor(maxSpanDays))
+      : effectiveMode === "stay"
+        ? 30
+        : MAX_AVAILABILITY_SPAN_DAYS;
   const numberOfMonths = 3;
   const calendarStartMonth = useMemo(() => startOfMonth(new Date()), []);
   const calendarEndMonth = useMemo(
@@ -146,11 +201,14 @@ export function DateRangeField({
   const lastClickedDateRef = useRef<Date | undefined>(undefined);
   const todayStart = useMemo(() => startOfDay(new Date()), []);
 
-  const selectedRange = useMemo<DateRange | undefined>(() => {
+  const selectedRange = useMemo<DateRange>(() => {
     const rawFrom = parseIsoDate(startDate);
     const rawTo = parseIsoDate(endDate);
     if (!rawFrom && !rawTo) {
-      return undefined;
+      return {
+        from: undefined,
+        to: undefined,
+      };
     }
 
     const from = rawFrom
@@ -167,9 +225,7 @@ export function DateRangeField({
           ? todayStart
           : to;
 
-    const maxAllowedTo = from
-      ? addDays(from, MAX_AVAILABILITY_SPAN_DAYS - 1)
-      : undefined;
+    const maxAllowedTo = from ? addDays(from, effectiveMaxSpanDays) : undefined;
 
     const boundedTo =
       safeTo && maxAllowedTo && isAfter(safeTo, maxAllowedTo)
@@ -180,21 +236,101 @@ export function DateRangeField({
       from,
       to: boundedTo,
     };
-  }, [startDate, endDate, todayStart]);
+  }, [startDate, endDate, todayStart, effectiveMaxSpanDays]);
 
   const selectedStartDate = useMemo(() => parseIsoDate(startDate), [startDate]);
+  const hasAvailabilityCalendarData = useMemo(() => {
+    if (!availabilityCalendarStatus) {
+      return false;
+    }
+
+    return Object.keys(availabilityCalendarStatus).length > 0;
+  }, [availabilityCalendarStatus]);
   const maxRangeBandEnd = useMemo(
     () =>
       selectedStartDate
-        ? startOfDay(addDays(selectedStartDate, MAX_AVAILABILITY_SPAN_DAYS - 1))
+        ? startOfDay(addDays(selectedStartDate, effectiveMaxSpanDays))
         : undefined,
-    [selectedStartDate],
+    [selectedStartDate, effectiveMaxSpanDays],
+  );
+
+  const dayTypeFor = useCallback(
+    (day: Date): DayType | "unknown" =>
+      resolveDayType(day, availabilityCalendarStatus),
+    [availabilityCalendarStatus],
+  );
+
+  const isCheckInSelectable = useCallback(
+    (day: Date): boolean => {
+      if (!hasAvailabilityCalendarData) {
+        return true;
+      }
+      const dayType = dayTypeFor(day);
+      return dayType === "available" || dayType === "checkin_only";
+    },
+    [dayTypeFor, hasAvailabilityCalendarData],
+  );
+
+  const isCheckOutSelectable = useCallback(
+    (day: Date): boolean => {
+      if (!hasAvailabilityCalendarData) {
+        return true;
+      }
+      const dayType = dayTypeFor(day);
+      return dayType === "available" || dayType === "checkout_only";
+    },
+    [dayTypeFor, hasAvailabilityCalendarData],
+  );
+
+  const isValidStaySpan = useCallback(
+    (start: Date, end: Date): boolean => {
+      if (!hasAvailabilityCalendarData) {
+        return true;
+      }
+
+      const normalizedStart = startOfDay(start);
+      const normalizedEnd = startOfDay(end);
+      if (!isAfter(normalizedEnd, normalizedStart)) {
+        return false;
+      }
+
+      if (!isCheckInSelectable(normalizedStart)) {
+        return false;
+      }
+
+      if (!isCheckOutSelectable(normalizedEnd)) {
+        return false;
+      }
+
+      // Every date between start and end must be A (available).
+      let cursor = addDays(normalizedStart, 1);
+      while (isBefore(cursor, normalizedEnd)) {
+        if (dayTypeFor(cursor) !== "available") {
+          return false;
+        }
+        cursor = addDays(cursor, 1);
+      }
+
+      return true;
+    },
+    [
+      dayTypeFor,
+      hasAvailabilityCalendarData,
+      isCheckInSelectable,
+      isCheckOutSelectable,
+    ],
   );
 
   const isSpanDisabled = (day: Date) => {
     const normalizedDay = startOfDay(day);
     if (isBefore(normalizedDay, todayStart)) {
       return true;
+    }
+
+    if (effectiveMode === "stay" && hasAvailabilityCalendarData) {
+      // In stay mode, validity is enforced in click handling so semantic
+      // day styles remain visible across the calendar.
+      return false;
     }
 
     if (!maxRangeBandEnd) {
@@ -218,11 +354,6 @@ export function DateRangeField({
       const next = clampVisibleMonth(addMonths(current, delta));
       return next;
     });
-  };
-
-  const handleMonthChange = (month: Date) => {
-    const clamped = clampVisibleMonth(month);
-    setVisibleMonth(clamped);
   };
 
   useEffect(() => {
@@ -268,6 +399,60 @@ export function DateRangeField({
   const handleDayClick = (day: Date) => {
     const clicked = startOfDay(day);
     const safeClicked = isBefore(clicked, todayStart) ? todayStart : clicked;
+
+    if (effectiveMode === "stay" && hasAvailabilityCalendarData) {
+      const hasCompleteRange = Boolean(startDate && endDate);
+      if (!selectedStartDate || hasCompleteRange) {
+        if (!isCheckInSelectable(safeClicked)) {
+          return;
+        }
+
+        lastClickedDateRef.current = safeClicked;
+        onChange({
+          startDate: toIsoDate(safeClicked),
+          endDate: "",
+        });
+        return;
+      }
+
+      const selectedStart = startOfDay(selectedStartDate);
+      if (!isAfter(safeClicked, selectedStart)) {
+        if (!isCheckInSelectable(safeClicked)) {
+          return;
+        }
+
+        lastClickedDateRef.current = safeClicked;
+        onChange({
+          startDate: toIsoDate(safeClicked),
+          endDate: "",
+        });
+        return;
+      }
+
+      const latestAllowedCheckout = addDays(
+        selectedStart,
+        effectiveMaxSpanDays,
+      );
+      if (isAfter(safeClicked, latestAllowedCheckout)) {
+        return;
+      }
+
+      if (!isCheckOutSelectable(safeClicked)) {
+        return;
+      }
+
+      if (!isValidStaySpan(selectedStart, safeClicked)) {
+        return;
+      }
+
+      lastClickedDateRef.current = safeClicked;
+      onChange({
+        startDate: toIsoDate(selectedStart),
+        endDate: toIsoDate(safeClicked),
+      });
+      return;
+    }
+
     const previous = lastClickedDateRef.current
       ? startOfDay(lastClickedDateRef.current)
       : undefined;
@@ -291,7 +476,7 @@ export function DateRangeField({
         ? [safePrevious, safeClicked]
         : [safeClicked, safePrevious];
     const boundedTo = (() => {
-      const latestAllowed = addDays(from, MAX_AVAILABILITY_SPAN_DAYS - 1);
+      const latestAllowed = addDays(from, effectiveMaxSpanDays);
       return isAfter(to, latestAllowed) ? latestAllowed : to;
     })();
 
@@ -340,10 +525,83 @@ export function DateRangeField({
   const temporarySingleEndDateLabel =
     startDate && !endDate
       ? format(
-          addDays(parseISO(startDate), MAX_AVAILABILITY_SPAN_DAYS - 1),
+          addDays(parseISO(startDate), effectiveMaxSpanDays),
           "MMM d, yyyy",
         )
       : "";
+
+  const resolvedPanelTitle =
+    panelTitle ??
+    (effectiveMode === "stay"
+      ? "PICK YOUR STAY DATES"
+      : "Date Search Window");
+
+  const resolvedPanelDescription =
+    panelDescription ??
+    (effectiveMode === "stay"
+      ? `Select your check-in and check-out dates for a stay up to ${effectiveMaxSpanDays} days.`
+      : `Pick your earliest and latest acceptable dates for us to find ${selectedNights ?? 0} nights.`);
+
+  const showLegend =
+    (showAvailabilityLegend ?? false) &&
+    effectiveMode === "stay" &&
+    hasAvailabilityCalendarData;
+
+  const showStayAvailabilityStyles =
+    effectiveMode === "stay" && hasAvailabilityCalendarData;
+  const disabledDayClassName =
+    "text-slate-300 [&>button]:!opacity-100 [&>button]:!text-slate-300 [&>button]:!border-transparent [&>button]:!bg-transparent";
+
+  const dayModifiers = useMemo(() => {
+    if (!showStayAvailabilityStyles) {
+      return undefined;
+    }
+
+    const selectedFrom = selectedRange?.from
+      ? startOfDay(selectedRange.from)
+      : undefined;
+    const selectedTo = selectedRange?.to
+      ? startOfDay(selectedRange.to)
+      : undefined;
+
+    const isSelectedRangeDay = (day: Date): boolean => {
+      if (!selectedFrom) {
+        return false;
+      }
+
+      const normalized = startOfDay(day);
+      if (!selectedTo) {
+        return normalized.getTime() === selectedFrom.getTime();
+      }
+
+      return (
+        !isBefore(normalized, selectedFrom) && !isAfter(normalized, selectedTo)
+      );
+    };
+
+    return {
+      day_available: (day: Date) =>
+        !isBefore(startOfDay(day), todayStart) &&
+        !isSelectedRangeDay(day) &&
+        dayTypeFor(day) === "available",
+      day_checkin_only: (day: Date) =>
+        !isBefore(startOfDay(day), todayStart) &&
+        !isSelectedRangeDay(day) &&
+        dayTypeFor(day) === "checkin_only",
+      day_checkout_only: (day: Date) =>
+        !isBefore(startOfDay(day), todayStart) &&
+        !isSelectedRangeDay(day) &&
+        dayTypeFor(day) === "checkout_only",
+      day_unavailable: (day: Date) =>
+        !isBefore(startOfDay(day), todayStart) &&
+        !isSelectedRangeDay(day) &&
+        dayTypeFor(day) === "unavailable",
+      day_unknown: (day: Date) =>
+        !isBefore(startOfDay(day), todayStart) &&
+        !isSelectedRangeDay(day) &&
+        dayTypeFor(day) === "unknown",
+    };
+  }, [dayTypeFor, selectedRange, showStayAvailabilityStyles, todayStart]);
 
   const clearSelection = () => {
     lastClickedDateRef.current = undefined;
@@ -408,11 +666,10 @@ export function DateRangeField({
           <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
             <div>
               <p className="text-[11px] font-bold tracking-[0.14em] text-emerald-800 uppercase">
-                Date Search Window
+                {resolvedPanelTitle}
               </p>
               <p className="text-sm font-semibold text-slate-700">
-                Pick your earliest and latest acceptable dates for us to find{" "}
-                {selectedNights ?? 0} nights.
+                {resolvedPanelDescription}
               </p>
             </div>
             <div className="flex items-center gap-1.5">
@@ -480,10 +737,13 @@ export function DateRangeField({
               key={pickerResetToken}
               mode="range"
               month={visibleMonth}
-              onMonthChange={handleMonthChange}
               selected={selectedRange}
+              onSelect={() => {
+                // Selection is controlled via onDayClick + external state.
+              }}
               onDayClick={handleDayClick}
               disabled={isSpanDisabled}
+              modifiers={dayModifiers}
               numberOfMonths={numberOfMonths}
               startMonth={calendarStartMonth}
               endMonth={calendarEndMonth}
@@ -516,7 +776,7 @@ export function DateRangeField({
                 today:
                   "discover-today text-amber-800 [&>button]:border [&>button]:border-amber-300 [&>button]:bg-amber-50/70 [&>button]:text-amber-900",
                 selected:
-                  "discover-range-selected [&>button]:border [&>button]:border-teal-600 [&>button]:bg-teal-600",
+                  "discover-range-selected [&>button]:border [&>button]:border-teal-600 [&>button]:bg-teal-600 [&>button]:text-white",
                 range_start:
                   "discover-range-endpoint [&>button]:border [&>button]:border-teal-600 [&>button]:bg-teal-600 [&>button]:!text-white [&>button]:hover:!border-teal-700 [&>button]:hover:!bg-teal-700 [&>button]:hover:!text-white",
                 range_end:
@@ -524,9 +784,44 @@ export function DateRangeField({
                 range_middle:
                   "discover-range-middle !text-slate-900 [&>button]:mx-auto [&>button]:h-8 [&>button]:w-8 [&>button]:rounded-full [&>button]:!border-emerald-300 [&>button]:!bg-emerald-50 [&>button]:!font-normal",
                 outside: "text-slate-400",
-                disabled: "text-slate-300",
+                disabled: disabledDayClassName,
               }}
+              modifiersClassNames={
+                showStayAvailabilityStyles
+                  ? {
+                      day_available:
+                        "[&>button]:border-sky-200 [&>button]:bg-sky-50 [&>button]:text-sky-900 [&>button]:rounded-full",
+                      day_checkin_only:
+                        "[&>button]:opacity-100 [&>button]:border-sky-200 [&>button]:bg-linear-to-r [&>button]:from-white [&>button]:to-sky-50 [&>button]:font-semibold [&>button]:text-sky-900 [&>button]:rounded-full",
+                      day_checkout_only:
+                        "[&>button]:opacity-100 [&>button]:border-sky-200 [&>button]:bg-linear-to-r [&>button]:from-sky-50 [&>button]:to-white [&>button]:font-normal [&>button]:text-sky-900 [&>button]:rounded-full",
+                      day_unavailable:
+                        "[&>button]:border-transparent [&>button]:bg-transparent [&>button]:text-slate-300 [&>button]:font-normal",
+                      day_unknown:
+                        "[&>button]:border-transparent [&>button]:bg-transparent [&>button]:text-slate-300 [&>button]:font-normal",
+                    }
+                  : undefined
+              }
             />
+            {showLegend ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-linear-to-r from-white to-sky-50 px-2 py-0.5 font-semibold text-sky-900">
+                  Check-In Only
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 font-normal text-sky-900">
+                  Available
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-linear-to-r from-sky-50 to-white px-2 py-0.5 font-normal text-sky-900">
+                  Check-Out Only
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-transparent px-2 py-0.5 font-normal text-slate-300">
+                  Unavailable
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-transparent px-2 py-0.5 font-normal text-slate-400">
+                  Blocked
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
