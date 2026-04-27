@@ -4,7 +4,7 @@ import type { QuoteProgress } from "@/lib/pricing/quotes/types";
 type QuoteCaptureProgressTrackerInput = {
   progress?: QuoteProgress;
   totalListings: number;
-  windowsPerListing: number;
+  windowsPerListing?: number;
   heartbeatMs?: number;
   modeLabel?: string;
 };
@@ -16,6 +16,7 @@ type ListingCompleteInput = {
 };
 
 export type QuoteCaptureProgressTracker = {
+  onWindowsPlanned: (windows: number) => void;
   onWindowResult: (quoteAvailable: boolean) => void;
   onListingComplete: (input: ListingCompleteInput) => void;
   finish: () => void;
@@ -24,7 +25,10 @@ export type QuoteCaptureProgressTracker = {
 export function createQuoteCaptureProgressTracker(
   input: QuoteCaptureProgressTrackerInput,
 ): QuoteCaptureProgressTracker {
-  const totalWindows = input.totalListings * input.windowsPerListing;
+  let plannedWindows =
+    input.windowsPerListing && input.windowsPerListing > 0
+      ? input.totalListings * input.windowsPerListing
+      : 0;
   let completedListings = 0;
   let completedWindows = 0;
   let availableWindows = 0;
@@ -33,11 +37,14 @@ export function createQuoteCaptureProgressTracker(
   const heartbeatMs = Math.max(1000, input.heartbeatMs ?? 15000);
   const modeLabel = input.modeLabel?.trim() || "quote-capture";
 
+  const totalForDisplay = (): number =>
+    Math.max(1, Math.max(plannedWindows, completedWindows));
+
   const formatPrefix = (): string =>
     formatModeProgressLine({
       mode: modeLabel,
       completed: completedWindows,
-      total: totalWindows,
+      total: totalForDisplay(),
       startedAtMs: runStartedAt,
       text: "",
     }).replace(/ - $/, "");
@@ -50,14 +57,15 @@ export function createQuoteCaptureProgressTracker(
     const throughputPerMinute = Math.round(
       (completedWindows / elapsedSeconds) * 60,
     );
+    const displayTotal = totalForDisplay();
     const prefix = formatPrefix();
     input.progress?.tick(
-      `${prefix} ${label} windows=${completedWindows}/${totalWindows} available=${availableWindows} unavailable=${unavailableWindows} throughput_per_min=${throughputPerMinute}`,
+      `${prefix} ${label} windows=${completedWindows}/${displayTotal} available=${availableWindows} unavailable=${unavailableWindows} throughput_per_min=${throughputPerMinute}`,
     );
   };
 
   const heartbeat = setInterval(() => {
-    if (completedWindows >= totalWindows) {
+    if (completedListings >= input.totalListings) {
       return;
     }
     emitProgress("quote windows heartbeat");
@@ -68,10 +76,16 @@ export function createQuoteCaptureProgressTracker(
   }
 
   input.progress?.phase(
-    `${formatPrefix()} capturing windows listings=${input.totalListings} windows=${totalWindows}`,
+    `${formatPrefix()} capturing windows listings=${input.totalListings} windows=${plannedWindows > 0 ? String(plannedWindows) : "planning"}`,
   );
 
   return {
+    onWindowsPlanned: (windows: number) => {
+      if (!Number.isFinite(windows) || windows <= 0) {
+        return;
+      }
+      plannedWindows += Math.floor(windows);
+    },
     onWindowResult: (quoteAvailable: boolean) => {
       completedWindows += 1;
       if (quoteAvailable) {
@@ -83,7 +97,7 @@ export function createQuoteCaptureProgressTracker(
       if (
         completedWindows <= 20 ||
         completedWindows % 200 === 0 ||
-        completedWindows === totalWindows
+        completedListings >= input.totalListings
       ) {
         emitProgress("quote windows progress");
       }

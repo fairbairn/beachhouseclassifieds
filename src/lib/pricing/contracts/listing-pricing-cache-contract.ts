@@ -1,5 +1,19 @@
 export type ListingPricingConfidence = "high" | "medium" | "low";
 
+export type ListingPricingValueOrigin =
+  | "quote_anchor"
+  | "scraped_rate"
+  | "interpolated"
+  | "assumptions_anchor"
+  | "global_default";
+
+export type ListingPricingQuoteAnchorScope =
+  | "same_month"
+  | "surrounding_months"
+  | "none";
+
+export type ListingPricingQualityBand = "high" | "medium" | "low";
+
 export type ListingPricingFeeComponent = {
   name: string;
   amount: number;
@@ -22,6 +36,23 @@ export type ListingPricingDayRecord = {
   estimated_fees_nightly?: number;
   estimated_taxes_nightly?: number;
   fee_components?: ListingPricingFeeComponent[];
+  provenance?: {
+    value_origin: ListingPricingValueOrigin;
+    quote_anchor_scope: ListingPricingQuoteAnchorScope;
+    has_any_quote_observations: boolean;
+    nearest_quote_observation_distance_days?: number | null;
+  };
+};
+
+export type ListingPricingQualityMonthSummary = {
+  month: string;
+  day_count: number;
+  contrived_days: number;
+  quote_anchor_same_month_days: number;
+  quote_anchor_surrounding_month_days: number;
+  interpolated_days: number;
+  scraped_rate_days: number;
+  quality_band: ListingPricingQualityBand;
 };
 
 export type ListingPricingHorizon = {
@@ -42,6 +73,11 @@ export type ListingPricingCacheRecord = {
     avg_fee_pct_of_base: number;
     avg_tax_pct_of_base: number;
     avg_all_in_multiplier: number;
+  };
+  quality_summary?: {
+    has_any_quote_observations: boolean;
+    quote_observation_months: string[];
+    monthly: ListingPricingQualityMonthSummary[];
   };
 };
 

@@ -61,20 +61,6 @@ type QuoteBackfillStatus = {
   deltaMinutes: number | null;
 };
 
-type EstimatedPricing = {
-  baseNightly: number;
-  allInNightly: number;
-  baseTotal: number;
-  taxesTotal: number;
-  feesTotalExclTaxes: number;
-  grandTotal: number;
-  quotedTotal: number;
-  feePctOfBase: number;
-  taxPctOfBase: number;
-  nonBasePctOfTotal: number;
-  allInMultiplier: number;
-};
-
 type QuoteWindow = {
   startDate: string;
   endDate: string;
@@ -83,6 +69,7 @@ type QuoteWindow = {
 
 type AvailabilityDay = {
   date: string;
+  status_code?: string;
   is_available?: boolean;
   is_available_for_checkin?: boolean;
   is_available_for_checkout?: boolean;
@@ -136,7 +123,8 @@ const DEFAULT_BASE_NIGHTLY = 500;
 const DEFAULT_FRESH_HOURS = 24;
 const DEFAULT_BACKFILL_WINDOW_HOURS = 1;
 const DEFAULT_MIN_PROBE_NIGHTS = 3;
-const DEFAULT_MAX_PROBE_NIGHTS = 7;
+const DEFAULT_MAX_PROBE_NIGHTS = 14;
+const DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS = 365;
 
 function parseArgs(
   argv: string[],
@@ -758,6 +746,10 @@ function normalizeAvailabilityDays(raw: unknown): AvailabilityDay[] {
 
     out.push({
       date,
+      status_code:
+        typeof day.status_code === "string"
+          ? day.status_code.trim().toUpperCase()
+          : undefined,
       is_available:
         typeof day.is_available === "boolean" ? day.is_available : undefined,
       is_available_for_checkin:
@@ -791,6 +783,20 @@ async function loadAvailabilityDays(input: {
   }
 }
 
+function canStartStay(day: AvailabilityDay): boolean {
+  if (day.status_code === "I" || day.status_code === "A") {
+    return true;
+  }
+  return day.is_available_for_checkin === true;
+}
+
+function canEndStay(day: AvailabilityDay): boolean {
+  if (day.status_code === "O" || day.status_code === "A") {
+    return true;
+  }
+  return day.is_available_for_checkout === true;
+}
+
 function canQuoteWindow(input: {
   byDate: Map<string, AvailabilityDay>;
   startDate: string;
@@ -802,7 +808,7 @@ function canQuoteWindow(input: {
     return false;
   }
 
-  if (start.is_available_for_checkin !== true) {
+  if (!canStartStay(start)) {
     return false;
   }
 
@@ -815,7 +821,8 @@ function canQuoteWindow(input: {
     return false;
   }
 
-  for (let offset = 0; offset < nights; offset += 1) {
+  // Start day can be arrival-only (I). Remaining stay dates must be available.
+  for (let offset = 1; offset < nights; offset += 1) {
     const stayDate = addDays(startDate, offset);
     const day = byDate.get(stayDate);
     if (!day || day.is_available !== true) {
@@ -824,7 +831,7 @@ function canQuoteWindow(input: {
   }
 
   const checkOut = byDate.get(addDays(startDate, nights));
-  if (!checkOut || checkOut.is_available_for_checkout !== true) {
+  if (!checkOut || !canEndStay(checkOut)) {
     return false;
   }
 
@@ -859,12 +866,12 @@ function buildAdaptiveQuoteWindows(input: {
       ? Math.max(1, Math.min(...explicitMinNightValues))
       : Math.max(1, input.defaultMinProbeNights);
   const minProbeNights = Math.min(
-    7,
+    14,
     Math.max(3, input.defaultMinProbeNights, inferredMinNights),
   );
   const maxProbeNights = Math.max(
     minProbeNights,
-    Math.min(7, Math.max(input.defaultMaxProbeNights, input.targetNights)),
+    Math.min(14, Math.max(input.defaultMaxProbeNights, input.targetNights)),
   );
 
   const sortedDays = [...input.availabilityDays]
@@ -872,17 +879,44 @@ function buildAdaptiveQuoteWindows(input: {
     .sort((left, right) => left.date.localeCompare(right.date));
 
   const windows: QuoteWindow[] = [];
-  for (const day of sortedDays) {
-    for (let nights = minProbeNights; nights <= maxProbeNights; nights += 1) {
-      if (!canQuoteWindow({ byDate, startDate: day.date, nights })) {
-        continue;
-      }
+  let dayIndex = 0;
+  while (dayIndex < sortedDays.length) {
+    const day = sortedDays[dayIndex];
+    if (!day) {
+      break;
+    }
 
-      windows.push({
-        startDate: day.date,
-        endDate: addDays(day.date, nights),
-        nights,
-      });
+    if (!canStartStay(day)) {
+      dayIndex += 1;
+      continue;
+    }
+
+    let selectedNights: number | null = null;
+    for (let nights = maxProbeNights; nights >= minProbeNights; nights -= 1) {
+      if (canQuoteWindow({ byDate, startDate: day.date, nights })) {
+        selectedNights = nights;
+        break;
+      }
+    }
+
+    if (selectedNights === null) {
+      dayIndex += 1;
+      continue;
+    }
+
+    const nextStartDate = addDays(day.date, selectedNights);
+    windows.push({
+      startDate: day.date,
+      endDate: nextStartDate,
+      nights: selectedNights,
+    });
+
+    while (dayIndex < sortedDays.length) {
+      const probeDay = sortedDays[dayIndex];
+      if (!probeDay || probeDay.date >= nextStartDate) {
+        break;
+      }
+      dayIndex += 1;
     }
   }
 
@@ -890,9 +924,13 @@ function buildAdaptiveQuoteWindows(input: {
     return fallback;
   }
 
-  return windows.sort((left, right) =>
-    left.startDate.localeCompare(right.startDate),
-  );
+  return windows.sort((left, right) => {
+    const startCompare = left.startDate.localeCompare(right.startDate);
+    if (startCompare !== 0) {
+      return startCompare;
+    }
+    return right.nights - left.nights;
+  });
 }
 
 async function executeWithRetries(
@@ -1045,68 +1083,176 @@ function createSuccessObservation(input: {
   };
 }
 
-function createUnavailableObservation(input: {
-  listingId: string;
-  startDate: string;
-  endDate: string;
-  nights: number;
-  reason: string;
-  pricing: EstimatedPricing;
-  handoffUrl: string | null;
-}): CanonicalQuoteObservation {
-  return {
-    sampled_at: new Date().toISOString(),
-    captured_at: new Date().toISOString(),
-    source_listing_id: input.listingId,
-    currency: "USD",
-    start_date: input.startDate,
-    end_date: input.endDate,
-    check_in_date: input.startDate,
-    check_out_date: input.endDate,
-    nights: input.nights,
-    base_nightly: input.pricing.baseNightly,
-    all_in_nightly: input.pricing.allInNightly,
-    quote_available: false,
-    quote_unavailable_reason: input.reason,
-    base_total: input.pricing.baseTotal,
-    taxes_total: input.pricing.taxesTotal,
-    fees_total_excl_taxes: input.pricing.feesTotalExclTaxes,
-    fee_lines: [],
-    grand_total: input.pricing.grandTotal,
-    quoted_total: input.pricing.quotedTotal,
-    fee_pct_of_base: input.pricing.feePctOfBase,
-    tax_pct_of_base: input.pricing.taxPctOfBase,
-    non_base_pct_of_total: input.pricing.nonBasePctOfTotal,
-    all_in_multiplier: input.pricing.allInMultiplier,
-    handoff_url: input.handoffUrl,
-    source: "quote_api",
-    pricing_source: "estimated_unavailable",
-  };
+function parseIsoMs(iso: string | null | undefined): number | null {
+  if (!iso || typeof iso !== "string") {
+    return null;
+  }
+
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return parsed;
 }
 
-function toUnavailableReason(result: QuoteExecutionResult): string {
-  if (result.success) {
-    return (
-      result.observation.quoteUnavailableReason?.trim() ||
-      "adapter returned unavailable quote window"
-    );
+function observationKey(observation: CanonicalQuoteObservation): string {
+  return [
+    observation.check_in_date,
+    observation.check_out_date,
+    observation.nights,
+  ].join("|");
+}
+
+function observationMonthBucket(
+  observation: CanonicalQuoteObservation,
+): string {
+  const checkIn = observation.check_in_date ?? "";
+  if (checkIn.length >= 7) {
+    return checkIn.slice(0, 7);
+  }
+  return "unknown";
+}
+
+function isRealQuoteObservation(
+  observation: CanonicalQuoteObservation,
+): boolean {
+  if (observation.quote_available !== true) {
+    return false;
   }
 
-  const code = result.error.code.trim().toUpperCase();
-  const message = result.error.message.trim();
-  const normalizedMessage = message.toLowerCase();
-  const isRateLimited =
-    code === "QUOTE_RATE_LIMITED" ||
-    normalizedMessage.includes("too_many_requests") ||
-    normalizedMessage.includes("too many requests") ||
-    normalizedMessage.includes("rate limit") ||
-    normalizedMessage.includes("status 429");
-
-  if (isRateLimited) {
-    return "QUOTE_UNAVAILABLE: Quote provider temporarily throttled request";
+  if (
+    observation.pricing_source &&
+    observation.pricing_source !== "runtime_parsed"
+  ) {
+    return false;
   }
 
-  return `${result.error.code}: ${result.error.message}`;
+  return true;
+}
+
+async function loadExistingRealQuoteObservations(input: {
+  outputPath: string;
+}): Promise<CanonicalQuoteObservation[]> {
+  try {
+    const raw = await readFile(input.outputPath, "utf8");
+    const parsed = JSON.parse(raw) as { observations?: unknown };
+    if (!Array.isArray(parsed.observations)) {
+      return [];
+    }
+
+    const observations: CanonicalQuoteObservation[] = [];
+    for (const entry of parsed.observations) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        continue;
+      }
+
+      const observation = entry as CanonicalQuoteObservation;
+      if (!isRealQuoteObservation(observation)) {
+        continue;
+      }
+
+      observations.push(observation);
+    }
+
+    return observations;
+  } catch {
+    return [];
+  }
+}
+
+function mergeRealQuoteObservations(input: {
+  existing: CanonicalQuoteObservation[];
+  latest: CanonicalQuoteObservation[];
+  nowMs: number;
+  retentionDays: number;
+}): CanonicalQuoteObservation[] {
+  const byKey = new Map<string, CanonicalQuoteObservation>();
+
+  const upsert = (observation: CanonicalQuoteObservation): void => {
+    const key = observationKey(observation);
+    const current = byKey.get(key);
+    if (!current) {
+      byKey.set(key, observation);
+      return;
+    }
+
+    const currentMs =
+      parseIsoMs(current.captured_at) ?? Number.NEGATIVE_INFINITY;
+    const nextMs =
+      parseIsoMs(observation.captured_at) ?? Number.NEGATIVE_INFINITY;
+    if (nextMs >= currentMs) {
+      byKey.set(key, observation);
+    }
+  };
+
+  for (const observation of input.existing) {
+    if (isRealQuoteObservation(observation)) {
+      upsert(observation);
+    }
+  }
+
+  for (const observation of input.latest) {
+    if (isRealQuoteObservation(observation)) {
+      upsert(observation);
+    }
+  }
+
+  const merged = Array.from(byKey.values());
+  const monthToNewestMs = new Map<string, number>();
+  for (const observation of merged) {
+    const bucket = observationMonthBucket(observation);
+    const capturedMs = parseIsoMs(observation.captured_at);
+    if (capturedMs === null) {
+      continue;
+    }
+    const existingNewest =
+      monthToNewestMs.get(bucket) ?? Number.NEGATIVE_INFINITY;
+    if (capturedMs > existingNewest) {
+      monthToNewestMs.set(bucket, capturedMs);
+    }
+  }
+
+  const maxAgeMs = Math.max(1, input.retentionDays) * 24 * 60 * 60 * 1000;
+  const pruned = merged.filter((observation) => {
+    const capturedMs = parseIsoMs(observation.captured_at);
+    if (capturedMs === null) {
+      return true;
+    }
+
+    const ageMs = input.nowMs - capturedMs;
+    if (ageMs < maxAgeMs) {
+      return true;
+    }
+
+    const bucket = observationMonthBucket(observation);
+    const newestInBucket = monthToNewestMs.get(bucket);
+    if (!Number.isFinite(newestInBucket ?? Number.NaN)) {
+      return true;
+    }
+
+    // Only prune 1y+ observations when a newer quote exists in the same month bucket.
+    return capturedMs >= (newestInBucket ?? capturedMs);
+  });
+
+  return pruned.sort((a, b) => {
+    if (a.check_in_date < b.check_in_date) {
+      return -1;
+    }
+    if (a.check_in_date > b.check_in_date) {
+      return 1;
+    }
+    if (a.nights < b.nights) {
+      return -1;
+    }
+    if (a.nights > b.nights) {
+      return 1;
+    }
+
+    const aMs = parseIsoMs(a.captured_at) ?? 0;
+    const bMs = parseIsoMs(b.captured_at) ?? 0;
+    return aMs - bMs;
+  });
 }
 
 function runtimeProvidedHandoffUrl(
@@ -1143,6 +1289,7 @@ async function buildSidecarForListing(input: {
   defaultMinProbeNights: number;
   defaultMaxProbeNights: number;
   progress?: QuoteProgress;
+  onWindowsPlanned?: (windows: number) => void;
   onWindowResult?: (result: { quoteAvailable: boolean }) => void;
   onListingComplete?: (result: {
     listingId: string;
@@ -1158,120 +1305,101 @@ async function buildSidecarForListing(input: {
     defaultMinProbeNights: input.defaultMinProbeNights,
     defaultMaxProbeNights: input.defaultMaxProbeNights,
   });
+  input.onWindowsPlanned?.(windows.length);
 
-  const runtimeResults = await runWithConcurrency(
-    windows,
-    options.quoteConcurrency,
-    async (window) => {
-      const request: QuoteExecutionRequest = {
-        listingId: listing.externalListingId,
-        checkInIso: window.startDate,
-        checkOutIso: window.endDate,
-        adults: 1,
-        children: 0,
-        quoteContext: listing.quoteContext,
-        options: {
-          timeoutMs: options.timeoutMs,
-        },
-      };
-
-      const result = await executeWithRetries(
-        request,
-        options.maxAttempts,
-        config.executeSingleQuote,
-      );
-
-      const runtimeHandoffUrl = runtimeProvidedHandoffUrl(result);
-      if (!runtimeHandoffUrl) {
-        throw new Error(
-          `runtime adapter '${config.adapterKey}' did not provide handoffUrl for listing '${listing.externalListingId}' window ${window.startDate} -> ${window.endDate}`,
-        );
-      }
-
-      const quoteAvailable = hasUsableAvailableTotals(result);
-      input.onWindowResult?.({ quoteAvailable });
-
-      return {
-        window,
-        result,
-        runtimeHandoffUrl,
-        quoteAvailable,
-      };
-    },
+  const groupedWindowsByStartDate = new Map<string, QuoteWindow[]>();
+  for (const window of windows) {
+    const existing = groupedWindowsByStartDate.get(window.startDate) ?? [];
+    existing.push(window);
+    groupedWindowsByStartDate.set(window.startDate, existing);
+  }
+  const startDatePlans = Array.from(groupedWindowsByStartDate.values()).map(
+    (plan) =>
+      [...plan].sort((left, right) => {
+        const startCompare = left.startDate.localeCompare(right.startDate);
+        if (startCompare !== 0) {
+          return startCompare;
+        }
+        return right.nights - left.nights;
+      }),
   );
 
-  const successBaseNightlies = runtimeResults
-    .map((entry) => {
-      if (!entry.result.success || entry.window.nights <= 0) {
-        return null;
-      }
-      if (entry.result.observation.baseTotal === null) {
-        return null;
-      }
-      return (
-        Math.round(
-          (entry.result.observation.baseTotal / entry.window.nights) * 100,
-        ) / 100
-      );
-    })
-    .filter((value): value is number => value !== null && value > 0);
+  type RuntimeWindowResult = {
+    window: QuoteWindow;
+    result: QuoteExecutionResult;
+    runtimeHandoffUrl: string | null;
+    quoteAvailable: boolean;
+  };
 
-  const successTaxPcts = runtimeResults
-    .map((entry) => {
-      if (!entry.result.success) {
-        return null;
-      }
-      const { baseTotal, taxesTotal } = entry.result.observation;
-      if (baseTotal === null || taxesTotal === null || baseTotal <= 0) {
-        return null;
-      }
-      return taxesTotal / baseTotal;
-    })
-    .filter((value): value is number => value !== null && value >= 0);
+  const runtimeResultsNested = await runWithConcurrency(
+    startDatePlans,
+    options.quoteConcurrency,
+    async (plan): Promise<RuntimeWindowResult[]> => {
+      const planResults: RuntimeWindowResult[] = [];
 
-  const fallbackBaseNightly =
-    median(successBaseNightlies) ??
-    config.defaultBaseNightly ??
-    DEFAULT_BASE_NIGHTLY;
-  const fallbackTaxPct =
-    median(successTaxPcts) ?? config.defaultTaxPct ?? DEFAULT_TAX_PCT;
+      for (const window of plan) {
+        const request: QuoteExecutionRequest = {
+          listingId: listing.externalListingId,
+          checkInIso: window.startDate,
+          checkOutIso: window.endDate,
+          adults: 1,
+          children: 0,
+          quoteContext: listing.quoteContext,
+          options: {
+            timeoutMs: options.timeoutMs,
+          },
+        };
 
-  const observations: CanonicalQuoteObservation[] = runtimeResults.map(
-    (entry) => {
-      if (entry.quoteAvailable) {
-        if (
-          !entry.result.success ||
-          typeof entry.result.observation.handoffUrl !== "string" ||
-          entry.result.observation.handoffUrl.trim().length === 0
-        ) {
+        const result = await executeWithRetries(
+          request,
+          options.maxAttempts,
+          config.executeSingleQuote,
+        );
+
+        const runtimeHandoffUrl = runtimeProvidedHandoffUrl(result);
+        const quoteAvailable = hasUsableAvailableTotals(result);
+        if (quoteAvailable && !runtimeHandoffUrl) {
           throw new Error(
-            `runtime adapter '${config.adapterKey}' returned available totals without handoffUrl for listing '${listing.externalListingId}' window ${entry.window.startDate} -> ${entry.window.endDate}`,
+            `runtime adapter '${config.adapterKey}' did not provide handoffUrl for listing '${listing.externalListingId}' window ${window.startDate} -> ${window.endDate}`,
           );
         }
-        return createSuccessObservation({
-          listingId: listing.externalListingId,
-          nights: entry.window.nights,
-          result: entry.result,
+
+        input.onWindowResult?.({ quoteAvailable });
+        planResults.push({
+          window,
+          result,
+          runtimeHandoffUrl,
+          quoteAvailable,
         });
+
+        if (quoteAvailable) {
+          break;
+        }
       }
 
-      const estimated = createEstimatedPricing({
-        baseNightly: fallbackBaseNightly,
-        nights: entry.window.nights,
-        taxPctOfBase: fallbackTaxPct,
-      });
-      const reason = toUnavailableReason(entry.result);
-      return createUnavailableObservation({
-        listingId: listing.externalListingId,
-        startDate: entry.window.startDate,
-        endDate: entry.window.endDate,
-        nights: entry.window.nights,
-        reason,
-        pricing: estimated,
-        handoffUrl: entry.runtimeHandoffUrl,
-      });
+      return planResults;
     },
   );
+  const runtimeResults = runtimeResultsNested.flat();
+
+  const observations: CanonicalQuoteObservation[] = runtimeResults
+    .filter((entry) => entry.quoteAvailable)
+    .map((entry) => {
+      if (
+        !entry.result.success ||
+        typeof entry.result.observation.handoffUrl !== "string" ||
+        entry.result.observation.handoffUrl.trim().length === 0
+      ) {
+        throw new Error(
+          `runtime adapter '${config.adapterKey}' returned available totals without handoffUrl for listing '${listing.externalListingId}' window ${entry.window.startDate} -> ${entry.window.endDate}`,
+        );
+      }
+      return createSuccessObservation({
+        listingId: listing.externalListingId,
+        nights: entry.window.nights,
+        result: entry.result,
+      });
+    });
 
   const endpointPathRaw =
     typeof listing.quoteContext?.endpoint_path === "string"
@@ -1295,7 +1423,7 @@ async function buildSidecarForListing(input: {
     quote_window_days: options.weeks * 7,
     quote_sample_step_days: 1,
     quote_nights: options.nights,
-    quote_max_queries: observations.length,
+    quote_max_queries: runtimeResults.length,
     endpoint_path: endpointPath,
     observations,
   };
@@ -1303,11 +1431,11 @@ async function buildSidecarForListing(input: {
   assertCanonicalQuotesSidecarRecord(sidecar);
   input.onListingComplete?.({
     listingId: listing.externalListingId,
-    windows: observations.length,
+    windows: runtimeResults.length,
     available: observations.filter((obs) => obs.quote_available).length,
   });
   input.progress?.tick(
-    `quotes listing=${listing.externalListingId} windows=${observations.length} available=${observations.filter((obs) => obs.quote_available).length}`,
+    `quotes listing=${listing.externalListingId} windows=${runtimeResults.length} available=${observations.filter((obs) => obs.quote_available).length}`,
   );
   return sidecar;
 }
@@ -1339,6 +1467,14 @@ export async function runRuntimeAdapterQuoteCli(
   };
 
   const options = parseArgs(argv, defaults);
+  const retentionDaysFromEnv = Number(
+    process.env.QUOTE_CAPTURE_OBSERVATION_RETENTION_DAYS ??
+      String(DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS),
+  );
+  const observationRetentionDays =
+    Number.isFinite(retentionDaysFromEnv) && retentionDaysFromEnv > 0
+      ? Math.floor(retentionDaysFromEnv)
+      : DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS;
   const minProbeNightsFromEnv = Number(
     process.env.QUOTE_CAPTURE_MIN_PROBE_NIGHTS ??
       String(DEFAULT_MIN_PROBE_NIGHTS),
@@ -1507,11 +1643,6 @@ export async function runRuntimeAdapterQuoteCli(
   const tracker = createQuoteCaptureProgressTracker({
     progress,
     totalListings: listingsToProcess.length,
-    windowsPerListing:
-      options.weeks *
-      (Math.max(3, Math.min(7, defaultMaxProbeNights)) -
-        Math.max(3, Math.min(7, defaultMinProbeNights)) +
-        1),
     modeLabel: "quote",
     heartbeatMs: Math.max(
       1000,
@@ -1534,6 +1665,9 @@ export async function runRuntimeAdapterQuoteCli(
         defaultMinProbeNights,
         defaultMaxProbeNights,
         progress,
+        onWindowsPlanned: (windows) => {
+          tracker.onWindowsPlanned(windows);
+        },
         onWindowResult: ({ quoteAvailable }) => {
           tracker.onWindowResult(quoteAvailable);
         },
@@ -1547,16 +1681,31 @@ export async function runRuntimeAdapterQuoteCli(
       });
 
       const outputPath = resolve(quotesDir, `${listing.fileId}.json`);
+      const existingObservations = await loadExistingRealQuoteObservations({
+        outputPath,
+      });
+      const mergedObservations = mergeRealQuoteObservations({
+        existing: existingObservations,
+        latest: sidecar.observations,
+        nowMs: Date.now(),
+        retentionDays: observationRetentionDays,
+      });
+
+      const persistedSidecar: CanonicalQuotesSidecarRecord = {
+        ...sidecar,
+        observations: mergedObservations,
+      };
+      assertCanonicalQuotesSidecarRecord(persistedSidecar);
       await writeFile(
         outputPath,
-        `${JSON.stringify(sidecar, null, 2)}\n`,
+        `${JSON.stringify(persistedSidecar, null, 2)}\n`,
         "utf8",
       );
       progress?.tick(
         `quote sidecar flushed listing=${sidecar.external_listing_id}`,
       );
 
-      return sidecar;
+      return persistedSidecar;
     },
   ).finally(() => {
     tracker.finish();

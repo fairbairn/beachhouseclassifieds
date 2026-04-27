@@ -40,7 +40,11 @@ function formatEtaMinutes(
   }
 
   const remaining = Math.max(0, total - completed);
-  return `${roundToOne(remaining / throughputPerMinute)} min`;
+  const remainingMinutes = remaining / throughputPerMinute;
+  if (remaining > 0 && remainingMinutes < 0.1) {
+    return "<0.1 min";
+  }
+  return `${roundToOne(remainingMinutes)} min`;
 }
 
 export function formatModeProgressLine(input: ModeProgressLineInput): string {

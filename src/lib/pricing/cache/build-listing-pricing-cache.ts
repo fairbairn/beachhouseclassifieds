@@ -52,6 +52,19 @@ type QuoteSidecarRecord = {
   observations?: QuoteObservation[];
 };
 
+type QuoteObservationSupport = {
+  hasAny: boolean;
+  months: Set<string>;
+  sortedEpochDays: number[];
+};
+
+type SeededValue = {
+  baseNightly: number | null;
+  valueOrigin: "quote_anchor" | "scraped_rate" | null;
+  quoteAnchorScope: "same_month" | "surrounding_months" | "none";
+  nearestQuoteObservationDistanceDays: number | null;
+};
+
 type PricingAssumptionsStore = {
   assumptions?: {
     avg_fee_pct_of_base?: number;
@@ -132,6 +145,15 @@ function addDays(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+function toMonthKey(isoDate: string): string {
+  return isoDate.slice(0, 7);
+}
+
+function toEpochDay(isoDate: string): number {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  return Math.floor(date.getTime() / 86_400_000);
+}
+
 function dayOfWeek(isoDate: string): number {
   return new Date(`${isoDate}T00:00:00.000Z`).getUTCDay();
 }
@@ -206,6 +228,108 @@ function mean(values: number[]): number | null {
   return roundCurrency(
     values.reduce((sum, value) => sum + value, 0) / values.length,
   );
+}
+
+function nearestDistanceFromSortedDays(
+  sortedDays: number[],
+  targetDay: number,
+): number | null {
+  if (sortedDays.length === 0) {
+    return null;
+  }
+
+  let low = 0;
+  let high = sortedDays.length - 1;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const value = sortedDays[mid]!;
+    if (value === targetDay) {
+      return 0;
+    }
+    if (value < targetDay) {
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  const left = high >= 0 ? sortedDays[high] : null;
+  const right = low < sortedDays.length ? sortedDays[low] : null;
+  const leftDistance =
+    left === null ? Number.POSITIVE_INFINITY : targetDay - left;
+  const rightDistance =
+    right === null ? Number.POSITIVE_INFINITY : right - targetDay;
+  const nearest = Math.min(leftDistance, rightDistance);
+  return Number.isFinite(nearest) ? nearest : null;
+}
+
+function buildQuoteObservationSupport(
+  observations: QuoteObservation[] | undefined,
+): QuoteObservationSupport {
+  const available = (observations ?? []).filter(
+    (observation) => observation.quote_available,
+  );
+  const months = new Set<string>();
+  const daySet = new Set<number>();
+
+  for (const observation of available) {
+    const checkInDate = observation.check_in_date || observation.start_date;
+    if (!checkInDate) {
+      continue;
+    }
+
+    const nights = Math.max(1, Math.floor(observation.nights));
+    for (let offset = 0; offset < nights; offset += 1) {
+      const stayDate = addDays(checkInDate, offset);
+      months.add(toMonthKey(stayDate));
+      daySet.add(toEpochDay(stayDate));
+    }
+  }
+
+  return {
+    hasAny: daySet.size > 0,
+    months,
+    sortedEpochDays: [...daySet].sort((left, right) => left - right),
+  };
+}
+
+function deriveMonthlyQualityBand(input: {
+  dayCount: number;
+  contrivedDays: number;
+  quoteAnchorSameMonthDays: number;
+  quoteAnchorSurroundingMonthDays: number;
+  interpolatedDays: number;
+  scrapedRateDays: number;
+}): "high" | "medium" | "low" {
+  const {
+    dayCount,
+    contrivedDays,
+    quoteAnchorSameMonthDays,
+    quoteAnchorSurroundingMonthDays,
+    interpolatedDays,
+    scrapedRateDays,
+  } = input;
+
+  if (dayCount <= 0) {
+    return "low";
+  }
+
+  if (
+    quoteAnchorSameMonthDays > 0 ||
+    scrapedRateDays >= Math.ceil(dayCount / 2)
+  ) {
+    return "high";
+  }
+
+  if (quoteAnchorSurroundingMonthDays > 0 || interpolatedDays > 0) {
+    return "medium";
+  }
+
+  if (contrivedDays > 0) {
+    return "low";
+  }
+
+  return "low";
 }
 
 function toValidPositiveNumber(value: unknown): number | null {
@@ -743,19 +867,24 @@ export async function buildListingPricingCacheForAdapter(
     }
 
     let quoteAnchorsByDate = new Map<string, number>();
+    let quoteObservations: QuoteObservation[] = [];
     let quoteChargeModel: QuoteChargeModel | null = null;
     try {
       const quotePath = resolve(quotesDir, `${listing.fileId}.json`);
       const quoteRaw = await readFile(quotePath, "utf8");
       const quoteSidecar = readJson<QuoteSidecarRecord>(quoteRaw);
+      quoteObservations = quoteSidecar.observations ?? [];
       quoteAnchorsByDate = readQuoteAnchorsByDate(
-        quoteSidecar.observations,
+        quoteObservations,
         quoteAnchorTargetNights,
       );
-      quoteChargeModel = deriveQuoteChargeModel(quoteSidecar.observations);
+      quoteChargeModel = deriveQuoteChargeModel(quoteObservations);
     } catch {
       // Quote sidecars are optional in bootstrap phases.
     }
+
+    const quoteObservationSupport =
+      buildQuoteObservationSupport(quoteObservations);
 
     const availabilityMap = new Map(
       (detail.normalized_availability?.days ?? []).map((day) => [
@@ -767,9 +896,12 @@ export async function buildListingPricingCacheForAdapter(
       (detail.normalized_rates?.days ?? []).map((day) => [day.date, day]),
     );
 
-    const seededValues: Array<number | null> = dates.map((date) => {
+    const seededValues: SeededValue[] = dates.map((date) => {
       const availability = availabilityMap.get(date);
       const rateDay = rateMap.get(date);
+      const monthHasQuoteObservations = quoteObservationSupport.months.has(
+        toMonthKey(date),
+      );
 
       const quoteAnchor = quoteAnchorsByDate.get(date);
       if (
@@ -777,7 +909,19 @@ export async function buildListingPricingCacheForAdapter(
         Number.isFinite(quoteAnchor) &&
         quoteAnchor > 0
       ) {
-        return roundCurrency(quoteAnchor);
+        return {
+          baseNightly: roundCurrency(quoteAnchor),
+          valueOrigin: "quote_anchor",
+          quoteAnchorScope: monthHasQuoteObservations
+            ? "same_month"
+            : quoteObservationSupport.hasAny
+              ? "surrounding_months"
+              : "none",
+          nearestQuoteObservationDistanceDays: nearestDistanceFromSortedDays(
+            quoteObservationSupport.sortedEpochDays,
+            toEpochDay(date),
+          ),
+        };
       }
 
       const nightly = Number(rateDay?.nightly_rate);
@@ -786,15 +930,32 @@ export async function buildListingPricingCacheForAdapter(
         Number.isFinite(nightly) &&
         nightly > 0
       ) {
-        return nightly;
+        return {
+          baseNightly: nightly,
+          valueOrigin: "scraped_rate",
+          quoteAnchorScope: "none",
+          nearestQuoteObservationDistanceDays: null,
+        };
       }
-      return null;
+      return {
+        baseNightly: null,
+        valueOrigin: null,
+        quoteAnchorScope: "none",
+        nearestQuoteObservationDistanceDays: null,
+      };
     });
 
-    const listingAnchors = seededValues.filter(
-      (value): value is number => value !== null && value > 0,
+    const seededNightlyValues = seededValues.map(
+      (seeded) => seeded.baseNightly,
     );
-    const listingAnchorBase = median(listingAnchors) ?? assumptionsAnchorBase;
+
+    const listingAnchors = seededValues.filter(
+      (value): value is SeededValue =>
+        value.baseNightly !== null && value.baseNightly > 0,
+    );
+    const listingAnchorBase =
+      median(listingAnchors.map((value) => value.baseNightly!)) ??
+      assumptionsAnchorBase;
 
     const days: ListingPricingDayRecord[] = dates.map((date, index) => {
       const availability = availabilityMap.get(date);
@@ -805,12 +966,12 @@ export async function buildListingPricingCacheForAdapter(
       let source: ListingPricingDayRecord["source"];
       let confidence: ListingPricingDayRecord["confidence"];
 
-      if (seeded !== null) {
-        baseNightly = seeded;
+      if (seeded && seeded.baseNightly !== null) {
+        baseNightly = seeded.baseNightly;
         source = "accurate_scrape";
         confidence = "high";
       } else {
-        const interpolated = interpolateValue(seededValues, index);
+        const interpolated = interpolateValue(seededNightlyValues, index);
         if (interpolated !== null) {
           baseNightly = interpolated;
           source = "derived_interpolated";
@@ -902,6 +1063,52 @@ export async function buildListingPricingCacheForAdapter(
                 : "U"
           : undefined);
 
+      const provenance = (() => {
+        if (seeded?.valueOrigin === "quote_anchor") {
+          return {
+            value_origin: "quote_anchor" as const,
+            quote_anchor_scope: seeded.quoteAnchorScope,
+            has_any_quote_observations: quoteObservationSupport.hasAny,
+            nearest_quote_observation_distance_days:
+              seeded.nearestQuoteObservationDistanceDays,
+          };
+        }
+
+        if (seeded?.valueOrigin === "scraped_rate") {
+          return {
+            value_origin: "scraped_rate" as const,
+            quote_anchor_scope: "none" as const,
+            has_any_quote_observations: quoteObservationSupport.hasAny,
+            nearest_quote_observation_distance_days: null,
+          };
+        }
+
+        if (source === "derived_interpolated") {
+          return {
+            value_origin: "interpolated" as const,
+            quote_anchor_scope: "none" as const,
+            has_any_quote_observations: quoteObservationSupport.hasAny,
+            nearest_quote_observation_distance_days: null,
+          };
+        }
+
+        if (source === "derived_assumptions_anchor") {
+          return {
+            value_origin: "assumptions_anchor" as const,
+            quote_anchor_scope: "none" as const,
+            has_any_quote_observations: quoteObservationSupport.hasAny,
+            nearest_quote_observation_distance_days: null,
+          };
+        }
+
+        return {
+          value_origin: "global_default" as const,
+          quote_anchor_scope: "none" as const,
+          has_any_quote_observations: quoteObservationSupport.hasAny,
+          nearest_quote_observation_distance_days: null,
+        };
+      })();
+
       return {
         date,
         is_available: isAvailable,
@@ -920,6 +1127,7 @@ export async function buildListingPricingCacheForAdapter(
         currency: detail.normalized_rates?.currency ?? "USD",
         source,
         confidence,
+        provenance,
       };
     });
 
@@ -938,6 +1146,67 @@ export async function buildListingPricingCacheForAdapter(
       ).length,
     };
 
+    const monthSummaryMap = new Map<
+      string,
+      {
+        month: string;
+        dayCount: number;
+        contrivedDays: number;
+        quoteAnchorSameMonthDays: number;
+        quoteAnchorSurroundingMonthDays: number;
+        interpolatedDays: number;
+        scrapedRateDays: number;
+      }
+    >();
+
+    for (const day of days) {
+      const month = toMonthKey(day.date);
+      const bucket = monthSummaryMap.get(month) ?? {
+        month,
+        dayCount: 0,
+        contrivedDays: 0,
+        quoteAnchorSameMonthDays: 0,
+        quoteAnchorSurroundingMonthDays: 0,
+        interpolatedDays: 0,
+        scrapedRateDays: 0,
+      };
+
+      bucket.dayCount += 1;
+
+      if (day.provenance?.value_origin === "quote_anchor") {
+        if (day.provenance.quote_anchor_scope === "same_month") {
+          bucket.quoteAnchorSameMonthDays += 1;
+        } else if (day.provenance.quote_anchor_scope === "surrounding_months") {
+          bucket.quoteAnchorSurroundingMonthDays += 1;
+        }
+      } else if (day.provenance?.value_origin === "scraped_rate") {
+        bucket.scrapedRateDays += 1;
+      } else if (day.provenance?.value_origin === "interpolated") {
+        bucket.interpolatedDays += 1;
+      } else if (
+        day.provenance?.value_origin === "assumptions_anchor" ||
+        day.provenance?.value_origin === "global_default"
+      ) {
+        bucket.contrivedDays += 1;
+      }
+
+      monthSummaryMap.set(month, bucket);
+    }
+
+    const monthlyQualitySummary = [...monthSummaryMap.values()]
+      .sort((left, right) => left.month.localeCompare(right.month))
+      .map((month) => ({
+        month: month.month,
+        day_count: month.dayCount,
+        contrived_days: month.contrivedDays,
+        quote_anchor_same_month_days: month.quoteAnchorSameMonthDays,
+        quote_anchor_surrounding_month_days:
+          month.quoteAnchorSurroundingMonthDays,
+        interpolated_days: month.interpolatedDays,
+        scraped_rate_days: month.scrapedRateDays,
+        quality_band: deriveMonthlyQualityBand(month),
+      }));
+
     const listingCache: ListingPricingCacheRecord = {
       adapter_key: input.adapterKey,
       external_listing_id: detail.external_listing_id,
@@ -952,6 +1221,11 @@ export async function buildListingPricingCacheForAdapter(
         avg_fee_pct_of_base: avgFeePct,
         avg_tax_pct_of_base: avgTaxPct,
         avg_all_in_multiplier: avgAllInMultiplier,
+      },
+      quality_summary: {
+        has_any_quote_observations: quoteObservationSupport.hasAny,
+        quote_observation_months: [...quoteObservationSupport.months].sort(),
+        monthly: monthlyQualitySummary,
       },
       source_summary: sourceSummary,
       days,
