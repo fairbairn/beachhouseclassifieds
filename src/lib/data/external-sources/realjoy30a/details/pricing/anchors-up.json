@@ -2,7 +2,7 @@
   "adapter_key": "realjoy30a",
   "external_listing_id": "anchors-up",
   "detail_url": "https://www.realjoy.com/beach-rentals/anchors-up",
-  "generated_at": "2026-04-27T11:37:24.087Z",
+  "generated_at": "2026-04-27T14:57:18.346Z",
   "horizon": {
     "from_date": "2026-05-02",
     "to_date": "2026-10-16",
@@ -13,9 +13,82 @@
     "avg_tax_pct_of_base": 0.12,
     "avg_all_in_multiplier": 1.15
   },
+  "quality_summary": {
+    "has_any_quote_observations": true,
+    "quote_observation_months": [
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10"
+    ],
+    "monthly": [
+      {
+        "month": "2026-05",
+        "day_count": 30,
+        "contrived_days": 0,
+        "quote_anchor_same_month_days": 13,
+        "quote_anchor_surrounding_month_days": 0,
+        "interpolated_days": 17,
+        "scraped_rate_days": 0,
+        "quality_band": "high"
+      },
+      {
+        "month": "2026-06",
+        "day_count": 30,
+        "contrived_days": 0,
+        "quote_anchor_same_month_days": 25,
+        "quote_anchor_surrounding_month_days": 0,
+        "interpolated_days": 5,
+        "scraped_rate_days": 0,
+        "quality_band": "high"
+      },
+      {
+        "month": "2026-07",
+        "day_count": 31,
+        "contrived_days": 0,
+        "quote_anchor_same_month_days": 26,
+        "quote_anchor_surrounding_month_days": 0,
+        "interpolated_days": 5,
+        "scraped_rate_days": 0,
+        "quality_band": "high"
+      },
+      {
+        "month": "2026-08",
+        "day_count": 31,
+        "contrived_days": 0,
+        "quote_anchor_same_month_days": 13,
+        "quote_anchor_surrounding_month_days": 0,
+        "interpolated_days": 18,
+        "scraped_rate_days": 0,
+        "quality_band": "high"
+      },
+      {
+        "month": "2026-09",
+        "day_count": 30,
+        "contrived_days": 0,
+        "quote_anchor_same_month_days": 27,
+        "quote_anchor_surrounding_month_days": 0,
+        "interpolated_days": 3,
+        "scraped_rate_days": 0,
+        "quality_band": "high"
+      },
+      {
+        "month": "2026-10",
+        "day_count": 16,
+        "contrived_days": 0,
+        "quote_anchor_same_month_days": 7,
+        "quote_anchor_surrounding_month_days": 0,
+        "interpolated_days": 9,
+        "scraped_rate_days": 0,
+        "quality_band": "high"
+      }
+    ]
+  },
   "source_summary": {
-    "accurate_scrape_days": 107,
-    "derived_interpolated_days": 61,
+    "accurate_scrape_days": 111,
+    "derived_interpolated_days": 57,
     "derived_assumptions_anchor_days": 0,
     "derived_global_default_days": 0
   },
@@ -27,13 +100,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 228.26,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 27.04,
-      "all_in_nightly": 322.69,
+      "base_nightly": 228.15,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 27.41,
+      "all_in_nightly": 322.47,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-03",
@@ -42,13 +121,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 228.26,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 27.04,
-      "all_in_nightly": 322.69,
+      "base_nightly": 228.15,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 27.41,
+      "all_in_nightly": 322.47,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-04",
@@ -57,13 +142,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 228.26,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 27.04,
-      "all_in_nightly": 322.69,
+      "base_nightly": 228.15,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 27.41,
+      "all_in_nightly": 322.47,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 3
+      }
     },
     {
       "date": "2026-05-05",
@@ -72,13 +163,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 228.64,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 27.09,
-      "all_in_nightly": 323.12,
+      "base_nightly": 228.51,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 27.45,
+      "all_in_nightly": 322.87,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 2
+      }
     },
     {
       "date": "2026-05-06",
@@ -87,13 +184,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 228.73,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 27.1,
-      "all_in_nightly": 323.22,
+      "base_nightly": 228.85,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 27.49,
+      "all_in_nightly": 323.25,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 1
+      }
     },
     {
       "date": "2026-05-07",
@@ -102,13 +205,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 243.84,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 28.89,
-      "all_in_nightly": 340.12,
+      "base_nightly": 243.89,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 29.3,
+      "all_in_nightly": 340.1,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-05-08",
@@ -118,12 +227,18 @@
       "is_available_for_checkout": true,
       "min_nights": null,
       "base_nightly": 247.79,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 29.36,
-      "all_in_nightly": 344.54,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 29.77,
+      "all_in_nightly": 344.47,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-05-09",
@@ -133,12 +248,18 @@
       "is_available_for_checkout": true,
       "min_nights": null,
       "base_nightly": 247.67,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 29.34,
-      "all_in_nightly": 344.4,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 29.75,
+      "all_in_nightly": 344.33,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-05-10",
@@ -147,13 +268,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 244.8,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 29,
-      "all_in_nightly": 341.19,
+      "base_nightly": 244.78,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 29.41,
+      "all_in_nightly": 341.1,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-05-11",
@@ -162,13 +289,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 255.02,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 30.21,
-      "all_in_nightly": 352.62,
+      "base_nightly": 254.99,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 30.63,
+      "all_in_nightly": 352.53,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-12",
@@ -177,13 +310,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 265.25,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 31.43,
-      "all_in_nightly": 364.07,
+      "base_nightly": 265.2,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 31.86,
+      "all_in_nightly": 363.97,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-13",
@@ -192,13 +331,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 275.47,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 32.64,
-      "all_in_nightly": 375.5,
+      "base_nightly": 275.41,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 33.09,
+      "all_in_nightly": 375.41,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-14",
@@ -207,13 +352,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 285.69,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 33.85,
-      "all_in_nightly": 386.93,
+      "base_nightly": 285.62,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 34.31,
+      "all_in_nightly": 386.84,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-15",
@@ -222,13 +373,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 295.92,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 35.06,
-      "all_in_nightly": 398.37,
+      "base_nightly": 295.83,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 35.54,
+      "all_in_nightly": 398.28,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-16",
@@ -237,13 +394,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 306.14,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 36.27,
-      "all_in_nightly": 409.8,
+      "base_nightly": 306.04,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 36.77,
+      "all_in_nightly": 409.72,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-17",
@@ -252,13 +415,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 316.36,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.48,
-      "all_in_nightly": 421.23,
+      "base_nightly": 316.25,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.99,
+      "all_in_nightly": 421.15,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-18",
@@ -267,13 +436,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 326.59,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 38.69,
-      "all_in_nightly": 432.67,
+      "base_nightly": 326.46,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 39.22,
+      "all_in_nightly": 432.59,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-19",
@@ -282,13 +457,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 336.81,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 39.9,
-      "all_in_nightly": 444.1,
+      "base_nightly": 336.68,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 40.45,
+      "all_in_nightly": 444.04,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-20",
@@ -297,13 +478,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 347.03,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 41.11,
-      "all_in_nightly": 455.53,
+      "base_nightly": 346.89,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.67,
+      "all_in_nightly": 455.47,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-21",
@@ -312,13 +499,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 357.25,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 42.33,
-      "all_in_nightly": 466.97,
+      "base_nightly": 357.1,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 42.9,
+      "all_in_nightly": 466.91,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-22",
@@ -327,13 +520,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 367.48,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 43.54,
-      "all_in_nightly": 478.41,
+      "base_nightly": 367.31,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 44.13,
+      "all_in_nightly": 478.35,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-23",
@@ -342,13 +541,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 377.7,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 44.75,
-      "all_in_nightly": 489.84,
+      "base_nightly": 377.52,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 45.35,
+      "all_in_nightly": 489.78,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-24",
@@ -357,13 +562,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 387.92,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 45.96,
-      "all_in_nightly": 501.27,
+      "base_nightly": 387.73,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 46.58,
+      "all_in_nightly": 501.22,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-25",
@@ -372,13 +583,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 398.15,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 47.17,
-      "all_in_nightly": 512.71,
+      "base_nightly": 397.94,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 47.81,
+      "all_in_nightly": 512.66,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-05-26",
@@ -387,13 +604,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 408.37,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 48.38,
-      "all_in_nightly": 524.14,
+      "base_nightly": 408.15,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 49.03,
+      "all_in_nightly": 524.09,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 3
+      }
     },
     {
       "date": "2026-05-27",
@@ -402,13 +625,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 409.77,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 48.55,
-      "all_in_nightly": 525.71,
+      "base_nightly": 409.99,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 49.25,
+      "all_in_nightly": 526.15,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 2
+      }
     },
     {
       "date": "2026-05-28",
@@ -417,13 +646,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 412.63,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 48.89,
-      "all_in_nightly": 528.91,
+      "base_nightly": 412.88,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 49.6,
+      "all_in_nightly": 529.39,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 1
+      }
     },
     {
       "date": "2026-05-29",
@@ -432,13 +667,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 421.18,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 49.9,
-      "all_in_nightly": 538.47,
+      "base_nightly": 421.19,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 50.6,
+      "all_in_nightly": 538.7,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-05-30",
@@ -447,13 +688,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 427.49,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 50.65,
-      "all_in_nightly": 545.53,
+      "base_nightly": 427.51,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 51.36,
+      "all_in_nightly": 545.78,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-05-31",
@@ -462,13 +709,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 435.1,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 51.55,
-      "all_in_nightly": 554.04,
+      "base_nightly": 435.07,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 52.27,
+      "all_in_nightly": 554.25,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-01",
@@ -477,13 +730,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 441.11,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 52.26,
-      "all_in_nightly": 560.76,
+      "base_nightly": 441.05,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 52.98,
+      "all_in_nightly": 560.94,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-02",
@@ -492,13 +751,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 447.39,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 53.01,
-      "all_in_nightly": 567.79,
+      "base_nightly": 447.34,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 53.74,
+      "all_in_nightly": 567.99,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-03",
@@ -507,13 +772,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 454.01,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 53.79,
-      "all_in_nightly": 575.19,
+      "base_nightly": 454.07,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 54.55,
+      "all_in_nightly": 575.53,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-04",
@@ -522,13 +793,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 461.24,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 54.65,
-      "all_in_nightly": 583.28,
+      "base_nightly": 461.3,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 55.42,
+      "all_in_nightly": 583.63,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-05",
@@ -538,12 +815,18 @@
       "is_available_for_checkout": true,
       "min_nights": null,
       "base_nightly": 467.65,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 55.41,
-      "all_in_nightly": 590.45,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 56.18,
+      "all_in_nightly": 590.74,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-06",
@@ -552,13 +835,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 472.25,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 55.95,
-      "all_in_nightly": 595.59,
+      "base_nightly": 472.26,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 56.73,
+      "all_in_nightly": 595.9,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-07",
@@ -567,13 +856,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 475.86,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 56.38,
-      "all_in_nightly": 599.63,
+      "base_nightly": 476.53,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 57.25,
+      "all_in_nightly": 600.69,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-08",
@@ -582,13 +877,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 481.68,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 57.07,
-      "all_in_nightly": 606.14,
+      "base_nightly": 482.16,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 57.92,
+      "all_in_nightly": 606.99,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-09",
@@ -597,13 +898,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 488.61,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 57.89,
-      "all_in_nightly": 613.89,
+      "base_nightly": 488.86,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 58.73,
+      "all_in_nightly": 614.5,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-10",
@@ -612,13 +919,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 497.05,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 58.89,
-      "all_in_nightly": 623.33,
+      "base_nightly": 497.17,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 59.73,
+      "all_in_nightly": 623.81,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-11",
@@ -627,13 +940,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 505.49,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 59.89,
-      "all_in_nightly": 632.77,
+      "base_nightly": 505.36,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 60.71,
+      "all_in_nightly": 632.98,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-12",
@@ -642,13 +961,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 512.83,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 60.76,
-      "all_in_nightly": 640.98,
+      "base_nightly": 512.41,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 61.56,
+      "all_in_nightly": 640.88,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-13",
@@ -657,13 +982,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 517.44,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 61.3,
-      "all_in_nightly": 646.13,
+      "base_nightly": 516.86,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.09,
+      "all_in_nightly": 645.86,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-14",
@@ -672,13 +1003,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 520.21,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 61.63,
-      "all_in_nightly": 649.23,
+      "base_nightly": 519.43,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.4,
+      "all_in_nightly": 648.74,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-15",
@@ -687,13 +1024,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 521.02,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 61.73,
-      "all_in_nightly": 650.14,
+      "base_nightly": 520.06,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.48,
+      "all_in_nightly": 649.45,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-16",
@@ -702,13 +1045,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 522.79,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 61.94,
-      "all_in_nightly": 652.12,
+      "base_nightly": 521.49,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.65,
+      "all_in_nightly": 651.05,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-17",
@@ -717,13 +1066,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 524.99,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 62.2,
-      "all_in_nightly": 654.58,
+      "base_nightly": 523.03,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.83,
+      "all_in_nightly": 652.77,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-18",
@@ -732,13 +1087,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 532.44,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 63.08,
-      "all_in_nightly": 662.91,
+      "base_nightly": 527.7,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 63.39,
+      "all_in_nightly": 658,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-19",
@@ -747,13 +1108,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 535.39,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 63.43,
-      "all_in_nightly": 666.21,
+      "base_nightly": 514.2,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 61.77,
+      "all_in_nightly": 642.88,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-06-20",
@@ -762,13 +1129,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 538.34,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 63.78,
-      "all_in_nightly": 669.51,
+      "base_nightly": 500.69,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 60.15,
+      "all_in_nightly": 627.75,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-06-21",
@@ -777,13 +1150,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 541.29,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 64.13,
-      "all_in_nightly": 672.81,
+      "base_nightly": 487.19,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 58.53,
+      "all_in_nightly": 612.63,
       "currency": "USD",
-      "source": "derived_interpolated",
-      "confidence": "medium"
+      "source": "accurate_scrape",
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 3
+      }
     },
     {
       "date": "2026-06-22",
@@ -792,13 +1171,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 544.23,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 64.48,
-      "all_in_nightly": 676.1,
+      "base_nightly": 489.78,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 58.84,
+      "all_in_nightly": 615.53,
       "currency": "USD",
-      "source": "derived_interpolated",
-      "confidence": "medium"
+      "source": "accurate_scrape",
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 2
+      }
     },
     {
       "date": "2026-06-23",
@@ -807,13 +1192,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 547.18,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 64.83,
-      "all_in_nightly": 679.4,
+      "base_nightly": 490.56,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 58.93,
+      "all_in_nightly": 616.4,
       "currency": "USD",
-      "source": "derived_interpolated",
-      "confidence": "medium"
+      "source": "accurate_scrape",
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 1
+      }
     },
     {
       "date": "2026-06-24",
@@ -822,13 +1213,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 550.13,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 65.18,
-      "all_in_nightly": 682.7,
+      "base_nightly": 508.15,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 61.05,
+      "all_in_nightly": 636.11,
       "currency": "USD",
-      "source": "derived_interpolated",
-      "confidence": "medium"
+      "source": "accurate_scrape",
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-25",
@@ -837,13 +1234,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 553.08,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 65.53,
-      "all_in_nightly": 686,
+      "base_nightly": 522.78,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.8,
+      "all_in_nightly": 652.49,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-26",
@@ -852,13 +1255,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 553.08,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 65.53,
-      "all_in_nightly": 686,
+      "base_nightly": 521.72,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.68,
+      "all_in_nightly": 651.31,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-27",
@@ -867,13 +1276,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 553.08,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 65.53,
-      "all_in_nightly": 686,
+      "base_nightly": 521.39,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.64,
+      "all_in_nightly": 650.94,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-06-28",
@@ -882,13 +1297,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 549.59,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 65.11,
-      "all_in_nightly": 682.09,
+      "base_nightly": 525.89,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 63.18,
+      "all_in_nightly": 655.98,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-06-29",
@@ -897,13 +1318,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 546.1,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 64.7,
-      "all_in_nightly": 678.19,
+      "base_nightly": 530.4,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 63.72,
+      "all_in_nightly": 661.03,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-06-30",
@@ -912,13 +1339,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 542.6,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 64.29,
-      "all_in_nightly": 674.28,
+      "base_nightly": 534.9,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 64.26,
+      "all_in_nightly": 666.07,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-07-01",
@@ -927,13 +1360,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 539.11,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 63.87,
-      "all_in_nightly": 670.37,
+      "base_nightly": 539.4,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 64.8,
+      "all_in_nightly": 671.11,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 2
+      }
     },
     {
       "date": "2026-07-02",
@@ -942,13 +1381,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 512.07,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 60.67,
-      "all_in_nightly": 640.13,
+      "base_nightly": 512.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 61.55,
+      "all_in_nightly": 640.84,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 1
+      }
     },
     {
       "date": "2026-07-03",
@@ -957,13 +1402,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 496.67,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 58.84,
-      "all_in_nightly": 622.9,
+      "base_nightly": 498.06,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 59.83,
+      "all_in_nightly": 624.8,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-04",
@@ -972,13 +1423,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 491.94,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 58.28,
-      "all_in_nightly": 617.61,
+      "base_nightly": 492.99,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 59.22,
+      "all_in_nightly": 619.12,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-05",
@@ -987,13 +1444,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 480.83,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 56.97,
-      "all_in_nightly": 605.19,
+      "base_nightly": 482.13,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 57.92,
+      "all_in_nightly": 606.96,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-06",
@@ -1002,13 +1465,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 480.52,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 56.93,
-      "all_in_nightly": 604.84,
+      "base_nightly": 481.43,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 57.84,
+      "all_in_nightly": 606.18,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-07",
@@ -1017,13 +1486,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 482.19,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 57.13,
-      "all_in_nightly": 606.71,
+      "base_nightly": 482.86,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 58.01,
+      "all_in_nightly": 607.78,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-08",
@@ -1032,13 +1507,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 485.96,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 57.57,
-      "all_in_nightly": 610.92,
+      "base_nightly": 486.56,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 58.45,
+      "all_in_nightly": 611.92,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-09",
@@ -1047,13 +1528,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 493.51,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 58.47,
-      "all_in_nightly": 619.37,
+      "base_nightly": 493.85,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 59.33,
+      "all_in_nightly": 620.09,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-10",
@@ -1062,13 +1549,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 501.19,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 59.38,
-      "all_in_nightly": 627.96,
+      "base_nightly": 501.22,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 60.21,
+      "all_in_nightly": 628.34,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-11",
@@ -1077,13 +1570,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 508.36,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 60.23,
-      "all_in_nightly": 635.98,
+      "base_nightly": 508.18,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 61.05,
+      "all_in_nightly": 636.14,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-12",
@@ -1092,13 +1591,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 515.06,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 61.02,
-      "all_in_nightly": 643.47,
+      "base_nightly": 514.62,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 61.82,
+      "all_in_nightly": 643.35,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-13",
@@ -1107,13 +1612,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 520.54,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 61.67,
-      "all_in_nightly": 649.6,
+      "base_nightly": 519.84,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.45,
+      "all_in_nightly": 649.2,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-14",
@@ -1122,13 +1633,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 524.14,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 62.1,
-      "all_in_nightly": 653.63,
+      "base_nightly": 523.18,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 62.85,
+      "all_in_nightly": 652.94,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-15",
@@ -1137,13 +1654,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 526.9,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 62.43,
-      "all_in_nightly": 656.72,
+      "base_nightly": 525.64,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 63.15,
+      "all_in_nightly": 655.7,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-16",
@@ -1152,13 +1675,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 528.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 62.62,
-      "all_in_nightly": 658.58,
+      "base_nightly": 526.59,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 63.26,
+      "all_in_nightly": 656.76,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-17",
@@ -1168,12 +1697,18 @@
       "is_available_for_checkout": true,
       "min_nights": null,
       "base_nightly": 528.1,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 62.57,
-      "all_in_nightly": 658.06,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 63.44,
+      "all_in_nightly": 658.45,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-18",
@@ -1182,13 +1717,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 515.51,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 61.08,
-      "all_in_nightly": 643.98,
+      "base_nightly": 515.55,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 61.93,
+      "all_in_nightly": 644.39,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-07-19",
@@ -1197,13 +1738,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 502.91,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 59.58,
-      "all_in_nightly": 629.88,
+      "base_nightly": 503,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 60.43,
+      "all_in_nightly": 630.34,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-07-20",
@@ -1212,13 +1759,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 490.32,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 58.09,
-      "all_in_nightly": 615.8,
+      "base_nightly": 490.46,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 58.92,
+      "all_in_nightly": 616.29,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-07-21",
@@ -1227,13 +1780,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 477.73,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 56.6,
-      "all_in_nightly": 601.72,
+      "base_nightly": 477.91,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 57.41,
+      "all_in_nightly": 602.23,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-07-22",
@@ -1242,13 +1801,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 465.13,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 55.11,
-      "all_in_nightly": 587.63,
+      "base_nightly": 465.36,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 55.91,
+      "all_in_nightly": 588.18,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-07-23",
@@ -1257,13 +1822,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 452.54,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 53.62,
-      "all_in_nightly": 573.55,
+      "base_nightly": 452.81,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 54.4,
+      "all_in_nightly": 574.12,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 2
+      }
     },
     {
       "date": "2026-07-24",
@@ -1272,13 +1843,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 450.82,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 53.41,
-      "all_in_nightly": 571.62,
+      "base_nightly": 450.84,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 54.16,
+      "all_in_nightly": 571.91,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 1
+      }
     },
     {
       "date": "2026-07-25",
@@ -1287,13 +1864,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 452.46,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 53.61,
-      "all_in_nightly": 573.46,
+      "base_nightly": 450.35,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 54.1,
+      "all_in_nightly": 571.36,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-26",
@@ -1302,13 +1885,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 460.44,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 54.55,
-      "all_in_nightly": 582.38,
+      "base_nightly": 458.74,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 55.11,
+      "all_in_nightly": 580.76,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-27",
@@ -1317,13 +1906,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 462.78,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 54.83,
-      "all_in_nightly": 585,
+      "base_nightly": 461.53,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 55.45,
+      "all_in_nightly": 583.89,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-28",
@@ -1332,13 +1927,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 464.98,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 55.09,
-      "all_in_nightly": 587.46,
+      "base_nightly": 463.95,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 55.74,
+      "all_in_nightly": 586.6,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-29",
@@ -1347,13 +1948,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 466.39,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 55.26,
-      "all_in_nightly": 589.04,
+      "base_nightly": 465.62,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 55.94,
+      "all_in_nightly": 588.47,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-30",
@@ -1362,13 +1969,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 467.59,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 55.4,
-      "all_in_nightly": 590.38,
+      "base_nightly": 466.86,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 56.09,
+      "all_in_nightly": 589.86,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-07-31",
@@ -1377,13 +1990,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 464.88,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 55.08,
-      "all_in_nightly": 587.35,
+      "base_nightly": 464.22,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 55.77,
+      "all_in_nightly": 586.9,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-01",
@@ -1392,13 +2011,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 458.58,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 54.33,
-      "all_in_nightly": 580.3,
+      "base_nightly": 458.14,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 55.04,
+      "all_in_nightly": 580.09,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-02",
@@ -1407,13 +2032,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 450.48,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 53.37,
-      "all_in_nightly": 571.24,
+      "base_nightly": 450.25,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 54.09,
+      "all_in_nightly": 571.25,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-03",
@@ -1422,13 +2053,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 444.46,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 52.66,
-      "all_in_nightly": 564.51,
+      "base_nightly": 444.4,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 53.39,
+      "all_in_nightly": 564.7,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-04",
@@ -1437,13 +2074,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 438.87,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 52,
-      "all_in_nightly": 558.26,
+      "base_nightly": 438.97,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 52.74,
+      "all_in_nightly": 558.62,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-05",
@@ -1452,13 +2095,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 433.52,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 51.36,
-      "all_in_nightly": 552.27,
+      "base_nightly": 433.88,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 52.12,
+      "all_in_nightly": 552.91,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-06",
@@ -1467,13 +2116,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 426.41,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 50.52,
-      "all_in_nightly": 544.32,
+      "base_nightly": 426.99,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 51.3,
+      "all_in_nightly": 545.2,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-07",
@@ -1482,13 +2137,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 415.66,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 49.25,
-      "all_in_nightly": 532.3,
+      "base_nightly": 416.52,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 50.04,
+      "all_in_nightly": 533.47,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-08",
@@ -1497,13 +2158,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 404.46,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 47.92,
-      "all_in_nightly": 519.77,
+      "base_nightly": 404.45,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 48.59,
+      "all_in_nightly": 519.95,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-09",
@@ -1512,13 +2179,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 395.12,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 46.81,
-      "all_in_nightly": 509.32,
+      "base_nightly": 395.08,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 47.46,
+      "all_in_nightly": 509.45,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-10",
@@ -1527,13 +2200,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 386.82,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 45.83,
-      "all_in_nightly": 500.04,
+      "base_nightly": 386.75,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 46.46,
+      "all_in_nightly": 500.12,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-11",
@@ -1542,13 +2221,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 379.44,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 44.95,
-      "all_in_nightly": 491.78,
+      "base_nightly": 379.34,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 45.57,
+      "all_in_nightly": 491.82,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-12",
@@ -1557,13 +2242,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 373.18,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 44.21,
-      "all_in_nightly": 484.78,
+      "base_nightly": 373.15,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 44.83,
+      "all_in_nightly": 484.89,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-13",
@@ -1572,13 +2263,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 367.43,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 43.53,
+      "base_nightly": 367.31,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 44.13,
       "all_in_nightly": 478.35,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-08-14",
@@ -1587,13 +2284,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 364.77,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 43.22,
-      "all_in_nightly": 475.38,
+      "base_nightly": 364.25,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 43.76,
+      "all_in_nightly": 474.92,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-15",
@@ -1602,13 +2305,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 362.11,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 42.9,
-      "all_in_nightly": 472.4,
+      "base_nightly": 361.19,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 43.39,
+      "all_in_nightly": 471.49,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-16",
@@ -1617,13 +2326,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 359.46,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 42.59,
-      "all_in_nightly": 469.44,
+      "base_nightly": 358.13,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 43.02,
+      "all_in_nightly": 468.06,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-17",
@@ -1632,13 +2347,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 356.8,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 42.27,
-      "all_in_nightly": 466.46,
+      "base_nightly": 355.07,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 42.66,
+      "all_in_nightly": 464.64,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-18",
@@ -1647,13 +2368,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 354.14,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 41.96,
-      "all_in_nightly": 463.49,
+      "base_nightly": 352.01,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 42.29,
+      "all_in_nightly": 461.21,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-19",
@@ -1662,13 +2389,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 351.48,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 41.64,
-      "all_in_nightly": 460.51,
+      "base_nightly": 348.95,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.92,
+      "all_in_nightly": 457.78,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-20",
@@ -1677,13 +2410,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 348.82,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 41.33,
-      "all_in_nightly": 457.54,
+      "base_nightly": 345.89,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.55,
+      "all_in_nightly": 454.35,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-21",
@@ -1692,13 +2431,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 346.16,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 41.01,
-      "all_in_nightly": 454.56,
+      "base_nightly": 342.83,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.19,
+      "all_in_nightly": 450.93,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-22",
@@ -1707,13 +2452,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 343.51,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.7,
-      "all_in_nightly": 451.6,
+      "base_nightly": 339.77,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 40.82,
+      "all_in_nightly": 447.5,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-23",
@@ -1722,13 +2473,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 340.85,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.38,
-      "all_in_nightly": 448.62,
+      "base_nightly": 336.71,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 40.45,
+      "all_in_nightly": 444.07,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-24",
@@ -1737,13 +2494,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 338.19,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.07,
-      "all_in_nightly": 445.65,
+      "base_nightly": 333.65,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 40.08,
+      "all_in_nightly": 440.64,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-25",
@@ -1752,13 +2515,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 335.53,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 39.75,
-      "all_in_nightly": 442.67,
+      "base_nightly": 330.59,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 39.71,
+      "all_in_nightly": 437.21,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-26",
@@ -1767,13 +2536,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 332.87,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 39.44,
-      "all_in_nightly": 439.7,
+      "base_nightly": 327.53,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 39.35,
+      "all_in_nightly": 433.79,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-27",
@@ -1782,13 +2557,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 330.22,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 39.12,
-      "all_in_nightly": 436.73,
+      "base_nightly": 324.47,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 38.98,
+      "all_in_nightly": 430.36,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-28",
@@ -1797,13 +2578,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 327.56,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 38.81,
-      "all_in_nightly": 433.76,
+      "base_nightly": 321.41,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 38.61,
+      "all_in_nightly": 426.93,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-29",
@@ -1812,13 +2599,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 324.9,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 38.49,
-      "all_in_nightly": 430.78,
+      "base_nightly": 318.35,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 38.24,
+      "all_in_nightly": 423.5,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-30",
@@ -1827,13 +2620,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 322.24,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 38.18,
-      "all_in_nightly": 427.81,
+      "base_nightly": 315.29,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.88,
+      "all_in_nightly": 420.08,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-08-31",
@@ -1842,13 +2641,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 319.58,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.86,
-      "all_in_nightly": 424.83,
+      "base_nightly": 312.23,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.51,
+      "all_in_nightly": 416.65,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-09-01",
@@ -1857,13 +2662,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 316.92,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.55,
-      "all_in_nightly": 421.86,
+      "base_nightly": 309.17,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.14,
+      "all_in_nightly": 413.22,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-09-02",
@@ -1872,13 +2683,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 314.27,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.23,
-      "all_in_nightly": 418.89,
+      "base_nightly": 306.11,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 36.77,
+      "all_in_nightly": 409.79,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-09-03",
@@ -1887,13 +2704,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 311.61,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 36.92,
-      "all_in_nightly": 415.92,
+      "base_nightly": 303.05,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 36.41,
+      "all_in_nightly": 406.37,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-09-04",
@@ -1902,13 +2725,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 308.95,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 36.6,
-      "all_in_nightly": 412.94,
+      "base_nightly": 299.99,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 36.04,
+      "all_in_nightly": 402.94,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-05",
@@ -1917,13 +2746,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 299.82,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 35.52,
-      "all_in_nightly": 402.73,
+      "base_nightly": 298.37,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 35.84,
+      "all_in_nightly": 401.12,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-06",
@@ -1932,13 +2767,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 290.18,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 34.38,
-      "all_in_nightly": 391.95,
+      "base_nightly": 290.24,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 34.87,
+      "all_in_nightly": 392.02,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-07",
@@ -1947,13 +2788,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 281.24,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 33.32,
-      "all_in_nightly": 381.95,
+      "base_nightly": 281.9,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 33.87,
+      "all_in_nightly": 382.68,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-08",
@@ -1962,13 +2809,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 278.05,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 32.94,
-      "all_in_nightly": 378.38,
+      "base_nightly": 278.73,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 33.48,
+      "all_in_nightly": 379.12,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-09",
@@ -1977,13 +2830,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 277.86,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 32.92,
-      "all_in_nightly": 378.17,
+      "base_nightly": 278.5,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 33.46,
+      "all_in_nightly": 378.87,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-10",
@@ -1992,13 +2851,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 277.34,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 32.86,
-      "all_in_nightly": 377.59,
+      "base_nightly": 277.94,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 33.39,
+      "all_in_nightly": 378.24,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-11",
@@ -2007,13 +2872,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 276.25,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 32.73,
-      "all_in_nightly": 376.37,
+      "base_nightly": 276.82,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 33.26,
+      "all_in_nightly": 376.99,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-12",
@@ -2022,13 +2893,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 277.62,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 32.89,
-      "all_in_nightly": 377.9,
+      "base_nightly": 278.14,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 33.41,
+      "all_in_nightly": 378.46,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-13",
@@ -2037,13 +2914,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 281.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 33.36,
-      "all_in_nightly": 382.32,
+      "base_nightly": 281.91,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 33.87,
+      "all_in_nightly": 382.69,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-14",
@@ -2052,13 +2935,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 287.43,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 34.05,
-      "all_in_nightly": 388.87,
+      "base_nightly": 287.53,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 34.54,
+      "all_in_nightly": 388.98,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-15",
@@ -2067,13 +2956,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 291.18,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 34.5,
-      "all_in_nightly": 393.07,
+      "base_nightly": 291.13,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 34.97,
+      "all_in_nightly": 393.01,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-16",
@@ -2082,13 +2977,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 293.16,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 34.73,
-      "all_in_nightly": 395.28,
+      "base_nightly": 293.12,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 35.21,
+      "all_in_nightly": 395.24,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-17",
@@ -2097,13 +2998,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 295.83,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 35.05,
-      "all_in_nightly": 398.27,
+      "base_nightly": 295.69,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 35.52,
+      "all_in_nightly": 398.12,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-18",
@@ -2112,13 +3019,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 298.59,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 35.38,
-      "all_in_nightly": 401.36,
+      "base_nightly": 298.75,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 35.89,
+      "all_in_nightly": 401.55,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-19",
@@ -2127,13 +3040,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 301.02,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 35.66,
-      "all_in_nightly": 404.07,
+      "base_nightly": 301.1,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 36.17,
+      "all_in_nightly": 404.18,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-20",
@@ -2142,13 +3061,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 303.35,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 35.94,
-      "all_in_nightly": 406.68,
+      "base_nightly": 303.3,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 36.44,
+      "all_in_nightly": 406.65,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-21",
@@ -2157,13 +3082,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 306.45,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 36.31,
-      "all_in_nightly": 410.15,
+      "base_nightly": 306.27,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 36.79,
+      "all_in_nightly": 409.97,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-22",
@@ -2172,13 +3103,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 310.39,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 36.77,
-      "all_in_nightly": 414.55,
+      "base_nightly": 310.05,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.25,
+      "all_in_nightly": 414.21,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-23",
@@ -2187,13 +3124,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 313.37,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.13,
-      "all_in_nightly": 417.89,
+      "base_nightly": 313,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.6,
+      "all_in_nightly": 417.51,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-24",
@@ -2202,13 +3145,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 314.94,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.31,
-      "all_in_nightly": 419.64,
+      "base_nightly": 314.52,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.78,
+      "all_in_nightly": 419.21,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-25",
@@ -2217,13 +3166,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 315.11,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.33,
-      "all_in_nightly": 419.83,
+      "base_nightly": 314.64,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.8,
+      "all_in_nightly": 419.35,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-26",
@@ -2232,13 +3187,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 314.84,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.3,
-      "all_in_nightly": 419.53,
+      "base_nightly": 314.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.77,
+      "all_in_nightly": 419.06,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-27",
@@ -2247,13 +3208,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 314.07,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.21,
-      "all_in_nightly": 418.67,
+      "base_nightly": 313.61,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.68,
+      "all_in_nightly": 418.2,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-28",
@@ -2262,13 +3229,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 314.04,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.21,
-      "all_in_nightly": 418.64,
+      "base_nightly": 313.56,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.67,
+      "all_in_nightly": 418.14,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-29",
@@ -2277,13 +3250,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 314.42,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.25,
-      "all_in_nightly": 419.06,
+      "base_nightly": 313.92,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.71,
+      "all_in_nightly": 418.54,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-09-30",
@@ -2292,13 +3271,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 316.33,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.48,
-      "all_in_nightly": 421.2,
+      "base_nightly": 315.85,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 37.94,
+      "all_in_nightly": 420.7,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-10-01",
@@ -2307,13 +3292,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 319.5,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 37.85,
-      "all_in_nightly": 424.74,
+      "base_nightly": 318.9,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 38.31,
+      "all_in_nightly": 424.12,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-10-02",
@@ -2322,13 +3313,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 322.9,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 38.26,
-      "all_in_nightly": 428.55,
+      "base_nightly": 323.04,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 38.81,
+      "all_in_nightly": 428.76,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-10-03",
@@ -2337,13 +3334,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 326.8,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 38.72,
-      "all_in_nightly": 432.91,
+      "base_nightly": 326.96,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 39.28,
+      "all_in_nightly": 433.15,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-10-04",
@@ -2352,13 +3355,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 330.59,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 39.17,
-      "all_in_nightly": 437.15,
+      "base_nightly": 330.76,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 39.74,
+      "all_in_nightly": 437.41,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-10-05",
@@ -2367,13 +3376,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 334.64,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 39.65,
-      "all_in_nightly": 441.68,
+      "base_nightly": 334.86,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 40.23,
+      "all_in_nightly": 442,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-10-06",
@@ -2382,13 +3397,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 338.73,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.13,
-      "all_in_nightly": 446.25,
+      "base_nightly": 339.06,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 40.73,
+      "all_in_nightly": 446.7,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-10-07",
@@ -2397,13 +3418,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "accurate_scrape",
-      "confidence": "high"
+      "confidence": "high",
+      "provenance": {
+        "value_origin": "quote_anchor",
+        "quote_anchor_scope": "same_month",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": 0
+      }
     },
     {
       "date": "2026-10-08",
@@ -2412,13 +3439,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-10-09",
@@ -2427,13 +3460,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-10-10",
@@ -2442,13 +3481,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-10-11",
@@ -2457,13 +3502,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-10-12",
@@ -2472,13 +3523,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-10-13",
@@ -2487,13 +3544,19 @@
       "is_available_for_checkin": false,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-10-14",
@@ -2502,13 +3565,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": false,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-10-15",
@@ -2517,13 +3586,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     },
     {
       "date": "2026-10-16",
@@ -2532,13 +3607,19 @@
       "is_available_for_checkin": true,
       "is_available_for_checkout": true,
       "min_nights": null,
-      "base_nightly": 342.57,
-      "estimated_fees_nightly": 67.39,
-      "estimated_taxes_nightly": 40.59,
-      "all_in_nightly": 450.55,
+      "base_nightly": 343.38,
+      "estimated_fees_nightly": 66.91,
+      "estimated_taxes_nightly": 41.25,
+      "all_in_nightly": 451.54,
       "currency": "USD",
       "source": "derived_interpolated",
-      "confidence": "medium"
+      "confidence": "medium",
+      "provenance": {
+        "value_origin": "interpolated",
+        "quote_anchor_scope": "none",
+        "has_any_quote_observations": true,
+        "nearest_quote_observation_distance_days": null
+      }
     }
   ]
 }

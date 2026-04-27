@@ -37,14 +37,17 @@ export function createQuoteCaptureProgressTracker(
   const heartbeatMs = Math.max(1000, input.heartbeatMs ?? 15000);
   const modeLabel = input.modeLabel?.trim() || "quote-capture";
 
-  const totalForDisplay = (): number =>
+  const totalListingsForDisplay = (): number =>
+    Math.max(1, input.totalListings);
+
+  const totalWindowsForDisplay = (): number =>
     Math.max(1, Math.max(plannedWindows, completedWindows));
 
   const formatPrefix = (): string =>
     formatModeProgressLine({
       mode: modeLabel,
-      completed: completedWindows,
-      total: totalForDisplay(),
+      completed: completedListings,
+      total: totalListingsForDisplay(),
       startedAtMs: runStartedAt,
       text: "",
     }).replace(/ - $/, "");
@@ -54,13 +57,16 @@ export function createQuoteCaptureProgressTracker(
       1,
       Math.round((Date.now() - runStartedAt) / 1000),
     );
-    const throughputPerMinute = Math.round(
+    const windowsThroughputPerMinute = Math.round(
       (completedWindows / elapsedSeconds) * 60,
     );
-    const displayTotal = totalForDisplay();
+    const listingsThroughputPerMinute = Math.round(
+      (completedListings / elapsedSeconds) * 60,
+    );
+    const windowsDisplayTotal = totalWindowsForDisplay();
     const prefix = formatPrefix();
     input.progress?.tick(
-      `${prefix} ${label} windows=${completedWindows}/${displayTotal} available=${availableWindows} unavailable=${unavailableWindows} throughput_per_min=${throughputPerMinute}`,
+      `${prefix} ${label} listings=${completedListings}/${input.totalListings} windows=${completedWindows}/${windowsDisplayTotal} available=${availableWindows} unavailable=${unavailableWindows} listings_per_min=${listingsThroughputPerMinute} windows_per_min=${windowsThroughputPerMinute}`,
     );
   };
 
