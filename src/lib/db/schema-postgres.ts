@@ -475,6 +475,50 @@ export const listing_pricing_summary = pgTable(
   }),
 );
 
+export const discover_quote_cache = pgTable(
+  "discover_quote_cache",
+  {
+    id: text("id").primaryKey(),
+    cache_key: text("cache_key").notNull(),
+    slug: text("slug").notNull(),
+    adapter_key: text("adapter_key").notNull(),
+    external_listing_id: text("external_listing_id").notNull(),
+    check_in_date: text("check_in_date").notNull(),
+    check_out_date: text("check_out_date").notNull(),
+    adults: integer("adults").notNull(),
+    kids: integer("kids").notNull(),
+    response_payload: jsonb("response_payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    expires_at: timestamp("expires_at", {
+      mode: "string",
+      withTimezone: true,
+    }).notNull(),
+    created_at: timestamp("created_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { mode: "string", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    cache_key_unique_idx: uniqueIndex(
+      "discover_quote_cache_cache_key_unique_idx",
+    ).on(table.cache_key),
+    expires_at_idx: index("discover_quote_cache_expires_at_idx").on(
+      table.expires_at,
+    ),
+    lookup_idx: index("discover_quote_cache_lookup_idx").on(
+      table.slug,
+      table.check_in_date,
+      table.check_out_date,
+      table.adults,
+      table.kids,
+      table.expires_at,
+    ),
+  }),
+);
+
 export const listing_geocode_cache = pgTable(
   "listing_geocode_cache",
   {

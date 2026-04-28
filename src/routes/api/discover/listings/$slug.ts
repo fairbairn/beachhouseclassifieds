@@ -3,10 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   NullRouteComponent,
   createNoStoreHeaders,
-  methodNotAllowedResponse,
   optionsResponse,
 } from "@/core/http/api-http";
 import { buildDiscoverListingDetailPayload } from "@/lib/discover/discover-listings-api.server";
+import { runDiscoverQuoteBySlug } from "@/lib/discover/discover-quote.server";
 
 export const Route = createFileRoute("/api/discover/listings/$slug")({
   component: NullRouteComponent,
@@ -37,8 +37,29 @@ export const Route = createFileRoute("/api/discover/listings/$slug")({
           headers: createNoStoreHeaders(),
         });
       },
-      OPTIONS: async () => optionsResponse("GET, OPTIONS"),
-      POST: async () => methodNotAllowedResponse(),
+      OPTIONS: async () => optionsResponse("GET, POST, OPTIONS"),
+      POST: async ({ params, request }) => {
+        const slug = typeof params.slug === "string" ? params.slug.trim() : "";
+        const body = (await request.json().catch(() => null)) as {
+          in?: unknown;
+          out?: unknown;
+          adults?: unknown;
+          kids?: unknown;
+        } | null;
+
+        const payload = await runDiscoverQuoteBySlug({
+          slug,
+          in: typeof body?.in === "string" ? body.in.trim() : "",
+          out: typeof body?.out === "string" ? body.out.trim() : "",
+          adults: body?.adults,
+          kids: body?.kids,
+        });
+
+        return Response.json(payload, {
+          status: payload.ok ? 200 : 400,
+          headers: createNoStoreHeaders(),
+        });
+      },
     },
   },
 });

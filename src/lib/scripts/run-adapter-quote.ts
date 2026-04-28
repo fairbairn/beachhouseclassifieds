@@ -1,3 +1,5 @@
+import "@/core/tooling/env/load-env-profile";
+
 import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
 import {
   createValidatedAdapterOperationProxyByKey,

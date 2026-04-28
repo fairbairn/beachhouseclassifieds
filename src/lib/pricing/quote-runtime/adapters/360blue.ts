@@ -4,6 +4,7 @@ type QuoteRequestContext = {
   unitId: string;
   reservationQuotesEndpoint: string;
   cartCreateEndpoint: string;
+  detailUrl: string;
 };
 
 type ReservationQuoteApiResponse = {
@@ -101,11 +102,43 @@ function extractQuoteContext(
     cartCreateEndpointRaw || DEFAULT_CART_CREATE_ENDPOINT,
   );
 
+  const detailUrlRaw =
+    typeof context.detail_url === "string" ? context.detail_url.trim() : "";
+
+  const detailUrl = canonicalize360BlueHost(
+    detailUrlRaw.length > 0
+      ? detailUrlRaw
+      : `${BASE_HOST}/destinations/emerald-coast/walton-county/properties/${encodeURIComponent(input.listingId)}`,
+  );
+
   return {
     unitId,
     reservationQuotesEndpoint,
     cartCreateEndpoint,
+    detailUrl,
   };
+}
+
+function buildPrefilledDetailUrl(input: {
+  detailUrl: string;
+  checkInIso: string;
+  checkOutIso: string;
+  adults: number;
+  children: number;
+}): string {
+  try {
+    const parsed = new URL(input.detailUrl);
+    parsed.searchParams.set("arrivalDate", input.checkInIso);
+    parsed.searchParams.set("departureDate", input.checkOutIso);
+    parsed.searchParams.set("adults", String(toPositiveInt(input.adults, 1)));
+    parsed.searchParams.set(
+      "children",
+      String(toNonNegativeInt(input.children, 0)),
+    );
+    return parsed.toString();
+  } catch {
+    return input.detailUrl;
+  }
 }
 
 function buildHandoffUrl(input: {
@@ -210,6 +243,14 @@ export async function execute360BlueSingleQuote(
   const handoffUrl = buildHandoffUrl({
     cartCreateEndpoint: quoteContext.cartCreateEndpoint,
     unitId: quoteContext.unitId,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+    adults: input.adults,
+    children: input.children,
+  });
+
+  const prefilledDetailUrl = buildPrefilledDetailUrl({
+    detailUrl: quoteContext.detailUrl,
     checkInIso: input.checkInIso,
     checkOutIso: input.checkOutIso,
     adults: input.adults,
@@ -327,6 +368,7 @@ export async function execute360BlueSingleQuote(
         feesTotalExclTaxes: Math.max(0, grandTotal - baseTotal - taxesTotal),
         grandTotal,
         quotedTotal: grandTotal,
+        detailUrl: prefilledDetailUrl,
         handoffUrl,
       },
     };

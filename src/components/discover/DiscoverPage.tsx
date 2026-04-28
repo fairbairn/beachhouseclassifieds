@@ -1,13 +1,15 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
-  ArrowRight,
   BedDouble,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
+  ExternalLink,
   Heart,
   House,
+  LoaderCircle,
   Mouse,
   Search,
   X,
@@ -65,6 +67,7 @@ import {
 } from "@/lib/discover/discover-listings-query";
 import { markDiscoverModalIntent } from "@/lib/discover/discover-modal-intent";
 import { buildDiscoverMapListings } from "@/lib/discover/discover-page-derived";
+import { fetchDiscoverStayQuote } from "@/lib/discover/discover-quote-query";
 import {
   buildDiscoverInputsSignature,
   createDiscoverInputsStore,
@@ -74,7 +77,10 @@ import {
   resolveDiscoverTotalCount,
   type DiscoverInputsState,
 } from "@/lib/discover/discover-state";
-import type { DiscoverListing } from "@/lib/discover/discover-types";
+import type {
+  DiscoverListing,
+  DiscoverQuoteSuccess,
+} from "@/lib/discover/discover-types";
 import { useDiscoverSearchControls } from "@/lib/discover/use-discover-search-controls";
 
 const defaultMapTarget = {
@@ -94,6 +100,193 @@ const STANDALONE_CLOSE_FADE_MS = 3000;
 const XL_BREAKPOINT_PX = 1280;
 const ORIGINAL_DESIGN_PANEL_MAX_HEIGHT_PX = 928;
 const DISCOVER_SECTION_GAP_PX = 24;
+
+type DiscoverQuoteUiState =
+  | { status: "idle" }
+  | { status: "loading"; key: string }
+  | { status: "error"; key: string; message: string }
+  | { status: "success"; key: string; quote: DiscoverQuoteSuccess };
+
+type SignedHandoffSpec = {
+  requestUrl: string;
+  method: string;
+  contentType: string | null;
+  payload: string | null;
+};
+
+const discoverWindowHandles = new Map<string, Window>();
+
+function parseSignedHandoffSpec(handoffUrl: string): SignedHandoffSpec | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(handoffUrl);
+  } catch {
+    return null;
+  }
+
+  const hash = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+  if (!hash) {
+    return null;
+  }
+
+  const hashParams = new URLSearchParams(hash);
+  const methodRaw = hashParams.get("method")?.trim() ?? "";
+  const payloadRaw = hashParams.get("payload");
+
+  if (!methodRaw || !payloadRaw) {
+    return null;
+  }
+
+  const method = methodRaw.toUpperCase();
+  const contentType = hashParams.get("contentType")?.trim() ?? null;
+  const requestUrl = `${parsed.origin}${parsed.pathname}${parsed.search}`;
+
+  return {
+    requestUrl,
+    method,
+    contentType,
+    payload: payloadRaw,
+  };
+}
+
+function appendHiddenInput(form: HTMLFormElement, name: string, value: string) {
+  const input = document.createElement("input");
+  input.type = "hidden";
+  input.name = name;
+  input.value = value;
+  form.append(input);
+}
+
+function openInNamedWindow(url: string, windowName: string) {
+  const existingWindow = discoverWindowHandles.get(windowName);
+  if (existingWindow && !existingWindow.closed) {
+    existingWindow.location.href = url;
+    existingWindow.focus();
+    return existingWindow;
+  }
+
+  const openedWindow = window.open(url, windowName);
+  if (openedWindow) {
+    openedWindow.opener = null;
+    openedWindow.focus();
+    discoverWindowHandles.set(windowName, openedWindow);
+  }
+
+  return openedWindow;
+}
+
+function toWindowNameToken(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized.length > 0 ? normalized : "listing";
+}
+
+function buildDiscoverWindowName(slug: string, suffix: "detail" | "checkout") {
+  return `${toWindowNameToken(slug)}-${suffix}`;
+}
+
+function openDiscoverHandoff(input: {
+  handoffUrl: string;
+  slug: string;
+  detailUrl: string | null;
+}) {
+  const handoffUrl = input.handoffUrl;
+  const slug = input.slug;
+  const checkoutWindowName = buildDiscoverWindowName(slug, "checkout");
+  const signed = parseSignedHandoffSpec(handoffUrl);
+  if (!signed) {
+    openInNamedWindow(handoffUrl, checkoutWindowName);
+    return;
+  }
+
+  const contentType = signed.contentType?.toLowerCase() ?? "";
+  if (signed.method === "POST" && contentType.includes("application/json")) {
+    // Cross-origin JSON POST handoffs are often API bootstrap calls rather than
+    // direct browser checkout URLs. Fall back to the detail page where the host
+    // site can establish required session state before checkout.
+    if (
+      typeof input.detailUrl === "string" &&
+      input.detailUrl.trim().length > 0
+    ) {
+      openInNamedWindow(input.detailUrl, checkoutWindowName);
+      console.info(
+        `[discover-handoff] json_post_signature_fallback slug=${slug} action=open_detail reason=browser_json_post_not_supported`,
+      );
+      return;
+    }
+  }
+
+  if (signed.method !== "POST") {
+    openInNamedWindow(signed.requestUrl, checkoutWindowName);
+    return;
+  }
+
+  const targetName = checkoutWindowName;
+  const existingWindow = discoverWindowHandles.get(targetName);
+  if (existingWindow && !existingWindow.closed) {
+    existingWindow.location.href = "about:blank";
+    existingWindow.focus();
+  }
+
+  const openedWindow = window.open("about:blank", targetName);
+  if (openedWindow) {
+    openedWindow.opener = null;
+    openedWindow.focus();
+    discoverWindowHandles.set(targetName, openedWindow);
+  }
+
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = signed.requestUrl;
+  form.target = targetName;
+
+  if (contentType.includes("multipart/form-data")) {
+    form.enctype = "multipart/form-data";
+  } else if (contentType.includes("text/plain")) {
+    form.enctype = "text/plain";
+  } else {
+    form.enctype = "application/x-www-form-urlencoded";
+  }
+
+  let appendedFieldCount = 0;
+
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    const params = new URLSearchParams(signed.payload ?? "");
+    params.forEach((value, key) => {
+      appendHiddenInput(form, key, value);
+      appendedFieldCount += 1;
+    });
+  } else {
+    try {
+      const payloadParsed = JSON.parse(signed.payload ?? "") as unknown;
+      if (
+        payloadParsed &&
+        typeof payloadParsed === "object" &&
+        !Array.isArray(payloadParsed)
+      ) {
+        const payloadRecord = payloadParsed as Record<string, unknown>;
+        for (const [key, value] of Object.entries(payloadRecord)) {
+          appendHiddenInput(form, key, String(value ?? ""));
+          appendedFieldCount += 1;
+        }
+      }
+    } catch {
+      // Fall back to raw payload field below.
+    }
+  }
+
+  if (appendedFieldCount === 0) {
+    appendHiddenInput(form, "payload", signed.payload ?? "");
+  }
+
+  document.body.append(form);
+  form.submit();
+  form.remove();
+}
 
 function isUnavailablePricingStatus(
   status: string | null | undefined,
@@ -265,7 +458,6 @@ export function DiscoverPage({
     datePanelOpenRequestToken,
     setDatePanelOpenRequestToken,
     checkDatePanelOpenRequestToken,
-    setCheckDatePanelOpenRequestToken,
     minSleeps,
     setMinSleeps,
     minBedrooms,
@@ -302,6 +494,8 @@ export function DiscoverPage({
   const [selectedBeaches, setSelectedBeaches] = useState<string[]>([]);
   const [selectedCommunities, setSelectedCommunities] = useState<string[]>([]);
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
+  const [discoverQuoteUiState, setDiscoverQuoteUiState] =
+    useState<DiscoverQuoteUiState>({ status: "idle" });
   const compositeDiscoverInputs = useMemo<DiscoverInputsState>(() => {
     const availabilityWindowStartDayInt = dayIntFromIsoDateString(earliestDate);
     const availabilityWindowEndDayInt = dayIntFromIsoDateString(latestDate);
@@ -1091,7 +1285,87 @@ export function DiscoverPage({
     return getLocationPresentation(overlayListing);
   }, [overlayListing]);
 
+  const quoteRequestKey = useMemo(
+    () =>
+      [
+        overlayListing?.id ?? "",
+        checkInDate ?? "",
+        checkOutDate ?? "",
+        String(adults),
+        String(children),
+      ].join("|"),
+    [overlayListing?.id, checkInDate, checkOutDate, adults, children],
+  );
+
+  const isCurrentQuoteRequestLoading =
+    discoverQuoteUiState.status === "loading" &&
+    discoverQuoteUiState.key === quoteRequestKey;
+
+  const hasCurrentSelectionQuote =
+    discoverQuoteUiState.status === "success" &&
+    discoverQuoteUiState.key === quoteRequestKey;
+
+  const isCheckAvailabilityDisabled =
+    !checkInDate ||
+    !checkOutDate ||
+    isCurrentQuoteRequestLoading ||
+    hasCurrentSelectionQuote;
+
+  const handleCheckAvailability = useCallback(() => {
+    if (!overlayListing || !checkInDate || !checkOutDate) {
+      return;
+    }
+
+    if (isCurrentQuoteRequestLoading || hasCurrentSelectionQuote) {
+      return;
+    }
+
+    setDiscoverQuoteUiState({ status: "loading", key: quoteRequestKey });
+
+    void fetchDiscoverStayQuote({
+      slug: overlayListing.id,
+      in: checkInDate,
+      out: checkOutDate,
+      adults,
+      kids: children,
+    })
+      .then((response) => {
+        if (!response.ok) {
+          setDiscoverQuoteUiState({
+            status: "error",
+            key: quoteRequestKey,
+            message: response.msg,
+          });
+          return;
+        }
+
+        setDiscoverQuoteUiState({
+          status: "success",
+          key: quoteRequestKey,
+          quote: response,
+        });
+      })
+      .catch(() => {
+        setDiscoverQuoteUiState({
+          status: "error",
+          key: quoteRequestKey,
+          message: "We could not get pricing for those dates. Try again.",
+        });
+      });
+  }, [
+    adults,
+    checkInDate,
+    checkOutDate,
+    children,
+    hasCurrentSelectionQuote,
+    isCurrentQuoteRequestLoading,
+    overlayListing,
+    quoteRequestKey,
+  ]);
+
   const closeDetailOverlay = useCallback(() => {
+    setDiscoverQuoteUiState({ status: "idle" });
+
     if (closeNavigateFrameRef.current !== null) {
       window.cancelAnimationFrame(closeNavigateFrameRef.current);
       closeNavigateFrameRef.current = null;
@@ -2191,6 +2465,9 @@ export function DiscoverPage({
                                       checkDatePanelOpenRequestToken
                                     }
                                     onChange={({ startDate, endDate }) => {
+                                      setDiscoverQuoteUiState({
+                                        status: "idle",
+                                      });
                                       setCheckInDate(startDate);
                                       setCheckOutDate(endDate);
                                     }}
@@ -2199,20 +2476,188 @@ export function DiscoverPage({
                                 <div className="mt-2">
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      if (!checkInDate || !checkOutDate) {
-                                        return;
-                                      }
-                                      setCheckDatePanelOpenRequestToken(
-                                        (current) => (current ?? 0) + 1,
-                                      );
-                                    }}
-                                    disabled={!checkInDate || !checkOutDate}
-                                    className={`inline-flex h-10 w-full items-center justify-center rounded-md border px-3 text-sm font-semibold whitespace-nowrap transition ${checkInDate && checkOutDate ? "border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 text-white shadow-[0_8px_18px_-12px_rgba(13,148,136,0.75)] hover:brightness-105" : "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400 shadow-none"}`}
+                                    onClick={handleCheckAvailability}
+                                    disabled={isCheckAvailabilityDisabled}
+                                    className={`inline-flex h-10 w-full items-center justify-center rounded-md border px-3 text-sm font-semibold whitespace-nowrap transition ${isCheckAvailabilityDisabled ? "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400 shadow-none" : "border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 text-white shadow-[0_8px_18px_-12px_rgba(13,148,136,0.75)] hover:brightness-105"}`}
                                   >
-                                    Check Availability
+                                    {isCurrentQuoteRequestLoading ? (
+                                      <span className="inline-flex items-center gap-2">
+                                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                                        Checking...
+                                      </span>
+                                    ) : (
+                                      "Check Availability"
+                                    )}
                                   </button>
                                 </div>
+                                {discoverQuoteUiState.status === "loading" &&
+                                discoverQuoteUiState.key === quoteRequestKey ? (
+                                  <p className="mt-2 text-xs font-medium text-cyan-800">
+                                    Checking live pricing...
+                                  </p>
+                                ) : null}
+                                {discoverQuoteUiState.status === "error" &&
+                                discoverQuoteUiState.key === quoteRequestKey ? (
+                                  <p className="mt-2 text-xs font-medium text-rose-700">
+                                    {discoverQuoteUiState.message}
+                                  </p>
+                                ) : null}
+                                {discoverQuoteUiState.status === "success" &&
+                                discoverQuoteUiState.key === quoteRequestKey ? (
+                                  <div className="mt-3 rounded-xl border border-cyan-200 bg-cyan-50/70 p-4 md:p-5">
+                                    <p className="text-xs font-semibold tracking-[0.08em] text-cyan-900 uppercase">
+                                      Live Quote
+                                    </p>
+                                    <dl className="mt-2.5 space-y-2 text-base text-slate-700">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <dt>Subtotal</dt>
+                                        <dd className="font-medium text-slate-700 tabular-nums">
+                                          $
+                                          {discoverQuoteUiState.quote.subtotal.toLocaleString(
+                                            "en-US",
+                                            {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            },
+                                          )}
+                                        </dd>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-3">
+                                        <dt>Taxes</dt>
+                                        <dd className="font-medium text-slate-700 tabular-nums">
+                                          $
+                                          {discoverQuoteUiState.quote.taxes.toLocaleString(
+                                            "en-US",
+                                            {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            },
+                                          )}
+                                        </dd>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-3 border-t border-cyan-200 pt-1.5">
+                                        <dt className="text-[1.03rem] font-semibold text-slate-900">
+                                          Total
+                                        </dt>
+                                        <dd className="text-lg font-extrabold text-slate-900 tabular-nums">
+                                          $
+                                          {discoverQuoteUiState.quote.total.toLocaleString(
+                                            "en-US",
+                                            {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            },
+                                          )}
+                                        </dd>
+                                      </div>
+                                    </dl>
+                                    {(() => {
+                                      const canCheckoutDirect =
+                                        discoverQuoteUiState.quote
+                                          .canCheckoutDirect ??
+                                        Boolean(
+                                          discoverQuoteUiState.quote.handoff,
+                                        );
+
+                                      if (!canCheckoutDirect) {
+                                        return (
+                                          <div className="mt-3">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const detailUrl =
+                                                  discoverQuoteUiState.quote
+                                                    .detail;
+                                                if (!detailUrl) {
+                                                  return;
+                                                }
+                                                const detailWindowName =
+                                                  buildDiscoverWindowName(
+                                                    overlayListing?.id ??
+                                                      "listing",
+                                                    "detail",
+                                                  );
+                                                openInNamedWindow(
+                                                  detailUrl,
+                                                  detailWindowName,
+                                                );
+                                              }}
+                                              disabled={
+                                                !discoverQuoteUiState.quote
+                                                  .detail
+                                              }
+                                              className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border text-sm font-semibold transition ${discoverQuoteUiState.quote.detail ? "animate-[pulse_2.2s_ease-in-out_infinite] border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 text-white shadow-[0_12px_24px_-16px_rgba(13,148,136,0.85)] ring-2 ring-cyan-300/70 ring-offset-1 ring-offset-cyan-50 hover:brightness-105" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+                                            >
+                                              <CreditCard className="h-3.5 w-3.5" />
+                                              Reserve at Host
+                                            </button>
+                                          </div>
+                                        );
+                                      }
+
+                                      return (
+                                        <div className="mt-3 grid grid-cols-2 gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const detailUrl =
+                                                discoverQuoteUiState.quote
+                                                  .detail;
+                                              if (!detailUrl) {
+                                                return;
+                                              }
+                                              const detailWindowName =
+                                                buildDiscoverWindowName(
+                                                  overlayListing?.id ??
+                                                    "listing",
+                                                  "detail",
+                                                );
+                                              openInNamedWindow(
+                                                detailUrl,
+                                                detailWindowName,
+                                              );
+                                            }}
+                                            disabled={
+                                              !discoverQuoteUiState.quote.detail
+                                            }
+                                            className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border text-xs font-semibold transition ${discoverQuoteUiState.quote.detail ? "border-cyan-300 bg-linear-to-r from-white to-cyan-50 text-cyan-800 shadow-[0_10px_18px_-16px_rgba(8,145,178,0.75)] hover:border-cyan-400 hover:from-cyan-50 hover:to-cyan-100" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+                                          >
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                            View at Host
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const handoffUrl =
+                                                discoverQuoteUiState.quote
+                                                  .handoff;
+                                              if (!handoffUrl) {
+                                                return;
+                                              }
+                                              openDiscoverHandoff({
+                                                handoffUrl,
+                                                slug:
+                                                  overlayListing?.id ??
+                                                  "listing",
+                                                detailUrl:
+                                                  discoverQuoteUiState.quote
+                                                    .detail,
+                                              });
+                                            }}
+                                            disabled={
+                                              !discoverQuoteUiState.quote
+                                                .handoff
+                                            }
+                                            className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border text-xs font-semibold transition ${discoverQuoteUiState.quote.handoff ? "animate-[pulse_2.2s_ease-in-out_infinite] border-teal-600 bg-linear-to-r from-teal-600 to-cyan-600 text-white shadow-[0_12px_24px_-16px_rgba(13,148,136,0.85)] ring-2 ring-cyan-300/70 ring-offset-1 ring-offset-cyan-50 hover:brightness-105" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+                                          >
+                                            <CreditCard className="h-3.5 w-3.5" />
+                                            Book Now
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                ) : null}
                               </section>
 
                               <section className="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.75)] md:p-5">

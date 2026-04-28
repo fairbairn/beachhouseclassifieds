@@ -194,6 +194,33 @@ export type DiscoverListingDetailPayload = {
   };
 };
 
+export type DiscoverQuoteRequest = {
+  slug: string;
+  in: string;
+  out: string;
+  adults?: number;
+  kids?: number;
+};
+
+export type DiscoverQuoteSuccess = {
+  ok: true;
+  subtotal: number;
+  taxes: number;
+  total: number;
+  detail: string | null;
+  handoff: string | null;
+  canCheckoutDirect?: boolean;
+  cached?: boolean;
+};
+
+export type DiscoverQuoteFailure = {
+  ok: false;
+  code: string;
+  msg: string;
+};
+
+export type DiscoverQuoteResponse = DiscoverQuoteSuccess | DiscoverQuoteFailure;
+
 export type DiscoverFacetsPayload = {
   totalCount: number;
   facets: DiscoverFacetGroups;

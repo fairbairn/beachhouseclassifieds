@@ -241,7 +241,7 @@ async function postStreamlineRequestViaContext(input: {
   }
 }
 
-export async function executeStayon30aSingleQuote(
+export async function executeStayon30aV2SingleQuote(
   input: QuoteExecutionRequest,
 ): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
@@ -688,5 +688,3 @@ export async function executeStayon30aSingleQuote(
     await browser.close();
   }
 }
-
-export const executeStayon30aV2SingleQuote = executeStayon30aSingleQuote;

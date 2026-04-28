@@ -15,6 +15,13 @@ const profileAliases: Record<string, EnvProfile> = {
 
 export const envOverrideKeys = [
   "APP_ENV_PROFILE",
+  "NODE_USE_ENV_PROXY",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
   "DATABASE_PROVIDER",
   "DATABASE_URL",
   "BETTER_AUTH_SECRET",
@@ -30,6 +37,12 @@ export const envOverrideKeys = [
   "MEILISEARCH_HOST",
   "MEILISEARCH_API_KEY",
   "MEILISEARCH_DISCOVER_INDEX",
+  "STAYON30A_QUOTE_RUNTIME_V2",
+  "STAYON30A_V2_PROXY_URL",
+  "STAYON30A_V2_PROXY_ARRAY",
+  "STAYON30A_V2_HEADLESS",
+  "STAYON30A_V2_USER_AGENT",
+  "STAYON30A_V2_SKIP_LANDING",
 ] as const;
 
 const localProfileFileAuthorityKeys = new Set<string>([

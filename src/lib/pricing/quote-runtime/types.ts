@@ -23,6 +23,7 @@ export type QuoteExecutionObservation = {
   feesTotalExclTaxes: number | null;
   grandTotal: number | null;
   quotedTotal: number | null;
+  detailUrl?: string | null;
   handoffUrl: string | null;
 };
 

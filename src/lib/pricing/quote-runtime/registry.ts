@@ -33,11 +33,14 @@ import { executeSandpiper30aSingleQuote } from "./adapters/sandpiper30a";
 import { executeScenicstays30aSingleQuote } from "./adapters/scenicstays30a";
 import { executeStayat30aSingleQuote } from "./adapters/stayat30a";
 import { executeStayon30aSingleQuote } from "./adapters/stayon30a";
+import { executeStayon30aV2SingleQuote } from "./adapters/stayon30a-v2";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "./types";
 
 export type QuoteRuntimeExecutor = (
   input: QuoteExecutionRequest,
 ) => Promise<QuoteExecutionResult>;
+
+const USE_STAYON30A_V2_RUNTIME = process.env.STAYON30A_QUOTE_RUNTIME_V2 === "1";
 
 const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   "30abeach": execute30ABeachSingleQuote,
@@ -74,7 +77,9 @@ const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   sandpiper30a: executeSandpiper30aSingleQuote,
   scenicstays30a: executeScenicstays30aSingleQuote,
   stayat30a: executeStayat30aSingleQuote,
-  stayon30a: executeStayon30aSingleQuote,
+  stayon30a: USE_STAYON30A_V2_RUNTIME
+    ? executeStayon30aV2SingleQuote
+    : executeStayon30aSingleQuote,
 };
 
 export function getKnownQuoteRuntimeAdapterKeys(): string[] {

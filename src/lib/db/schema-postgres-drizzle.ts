@@ -1,4 +1,5 @@
 export {
+  discover_quote_cache,
   listing,
   listing_pricing_summary,
   listing_source_availability,
