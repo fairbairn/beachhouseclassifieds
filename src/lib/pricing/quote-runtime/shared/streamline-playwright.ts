@@ -1,5 +1,4 @@
 import { chromium, type Browser, type BrowserContext } from "playwright";
-
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 export type StreamlineEnvelope<TData = unknown> = {
@@ -184,9 +183,7 @@ async function launchChromiumBrowser(input: {
     const playwrightExtraModule = (await import("playwright-extra")) as {
       chromium?: typeof chromium;
     };
-    const stealthModule = (await import(
-      "puppeteer-extra-plugin-stealth"
-    )) as {
+    const stealthModule = (await import("puppeteer-extra-plugin-stealth")) as {
       default?: () => unknown;
     };
 
