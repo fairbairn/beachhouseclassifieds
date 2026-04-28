@@ -1,4 +1,4 @@
-import { chromium, type BrowserContext } from "playwright";
+import { chromium, type Browser, type BrowserContext } from "playwright";
 
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
@@ -102,12 +102,214 @@ type StreamlinePreReservationPayload = {
 
 const DEFAULT_ENDPOINT_PATH = "/wp-admin/admin-ajax.php";
 const DEFAULT_TIMEOUT_MS = 20000;
+const DEFAULT_USER_AGENT_CANDIDATES = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edg/137.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 13; SAMSUNG SM-S918U) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/24.0 Chrome/120.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (Linux; Android 14; OnePlus 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+] as const;
 
 function normalizeTimeoutMs(raw: number | undefined): number {
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
     return DEFAULT_TIMEOUT_MS;
   }
   return Math.max(1000, Math.floor(raw));
+}
+
+function resolveDetailLoadTimeoutMs(timeoutMs: number): number {
+  // Detail navigation should have a larger budget than API calls, especially
+  // when anti-bot challenge pages need to load before retrying.
+  return Math.min(120000, Math.max(15000, Math.floor(timeoutMs * 2)));
+}
+
+function resolveChallengeWaitMs(input: {
+  timeoutMs: number;
+  headless: boolean;
+}): number {
+  if (input.headless) {
+    return Math.min(8000, Math.max(2000, Math.floor(input.timeoutMs / 3)));
+  }
+
+  // In headed mode, allow enough time for a human to complete challenge UI.
+  return Math.min(60000, Math.max(30000, Math.floor(input.timeoutMs / 2)));
+}
+
+async function launchChromiumBrowser(input: {
+  envPrefix: string;
+  headless: boolean;
+  proxy: {
+    server: string;
+    username?: string;
+    password?: string;
+  } | null;
+}): Promise<{
+  browser: Browser;
+  stealthRequested: boolean;
+  stealthActive: boolean;
+  stealthError: string | null;
+  realChromeRequested: boolean;
+}> {
+  const stealthRequested = readToggle(
+    `${input.envPrefix}_STEALTH`,
+    readToggle("STREAMLINE_STEALTH", false),
+  );
+  const realChromeRequested = readToggle(
+    `${input.envPrefix}_REAL_CHROME`,
+    readToggle("STREAMLINE_REAL_CHROME", false),
+  );
+
+  const launchOptions = {
+    headless: input.headless,
+    ...(realChromeRequested ? { channel: "chrome" as const } : {}),
+    ...(input.proxy ? { proxy: input.proxy } : {}),
+  };
+
+  if (!stealthRequested) {
+    return {
+      browser: await chromium.launch(launchOptions),
+      stealthRequested,
+      stealthActive: false,
+      stealthError: null,
+      realChromeRequested,
+    };
+  }
+
+  try {
+    const playwrightExtraModule = (await import("playwright-extra")) as {
+      chromium?: typeof chromium;
+    };
+    const stealthModule = (await import(
+      "puppeteer-extra-plugin-stealth"
+    )) as {
+      default?: () => unknown;
+    };
+
+    const extraChromium = playwrightExtraModule.chromium;
+    const createStealthPlugin = stealthModule.default;
+
+    if (!extraChromium || typeof createStealthPlugin !== "function") {
+      throw new Error("Stealth modules loaded without expected API shape");
+    }
+
+    (extraChromium as typeof chromium & { use: (plugin: unknown) => void }).use(
+      createStealthPlugin(),
+    );
+
+    return {
+      browser: await extraChromium.launch(launchOptions),
+      stealthRequested,
+      stealthActive: true,
+      stealthError: null,
+      realChromeRequested,
+    };
+  } catch (error: unknown) {
+    return {
+      browser: await chromium.launch(launchOptions),
+      stealthRequested,
+      stealthActive: false,
+      stealthError:
+        error instanceof Error
+          ? error.message
+          : "Unknown stealth launch initialization error",
+      realChromeRequested,
+    };
+  }
+}
+
+function readEnv(name: string): string | null {
+  const value = process.env[name]?.trim();
+  return value && value.length > 0 ? value : null;
+}
+
+async function seedCloudflareCookies(input: {
+  context: BrowserContext;
+  detailUrl: string;
+  envPrefix: string;
+}): Promise<{
+  seededCfClearance: boolean;
+  seededCfBm: boolean;
+}> {
+  const cfClearance = readEnv(`${input.envPrefix}_CF_CLEARANCE`);
+  const cfBm = readEnv(`${input.envPrefix}_CF_BM`);
+
+  if (!cfClearance && !cfBm) {
+    return {
+      seededCfClearance: false,
+      seededCfBm: false,
+    };
+  }
+
+  const hostname = new URL(input.detailUrl).hostname;
+  const cookies: Array<{
+    name: string;
+    value: string;
+    domain: string;
+    path: string;
+    secure: boolean;
+    httpOnly: boolean;
+    sameSite: "None";
+  }> = [];
+
+  if (cfClearance) {
+    cookies.push({
+      name: "cf_clearance",
+      value: cfClearance,
+      domain: hostname,
+      path: "/",
+      secure: true,
+      httpOnly: true,
+      sameSite: "None",
+    });
+  }
+
+  if (cfBm) {
+    cookies.push({
+      name: "__cf_bm",
+      value: cfBm,
+      domain: hostname,
+      path: "/",
+      secure: true,
+      httpOnly: true,
+      sameSite: "None",
+    });
+  }
+
+  await input.context.addCookies(cookies);
+
+  return {
+    seededCfClearance: Boolean(cfClearance),
+    seededCfBm: Boolean(cfBm),
+  };
+}
+
+async function waitForCookie(input: {
+  context: BrowserContext;
+  origin: string;
+  cookieName: string;
+  timeoutMs: number;
+  pollMs?: number;
+}): Promise<boolean> {
+  const pollMs = Math.max(200, Math.floor(input.pollMs ?? 750));
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < input.timeoutMs) {
+    const cookies = await input.context.cookies(input.origin);
+    if (cookies.some((cookie) => cookie.name === input.cookieName)) {
+      return true;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, pollMs);
+    });
+  }
+
+  return false;
 }
 
 function toPositiveIntString(value: unknown): string | null {
@@ -324,6 +526,101 @@ function readToggle(name: string, defaultEnabled = true): boolean {
   return raw !== "0";
 }
 
+function readFirstEnv(keys: string[]): string | null {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function parseUserAgentPool(raw: string | null): string[] {
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split("||")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+function hashString(input: string): number {
+  let hash = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+function resolveUserAgent(input: {
+  envPrefix: string;
+  adapterKey: string;
+  request: QuoteExecutionRequest;
+}): string {
+  const explicitUserAgent =
+    process.env[`${input.envPrefix}_USER_AGENT`]?.trim();
+  if (explicitUserAgent) {
+    return explicitUserAgent;
+  }
+
+  const envPool = parseUserAgentPool(
+    readFirstEnv([
+      `${input.envPrefix}_USER_AGENT_POOL`,
+      "STREAMLINE_USER_AGENT_POOL",
+    ]),
+  );
+
+  const candidates =
+    envPool.length > 0 ? envPool : [...DEFAULT_USER_AGENT_CANDIDATES];
+
+  const hashSeed = `${input.adapterKey}:${input.request.listingId}:${input.request.checkInIso}:${input.request.checkOutIso}`;
+  const index = hashString(hashSeed) % candidates.length;
+  return candidates[index] ?? DEFAULT_USER_AGENT_CANDIDATES[0];
+}
+
+function resolvePlaywrightProxy(envPrefix: string): {
+  server: string;
+  username?: string;
+  password?: string;
+} | null {
+  const proxyUrl = readFirstEnv([
+    `${envPrefix}_HTTPS_PROXY`,
+    `${envPrefix}_HTTP_PROXY`,
+    `${envPrefix}_PROXY`,
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "https_proxy",
+    "http_proxy",
+  ]);
+
+  if (!proxyUrl) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(proxyUrl);
+    const server = `${parsed.protocol}//${parsed.host}`;
+    const username = parsed.username
+      ? decodeURIComponent(parsed.username)
+      : undefined;
+    const password = parsed.password
+      ? decodeURIComponent(parsed.password)
+      : undefined;
+    return {
+      server,
+      ...(username ? { username } : {}),
+      ...(password ? { password } : {}),
+    };
+  } catch {
+    return {
+      server: proxyUrl,
+    };
+  }
+}
+
 export async function executeStreamlinePlaywrightQuote(input: {
   adapterKey: string;
   envPrefix: string;
@@ -368,26 +665,132 @@ export async function executeStreamlinePlaywrightQuote(input: {
     true,
   );
   const skipLanding = readToggle(`${input.envPrefix}_SKIP_LANDING`, true);
-  const userAgent =
-    process.env[`${input.envPrefix}_USER_AGENT`]?.trim() || null;
+  const userAgent = resolveUserAgent({
+    envPrefix: input.envPrefix,
+    adapterKey: input.adapterKey,
+    request: input.request,
+  });
+  const proxy = resolvePlaywrightProxy(input.envPrefix);
+  const detailLoadTimeoutMs = resolveDetailLoadTimeoutMs(timeoutMs);
+  const detailChallengeWaitMs = resolveChallengeWaitMs({
+    timeoutMs,
+    headless,
+  });
 
-  const browser = await chromium.launch({ headless });
+  const launchState = await launchChromiumBrowser({
+    envPrefix: input.envPrefix,
+    headless,
+    proxy,
+  });
+  const browser = launchState.browser;
+
+  const launchDiagnostics: Record<string, unknown> = {
+    stealthRequested: launchState.stealthRequested,
+    stealthActive: launchState.stealthActive,
+    realChromeRequested: launchState.realChromeRequested,
+    proxyConfigured: Boolean(proxy),
+    proxyServer: proxy?.server ?? null,
+    proxyAuthConfigured: Boolean(proxy?.username || proxy?.password),
+    effectiveUserAgent: userAgent,
+    ...(launchState.stealthError
+      ? { stealthError: launchState.stealthError }
+      : {}),
+  };
 
   try {
     const context = await browser.newContext({
-      ...(userAgent ? { userAgent } : {}),
+      userAgent,
       ignoreHTTPSErrors: false,
     });
 
+    const seededCookies = await seedCloudflareCookies({
+      context,
+      detailUrl: contextData.detailUrl,
+      envPrefix: input.envPrefix,
+    });
+
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, "webdriver", {
+        configurable: true,
+        get: () => undefined,
+      });
+    });
+
     let detailStatus: number | null = null;
+    let detailInitialStatus: number | null = null;
+    let detailRetryStatus: number | null = null;
+    let detailCfMitigatedInitial: string | null = null;
+    let detailCfMitigatedRetry: string | null = null;
+    let detailChallengeRetryAttempted = false;
+    let detailHasCfClearanceCookie = false;
     if (!skipLanding) {
       const page = await context.newPage();
       try {
         const response = await page.goto(contextData.detailUrl, {
           waitUntil: "commit",
-          timeout: Math.max(1000, Math.floor(timeoutMs / 2)),
+          timeout: detailLoadTimeoutMs,
         });
-        detailStatus = response?.status() ?? null;
+        detailInitialStatus = response?.status() ?? null;
+        detailStatus = detailInitialStatus;
+        detailCfMitigatedInitial =
+          response?.headers()["cf-mitigated"]?.trim() ?? null;
+
+        if (
+          detailInitialStatus === 403 &&
+          detailCfMitigatedInitial?.toLowerCase() === "challenge"
+        ) {
+          detailChallengeRetryAttempted = true;
+
+          // Allow challenge completion and wait for the clearance cookie.
+          detailHasCfClearanceCookie = await waitForCookie({
+            context,
+            origin: contextData.origin,
+            cookieName: "cf_clearance",
+            timeoutMs: detailChallengeWaitMs,
+          });
+
+          if (!detailHasCfClearanceCookie) {
+            return {
+              success: false,
+              elapsedMs: performance.now() - startedAt,
+              error: toError({
+                adapterKey: input.adapterKey,
+                code: "EDGE_CHALLENGE_BLOCKED",
+                message:
+                  "Cloudflare challenge did not issue cf_clearance cookie within wait window",
+                retryable: true,
+                listingId: input.request.listingId,
+                checkInIso: input.request.checkInIso,
+                checkOutIso: input.request.checkOutIso,
+                details: {
+                  handoffUrl,
+                  detailUrl: contextData.detailUrl,
+                  detailStatus,
+                  detailInitialStatus,
+                  detailRetryStatus,
+                  detailCfMitigatedInitial,
+                  detailCfMitigatedRetry,
+                  detailChallengeRetryAttempted,
+                  detailHasCfClearanceCookie,
+                  detailLoadTimeoutMs,
+                  detailChallengeWaitMs,
+                  seededCfClearanceCookie: seededCookies.seededCfClearance,
+                  seededCfBmCookie: seededCookies.seededCfBm,
+                  ...launchDiagnostics,
+                },
+              }),
+            };
+          }
+
+          const retryResponse = await page.goto(contextData.detailUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: detailLoadTimeoutMs,
+          });
+          detailRetryStatus = retryResponse?.status() ?? null;
+          detailStatus = detailRetryStatus;
+          detailCfMitigatedRetry =
+            retryResponse?.headers()["cf-mitigated"]?.trim() ?? null;
+        }
       } catch (error: unknown) {
         return {
           success: false,
@@ -406,9 +809,22 @@ export async function executeStreamlinePlaywrightQuote(input: {
             details: {
               handoffUrl,
               detailUrl: contextData.detailUrl,
+              detailInitialStatus,
+              detailRetryStatus,
+              detailCfMitigatedInitial,
+              detailCfMitigatedRetry,
+              detailChallengeRetryAttempted,
+              detailHasCfClearanceCookie,
+              detailLoadTimeoutMs,
+              detailChallengeWaitMs,
+              seededCfClearanceCookie: seededCookies.seededCfClearance,
+              seededCfBmCookie: seededCookies.seededCfBm,
+              ...launchDiagnostics,
             },
           }),
         };
+      } finally {
+        await page.close();
       }
 
       if (detailStatus !== null && detailStatus >= 400) {
@@ -427,6 +843,17 @@ export async function executeStreamlinePlaywrightQuote(input: {
               handoffUrl,
               detailUrl: contextData.detailUrl,
               detailStatus,
+              detailInitialStatus,
+              detailRetryStatus,
+              detailCfMitigatedInitial,
+              detailCfMitigatedRetry,
+              detailChallengeRetryAttempted,
+              detailHasCfClearanceCookie,
+              detailLoadTimeoutMs,
+              detailChallengeWaitMs,
+              seededCfClearanceCookie: seededCookies.seededCfClearance,
+              seededCfBmCookie: seededCookies.seededCfBm,
+              ...launchDiagnostics,
             },
           }),
         };
@@ -494,6 +921,16 @@ export async function executeStreamlinePlaywrightQuote(input: {
             details: {
               handoffUrl,
               detailStatus,
+              detailInitialStatus,
+              detailRetryStatus,
+              detailCfMitigatedInitial,
+              detailCfMitigatedRetry,
+              detailChallengeRetryAttempted,
+              detailHasCfClearanceCookie,
+              detailLoadTimeoutMs,
+              detailChallengeWaitMs,
+              seededCfClearanceCookie: seededCookies.seededCfClearance,
+              seededCfBmCookie: seededCookies.seededCfBm,
               pricingStatus: pricingResponse.httpStatus,
               availabilityStatus: availabilityResponse.httpStatus,
             },
@@ -517,6 +954,16 @@ export async function executeStreamlinePlaywrightQuote(input: {
           details: {
             handoffUrl,
             detailStatus,
+            detailInitialStatus,
+            detailRetryStatus,
+            detailCfMitigatedInitial,
+            detailCfMitigatedRetry,
+            detailChallengeRetryAttempted,
+            detailHasCfClearanceCookie,
+            detailLoadTimeoutMs,
+            detailChallengeWaitMs,
+            seededCfClearanceCookie: seededCookies.seededCfClearance,
+            seededCfBmCookie: seededCookies.seededCfBm,
             pricingStatus: pricingResponse.httpStatus,
           },
         }),
@@ -541,6 +988,16 @@ export async function executeStreamlinePlaywrightQuote(input: {
           details: {
             handoffUrl,
             detailStatus,
+            detailInitialStatus,
+            detailRetryStatus,
+            detailCfMitigatedInitial,
+            detailCfMitigatedRetry,
+            detailChallengeRetryAttempted,
+            detailHasCfClearanceCookie,
+            detailLoadTimeoutMs,
+            detailChallengeWaitMs,
+            seededCfClearanceCookie: seededCookies.seededCfClearance,
+            seededCfBmCookie: seededCookies.seededCfBm,
             pricingStatus: pricingResponse.httpStatus,
           },
         }),
@@ -563,6 +1020,16 @@ export async function executeStreamlinePlaywrightQuote(input: {
           details: {
             handoffUrl,
             detailStatus,
+            detailInitialStatus,
+            detailRetryStatus,
+            detailCfMitigatedInitial,
+            detailCfMitigatedRetry,
+            detailChallengeRetryAttempted,
+            detailHasCfClearanceCookie,
+            detailLoadTimeoutMs,
+            detailChallengeWaitMs,
+            seededCfClearanceCookie: seededCookies.seededCfClearance,
+            seededCfBmCookie: seededCookies.seededCfBm,
             pricingStatus: pricingResponse.httpStatus,
           },
         }),
@@ -589,6 +1056,16 @@ export async function executeStreamlinePlaywrightQuote(input: {
           details: {
             handoffUrl,
             detailStatus,
+            detailInitialStatus,
+            detailRetryStatus,
+            detailCfMitigatedInitial,
+            detailCfMitigatedRetry,
+            detailChallengeRetryAttempted,
+            detailHasCfClearanceCookie,
+            detailLoadTimeoutMs,
+            detailChallengeWaitMs,
+            seededCfClearanceCookie: seededCookies.seededCfClearance,
+            seededCfBmCookie: seededCookies.seededCfBm,
             pricingStatus: pricingResponse.httpStatus,
           },
         }),
