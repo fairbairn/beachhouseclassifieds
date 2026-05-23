@@ -80,6 +80,7 @@ type RequestResult = {
     feesTotalExclTaxes: number | null;
     grandTotal: number | null;
     quotedTotal: number | null;
+    detailUrl: string | null;
     handoffUrl: string | null;
   };
 };
@@ -765,6 +766,13 @@ function printSingleQuoteReport(input: {
 }): void {
   const { adapterKey, sample, result, adults, children } = input;
   const successColor = result.success ? COLOR.green : COLOR.red;
+  const runtimeDetailUrl =
+    result.observationSample.detailUrl?.trim() ||
+    (typeof result.runtimeError?.details?.detail_url === "string"
+      ? result.runtimeError.details.detail_url.trim()
+      : "") ||
+    sample.detailUrl ||
+    "n/a";
   const runtimeHandoff =
     result.observationSample.handoffUrl?.trim() ||
     (typeof result.runtimeError?.details?.handoff_url === "string"
@@ -828,7 +836,7 @@ function printSingleQuoteReport(input: {
   );
 
   const urlRows = [
-    [paint("Detail", COLOR.cyan), sample.detailUrl || "n/a"],
+    [paint("Detail", COLOR.cyan), runtimeDetailUrl],
     [paint("Checkout (handoff_url)", COLOR.cyan), runtimeHandoff],
   ];
 
@@ -943,6 +951,7 @@ async function runSingleQuoteRequestOnce(
             feesTotalExclTaxes: null,
             grandTotal: null,
             quotedTotal: null,
+            detailUrl: null,
             handoffUrl: runtimeHandoffUrl,
           },
         };
@@ -966,6 +975,7 @@ async function runSingleQuoteRequestOnce(
           feesTotalExclTaxes: result.observation.feesTotalExclTaxes,
           grandTotal: result.observation.grandTotal,
           quotedTotal: result.observation.quotedTotal,
+          detailUrl: result.observation.detailUrl,
           handoffUrl: result.observation.handoffUrl,
         },
       };
@@ -993,6 +1003,7 @@ async function runSingleQuoteRequestOnce(
           feesTotalExclTaxes: null,
           grandTotal: null,
           quotedTotal: null,
+          detailUrl: null,
           handoffUrl: null,
         },
       };
@@ -1021,6 +1032,7 @@ async function runSingleQuoteRequestOnce(
       feesTotalExclTaxes: null,
       grandTotal: null,
       quotedTotal: null,
+      detailUrl: null,
       handoffUrl: null,
     },
   };
@@ -1061,6 +1073,7 @@ async function runSingleQuoteRequestOnceWithTimeout(
           feesTotalExclTaxes: null,
           grandTotal: null,
           quotedTotal: null,
+          detailUrl: null,
           handoffUrl: null,
         },
       });
@@ -1105,6 +1118,7 @@ async function runSingleQuoteRequestOnceWithTimeout(
             feesTotalExclTaxes: null,
             grandTotal: null,
             quotedTotal: null,
+            detailUrl: null,
             handoffUrl: null,
           },
         });
@@ -1176,6 +1190,7 @@ async function runSingleQuoteRequest(
       feesTotalExclTaxes: null,
       grandTotal: null,
       quotedTotal: null,
+      detailUrl: null,
       handoffUrl: null,
     },
   };

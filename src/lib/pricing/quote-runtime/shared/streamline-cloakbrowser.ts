@@ -160,6 +160,7 @@ type StreamlinePreReservationPayload = {
 
 const DEFAULT_ENDPOINT_PATH = "/wp-admin/admin-ajax.php";
 const DEFAULT_TIMEOUT_MS = 20000;
+const ADAPTERS_REQUIRING_LANDING_SESSION = new Set<string>(["stayon30a"]);
 const DEFAULT_USER_AGENT_CANDIDATES = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
@@ -657,6 +658,16 @@ function readFirstEnv(keys: string[]): string | null {
   return null;
 }
 
+function resolveSkipLanding(input: {
+  adapterKey: string;
+  envPrefix: string;
+}): boolean {
+  const defaultSkipLanding = !ADAPTERS_REQUIRING_LANDING_SESSION.has(
+    input.adapterKey,
+  );
+  return readToggle(`${input.envPrefix}_SKIP_LANDING`, defaultSkipLanding);
+}
+
 function parseUserAgentPool(raw: string | null): string[] {
   if (!raw) {
     return [];
@@ -785,7 +796,10 @@ export async function executeStreamlineCloakBrowserQuote(input: {
     `${input.envPrefix}_FALLBACK_AVAILABILITY`,
     true,
   );
-  const skipLanding = readToggle(`${input.envPrefix}_SKIP_LANDING`, true);
+  const skipLanding = resolveSkipLanding({
+    adapterKey: input.adapterKey,
+    envPrefix: input.envPrefix,
+  });
   const userAgent = resolveUserAgent({
     envPrefix: input.envPrefix,
     adapterKey: input.adapterKey,

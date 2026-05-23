@@ -32,6 +32,7 @@ type StayDetailRecord = DetailRecordBase & {
     listing_id: string;
     unit_id: string;
     detail_url: string;
+    property_id?: string;
   };
   title: string;
   h1: string;
@@ -115,18 +116,16 @@ type StayDetailRecord = DetailRecordBase & {
     day_codes: string;
   };
   pricing_api_hints: {
-    provider: "streamlinecore-api-request";
-    endpoint_path: "/wp-admin/admin-ajax.php";
+    provider: "homelocal-wp-json-quotes";
+    endpoint_path: "/wp-json/homelocal/v1/quotes";
     method_names: {
-      availability: "GetPropertyAvailabilityRawData";
-      room_details: "GetPropertyRoomDetails";
+      quotes: "POST /wp-json/homelocal/v1/quotes";
     };
     notes: string;
   };
 };
 
-const DEFAULT_ANCHOR_URL =
-  "https://stayon30a.com/search-results/?min_beds=3&sort_by=rotation&plus_oc=1";
+const DEFAULT_ANCHOR_URL = "https://stayon30a.com/stays/";
 const OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
@@ -160,6 +159,390 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&#(\d+);/g, (_match, codePointText: string) => {
+      const codePoint = Number(codePointText);
+      if (!Number.isFinite(codePoint)) {
+        return _match;
+      }
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return _match;
+      }
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hexText: string) => {
+      const codePoint = Number.parseInt(hexText, 16);
+      if (!Number.isFinite(codePoint)) {
+        return _match;
+      }
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return _match;
+      }
+    })
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;/gi, "'")
+    .replace(/&#8211;/gi, "-")
+    .replace(/&#8212;/gi, "-")
+    .replace(/&#8216;|&#8217;/gi, "'")
+    .replace(/&#8220;|&#8221;/gi, '"');
+}
+
+function stripHtmlPreserveLineBreaks(value: string): string {
+  return decodeHtmlEntities(
+    value
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<br\s*\/?\s*>/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<\/div>/gi, "\n")
+      .replace(/<\/li>/gi, "\n")
+      .replace(/<\/h[1-6]>/gi, "\n")
+      .replace(/<li[^>]*>/gi, "- ")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\r/g, "")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
+  );
+}
+
+function cleanAboutSpaceDescriptionText(value: string): string {
+  return value
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/^(?:close\s*)+/i, "")
+    .replace(/^(?:about\s*this\s*space\s*)+/i, "")
+    .trim();
+}
+
+function extractAboutSpacePopupDescription(html: string): string {
+  const aboutDialogSlice = extractFirst(
+    /<h[1-6][^>]*>\s*About\s*this\s*space\s*<\/h[1-6]>[\s\S]*?<div[^>]*style\s*=\s*["'][^"']*white-space\s*:\s*pre-wrap[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+    html,
+  );
+  const preWrapText = aboutDialogSlice;
+  if (preWrapText) {
+    return cleanAboutSpaceDescriptionText(
+      stripHtmlPreserveLineBreaks(preWrapText),
+    ).slice(0, 20000);
+  }
+
+  const aboutPopupSlice = extractFirst(
+    /<h[1-6][^>]*>\s*About\s*this\s*space\s*<\/h[1-6]>[\s\S]*?<div[^>]*class\s*=\s*["'][^"']*(?:popup|modal|dialog)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+    html,
+  );
+  if (aboutPopupSlice) {
+    const popupText = cleanAboutSpaceDescriptionText(
+      stripHtmlPreserveLineBreaks(aboutPopupSlice),
+    );
+    if (popupText.length >= 120) {
+      return popupText.slice(0, 20000);
+    }
+  }
+
+  const aboutSection = extractFirst(
+    /About\s*this\s*space([\s\S]*?)Other\s+things\s+to\s+note/i,
+    html,
+  );
+  if (aboutSection) {
+    return cleanAboutSpaceDescriptionText(
+      stripHtmlPreserveLineBreaks(aboutSection),
+    ).slice(0, 20000);
+  }
+
+  return "";
+}
+
+async function activateDetailPopups(
+  page: Awaited<
+    ReturnType<{ newPage: () => Promise<DiscoverContext["page"]> }["newPage"]>
+  >,
+): Promise<string> {
+  const extractVisibleAboutSpaceDialogText = async (): Promise<string> =>
+    page.evaluate(() => {
+      const headings = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "h1, h2, h3, .elementor-heading-title",
+        ),
+      ).filter((heading) => {
+        const normalized = (heading.textContent ?? "")
+          .replace(/[\u200B-\u200D\uFEFF]/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+        return normalized === "about this space";
+      });
+
+      for (const heading of headings) {
+        const headingStyle = window.getComputedStyle(heading);
+        const headingRect = heading.getBoundingClientRect();
+        const headingVisible =
+          headingStyle.display !== "none" &&
+          headingStyle.visibility !== "hidden" &&
+          Number(headingStyle.opacity || "1") > 0 &&
+          headingRect.width > 0 &&
+          headingRect.height > 0;
+        if (!headingVisible) {
+          continue;
+        }
+
+        let container =
+          heading.closest<HTMLElement>(
+            "[role='dialog'], .dialog-widget-content, .elementor-popup-modal, .elementor-location-popup",
+          ) ?? heading.parentElement;
+        while (
+          container &&
+          (container.textContent ?? "").length < 220 &&
+          container.parentElement
+        ) {
+          container = container.parentElement;
+        }
+        if (!container) {
+          continue;
+        }
+
+        const containerStyle = window.getComputedStyle(container);
+        const containerRect = container.getBoundingClientRect();
+        const containerVisible =
+          containerStyle.display !== "none" &&
+          containerStyle.visibility !== "hidden" &&
+          Number(containerStyle.opacity || "1") > 0 &&
+          containerRect.width > 0 &&
+          containerRect.height > 0;
+        if (!containerVisible) {
+          continue;
+        }
+
+        const text = (container.textContent ?? "")
+          .replace(/[\u200B-\u200D\uFEFF]/g, "")
+          .replace(/\s+/g, " ")
+          .replace(/^(?:close\s*)+/i, "")
+          .replace(/^(?:about\s*this\s*space\s*)+/i, "")
+          .replace(/\bclose\b/gi, " ")
+          .trim();
+
+        if (text.length >= 120) {
+          return text.slice(0, 20000);
+        }
+      }
+
+      return "";
+    });
+
+  let popupText = await extractVisibleAboutSpaceDialogText();
+  if (popupText) {
+    return popupText;
+  }
+
+  const clickVisibleByText = async (matcher: RegExp): Promise<boolean> =>
+    page.evaluate((patternSource) => {
+      const pattern = new RegExp(patternSource, "i");
+      const candidates = Array.from(
+        document.querySelectorAll<HTMLElement>("button, a, [role='button']"),
+      );
+      const target = candidates.find((element) => {
+        const style = window.getComputedStyle(element);
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          Number(style.opacity || "1") <= 0
+        ) {
+          return false;
+        }
+        const text = (element.textContent ?? "").replace(/\s+/g, " ").trim();
+        return pattern.test(text);
+      });
+      if (!target) {
+        return false;
+      }
+      target.click();
+      return true;
+    }, matcher.source);
+
+  const clickPopupTrigger = async (selector: string): Promise<void> => {
+    const clicked = await page.evaluate((selectorText) => {
+      const candidates = Array.from(
+        document.querySelectorAll<HTMLElement>(selectorText),
+      );
+      const target = candidates.find((element) => {
+        const style = window.getComputedStyle(element);
+        const visible =
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          Number(style.opacity || "1") > 0;
+        return visible;
+      });
+      if (!target) {
+        return false;
+      }
+      target.click();
+      return true;
+    }, selector);
+
+    if (clicked) {
+      await page.waitForTimeout(450);
+    }
+  };
+
+  if (await clickVisibleByText(/about\s*this\s*space/)) {
+    await page.waitForTimeout(500);
+    popupText = await extractVisibleAboutSpaceDialogText();
+    if (popupText) {
+      return popupText;
+    }
+  }
+
+  await clickPopupTrigger(
+    ".show-more-popup .elementor-button, .show-more-popup a, .show-more-popup button",
+  );
+  popupText = await extractVisibleAboutSpaceDialogText();
+  if (popupText) {
+    return popupText;
+  }
+
+  if (await clickVisibleByText(/show\s*more/)) {
+    await page.waitForTimeout(500);
+    popupText = await extractVisibleAboutSpaceDialogText();
+    if (popupText) {
+      return popupText;
+    }
+  }
+
+  return "";
+}
+
+async function advanceAvailabilityCalendarAndCaptureHtml(
+  page: Awaited<
+    ReturnType<{ newPage: () => Promise<DiscoverContext["page"]> }["newPage"]>
+  >,
+  maxAdvanceMonths: number,
+): Promise<string> {
+  const normalizedMaxAdvanceMonths = Math.max(0, maxAdvanceMonths || 0);
+
+  const signature = async (): Promise<{
+    key: string;
+    maxDate: string;
+    nextDisabled: boolean;
+  } | null> =>
+    page.evaluate(() => {
+      const container = document.querySelector<HTMLElement>(
+        ".homelocal-availability-calendar-container",
+      );
+      if (!container) {
+        return null;
+      }
+
+      const active = container.querySelector<HTMLElement>(
+        ".calendar.tns-slide-active",
+      );
+      const activeYear = active?.getAttribute("data-y") ?? "";
+      const activeMonth = active?.getAttribute("data-m") ?? "";
+
+      let maxDate = "";
+      for (const node of container.querySelectorAll<HTMLElement>(
+        ".day.day-of-month[data-date]",
+      )) {
+        const value = node.getAttribute("data-date") ?? "";
+        if (value && value > maxDate) {
+          maxDate = value;
+        }
+      }
+
+      const nextButton = container.querySelector<HTMLButtonElement>(
+        "button[data-controls='next']",
+      );
+      const nextDisabled =
+        !nextButton ||
+        nextButton.disabled ||
+        nextButton.getAttribute("aria-disabled") === "true" ||
+        /disabled/i.test(nextButton.className);
+
+      return {
+        key: `${activeYear}-${activeMonth}`,
+        maxDate,
+        nextDisabled,
+      };
+    });
+
+  await page.evaluate(() => {
+    const container = document.querySelector<HTMLElement>(
+      ".homelocal-availability-calendar-container",
+    );
+    container?.scrollIntoView({ block: "center", behavior: "instant" });
+  });
+  await page.waitForTimeout(300);
+
+  let stagnantClicks = 0;
+  for (
+    let clickIndex = 0;
+    clickIndex < normalizedMaxAdvanceMonths;
+    clickIndex += 1
+  ) {
+    const before = await signature();
+    if (!before || before.nextDisabled) {
+      break;
+    }
+
+    const clicked = await page.evaluate(() => {
+      const container = document.querySelector<HTMLElement>(
+        ".homelocal-availability-calendar-container",
+      );
+      const nextButton = container?.querySelector<HTMLButtonElement>(
+        "button[data-controls='next']",
+      );
+      if (
+        !nextButton ||
+        nextButton.disabled ||
+        nextButton.getAttribute("aria-disabled") === "true" ||
+        /disabled/i.test(nextButton.className)
+      ) {
+        return false;
+      }
+      nextButton.click();
+      return true;
+    });
+
+    if (!clicked) {
+      break;
+    }
+
+    let changed = false;
+    for (let poll = 0; poll < 10; poll += 1) {
+      await page.waitForTimeout(180);
+      const after = await signature();
+      if (!after) {
+        break;
+      }
+      if (after.maxDate > before.maxDate || after.key !== before.key) {
+        changed = true;
+        break;
+      }
+    }
+
+    if (!changed) {
+      stagnantClicks += 1;
+      if (stagnantClicks >= 2) {
+        break;
+      }
+      continue;
+    }
+
+    stagnantClicks = 0;
+  }
+
+  return page.content();
 }
 
 function normalizeForMatch(value: string): string {
@@ -222,7 +605,9 @@ function toAbsoluteHttpUrl(value: string, baseUrl: string): string | null {
   }
   try {
     return new URL(raw, baseUrl).toString();
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[stayon30a] detail pull failed for ${detailUrl}: ${message}`);
     return null;
   }
 }
@@ -271,6 +656,43 @@ function extractSectionBetween(
     return "";
   }
   return html.slice(start, end);
+}
+
+function extractFirstDivBlockByClass(html: string, classToken: string): string {
+  const startPattern = new RegExp(
+    `<div[^>]+class\\s*=\\s*["'][^"']*\\b${classToken}\\b[^"']*["'][^>]*>`,
+    "i",
+  );
+  const startMatch = startPattern.exec(html);
+  if (!startMatch || typeof startMatch.index !== "number") {
+    return "";
+  }
+
+  const startIndex = startMatch.index;
+  const tagScanner = /<\/?div\b[^>]*>/gi;
+  tagScanner.lastIndex = startIndex;
+
+  let depth = 0;
+  let firstTagSeen = false;
+  let match: RegExpExecArray | null;
+
+  while ((match = tagScanner.exec(html)) !== null) {
+    const token = match[0] ?? "";
+    const isClosingTag = /^<\/div/i.test(token);
+
+    if (!firstTagSeen) {
+      firstTagSeen = true;
+      depth = 1;
+      continue;
+    }
+
+    depth += isClosingTag ? -1 : 1;
+    if (depth === 0) {
+      return html.slice(startIndex, tagScanner.lastIndex);
+    }
+  }
+
+  return html.slice(startIndex);
 }
 
 function extractJsonLdObjects(html: string): Array<Record<string, unknown>> {
@@ -379,107 +801,275 @@ function extractGoogleMapsHrefGeo(
   return { latitude, longitude };
 }
 
+function extractLeafletConfig(html: string): {
+  latitude: number | null;
+  longitude: number | null;
+  propertyId: string | null;
+} {
+  const scriptMatch = html.match(/\}\)\((\{[\s\S]*?"mapId"[\s\S]*?\})\);/i);
+  if (!scriptMatch?.[1]) {
+    return {
+      latitude: null,
+      longitude: null,
+      propertyId: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(scriptMatch[1]) as Record<string, unknown>;
+    const latitude = parseCoordinateLike(parsed.lat as string | number, "lat");
+    const longitude = parseCoordinateLike(parsed.lng as string | number, "lng");
+
+    const mapId = String(parsed.mapId ?? "");
+    const propertyId = mapId.match(/(\d+)/)?.[1] ?? null;
+
+    return {
+      latitude,
+      longitude,
+      propertyId,
+    };
+  } catch {
+    return {
+      latitude: null,
+      longitude: null,
+      propertyId: null,
+    };
+  }
+}
+
 function collectMediaUrls(
   html: string,
   baseUrl: string,
-  jsonLdObjects: Array<Record<string, unknown>>,
+  lodgingJsonLd: Record<string, unknown> | null,
 ): string[] {
-  const urls = new Set<string>();
+  const canonicalToOriginal = new Map<string, string>();
 
-  for (const object of jsonLdObjects) {
-    const image = object.image;
-    if (typeof image === "string") {
-      const absolute = toAbsoluteHttpUrl(image, baseUrl);
-      if (!absolute) {
+  const canonicalizeMediaUrl = (value: string): string | null => {
+    let parsed: URL;
+    try {
+      parsed = new URL(value, baseUrl);
+    } catch {
+      return null;
+    }
+
+    const host = parsed.hostname.toLowerCase();
+    if (host !== "assets.guesty.com") {
+      return null;
+    }
+
+    parsed.pathname = parsed.pathname.replace(
+      /\/image\/upload\/[a-z]_[^/]+(?:,[a-z]_[^/]+)*\//i,
+      "/image/upload/",
+    );
+
+    if (
+      !parsed.pathname
+        .toLowerCase()
+        .includes("/listing_images_s3/production/property-photos/")
+    ) {
+      return null;
+    }
+
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  };
+
+  const addIfUseful = (value: unknown): void => {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      return;
+    }
+    const canonical = canonicalizeMediaUrl(value.trim());
+    if (!canonical) {
+      return;
+    }
+    if (!canonicalToOriginal.has(canonical)) {
+      canonicalToOriginal.set(canonical, canonical);
+    }
+  };
+
+  const galleryScopedHtml = extractFirstDivBlockByClass(
+    html,
+    "acf-photo-gallery",
+  );
+
+  const extractAttribute = (tagHtml: string, attributeName: string): string => {
+    const attrMatch = new RegExp(
+      `\\b${attributeName}\\s*=\\s*["']([^"']+)["']`,
+      "i",
+    ).exec(tagHtml);
+    return attrMatch?.[1]?.trim() ?? "";
+  };
+
+  for (const anchorMatch of galleryScopedHtml.matchAll(/<a\b[^>]*>/gi)) {
+    const anchorTag = anchorMatch[0] ?? "";
+    if (!/\bglightbox\b/i.test(anchorTag)) {
+      continue;
+    }
+    const galleryName = extractAttribute(anchorTag, "data-gallery");
+    if (galleryName.toLowerCase() !== "property-gallery") {
+      continue;
+    }
+    const href = extractAttribute(anchorTag, "href");
+    addIfUseful(href);
+  }
+
+  const orderedGalleryUrls = Array.from(canonicalToOriginal.values());
+  if (orderedGalleryUrls.length > 0) {
+    return orderedGalleryUrls;
+  }
+
+  const guestyUrlMatches = html.match(
+    /https?:\/\/assets\.guesty\.com\/image\/upload\/[^"'\s<>]+/gi,
+  );
+  for (const rawUrl of guestyUrlMatches ?? []) {
+    addIfUseful(rawUrl);
+  }
+
+  const canonicalUrls = Array.from(canonicalToOriginal.values());
+  if (canonicalUrls.length > 0) {
+    const folderPattern =
+      /\/listing_images_s3\/production\/property-photos\/[a-z0-9]+\/([a-z0-9]+)\//i;
+    const folderCounts = new Map<string, number>();
+
+    for (const url of canonicalUrls) {
+      const folderId = url.match(folderPattern)?.[1]?.toLowerCase() ?? "";
+      if (!folderId) {
         continue;
       }
+      folderCounts.set(folderId, (folderCounts.get(folderId) ?? 0) + 1);
+    }
 
-      const canonical = toCanonicalGalleryImageUrl(absolute);
-      if (canonical) {
-        urls.add(canonical);
+    let dominantFolder = "";
+    let dominantCount = 0;
+    for (const [folderId, count] of folderCounts) {
+      if (count > dominantCount) {
+        dominantFolder = folderId;
+        dominantCount = count;
       }
     }
-    if (Array.isArray(image)) {
-      for (const entry of image) {
-        if (typeof entry !== "string") {
-          continue;
-        }
-        const absolute = toAbsoluteHttpUrl(entry, baseUrl);
-        if (!absolute) {
-          continue;
-        }
 
-        const canonical = toCanonicalGalleryImageUrl(absolute);
-        if (canonical) {
-          urls.add(canonical);
-        }
+    if (dominantFolder) {
+      const filtered = canonicalUrls.filter((url) =>
+        url.toLowerCase().includes(`/${dominantFolder}/`),
+      );
+      if (filtered.length > 0) {
+        return filtered;
       }
     }
+
+    return canonicalUrls;
   }
 
-  const attrMatches = html.matchAll(
-    /(?:data-lazy|data-src|src|content)=["']([^"']+)["']/gi,
-  );
-  for (const match of attrMatches) {
-    const raw = (match[1] ?? "").trim();
-    if (!raw) {
-      continue;
-    }
-    const absolute = toAbsoluteHttpUrl(raw, baseUrl);
-    if (!absolute) {
-      continue;
-    }
-
-    const canonical = toCanonicalGalleryImageUrl(absolute);
-    if (canonical) {
-      urls.add(canonical);
+  // Fallback to listing JSON-LD image set when gallery signals are absent.
+  const listingImages = lodgingJsonLd?.image;
+  if (typeof listingImages === "string") {
+    addIfUseful(listingImages);
+  }
+  if (Array.isArray(listingImages)) {
+    for (const image of listingImages) {
+      addIfUseful(image);
     }
   }
 
-  return Array.from(urls);
+  return Array.from(canonicalToOriginal.values());
 }
 
-function extractIdsFromPropertyListPayload(raw: string): string[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return [];
+function prettifyAmenityToken(value: string): string {
+  const withSpaces = value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!withSpaces) {
+    return "";
   }
+  return withSpaces
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
 
-  const data = (parsed as { data?: unknown })?.data;
-  if (!data || typeof data !== "object") {
-    return [];
-  }
+function extractAmenitiesFromJsonLd(
+  lodgingJsonLd: Record<string, unknown> | null,
+): string[] {
+  const containsPlace =
+    lodgingJsonLd && typeof lodgingJsonLd.containsPlace === "object"
+      ? (lodgingJsonLd.containsPlace as Record<string, unknown>)
+      : null;
+  const amenityFeature = Array.isArray(containsPlace?.amenityFeature)
+    ? containsPlace.amenityFeature
+    : [];
 
-  const properties = (data as { property?: unknown })?.property;
-  if (!Array.isArray(properties)) {
-    return [];
-  }
-
-  const ids: string[] = [];
-  for (const property of properties) {
-    if (!property || typeof property !== "object") {
+  const amenities: string[] = [];
+  for (const feature of amenityFeature) {
+    if (!feature || typeof feature !== "object") {
       continue;
     }
-
-    const idValue = (property as { id?: unknown }).id;
-    if (typeof idValue === "number" || typeof idValue === "string") {
-      const id = String(idValue).match(/\d+/)?.[0];
-      if (id) {
-        ids.push(id);
-      }
+    const value = (feature as Record<string, unknown>).value;
+    if (value !== true && value !== "true" && value !== 1) {
+      continue;
+    }
+    const name = prettifyAmenityToken(
+      String((feature as Record<string, unknown>).name ?? ""),
+    );
+    if (name) {
+      amenities.push(name);
     }
   }
 
-  return ids;
+  return dedupePreserveOrder(amenities);
 }
 
-function canonicalStayUrlFromId(id: string): string {
-  return `https://www.stayon30a.com/${id}/`;
+function extractBedGuidanceFromJsonLd(
+  lodgingJsonLd: Record<string, unknown> | null,
+): string[] {
+  const containsPlace =
+    lodgingJsonLd && typeof lodgingJsonLd.containsPlace === "object"
+      ? (lodgingJsonLd.containsPlace as Record<string, unknown>)
+      : null;
+  const beds = Array.isArray(containsPlace?.bed) ? containsPlace.bed : [];
+  const lines: string[] = [];
+  for (const bed of beds) {
+    if (!bed || typeof bed !== "object") {
+      continue;
+    }
+    const entry = bed as Record<string, unknown>;
+    const type = prettifyAmenityToken(String(entry.typeOfBed ?? ""));
+    const count = parsePositiveNumberLike(
+      entry.numberOfBeds as number | string,
+    );
+    if (!type) {
+      continue;
+    }
+    lines.push(count ? `${type}: ${count}` : type);
+  }
+  return dedupePreserveOrder(lines);
 }
 
-function extractRentalIdFromDetailUrl(detailUrl: string): string | null {
+function extractSectionByLabel(plainText: string, label: string): string {
+  const lower = plainText.toLowerCase();
+  const start = lower.indexOf(label.toLowerCase());
+  if (start < 0) {
+    return "";
+  }
+
+  const endCandidates = [
+    lower.indexOf("where you'll be", start + 1),
+    lower.indexOf("things to know", start + 1),
+    lower.indexOf("cancellation policy", start + 1),
+    lower.indexOf("availability calendar", start + 1),
+  ].filter((index) => index > start);
+
+  const end =
+    endCandidates.length > 0
+      ? Math.min(...endCandidates)
+      : Math.min(plainText.length, start + 1200);
+
+  return plainText.slice(start, end).trim();
+}
+
+function extractListingKeyFromDetailUrl(detailUrl: string): string | null {
   try {
     const parsed = new URL(detailUrl);
     if (!parsed.hostname.endsWith("stayon30a.com")) {
@@ -487,11 +1077,62 @@ function extractRentalIdFromDetailUrl(detailUrl: string): string | null {
     }
 
     const parts = parsed.pathname.split("/").filter(Boolean);
-    const fromPath = parts[0]?.match(/\d+/)?.[0] ?? null;
-    return fromPath;
+    if (parts.length === 0) {
+      return null;
+    }
+
+    if (parts[0] === "property" && parts[1]) {
+      return parts[1].trim().toLowerCase();
+    }
+
+    const numeric = parts[0]?.match(/\d+/)?.[0] ?? null;
+    return numeric;
   } catch {
     return null;
   }
+}
+
+function canonicalizeStayDetailUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.endsWith("stayon30a.com")) {
+      return null;
+    }
+
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    if (parts.length === 0) {
+      return null;
+    }
+
+    if (parts[0] === "property" && parts[1]) {
+      return `https://www.stayon30a.com/property/${parts[1].trim().toLowerCase()}`;
+    }
+
+    const numeric = parts[0]?.match(/\d+/)?.[0] ?? null;
+    if (!numeric) {
+      return null;
+    }
+    return `https://www.stayon30a.com/${numeric}`;
+  } catch {
+    return null;
+  }
+}
+
+function extractHomeLocalPropertyId(html: string): string | null {
+  const matchers = [
+    /"property_id"\s*:\s*(\d+)/i,
+    /property_id\s*=\s*["']?(\d+)["']?/i,
+    /"propertyId"\s*:\s*(\d+)/i,
+  ];
+
+  for (const matcher of matchers) {
+    const match = html.match(matcher);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
 }
 
 function formatDateIso(date: Date): string {
@@ -594,19 +1235,89 @@ function deriveTurnDayStatuses(
   }
 }
 
-type StreamlineRoomDetailsPayload = {
-  data?: {
-    room_details?: Array<{
-      name?: unknown;
-      group?: Array<{
-        name?: unknown;
-        amenity?: Array<{
-          name?: unknown;
-        }>;
-      }>;
-    }>;
-  };
-};
+function mapDayStateToStatusCode(input: {
+  checkinAvailable: boolean;
+  checkoutAvailable: boolean;
+}): StayOnStatusCode {
+  if (input.checkinAvailable && input.checkoutAvailable) {
+    return "A";
+  }
+  if (input.checkinAvailable && !input.checkoutAvailable) {
+    return "I";
+  }
+  if (!input.checkinAvailable && input.checkoutAvailable) {
+    return "O";
+  }
+  return "U";
+}
+
+function extractNormalizedAvailabilityDaysFromCalendar(
+  html: string,
+  horizonDays: number,
+): StayDetailRecord["normalized_availability"]["days"] {
+  const dayByDate = new Map<
+    string,
+    StayDetailRecord["normalized_availability"]["days"][number]
+  >();
+
+  for (const match of html.matchAll(
+    /<div\b[^>]*\bdata-date\s*=\s*"(\d{4}-\d{2}-\d{2})"[^>]*>/gi,
+  )) {
+    const dayTag = match[0] ?? "";
+    const date = match[1] ?? "";
+    if (!date || dayByDate.has(date)) {
+      continue;
+    }
+
+    const classAttr =
+      dayTag.match(/\bclass\s*=\s*"([^"]+)"/i)?.[1]?.toLowerCase() ?? "";
+    if (!classAttr.includes("day-of-month")) {
+      continue;
+    }
+
+    const checkinAvailable = classAttr.includes("checkin-available");
+    const checkoutAvailable = classAttr.includes("checkout-available");
+    const hasCheckinFlag = /\bcheckin-(available|booked|blocked)\b/.test(
+      classAttr,
+    );
+    const hasCheckoutFlag = /\bcheckout-(available|booked|blocked)\b/.test(
+      classAttr,
+    );
+    if (!hasCheckinFlag && !hasCheckoutFlag) {
+      continue;
+    }
+
+    const statusCode = mapDayStateToStatusCode({
+      checkinAvailable,
+      checkoutAvailable,
+    });
+
+    dayByDate.set(date, {
+      date,
+      day_code: toDayCodeFromStatus(statusCode),
+      changeover_code: toChangeoverCodeFromStatus(statusCode),
+      is_available: statusCode === "A" || statusCode === "O",
+      status_code: statusCode,
+      is_available_for_checkin: checkinAvailable,
+      is_available_for_checkout: checkoutAvailable,
+      booking_day_state:
+        statusCode === "A" || statusCode === "O" ? "bookable" : "blocked",
+    });
+  }
+
+  const days = Array.from(dayByDate.values()).sort((left, right) =>
+    left.date.localeCompare(right.date),
+  );
+  if (days.length === 0) {
+    return [];
+  }
+
+  const todayIso = formatDateIso(new Date());
+  const filteredFromToday = days.filter((day) => day.date >= todayIso);
+  const baseline = filteredFromToday.length > 0 ? filteredFromToday : days;
+  const maxDays = Math.max(1, horizonDays || baseline.length);
+  return baseline.slice(0, maxDays);
+}
 
 function dedupePreserveOrder(values: string[]): string[] {
   const out: string[] = [];
@@ -620,57 +1331,6 @@ function dedupePreserveOrder(values: string[]): string[] {
     out.push(normalized);
   }
   return out;
-}
-
-function extractRoomDetailsGuidanceFromApi(
-  payload: StreamlineRoomDetailsPayload | null,
-): string[] {
-  const hasSleepSignal = (value: string): boolean =>
-    /king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
-      value,
-    );
-
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const rooms = Array.isArray(payload?.data?.room_details)
-    ? payload.data.room_details
-    : [];
-
-  for (const room of rooms) {
-    const roomName = String(room?.name ?? "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!roomName) {
-      continue;
-    }
-
-    const amenities: string[] = [];
-    const groups = Array.isArray(room?.group) ? room.group : [];
-    for (const group of groups) {
-      const entries = Array.isArray(group?.amenity) ? group.amenity : [];
-      for (const entry of entries) {
-        const value = String(entry?.name ?? "")
-          .replace(/\s+/g, " ")
-          .trim();
-        if (!value) {
-          continue;
-        }
-        amenities.push(value);
-      }
-    }
-
-    const beds = dedupePreserveOrder(amenities).join(" + ");
-    const line = beds ? `${roomName}: ${beds}` : roomName;
-    const signal = `${roomName} ${beds}`.toLowerCase();
-    if (!hasSleepSignal(signal) || seen.has(line)) {
-      continue;
-    }
-
-    seen.add(line);
-    out.push(line);
-  }
-
-  return out.slice(0, 80);
 }
 
 function extractRoomDetailsGuidanceFromDescription(
@@ -720,38 +1380,6 @@ function extractRoomDetailsGuidanceFromDescription(
   return out.slice(0, 80);
 }
 
-async function callStreamlineApi<T>(
-  origin: string,
-  methodName: string,
-  params: Record<string, unknown>,
-): Promise<T | null> {
-  const apiUrl = `${origin}/wp-admin/admin-ajax.php?${new URLSearchParams({
-    action: "streamlinecore-api-request",
-    params: JSON.stringify({
-      methodName,
-      params,
-    }),
-  }).toString()}`;
-
-  try {
-    const response = await fetch(apiUrl, {
-      method: "GET",
-      headers: {
-        accept: "application/json,text/plain,*/*",
-      },
-    });
-
-    if (response.status !== 200) {
-      return null;
-    }
-
-    const raw = await response.text();
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
 async function discoverListings(
   page: Parameters<
     ScraperAdapter<StayDetailRecord>["discoverListings"]
@@ -762,29 +1390,41 @@ async function discoverListings(
   _networkIdleWaitMs: number,
   reportProgress: (message: string) => void,
 ): Promise<ScrapedLink[]> {
-  const idSet = new Set<string>();
+  const discoveredLinks = new Set<string>();
 
-  page.on("response", (response) => {
-    void (async () => {
-      try {
-        const url = response.url();
-        if (!url.includes("stayon30a.com/wp-admin/admin-ajax.php")) {
-          return;
+  const collectLinks = async (): Promise<number> => {
+    const links = await page.evaluate(() => {
+      const values = new Set<string>();
+      const anchors = Array.from(document.querySelectorAll("a[href]"));
+      for (const anchor of anchors) {
+        const href = (anchor as HTMLAnchorElement).href;
+        if (!href) {
+          continue;
         }
-        if (!url.includes("GetPropertyListWordPress")) {
-          return;
+        try {
+          const parsed = new URL(href, window.location.origin);
+          if (!parsed.hostname.endsWith("stayon30a.com")) {
+            continue;
+          }
+          const parts = parsed.pathname.split("/").filter(Boolean);
+          if (parts[0] === "property" && parts[1]) {
+            values.add(
+              `https://www.stayon30a.com/property/${parts[1].trim().toLowerCase()}`,
+            );
+          }
+        } catch {
+          // Ignore malformed href entries.
         }
-
-        const body = await response.text();
-        const ids = extractIdsFromPropertyListPayload(body);
-        for (const id of ids) {
-          idSet.add(id);
-        }
-      } catch {
-        // Ignore per-response parsing failures.
       }
-    })();
-  });
+      return Array.from(values);
+    });
+
+    for (const link of links) {
+      discoveredLinks.add(link);
+    }
+
+    return discoveredLinks.size;
+  };
 
   await page.goto(anchorUrl, {
     waitUntil: "domcontentloaded",
@@ -792,152 +1432,101 @@ async function discoverListings(
   });
 
   await page.waitForTimeout(Math.max(1800, scrollPauseMs * 2));
+  await collectLinks();
 
   const maxCycles = Math.min(maxScrollSteps, MAX_CLICK_CYCLES);
   for (let cycle = 0; cycle < maxCycles; cycle += 1) {
-    const loadMoreVisible = await page.evaluate(() => {
-      const nodes = Array.from(
-        document.querySelectorAll(
-          "button, a, [role='button'], input[type='button'], input[type='submit']",
-        ),
-      );
+    const beforeCount = discoveredLinks.size;
 
-      for (const node of nodes) {
-        const element = node as HTMLElement;
-        if (element.offsetParent === null) {
-          continue;
-        }
-
-        if (
-          element.getAttribute("disabled") !== null ||
-          element.getAttribute("aria-disabled") === "true"
-        ) {
-          continue;
-        }
-
-        const text = (element.textContent ?? "").toLowerCase().trim();
-        const aria = (element.getAttribute("aria-label") ?? "")
-          .toLowerCase()
-          .trim();
-        const value = (element.getAttribute("value") ?? "")
-          .toLowerCase()
-          .trim();
-        const combined = `${text} ${aria} ${value}`;
-        if (combined.includes("load more")) {
-          return true;
-        }
-      }
-
-      return false;
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
     });
-
-    if (!loadMoreVisible) {
-      break;
-    }
-
-    const beforeCount = idSet.size;
-
-    const clicked = await page.evaluate(() => {
-      const nodes = Array.from(
-        document.querySelectorAll(
-          "button, a, [role='button'], input[type='button'], input[type='submit']",
-        ),
-      );
-
-      for (const node of nodes) {
-        const element = node as HTMLElement;
-        if (element.offsetParent === null) {
-          continue;
-        }
-
-        if (
-          element.getAttribute("disabled") !== null ||
-          element.getAttribute("aria-disabled") === "true"
-        ) {
-          continue;
-        }
-
-        const text = (element.textContent ?? "").toLowerCase().trim();
-        const aria = (element.getAttribute("aria-label") ?? "")
-          .toLowerCase()
-          .trim();
-        const value = (element.getAttribute("value") ?? "")
-          .toLowerCase()
-          .trim();
-        const combined = `${text} ${aria} ${value}`;
-
-        if (combined.includes("load more")) {
-          element.click();
-          return true;
-        }
-      }
-
-      return false;
-    });
-
-    if (!clicked) {
-      break;
-    }
 
     await page.waitForTimeout(CLICK_WAIT_MS);
 
     for (let poll = 0; poll < GROWTH_POLL_ROUNDS; poll += 1) {
-      if (idSet.size > beforeCount) {
+      const currentCount = await collectLinks();
+      if (currentCount > beforeCount) {
         break;
       }
       await page.waitForTimeout(350);
     }
 
+    if (discoveredLinks.size === beforeCount && cycle > 2) {
+      break;
+    }
+
     if ((cycle + 1) % 3 === 0) {
       reportProgress(
-        `load-more cycle ${cycle + 1}/${maxCycles}; ids=${idSet.size}`,
+        `infinite-scroll cycle ${cycle + 1}/${maxCycles}; links=${discoveredLinks.size}`,
       );
     }
   }
 
-  const sortedIds = Array.from(idSet).sort(
-    (left, right) => Number(left) - Number(right),
+  const sortedLinks = Array.from(discoveredLinks).sort((left, right) =>
+    left.localeCompare(right),
   );
 
-  return sortedIds.map((id) => ({
-    link: normalizeLink(canonicalStayUrlFromId(id)),
+  return sortedLinks.map((link) => ({
+    link: normalizeLink(link),
     source_url: anchorUrl,
-    anchor_text: "api-load-more",
+    anchor_text: "dom-infinite-scroll",
   }));
 }
 
 async function fetchDetail(
+  browser: { newPage: () => Promise<DiscoverContext["page"]> },
   detailUrl: string,
   availabilityHorizonDays: number,
+  maxCalendarAdvanceMonths: number,
+  reportDetailProgress?: (message: string) => void,
 ): Promise<StayDetailRecord | null> {
-  const rentalId = extractRentalIdFromDetailUrl(detailUrl);
-  if (!rentalId) {
+  const listingKey = extractListingKeyFromDetailUrl(detailUrl);
+  if (!listingKey) {
     return null;
   }
 
-  const headers = {
-    "user-agent":
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    accept: "text/html,application/json,text/plain,*/*",
-    referer: detailUrl,
-  };
-
   try {
-    const detailOrigin = new URL(detailUrl).origin;
-    const detailResponse = await fetch(detailUrl, {
-      method: "GET",
-      redirect: "follow",
-      headers,
-    });
-
-    const contentType = (
-      detailResponse.headers.get("content-type") ?? ""
-    ).toLowerCase();
-    if (detailResponse.status !== 200 || !contentType.includes("text/html")) {
-      return null;
+    const page = await browser.newPage();
+    let finalUrl = detailUrl;
+    let html = "";
+    let prePopupHtml = "";
+    let availabilityHtml = "";
+    let popupDescriptionFromDialog = "";
+    let detailStatus: number | null = null;
+    try {
+      const detailResponse = await page.goto(detailUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 120000,
+      });
+      detailStatus = detailResponse?.status() ?? null;
+      finalUrl = page.url();
+      if (detailStatus === 200) {
+        prePopupHtml = await page.content();
+        popupDescriptionFromDialog = await activateDetailPopups(page);
+        html = await page.content();
+        availabilityHtml = await advanceAvailabilityCalendarAndCaptureHtml(
+          page,
+          maxCalendarAdvanceMonths,
+        );
+      } else {
+        html = "";
+        prePopupHtml = "";
+        availabilityHtml = "";
+      }
+    } finally {
+      await page.close();
     }
 
-    const html = await detailResponse.text();
+    if (detailStatus !== 200 || !html) {
+      reportDetailProgress?.(
+        `detail gate failed detail_url=${detailUrl} status=${String(detailStatus)} final_url=${finalUrl} html_present=${String(Boolean(html))}`,
+      );
+      console.warn(
+        `[stayon30a] detail gate failed for ${detailUrl}: status=${String(detailStatus)} final_url=${finalUrl} html_present=${String(Boolean(html))}`,
+      );
+      return null;
+    }
 
     const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
       0,
@@ -965,7 +1554,9 @@ async function fetchDetail(
       jsonLdObjects.find((item) => {
         const itemType = String(item["@type"] ?? "").toLowerCase();
         return (
-          itemType.includes("lodging") || itemType.includes("accommodation")
+          itemType.includes("vacationrental") ||
+          itemType.includes("lodging") ||
+          itemType.includes("accommodation")
         );
       }) ??
       jsonLdObjects[0] ??
@@ -976,15 +1567,38 @@ async function fetchDetail(
       'class="property_description"',
       "</section><!--End description-->",
     );
+    const plainText = stripHtml(html);
+    const thingsToKnowSection = extractSectionByLabel(
+      plainText,
+      "Things to know",
+    );
+    const cancellationPolicySection = extractSectionByLabel(
+      plainText,
+      "Cancellation policy",
+    );
+
+    const popupDescriptionRaw =
+      popupDescriptionFromDialog || extractAboutSpacePopupDescription(html);
+    const popupDescription =
+      cleanAboutSpaceDescriptionText(popupDescriptionRaw);
+
     const descriptionExpanded =
-      stripHtml(descriptionSection)
-        .replace(/^description\s+/i, "")
-        .slice(0, 20000) ||
-      stripHtml(
-        typeof lodgingJsonLd?.description === "string"
-          ? lodgingJsonLd.description
-          : metaDescription,
-      ).slice(0, 20000);
+      popupDescription ||
+      [
+        stripHtml(descriptionSection)
+          .replace(/^description\s+/i, "")
+          .trim(),
+        stripHtml(
+          typeof lodgingJsonLd?.description === "string"
+            ? lodgingJsonLd.description
+            : metaDescription,
+        ).trim(),
+        thingsToKnowSection,
+        cancellationPolicySection,
+      ]
+        .filter((value) => value.length > 0)
+        .join("\n\n")
+        .slice(0, 20000);
 
     const amenitiesSection = extractSectionBetween(
       html,
@@ -1017,7 +1631,14 @@ async function fetchDetail(
       }
     }
 
-    const amenitiesAll = Object.values(categoryMap).flat().filter(Boolean);
+    const amenitiesFromJsonLd = extractAmenitiesFromJsonLd(lodgingJsonLd);
+    const amenitiesAll = dedupePreserveOrder([
+      ...Object.values(categoryMap).flat().filter(Boolean),
+      ...amenitiesFromJsonLd,
+    ]);
+    if (amenitiesFromJsonLd.length > 0 && !categoryMap["HomeLocal JSON-LD"]) {
+      categoryMap["HomeLocal JSON-LD"] = amenitiesFromJsonLd;
+    }
 
     const jsonLdAddress =
       lodgingJsonLd && typeof lodgingJsonLd.address === "object"
@@ -1037,6 +1658,7 @@ async function fetchDetail(
         : null;
     const jsonLdAnyGeo = extractGeoFromJsonLdObjects(jsonLdObjects);
     const googleMapsHrefGeo = extractGoogleMapsHrefGeo(html);
+    const leafletConfig = extractLeafletConfig(html);
 
     const location = {
       address: stripHtml(
@@ -1060,6 +1682,7 @@ async function fetchDetail(
           "lat",
         ) ??
         jsonLdAnyGeo?.latitude ??
+        leafletConfig.latitude ??
         googleMapsHrefGeo?.latitude ??
         null,
       longitude:
@@ -1068,6 +1691,7 @@ async function fetchDetail(
           "lng",
         ) ??
         jsonLdAnyGeo?.longitude ??
+        leafletConfig.longitude ??
         googleMapsHrefGeo?.longitude ??
         null,
     };
@@ -1128,108 +1752,50 @@ async function fetchDetail(
           extractFirst(/\bsleeps?\s*[:-]?\s*(\d+)\b/i, capacitySourceText),
       );
 
-    const mediaUrls = collectMediaUrls(html, detailUrl, jsonLdObjects);
+    const mediaUrls = collectMediaUrls(
+      prePopupHtml || html,
+      finalUrl,
+      lodgingJsonLd,
+    );
+    const propertyId =
+      extractHomeLocalPropertyId(html) ?? leafletConfig.propertyId;
 
-    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${rentalId}.html`);
+    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${listingKey}.html`);
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
-    const roomDetailsApiPayload =
-      await callStreamlineApi<StreamlineRoomDetailsPayload>(
-        detailOrigin,
-        "GetPropertyRoomDetails",
-        {
-          unit_id: Number(rentalId),
-          use_room_type_logic: "no",
-          standard_pricing: 1,
-        },
-      );
-
-    let rawBeginDate = "";
-    let rawEndDate = "";
-    let rawAvailabilityCodes = "";
-
-    const availabilityPayload = await callStreamlineApi<{
-      data?: {
-        range?: { beginDate?: string; endDate?: string };
-        availability?: string;
-      };
-    }>(detailOrigin, "GetPropertyAvailabilityRawData", {
-      unit_id: Number(rentalId),
-      use_room_type_logic: "no",
-      standard_pricing: 1,
-    });
-
-    rawBeginDate = availabilityPayload?.data?.range?.beginDate ?? "";
-    rawEndDate = availabilityPayload?.data?.range?.endDate ?? "";
-    rawAvailabilityCodes = availabilityPayload?.data?.availability ?? "";
-
-    const allAvailabilityDays = decodeAvailabilityDays(
-      rawBeginDate,
-      rawAvailabilityCodes,
+    const normalizedDays = extractNormalizedAvailabilityDaysFromCalendar(
+      availabilityHtml || prePopupHtml || html,
+      availabilityHorizonDays,
     );
-
-    const now = new Date();
-    const today = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-    );
-    const horizonDate = new Date(today);
-    horizonDate.setUTCDate(horizonDate.getUTCDate() + availabilityHorizonDays);
-
-    const filteredDays = allAvailabilityDays.filter((day) => {
-      const dayDate = new Date(`${day.date}T00:00:00.000Z`);
-      return dayDate >= today && dayDate <= horizonDate;
-    });
-
-    const normalizedDays = filteredDays.map((day) => {
-      const bookingDayState: "bookable" | "blocked" | "unknown" =
-        day.code === "Y"
-          ? "bookable"
-          : day.code === "N"
-            ? "blocked"
-            : "unknown";
-
-      const statusCode: StayOnStatusCode =
-        day.code === "Y" ? "A" : day.code === "N" ? "U" : "X";
-
-      return {
-        date: day.date,
-        day_code: toDayCodeFromStatus(statusCode),
-        changeover_code: toChangeoverCodeFromStatus(statusCode),
-        is_available: day.code === "Y",
-        is_available_for_checkin: day.code === "Y",
-        is_available_for_checkout: day.code === "Y",
-        status_code: statusCode,
-        booking_day_state: bookingDayState,
-      };
-    });
-
-    deriveTurnDayStatuses(normalizedDays);
-
-    const available = filteredDays.filter((day) => day.code === "Y").length;
-    const notAvailable = filteredDays.filter((day) => day.code === "N").length;
+    const available = normalizedDays.filter(
+      (day) => day.status_code === "A" || day.status_code === "O",
+    ).length;
+    const notAvailable = normalizedDays.filter(
+      (day) => day.status_code === "U" || day.status_code === "I",
+    ).length;
     const other = normalizedDays.length - available - notAvailable;
+    const windowStart = normalizedDays[0]?.date ?? "";
+    const windowEnd = normalizedDays[normalizedDays.length - 1]?.date ?? "";
 
     const description =
       descriptionExpanded || stripHtml(metaDescription).slice(0, 20000);
-    const roomDetailsGuidanceFromApi = extractRoomDetailsGuidanceFromApi(
-      roomDetailsApiPayload,
-    );
-    const roomDetailsGuidance =
-      roomDetailsGuidanceFromApi.length > 0
-        ? roomDetailsGuidanceFromApi
-        : extractRoomDetailsGuidanceFromDescription(description);
+    const roomDetailsGuidance = dedupePreserveOrder([
+      ...extractBedGuidanceFromJsonLd(lodgingJsonLd),
+      ...extractRoomDetailsGuidanceFromDescription(description),
+    ]).slice(0, 80);
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
 
     return {
-      external_listing_id: rentalId,
-      detail_url: detailUrl,
+      external_listing_id: listingKey,
+      detail_url: finalUrl,
       fetched_at: new Date().toISOString(),
       quote_context: {
-        listing_id: rentalId,
-        unit_id: rentalId,
-        detail_url: detailUrl,
+        listing_id: listingKey,
+        unit_id: listingKey,
+        detail_url: finalUrl,
+        ...(propertyId ? { property_id: propertyId } : {}),
       },
       title,
       h1,
@@ -1247,8 +1813,8 @@ async function fetchDetail(
         image_urls: mediaUrls,
       },
       property_profile: {
-        unit_id: rentalId,
-        property_code: rentalId,
+        unit_id: listingKey,
+        property_code: propertyId ?? listingKey,
         beds,
         baths,
         sleeps,
@@ -1258,7 +1824,7 @@ async function fetchDetail(
       },
       normalized_matching_profile: {
         source: "pm_stayon30a",
-        external_listing_id: rentalId,
+        external_listing_id: listingKey,
         name,
         description,
         match_signals: {
@@ -1268,7 +1834,7 @@ async function fetchDetail(
           title_sha256: hashSha256(titleNormalized),
           listing_composite_key: [
             "pm_stayon30a",
-            rentalId,
+            listingKey,
             hashSha256(descriptionNormalized),
             hashSha256(titleNormalized),
           ].join("::"),
@@ -1276,10 +1842,10 @@ async function fetchDetail(
       },
       normalized_availability: {
         source: "pm_stayon30a",
-        external_listing_id: rentalId,
+        external_listing_id: listingKey,
         captured_at: new Date().toISOString(),
-        window_start: filteredDays[0]?.date ?? "",
-        window_end: filteredDays[filteredDays.length - 1]?.date ?? "",
+        window_start: windowStart,
+        window_end: windowEnd,
         code_legend: {
           Y: "available",
           N: "not_available",
@@ -1302,23 +1868,26 @@ async function fetchDetail(
         },
       },
       availability_raw: {
-        begin_date: rawBeginDate,
-        end_date: rawEndDate,
-        day_codes: rawAvailabilityCodes,
+        begin_date: windowStart,
+        end_date: windowEnd,
+        day_codes: normalizedDays.map((day) => day.status_code).join(""),
       },
       pricing_api_hints: {
-        provider: "streamlinecore-api-request",
-        endpoint_path: "/wp-admin/admin-ajax.php",
+        provider: "homelocal-wp-json-quotes",
+        endpoint_path: "/wp-json/homelocal/v1/quotes",
         method_names: {
-          availability: "GetPropertyAvailabilityRawData",
-          room_details: "GetPropertyRoomDetails",
+          quotes: "POST /wp-json/homelocal/v1/quotes",
         },
         notes:
-          "GetPropertyRoomDetails is used as the primary room guidance source; description parsing remains as a fallback when API room details are empty.",
+          "HomeLocal platform: quote runtime uses property_id from detail page when present.",
       },
       html_path: htmlPath,
     };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    reportDetailProgress?.(
+      `detail request_error detail_url=${detailUrl} message=${message}`,
+    );
     return null;
   }
 }
@@ -1343,17 +1912,7 @@ export function createStayOn30AAdapter(): ScraperAdapter<StayDetailRecord> {
     maxCalendarAdvanceMonths: 24,
     isValidDetailUrl(value: string): string | null {
       try {
-        const parsed = new URL(value.trim());
-        if (!parsed.hostname.endsWith("stayon30a.com")) {
-          return null;
-        }
-
-        const rentalId = extractRentalIdFromDetailUrl(parsed.toString());
-        if (!rentalId) {
-          return null;
-        }
-
-        return normalizeLink(canonicalStayUrlFromId(rentalId));
+        return canonicalizeStayDetailUrl(value.trim());
       } catch {
         return null;
       }
@@ -1369,7 +1928,13 @@ export function createStayOn30AAdapter(): ScraperAdapter<StayDetailRecord> {
       );
     },
     async fetchDetail(context) {
-      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+      return fetchDetail(
+        context.browser as { newPage: () => Promise<DiscoverContext["page"]> },
+        context.detailUrl,
+        context.availabilityHorizonDays,
+        context.maxCalendarAdvanceMonths,
+        context.reportDetailProgress,
+      );
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(
@@ -1382,7 +1947,7 @@ export function createStayOn30AAdapter(): ScraperAdapter<StayDetailRecord> {
           executeSingleQuote: executeStayon30aSingleQuote,
           defaultQuoteTimeoutMs: 20000,
           defaultQuoteMaxAttempts: 2,
-          defaultEndpointPath: "/wp-admin/admin-ajax.php",
+          defaultEndpointPath: "/wp-json/homelocal/v1/quotes",
           defaultTaxPct: 0.12,
           defaultBaseNightly: 650,
         },
