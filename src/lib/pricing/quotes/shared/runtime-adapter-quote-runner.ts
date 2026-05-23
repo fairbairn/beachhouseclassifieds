@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
@@ -94,6 +94,36 @@ function hasUsableAvailableTotals(result: QuoteExecutionResult): boolean {
   return hasBase && hasGrand;
 }
 
+function hasHttp403Signal(result: QuoteExecutionResult): boolean {
+  if (result.success) {
+    return false;
+  }
+
+  const details =
+    result.error.details && typeof result.error.details === "object"
+      ? (result.error.details as Record<string, unknown>)
+      : null;
+  if (!details) {
+    return false;
+  }
+
+  const keys = [
+    "detailStatus",
+    "detailInitialStatus",
+    "detailRetryStatus",
+    "pricingStatus",
+    "availabilityStatus",
+    "httpStatus",
+    "status",
+  ];
+
+  return keys.some((key) => Number(details[key] ?? NaN) === 403);
+}
+
+function hasChallengeSignal(result: QuoteExecutionResult): boolean {
+  return !result.success && result.error.code === "EDGE_CHALLENGE_BLOCKED";
+}
+
 export type RuntimeAdapterQuoteRunnerConfig = {
   adapterKey: string;
   executeSingleQuote: (
@@ -128,6 +158,20 @@ const DEFAULT_BACKFILL_WINDOW_HOURS = 1;
 const DEFAULT_MIN_PROBE_NIGHTS = 3;
 const DEFAULT_MAX_PROBE_NIGHTS = 14;
 const DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS = 365;
+
+function readToggle(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined) {
+    return defaultValue;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return defaultValue;
+}
 
 function parseArgs(
   argv: string[],
@@ -1548,7 +1592,11 @@ async function buildSidecarForListing(input: {
           );
         }
 
-        input.onWindowResult?.({ quoteAvailable });
+        input.onWindowResult?.({
+          quoteAvailable,
+          http403: hasHttp403Signal(result),
+          challengeBlocked: hasChallengeSignal(result),
+        });
         planResults.push({
           window,
           result,
@@ -1651,277 +1699,335 @@ export async function runRuntimeAdapterQuoteCli(
   };
 
   const options = parseArgs(argv, defaults);
-  const retentionDaysFromEnv = Number(
-    process.env.QUOTE_CAPTURE_OBSERVATION_RETENTION_DAYS ??
-      String(DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS),
+  const adapterEnvPrefix = config.adapterKey
+    .replace(/[^a-z0-9]+/gi, "_")
+    .toUpperCase();
+  const failFastHttp403 = readToggle(
+    process.env.QUOTE_CAPTURE_FAIL_FAST_HTTP_403,
+    true,
   );
-  const observationRetentionDays =
-    Number.isFinite(retentionDaysFromEnv) && retentionDaysFromEnv > 0
-      ? Math.floor(retentionDaysFromEnv)
-      : DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS;
-  const minProbeNightsFromEnv = Number(
-    process.env.QUOTE_CAPTURE_MIN_PROBE_NIGHTS ??
-      String(DEFAULT_MIN_PROBE_NIGHTS),
+  const cleanupPersistentProfiles = readToggle(
+    process.env.QUOTE_CAPTURE_PERSISTENT_PROFILE_CLEANUP,
+    readToggle(
+      process.env[`${adapterEnvPrefix}_PERSISTENT_PROFILE_CLEANUP`],
+      true,
+    ),
   );
-  const maxProbeNightsFromEnv = Number(
-    process.env.QUOTE_CAPTURE_MAX_PROBE_NIGHTS ??
-      String(DEFAULT_MAX_PROBE_NIGHTS),
-  );
-  const defaultMinProbeNights =
-    Number.isFinite(minProbeNightsFromEnv) && minProbeNightsFromEnv > 0
-      ? Math.floor(minProbeNightsFromEnv)
-      : DEFAULT_MIN_PROBE_NIGHTS;
-  const defaultMaxProbeNights =
-    Number.isFinite(maxProbeNightsFromEnv) && maxProbeNightsFromEnv > 0
-      ? Math.floor(maxProbeNightsFromEnv)
-      : DEFAULT_MAX_PROBE_NIGHTS;
+  const configuredProfileRoot =
+    process.env[`${adapterEnvPrefix}_PERSISTENT_PROFILE_DIR`] ??
+    process.env.STREAMLINE_PERSISTENT_PROFILE_DIR;
+  const adapterProfileRoot = configuredProfileRoot
+    ? resolve(
+        process.cwd(),
+        configuredProfileRoot,
+        config.adapterKey.toLowerCase(),
+      )
+    : resolve(process.cwd(), ".tmp", "cloak-profiles", config.adapterKey);
 
-  progress?.info(
-    [
-      `quote-capture mode=index-runtime`,
-      `weeks=${options.weeks}`,
-      `nights=${options.nights}`,
-      `listing_concurrency=${options.listingConcurrency}`,
-      `quote_concurrency=${options.quoteConcurrency}`,
-      `timeout_ms=${options.timeoutMs}`,
-      `max_attempts=${options.maxAttempts}`,
-      `skip_fresh_quotes=${options.skipFreshQuotes}`,
-      `fresh_hours=${options.freshHours}`,
-      `skip_covered_windows=${options.skipCoveredWindows}`,
-      `min_overlap_nights=${options.minOverlapNights}`,
-      `selection=${options.listingId ? `listing:${options.listingId}` : `max-listings:${options.maxListings}`}`,
-      `min_probe_nights=${defaultMinProbeNights}`,
-      `max_probe_nights=${defaultMaxProbeNights}`,
-    ].join(" "),
-  );
-
-  const listings = await loadListingSeeds(config.adapterKey, options, progress);
-
-  const quotesDir = resolve(
-    process.cwd(),
-    "src",
-    "lib",
-    "data",
-    "external-sources",
-    config.adapterKey,
-    "details",
-    "quotes",
-  );
-  const detailsJsonDir = resolve(
-    process.cwd(),
-    "src",
-    "lib",
-    "data",
-    "external-sources",
-    config.adapterKey,
-    "details",
-    "json",
-  );
-  await mkdir(quotesDir, { recursive: true });
-
-  let listingsToProcess = listings;
-  let skippedFresh = 0;
-  if (options.skipFreshQuotes) {
-    progress?.phase(
-      `evaluating existing quote sidecars for freshness (hours=${options.freshHours})`,
-    );
-    const keep: ListingSeed[] = [];
-    for (const listing of listings) {
-      const fresh = await hasFreshQuoteSidecar({
-        quotesDir,
-        fileId: listing.fileId,
-        freshHours: options.freshHours,
-      });
-      if (fresh) {
-        skippedFresh += 1;
-      } else {
-        keep.push(listing);
-      }
+  const cleanupProfiles = async (): Promise<void> => {
+    if (!cleanupPersistentProfiles) {
+      return;
     }
-    listingsToProcess = keep;
-    progress?.tick(
-      `quote freshness evaluation complete skipped_fresh=${skippedFresh}/${listings.length} to_process=${listingsToProcess.length}`,
+    await rm(adapterProfileRoot, { recursive: true, force: true });
+    progress?.info(
+      `quote-capture profile cleanup complete path=${adapterProfileRoot}`,
     );
-  }
+  };
 
-  const backfillStatuses: QuoteBackfillStatus[] = [];
-  if (options.backfillOnly) {
-    progress?.phase(
-      `evaluating quote backfill candidates (window_hours=${options.backfillWindowHours})`,
+  try {
+    const retentionDaysFromEnv = Number(
+      process.env.QUOTE_CAPTURE_OBSERVATION_RETENTION_DAYS ??
+        String(DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS),
     );
-
-    for (const listing of listingsToProcess) {
-      const detailFetchedAt = await loadDetailFetchedAt({
-        detailsJsonDir: resolve(
-          process.cwd(),
-          "src",
-          "lib",
-          "data",
-          "external-sources",
-          config.adapterKey,
-          "details",
-          "json",
-        ),
-        fileId: listing.fileId,
-      });
-      const quoteCapturedAt = await loadQuoteCapturedAt({
-        quotesDir,
-        fileId: listing.fileId,
-      });
-
-      backfillStatuses.push(
-        evaluateQuoteBackfillStatus({
-          listingId: listing.externalListingId,
-          detailFetchedAt,
-          quoteCapturedAt,
-          backfillWindowHours: options.backfillWindowHours,
-        }),
-      );
-    }
-
-    const byReason = new Map<string, number>();
-    for (const status of backfillStatuses) {
-      byReason.set(status.reason, (byReason.get(status.reason) ?? 0) + 1);
-    }
-
-    listingsToProcess = listingsToProcess.filter((listing) => {
-      const status = backfillStatuses.find(
-        (entry) => entry.listingId === listing.externalListingId,
-      );
-      return status?.shouldProcess ?? false;
-    });
-
-    const reasonsSummary = Array.from(byReason.entries())
-      .sort((left, right) => left[0].localeCompare(right[0]))
-      .map(([reason, count]) => `${reason}:${count}`)
-      .join(", ");
-
-    progress?.tick(
-      `quote backfill evaluation complete candidates=${listingsToProcess.length}/${backfillStatuses.length}${reasonsSummary ? ` reasons=[${reasonsSummary}]` : ""}`,
+    const observationRetentionDays =
+      Number.isFinite(retentionDaysFromEnv) && retentionDaysFromEnv > 0
+        ? Math.floor(retentionDaysFromEnv)
+        : DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS;
+    const minProbeNightsFromEnv = Number(
+      process.env.QUOTE_CAPTURE_MIN_PROBE_NIGHTS ??
+        String(DEFAULT_MIN_PROBE_NIGHTS),
     );
-  }
-
-  if (options.dryRun) {
-    const selectedIds = listingsToProcess.map(
-      (listing) => listing.externalListingId,
+    const maxProbeNightsFromEnv = Number(
+      process.env.QUOTE_CAPTURE_MAX_PROBE_NIGHTS ??
+        String(DEFAULT_MAX_PROBE_NIGHTS),
     );
-    const sampleIds = selectedIds.slice(0, 20).join(", ");
+    const defaultMinProbeNights =
+      Number.isFinite(minProbeNightsFromEnv) && minProbeNightsFromEnv > 0
+        ? Math.floor(minProbeNightsFromEnv)
+        : DEFAULT_MIN_PROBE_NIGHTS;
+    const defaultMaxProbeNights =
+      Number.isFinite(maxProbeNightsFromEnv) && maxProbeNightsFromEnv > 0
+        ? Math.floor(maxProbeNightsFromEnv)
+        : DEFAULT_MAX_PROBE_NIGHTS;
 
-    progress?.success(
+    progress?.info(
       [
-        `quote-capture dry-run complete adapter=${config.adapterKey}`,
-        `selected=${selectedIds.length}`,
-        `skipped_fresh=${skippedFresh}`,
-        `backfill_only=${options.backfillOnly}`,
-        `sample_listing_ids=${sampleIds || "none"}`,
+        `quote-capture mode=index-runtime`,
+        `weeks=${options.weeks}`,
+        `nights=${options.nights}`,
+        `listing_concurrency=${options.listingConcurrency}`,
+        `quote_concurrency=${options.quoteConcurrency}`,
+        `timeout_ms=${options.timeoutMs}`,
+        `max_attempts=${options.maxAttempts}`,
+        `skip_fresh_quotes=${options.skipFreshQuotes}`,
+        `fresh_hours=${options.freshHours}`,
+        `skip_covered_windows=${options.skipCoveredWindows}`,
+        `min_overlap_nights=${options.minOverlapNights}`,
+        `selection=${options.listingId ? `listing:${options.listingId}` : `max-listings:${options.maxListings}`}`,
+        `min_probe_nights=${defaultMinProbeNights}`,
+        `max_probe_nights=${defaultMaxProbeNights}`,
       ].join(" "),
     );
-    return;
-  }
 
-  if (listingsToProcess.length === 0) {
-    progress?.success(
-      `quote-capture complete listings=0 observations=0 available=0 skipped_fresh=${skippedFresh}`,
+    const listings = await loadListingSeeds(
+      config.adapterKey,
+      options,
+      progress,
     );
-    return;
-  }
 
-  const tracker = createQuoteCaptureProgressTracker({
-    progress,
-    totalListings: listingsToProcess.length,
-    modeLabel: "quote",
-    heartbeatMs: Math.max(
-      1000,
-      Number(process.env.QUOTE_CAPTURE_HEARTBEAT_MS ?? "15000") || 15000,
-    ),
-  });
+    const quotesDir = resolve(
+      process.cwd(),
+      "src",
+      "lib",
+      "data",
+      "external-sources",
+      config.adapterKey,
+      "details",
+      "quotes",
+    );
+    const detailsJsonDir = resolve(
+      process.cwd(),
+      "src",
+      "lib",
+      "data",
+      "external-sources",
+      config.adapterKey,
+      "details",
+      "json",
+    );
+    await mkdir(quotesDir, { recursive: true });
 
-  let skippedCoveredListings = 0;
-  const sidecars = await runWithConcurrency(
-    listingsToProcess,
-    options.listingConcurrency,
-    async (listing): Promise<CanonicalQuotesSidecarRecord | null> => {
-      const outputPath = resolve(quotesDir, `${listing.fileId}.json`);
-      const existingObservations = await loadExistingRealQuoteObservations({
-        outputPath,
-      });
-
-      const sidecar = await buildSidecarForListing({
-        config,
-        listing,
-        options,
-        availabilityDays: await loadAvailabilityDays({
-          detailsJsonDir,
+    let listingsToProcess = listings;
+    let skippedFresh = 0;
+    if (options.skipFreshQuotes) {
+      progress?.phase(
+        `evaluating existing quote sidecars for freshness (hours=${options.freshHours})`,
+      );
+      const keep: ListingSeed[] = [];
+      for (const listing of listings) {
+        const fresh = await hasFreshQuoteSidecar({
+          quotesDir,
           fileId: listing.fileId,
-        }),
-        defaultMinProbeNights,
-        defaultMaxProbeNights,
-        existingRealQuoteObservations: existingObservations,
-        progress,
-        onWindowsPlanned: (windows) => {
-          tracker.onWindowsPlanned(windows);
-        },
-        onWindowResult: ({ quoteAvailable }) => {
-          tracker.onWindowResult(quoteAvailable);
-        },
-        onListingComplete: ({ listingId, windows, available }) => {
-          tracker.onListingComplete({
-            listingId,
-            windows,
-            available,
-          });
-        },
-      });
+          freshHours: options.freshHours,
+        });
+        if (fresh) {
+          skippedFresh += 1;
+        } else {
+          keep.push(listing);
+        }
+      }
+      listingsToProcess = keep;
+      progress?.tick(
+        `quote freshness evaluation complete skipped_fresh=${skippedFresh}/${listings.length} to_process=${listingsToProcess.length}`,
+      );
+    }
 
-      if (sidecar.quote_max_queries === 0) {
-        skippedCoveredListings += 1;
-        return null;
+    const backfillStatuses: QuoteBackfillStatus[] = [];
+    if (options.backfillOnly) {
+      progress?.phase(
+        `evaluating quote backfill candidates (window_hours=${options.backfillWindowHours})`,
+      );
+
+      for (const listing of listingsToProcess) {
+        const detailFetchedAt = await loadDetailFetchedAt({
+          detailsJsonDir: resolve(
+            process.cwd(),
+            "src",
+            "lib",
+            "data",
+            "external-sources",
+            config.adapterKey,
+            "details",
+            "json",
+          ),
+          fileId: listing.fileId,
+        });
+        const quoteCapturedAt = await loadQuoteCapturedAt({
+          quotesDir,
+          fileId: listing.fileId,
+        });
+
+        backfillStatuses.push(
+          evaluateQuoteBackfillStatus({
+            listingId: listing.externalListingId,
+            detailFetchedAt,
+            quoteCapturedAt,
+            backfillWindowHours: options.backfillWindowHours,
+          }),
+        );
       }
 
-      const mergedObservations = mergeRealQuoteObservations({
-        existing: existingObservations,
-        latest: sidecar.observations,
-        nowMs: Date.now(),
-        retentionDays: observationRetentionDays,
+      const byReason = new Map<string, number>();
+      for (const status of backfillStatuses) {
+        byReason.set(status.reason, (byReason.get(status.reason) ?? 0) + 1);
+      }
+
+      listingsToProcess = listingsToProcess.filter((listing) => {
+        const status = backfillStatuses.find(
+          (entry) => entry.listingId === listing.externalListingId,
+        );
+        return status?.shouldProcess ?? false;
       });
 
-      const persistedSidecar: CanonicalQuotesSidecarRecord = {
-        ...sidecar,
-        observations: mergedObservations,
-      };
-      assertCanonicalQuotesSidecarRecord(persistedSidecar);
-      await writeFile(
-        outputPath,
-        `${JSON.stringify(persistedSidecar, null, 2)}\n`,
-        "utf8",
-      );
+      const reasonsSummary = Array.from(byReason.entries())
+        .sort((left, right) => left[0].localeCompare(right[0]))
+        .map(([reason, count]) => `${reason}:${count}`)
+        .join(", ");
+
       progress?.tick(
-        `quote sidecar flushed listing=${sidecar.external_listing_id}`,
+        `quote backfill evaluation complete candidates=${listingsToProcess.length}/${backfillStatuses.length}${reasonsSummary ? ` reasons=[${reasonsSummary}]` : ""}`,
       );
+    }
 
-      return persistedSidecar;
-    },
-  ).finally(() => {
-    tracker.finish();
-  });
+    if (options.dryRun) {
+      const selectedIds = listingsToProcess.map(
+        (listing) => listing.externalListingId,
+      );
+      const sampleIds = selectedIds.slice(0, 20).join(", ");
 
-  const persistedSidecars = sidecars.filter(
-    (sidecar): sidecar is CanonicalQuotesSidecarRecord => sidecar !== null,
-  );
+      progress?.success(
+        [
+          `quote-capture dry-run complete adapter=${config.adapterKey}`,
+          `selected=${selectedIds.length}`,
+          `skipped_fresh=${skippedFresh}`,
+          `backfill_only=${options.backfillOnly}`,
+          `sample_listing_ids=${sampleIds || "none"}`,
+        ].join(" "),
+      );
+      return;
+    }
 
-  const totalObservations = persistedSidecars.reduce(
-    (sum, sidecar) => sum + sidecar.observations.length,
-    0,
-  );
-  const availableObservations = persistedSidecars.reduce(
-    (sum, sidecar) =>
-      sum +
-      sidecar.observations.filter((observation) => observation.quote_available)
-        .length,
-    0,
-  );
+    if (listingsToProcess.length === 0) {
+      progress?.success(
+        `quote-capture complete listings=0 observations=0 available=0 skipped_fresh=${skippedFresh}`,
+      );
+      return;
+    }
 
-  progress?.success(
-    `quote-capture complete listings=${persistedSidecars.length} observations=${totalObservations} available=${availableObservations} skipped_fresh=${skippedFresh} skipped_covered=${skippedCoveredListings}`,
-  );
+    const tracker = createQuoteCaptureProgressTracker({
+      progress,
+      totalListings: listingsToProcess.length,
+      modeLabel: "quote",
+      heartbeatMs: Math.max(
+        1000,
+        Number(process.env.QUOTE_CAPTURE_HEARTBEAT_MS ?? "15000") || 15000,
+      ),
+    });
+
+    let observedHttp403 = 0;
+    let observedChallengeBlocked = 0;
+
+    let skippedCoveredListings = 0;
+    const sidecars = await runWithConcurrency(
+      listingsToProcess,
+      options.listingConcurrency,
+      async (listing): Promise<CanonicalQuotesSidecarRecord | null> => {
+        const outputPath = resolve(quotesDir, `${listing.fileId}.json`);
+        const existingObservations = await loadExistingRealQuoteObservations({
+          outputPath,
+        });
+
+        const sidecar = await buildSidecarForListing({
+          config,
+          listing,
+          options,
+          availabilityDays: await loadAvailabilityDays({
+            detailsJsonDir,
+            fileId: listing.fileId,
+          }),
+          defaultMinProbeNights,
+          defaultMaxProbeNights,
+          existingRealQuoteObservations: existingObservations,
+          progress,
+          onWindowsPlanned: (windows) => {
+            tracker.onWindowsPlanned(windows);
+          },
+          onWindowResult: ({ quoteAvailable, http403, challengeBlocked }) => {
+            tracker.onWindowResult(quoteAvailable);
+            if (http403) {
+              observedHttp403 += 1;
+              if (failFastHttp403) {
+                throw new Error(
+                  `Fail-fast abort: observed HTTP 403 during quote capture for adapter '${config.adapterKey}'.`,
+                );
+              }
+            }
+            if (challengeBlocked) {
+              observedChallengeBlocked += 1;
+            }
+          },
+          onListingComplete: ({ listingId, windows, available }) => {
+            tracker.onListingComplete({
+              listingId,
+              windows,
+              available,
+            });
+          },
+        });
+
+        if (sidecar.quote_max_queries === 0) {
+          skippedCoveredListings += 1;
+          return null;
+        }
+
+        const mergedObservations = mergeRealQuoteObservations({
+          existing: existingObservations,
+          latest: sidecar.observations,
+          nowMs: Date.now(),
+          retentionDays: observationRetentionDays,
+        });
+
+        const persistedSidecar: CanonicalQuotesSidecarRecord = {
+          ...sidecar,
+          observations: mergedObservations,
+        };
+        assertCanonicalQuotesSidecarRecord(persistedSidecar);
+        await writeFile(
+          outputPath,
+          `${JSON.stringify(persistedSidecar, null, 2)}\n`,
+          "utf8",
+        );
+        progress?.tick(
+          `quote sidecar flushed listing=${sidecar.external_listing_id}`,
+        );
+
+        return persistedSidecar;
+      },
+    ).finally(() => {
+      tracker.finish();
+    });
+
+    const persistedSidecars = sidecars.filter(
+      (sidecar): sidecar is CanonicalQuotesSidecarRecord => sidecar !== null,
+    );
+
+    const totalObservations = persistedSidecars.reduce(
+      (sum, sidecar) => sum + sidecar.observations.length,
+      0,
+    );
+    const availableObservations = persistedSidecars.reduce(
+      (sum, sidecar) =>
+        sum +
+        sidecar.observations.filter(
+          (observation) => observation.quote_available,
+        ).length,
+      0,
+    );
+
+    progress?.success(
+      `quote-capture complete listings=${persistedSidecars.length} observations=${totalObservations} available=${availableObservations} skipped_fresh=${skippedFresh} skipped_covered=${skippedCoveredListings} observed_http_403=${observedHttp403} observed_challenge_blocked=${observedChallengeBlocked}`,
+    );
+  } finally {
+    await cleanupProfiles();
+  }
 }

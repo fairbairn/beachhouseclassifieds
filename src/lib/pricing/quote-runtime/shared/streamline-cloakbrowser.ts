@@ -1,4 +1,10 @@
-import { launch as launchCloakBrowser } from "cloakbrowser";
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import {
+  launch as launchCloakBrowser,
+  launchPersistentContext as launchPersistentCloakContext,
+} from "cloakbrowser";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type BrowserProxyConfig = {
@@ -43,6 +49,7 @@ type BrowserContextLike = {
   cookies(origin: string): Promise<Array<{ name: string }>>;
   addInitScript(script: () => void): Promise<void>;
   newPage(): Promise<BrowserPageLike>;
+  close(): Promise<void>;
 };
 
 type BrowserLike = {
@@ -192,15 +199,22 @@ function resolveChallengeWaitMs(input: {
 }
 
 async function launchCloakBrowserInstance(input: {
+  adapterKey: string;
+  listingId: string;
   envPrefix: string;
+  userAgent: string;
   headless: boolean;
   proxy: BrowserProxyConfig | null;
 }): Promise<{
-  browser: BrowserLike;
+  context: BrowserContextLike;
+  close: () => Promise<void>;
   stealthRequested: boolean;
   stealthActive: boolean;
   stealthError: string | null;
   realChromeRequested: boolean;
+  persistentProfileEnabled: boolean;
+  persistentProfileDir: string | null;
+  disableHttp2: boolean;
 }> {
   const stealthRequested = readToggle(
     `${input.envPrefix}_STEALTH`,
@@ -210,16 +224,112 @@ async function launchCloakBrowserInstance(input: {
     `${input.envPrefix}_REAL_CHROME`,
     readToggle("STREAMLINE_REAL_CHROME", false),
   );
+  const persistentProfileEnabled = readToggle(
+    `${input.envPrefix}_PERSISTENT_PROFILE`,
+    readToggle("STREAMLINE_PERSISTENT_PROFILE", false),
+  );
+  const disableHttp2Configured = readToggle(
+    `${input.envPrefix}_DISABLE_HTTP2`,
+    readToggle("STREAMLINE_DISABLE_HTTP2", false),
+  );
+  const warmupOnceEnabled = readToggle(
+    `${input.envPrefix}_PERSISTENT_PROFILE_WARMUP_ONCE`,
+    readToggle("STREAMLINE_PERSISTENT_PROFILE_WARMUP_ONCE", false),
+  );
+
+  let disableHttp2 = disableHttp2Configured;
+  let shouldWriteWarmupMarker = false;
+
+  if (persistentProfileEnabled) {
+    const configuredProfileDir = readFirstEnv([
+      `${input.envPrefix}_PERSISTENT_PROFILE_DIR`,
+      "STREAMLINE_PERSISTENT_PROFILE_DIR",
+    ]);
+
+    const listingScopedSegment = input.listingId
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-");
+
+    const profileBaseDir = configuredProfileDir
+      ? resolve(
+          process.cwd(),
+          configuredProfileDir,
+          input.adapterKey.toLowerCase(),
+        )
+      : resolve(
+          process.cwd(),
+          ".tmp",
+          "cloak-profiles",
+          input.adapterKey.toLowerCase(),
+        );
+    const profileDir = resolve(profileBaseDir, listingScopedSegment);
+
+    await mkdir(profileDir, { recursive: true });
+
+    const warmupMarkerPath = resolve(profileDir, ".warmup-http2-complete");
+    if (warmupOnceEnabled && !disableHttp2Configured) {
+      try {
+        await access(warmupMarkerPath);
+      } catch {
+        disableHttp2 = true;
+        shouldWriteWarmupMarker = true;
+      }
+    }
+
+    const args = disableHttp2 ? ["--disable-http2"] : [];
+
+    const context = (await launchPersistentCloakContext({
+      userDataDir: profileDir,
+      headless: input.headless,
+      userAgent: input.userAgent,
+      ...(input.proxy ? { proxy: input.proxy } : {}),
+      ...(args.length > 0 ? { args } : {}),
+    })) as BrowserContextLike;
+
+    if (shouldWriteWarmupMarker) {
+      await writeFile(
+        warmupMarkerPath,
+        `${new Date().toISOString()}\n`,
+        "utf8",
+      );
+    }
+
+    return {
+      context,
+      close: () => context.close(),
+      stealthRequested,
+      // CloakBrowser ships stealth defaults at the browser layer.
+      stealthActive: true,
+      stealthError: realChromeRequested
+        ? "STREAMLINE_REAL_CHROME toggle ignored in CloakBrowser path"
+        : null,
+      realChromeRequested,
+      persistentProfileEnabled,
+      persistentProfileDir: profileDir,
+      disableHttp2,
+    };
+  }
+
+  const args = disableHttp2 ? ["--disable-http2"] : [];
 
   const launchOptions: Record<string, unknown> = {
     headless: input.headless,
+    userAgent: input.userAgent,
+    ignoreHTTPSErrors: false,
+    ...(args.length > 0 ? { args } : {}),
     ...(input.proxy ? { proxy: input.proxy } : {}),
   };
 
   const browser = (await launchCloakBrowser(launchOptions)) as BrowserLike;
+  const context = await browser.newContext({
+    userAgent: input.userAgent,
+    ignoreHTTPSErrors: false,
+  });
 
   return {
-    browser,
+    context,
+    close: () => browser.close(),
     stealthRequested,
     // CloakBrowser ships stealth defaults at the browser layer.
     stealthActive: true,
@@ -227,6 +337,9 @@ async function launchCloakBrowserInstance(input: {
       ? "STREAMLINE_REAL_CHROME toggle ignored in CloakBrowser path"
       : null,
     realChromeRequested,
+    persistentProfileEnabled,
+    persistentProfileDir: null,
+    disableHttp2,
   };
 }
 
@@ -686,15 +799,22 @@ export async function executeStreamlineCloakBrowserQuote(input: {
   });
 
   let launchState: {
-    browser: BrowserLike;
+    context: BrowserContextLike;
+    close: () => Promise<void>;
     stealthRequested: boolean;
     stealthActive: boolean;
     stealthError: string | null;
     realChromeRequested: boolean;
+    persistentProfileEnabled: boolean;
+    persistentProfileDir: string | null;
+    disableHttp2: boolean;
   };
   try {
     launchState = await launchCloakBrowserInstance({
+      adapterKey: input.adapterKey,
+      listingId: input.request.listingId,
       envPrefix: input.envPrefix,
+      userAgent,
       headless,
       proxy,
     });
@@ -719,7 +839,7 @@ export async function executeStreamlineCloakBrowserQuote(input: {
       }),
     };
   }
-  const browser = launchState.browser;
+  const context = launchState.context;
 
   const launchDiagnostics: Record<string, unknown> = {
     browserEngine: "cloakbrowser",
@@ -729,6 +849,9 @@ export async function executeStreamlineCloakBrowserQuote(input: {
     proxyConfigured: Boolean(proxy),
     proxyServer: proxy?.server ?? null,
     proxyAuthConfigured: Boolean(proxy?.username || proxy?.password),
+    persistentProfileEnabled: launchState.persistentProfileEnabled,
+    persistentProfileDir: launchState.persistentProfileDir,
+    disableHttp2: launchState.disableHttp2,
     effectiveUserAgent: userAgent,
     ...(launchState.stealthError
       ? { stealthError: launchState.stealthError }
@@ -736,11 +859,6 @@ export async function executeStreamlineCloakBrowserQuote(input: {
   };
 
   try {
-    const context = await browser.newContext({
-      userAgent,
-      ignoreHTTPSErrors: false,
-    });
-
     const seededCookies = await seedCloudflareCookies({
       context,
       detailUrl: contextData.detailUrl,
@@ -1147,6 +1265,6 @@ export async function executeStreamlineCloakBrowserQuote(input: {
       }),
     };
   } finally {
-    await browser.close();
+    await launchState.close();
   }
 }

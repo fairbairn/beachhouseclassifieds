@@ -560,19 +560,12 @@ export function create30ABeachGirlsAdapter(): ScraperAdapter<BeachGirlsDetailRec
     async discoverListings(context) {
       const logger = createDiscoveryLogger(context.reportProgress);
       const discovered = new Map<string, ScrapedLink>();
-      const maxStagnantRounds = 3;
+      const maxStagnantRounds = 6;
+      const settleChecksPerRound = 3;
       let stagnantRounds = 0;
 
-      await context.page.goto(context.anchorUrl, {
-        waitUntil: "domcontentloaded",
-      });
-
-      for (
-        let step = 0;
-        step < Math.max(1, context.maxScrollSteps);
-        step += 1
-      ) {
-        const links = await context.page.evaluate(() => {
+      const collectAnchorCandidates = async () =>
+        context.page.evaluate(() => {
           const anchors = Array.from(document.querySelectorAll("a[href]"));
           return anchors.map((anchor) => {
             const href = anchor.getAttribute("href") ?? "";
@@ -581,8 +574,11 @@ export function create30ABeachGirlsAdapter(): ScraperAdapter<BeachGirlsDetailRec
           });
         });
 
+      const ingestCandidates = (
+        candidates: Array<{ href: string; text: string }>,
+      ): boolean => {
         let grew = false;
-        for (const candidate of links) {
+        for (const candidate of candidates) {
           const rawHref = candidate.href?.trim();
           if (!rawHref) {
             continue;
@@ -606,6 +602,38 @@ export function create30ABeachGirlsAdapter(): ScraperAdapter<BeachGirlsDetailRec
             anchor_text: candidate.text || "View property",
           });
           grew = true;
+        }
+
+        return grew;
+      };
+
+      await context.page.goto(context.anchorUrl, {
+        waitUntil: "domcontentloaded",
+      });
+
+      for (
+        let step = 0;
+        step < Math.max(1, context.maxScrollSteps);
+        step += 1
+      ) {
+        const links = await collectAnchorCandidates();
+        let grew = ingestCandidates(links);
+
+        if (!grew) {
+          for (
+            let settleRound = 0;
+            settleRound < settleChecksPerRound;
+            settleRound += 1
+          ) {
+            await context.page.waitForTimeout(
+              Math.max(120, Math.floor(context.scrollPauseMs * 0.45)),
+            );
+            const settleLinks = await collectAnchorCandidates();
+            grew = ingestCandidates(settleLinks);
+            if (grew) {
+              break;
+            }
+          }
         }
 
         logger.progress({
@@ -660,7 +688,7 @@ export function create30ABeachGirlsAdapter(): ScraperAdapter<BeachGirlsDetailRec
         });
 
         const delayMs = !grew
-          ? Math.max(200, context.scrollPauseMs * 2)
+          ? Math.max(120, Math.floor(context.scrollPauseMs * 0.5))
           : Math.max(50, context.scrollPauseMs);
         await context.page.waitForTimeout(delayMs);
       }

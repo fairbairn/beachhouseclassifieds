@@ -25,7 +25,18 @@ export type ScraperBrowserLike = {
   close(): Promise<void>;
 };
 
+// Keep CloakBrowser rollout explicit so we can migrate adapters safely one at a time.
 const CLOAK_BROWSER_DEFAULT_ADAPTERS = new Set<string>([
+  "rosemary30a",
+  "coastproperties30a",
+  "dunevr30a",
+  "stayon30a",
+  "30abeach",
+  "30abeachgirls",
+]);
+
+// For migrated Streamline adapters, keep scraper execution strictly on CloakBrowser.
+const CLOAK_BROWSER_LOCKED_ADAPTERS = new Set<string>([
   "rosemary30a",
   "coastproperties30a",
   "dunevr30a",
@@ -52,6 +63,10 @@ function resolveEngine(input: {
   adapterKey: string;
   envPrefix: string;
 }): BrowserEngine {
+  if (CLOAK_BROWSER_LOCKED_ADAPTERS.has(input.adapterKey)) {
+    return "cloakbrowser";
+  }
+
   const adapterScraperScoped = normalizeEngineValue(
     process.env[`${input.envPrefix}_SCRAPER_BROWSER_ENGINE`],
   );

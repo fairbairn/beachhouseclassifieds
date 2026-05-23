@@ -10,6 +10,10 @@ import {
   resolveAdapterRuntime,
 } from "../adapter-foundation";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
+import {
+  navigateDetailWithChallenge,
+  postStreamlineApiRequestWithPage,
+} from "../shared/streamline-browser-session";
 import type {
   DetailRecordBase,
   DiscoverContext,
@@ -180,8 +184,7 @@ const OUTPUT_ROOT = resolve(
   "30abeach",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
-const USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const DETAIL_NAV_TIMEOUT_MS = 20000;
 
 const listingCache = new Map<string, Promise<ThirtyABeachListingRow[]>>();
 
@@ -887,32 +890,16 @@ function extractImageUrlsFromListingRow(
 
 async function callStreamlineApi<T = unknown>(
   origin: string,
+  page: BrowserPage,
   methodName: string,
   params: Record<string, unknown>,
 ): Promise<T | null> {
-  const url = `${origin}/wp-admin/admin-ajax.php?${new URLSearchParams({
-    action: "streamlinecore-api-request",
-    params: JSON.stringify({ methodName, params }),
-  }).toString()}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "user-agent": USER_AGENT,
-      accept: "application/json,text/plain,*/*",
-    },
+  return postStreamlineApiRequestWithPage<T>({
+    page,
+    origin,
+    methodName,
+    params,
   });
-
-  if (response.status !== 200) {
-    return null;
-  }
-
-  const raw = await response.text();
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
 }
 
 function mapListingRow(
@@ -994,6 +981,7 @@ function mapListingRow(
 
 async function loadListingRows(
   origin: string,
+  page: BrowserPage,
 ): Promise<ThirtyABeachListingRow[]> {
   const cacheKey = origin.toLowerCase();
   let pending = listingCache.get(cacheKey);
@@ -1005,7 +993,7 @@ async function loadListingRows(
       for (let pageNumber = 1; pageNumber <= 8; pageNumber += 1) {
         const payload = await callStreamlineApi<{
           data?: { property?: unknown };
-        }>(origin, "GetPropertyListWordPress", {
+        }>(origin, page, "GetPropertyListWordPress", {
           sort_by: "random",
           return_gallery: 1,
           max_images_number: "5",
@@ -1071,10 +1059,11 @@ function buildSeoMap(
 
 async function discoverListingsFromApi(
   anchorUrl: string,
+  page: BrowserPage,
 ): Promise<ScrapedLink[]> {
   const parsed = new URL(anchorUrl);
   const origin = parsed.origin;
-  const rows = await loadListingRows(origin);
+  const rows = await loadListingRows(origin, page);
   const links = rows
     .map((row): ScrapedLink | null => {
       const detailUrl = detailUrlFromSeoPath(origin, row.seoPageName);
@@ -1483,6 +1472,7 @@ function expandRateDays(
 }
 
 async function fetchDetail(
+  browser: { newPage: () => Promise<DiscoverContext["page"]> },
   detailUrl: string,
   availabilityHorizonDays: number,
 ): Promise<ThirtyABeachDetailRecord | null> {
@@ -1492,455 +1482,478 @@ async function fetchDetail(
     const seoPath = normalizeSeoLookupKey(
       extractSeoPathFromDetailUrl(detailUrl),
     );
+    const page = await browser.newPage();
 
-    const listingRows = await loadListingRows(origin);
-    const seoMap = buildSeoMap(listingRows);
-    let listingRow = seoMap.get(seoPath) ?? null;
+    try {
+      const listingRows = await loadListingRows(origin, page);
+      const seoMap = buildSeoMap(listingRows);
+      let listingRow = seoMap.get(seoPath) ?? null;
 
-    const resolvedDetailUrl = listingRow
-      ? detailUrlFromSeoPath(origin, listingRow.seoPageName)
-      : detailUrl;
+      const resolvedDetailUrl = listingRow
+        ? detailUrlFromSeoPath(origin, listingRow.seoPageName)
+        : detailUrl;
 
-    let detailResponse = await fetch(resolvedDetailUrl, {
-      method: "GET",
-      headers: {
-        "user-agent": USER_AGENT,
-        accept: "text/html,application/xhtml+xml",
-      },
-    });
+      const navigateDetail = async (url: string) =>
+        navigateDetailWithChallenge({
+          page,
+          detailUrl: url,
+          origin,
+          timeoutMs: DETAIL_NAV_TIMEOUT_MS,
+        });
 
-    if (detailResponse.status === 404 && !listingRow) {
-      const sanitizedPath = parsedDetail.pathname.replace(/'/g, "");
-      const fallbackUrl = `${origin}${sanitizedPath}`;
-      detailResponse = await fetch(fallbackUrl, {
-        method: "GET",
-        headers: {
-          "user-agent": USER_AGENT,
-          accept: "text/html,application/xhtml+xml",
-        },
-      });
+      let detailResponse = await navigateDetail(resolvedDetailUrl);
 
-      if (detailResponse.status === 200) {
-        const fallbackSeoPath = normalizeSeoLookupKey(
-          extractSeoPathFromDetailUrl(fallbackUrl),
-        );
-        listingRow = seoMap.get(fallbackSeoPath) ?? listingRow;
+      if (detailResponse.status === 404 && !listingRow) {
+        const sanitizedPath = parsedDetail.pathname.replace(/'/g, "");
+        const fallbackUrl = `${origin}${sanitizedPath}`;
+        detailResponse = await navigateDetail(fallbackUrl);
+
+        if (detailResponse.status === 200) {
+          const fallbackSeoPath = normalizeSeoLookupKey(
+            extractSeoPathFromDetailUrl(fallbackUrl),
+          );
+          listingRow = seoMap.get(fallbackSeoPath) ?? listingRow;
+        }
       }
-    }
 
-    if (detailResponse.status !== 200) {
-      return null;
-    }
+      if (detailResponse.status !== 200) {
+        return null;
+      }
 
-    const html = await detailResponse.text();
+      const html = detailResponse.html;
 
-    const extractedUnitId = extractUnitIdFromHtml(html);
-    if (!listingRow && extractedUnitId) {
-      listingRow =
-        listingRows.find((row) => row.id === extractedUnitId) ?? null;
-    }
+      if (!html) {
+        return null;
+      }
 
-    const unitId = listingRow?.id ?? extractedUnitId ?? "";
-    if (!unitId) {
-      return null;
-    }
+      const extractedUnitId = extractUnitIdFromHtml(html);
+      if (!listingRow && extractedUnitId) {
+        listingRow =
+          listingRows.find((row) => row.id === extractedUnitId) ?? null;
+      }
 
-    const canonicalUrl =
-      extractFirst(
-        /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i,
+      const unitId = listingRow?.id ?? extractedUnitId ?? "";
+      if (!unitId) {
+        return null;
+      }
+
+      const canonicalUrl =
+        extractFirst(
+          /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i,
+          html,
+        ) || normalizeLink(detailResponse.finalUrl || detailUrl);
+      const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html);
+      const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html);
+      const metaDescription = extractFirst(
+        /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i,
         html,
-      ) || normalizeLink(detailUrl);
-    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html);
-    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html);
-    const metaDescription = extractFirst(
-      /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i,
-      html,
-    );
+      );
 
-    const descriptionExpanded = extractFirst(
-      /<div[^>]+class=["'][^"']*property_description[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      html,
-    );
+      const descriptionExpanded = extractFirst(
+        /<div[^>]+class=["'][^"']*property_description[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+        html,
+      );
 
-    const amenitiesCategories = extractAmenityCategoriesFromHtml(html);
-    const amenitiesAll = dedupePreserveOrder(
-      Object.values(amenitiesCategories).flat(),
-    );
-    const roomDetailsStats = extractRoomDetailsStats(html);
-    const roomDetailsApiPayload =
-      await callStreamlineApi<StreamlineRoomDetailsPayload>(
+      const amenitiesCategories = extractAmenityCategoriesFromHtml(html);
+      const amenitiesAll = dedupePreserveOrder(
+        Object.values(amenitiesCategories).flat(),
+      );
+      const roomDetailsStats = extractRoomDetailsStats(html);
+      const roomDetailsApiPayload =
+        await postStreamlineApiRequestWithPage<StreamlineRoomDetailsPayload>({
+          page,
+          origin,
+          methodName: "GetPropertyRoomDetails",
+          params: {
+            unit_id: Number(unitId),
+            use_room_type_logic: "no",
+            standard_pricing: 1,
+          },
+        });
+      const roomDetailsGuidanceFromApi = extractRoomDetailsGuidanceFromApi(
+        roomDetailsApiPayload,
+      );
+      const roomDetailsGuidance =
+        roomDetailsGuidanceFromApi.length > 0
+          ? roomDetailsGuidanceFromApi
+          : extractRoomDetailsGuidance(html);
+
+      const latitudeFromHtml = parseNumberLike(
+        html.match(/["']latitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i)?.[1],
+      );
+      const longitudeFromHtml = parseNumberLike(
+        html.match(/["']longitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i)?.[1],
+      );
+      const latitude = listingRow?.latitude ?? latitudeFromHtml ?? null;
+      const longitude = listingRow?.longitude ?? longitudeFromHtml ?? null;
+
+      const jsonLdAddress = extractJsonLdAddress(html);
+      const fullAddress = jsonLdAddress.address;
+      const directionsDaddr = fullAddress;
+      const directionsUrl = directionsDaddr
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsDaddr)}`
+        : "";
+
+      const canonicalDetailUrl = listingRow
+        ? detailUrlFromSeoPath(origin, listingRow.seoPageName)
+        : resolvedDetailUrl;
+
+      const externalListingId = externalListingIdFromDetailUrl(
+        canonicalDetailUrl,
+        unitId,
+      );
+
+      const htmlPath = resolve(
+        OUTPUT_DETAILS_HTML_DIR,
+        `${externalListingId}.html`,
+      );
+      await writeFile(htmlPath, `${html}\n`, "utf8");
+
+      const availabilityPayload = await postStreamlineApiRequestWithPage<{
+        data?: {
+          range?: { beginDate?: string; endDate?: string };
+          availability?: string;
+          changeOver?: string;
+        };
+      }>({
+        page,
         origin,
-        "GetPropertyRoomDetails",
-        {
+        methodName: "GetPropertyAvailabilityRawData",
+        params: {
           unit_id: Number(unitId),
           use_room_type_logic: "no",
           standard_pricing: 1,
         },
+      });
+
+      const rawBeginDate = availabilityPayload?.data?.range?.beginDate ?? "";
+      const rawEndDate = availabilityPayload?.data?.range?.endDate ?? "";
+      const rawAvailabilityCodes =
+        availabilityPayload?.data?.availability ?? "";
+      const rawChangeoverCodes = availabilityPayload?.data?.changeOver ?? "";
+
+      const allAvailabilityDays = decodeAvailabilityDays(
+        rawBeginDate,
+        rawAvailabilityCodes,
+        rawChangeoverCodes,
       );
-    const roomDetailsGuidanceFromApi = extractRoomDetailsGuidanceFromApi(
-      roomDetailsApiPayload,
-    );
-    const roomDetailsGuidance =
-      roomDetailsGuidanceFromApi.length > 0
-        ? roomDetailsGuidanceFromApi
-        : extractRoomDetailsGuidance(html);
 
-    const latitudeFromHtml = parseNumberLike(
-      html.match(/["']latitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i)?.[1],
-    );
-    const longitudeFromHtml = parseNumberLike(
-      html.match(/["']longitude["']\s*:\s*(-?\d+(?:\.\d+)?)/i)?.[1],
-    );
-    const latitude = listingRow?.latitude ?? latitudeFromHtml ?? null;
-    const longitude = listingRow?.longitude ?? longitudeFromHtml ?? null;
-
-    const jsonLdAddress = extractJsonLdAddress(html);
-    const fullAddress = jsonLdAddress.address;
-    const directionsDaddr = fullAddress;
-    const directionsUrl = directionsDaddr
-      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsDaddr)}`
-      : "";
-
-    const canonicalDetailUrl = listingRow
-      ? detailUrlFromSeoPath(origin, listingRow.seoPageName)
-      : resolvedDetailUrl;
-
-    const externalListingId = externalListingIdFromDetailUrl(
-      canonicalDetailUrl,
-      unitId,
-    );
-
-    const htmlPath = resolve(
-      OUTPUT_DETAILS_HTML_DIR,
-      `${externalListingId}.html`,
-    );
-    await writeFile(htmlPath, `${html}\n`, "utf8");
-
-    const availabilityPayload = await callStreamlineApi<{
-      data?: {
-        range?: { beginDate?: string; endDate?: string };
-        availability?: string;
-        changeOver?: string;
-      };
-    }>(origin, "GetPropertyAvailabilityRawData", {
-      unit_id: Number(unitId),
-      use_room_type_logic: "no",
-      standard_pricing: 1,
-    });
-
-    const rawBeginDate = availabilityPayload?.data?.range?.beginDate ?? "";
-    const rawEndDate = availabilityPayload?.data?.range?.endDate ?? "";
-    const rawAvailabilityCodes = availabilityPayload?.data?.availability ?? "";
-    const rawChangeoverCodes = availabilityPayload?.data?.changeOver ?? "";
-
-    const allAvailabilityDays = decodeAvailabilityDays(
-      rawBeginDate,
-      rawAvailabilityCodes,
-      rawChangeoverCodes,
-    );
-
-    const now = new Date();
-    const today = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-    );
-    const horizonDate = new Date(today);
-    horizonDate.setUTCDate(horizonDate.getUTCDate() + availabilityHorizonDays);
-
-    const filteredDays = allAvailabilityDays.filter((day) => {
-      const dayDate = new Date(`${day.date}T00:00:00.000Z`);
-      return dayDate >= today && dayDate <= horizonDate;
-    });
-
-    const availabilityDays = [...filteredDays];
-    if (availabilityDays.length > 0) {
-      const lastKnown = new Date(
-        `${availabilityDays[availabilityDays.length - 1]?.date}T00:00:00.000Z`,
+      const now = new Date();
+      const today = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
       );
-      const cursor = new Date(lastKnown);
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      const horizonDate = new Date(today);
+      horizonDate.setUTCDate(
+        horizonDate.getUTCDate() + availabilityHorizonDays,
+      );
 
-      while (cursor <= horizonDate) {
-        availabilityDays.push({
-          date: formatDateIso(cursor),
-          code: "X",
-          changeOverCode: "X",
-        });
+      const filteredDays = allAvailabilityDays.filter((day) => {
+        const dayDate = new Date(`${day.date}T00:00:00.000Z`);
+        return dayDate >= today && dayDate <= horizonDate;
+      });
+
+      const availabilityDays = [...filteredDays];
+      if (availabilityDays.length > 0) {
+        const lastKnown = new Date(
+          `${availabilityDays[availabilityDays.length - 1]?.date}T00:00:00.000Z`,
+        );
+        const cursor = new Date(lastKnown);
         cursor.setUTCDate(cursor.getUTCDate() + 1);
+
+        while (cursor <= horizonDate) {
+          availabilityDays.push({
+            date: formatDateIso(cursor),
+            code: "X",
+            changeOverCode: "X",
+          });
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+      } else {
+        const cursor = new Date(today);
+        while (cursor <= horizonDate) {
+          availabilityDays.push({
+            date: formatDateIso(cursor),
+            code: "X",
+            changeOverCode: "X",
+          });
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
       }
-    } else {
-      const cursor = new Date(today);
-      while (cursor <= horizonDate) {
-        availabilityDays.push({
-          date: formatDateIso(cursor),
-          code: "X",
-          changeOverCode: "X",
-        });
-        cursor.setUTCDate(cursor.getUTCDate() + 1);
+
+      const availabilityByDate = new Map<string, ThirtyABeachDayCode>();
+      const changeoverByDate = new Map<string, ThirtyABeachChangeOverCode>();
+      for (const day of availabilityDays) {
+        availabilityByDate.set(day.date, day.code);
+        changeoverByDate.set(day.date, day.changeOverCode);
       }
-    }
 
-    const availabilityByDate = new Map<string, ThirtyABeachDayCode>();
-    const changeoverByDate = new Map<string, ThirtyABeachChangeOverCode>();
-    for (const day of availabilityDays) {
-      availabilityByDate.set(day.date, day.code);
-      changeoverByDate.set(day.date, day.changeOverCode);
-    }
+      const ratesStartIso = filteredDays[0]?.date ?? formatDateIso(today);
+      const ratesEndIso =
+        filteredDays[filteredDays.length - 1]?.date ??
+        formatDateIso(horizonDate);
+      const ratesStartDateUs = formatDateUsFromIso(ratesStartIso);
+      const ratesEndDateUs = formatDateUsFromIso(ratesEndIso);
 
-    const ratesStartIso = filteredDays[0]?.date ?? formatDateIso(today);
-    const ratesEndIso =
-      filteredDays[filteredDays.length - 1]?.date ?? formatDateIso(horizonDate);
-    const ratesStartDateUs = formatDateUsFromIso(ratesStartIso);
-    const ratesEndDateUs = formatDateUsFromIso(ratesEndIso);
+      const ratesPayload =
+        ratesStartDateUs && ratesEndDateUs
+          ? await postStreamlineApiRequestWithPage({
+              page,
+              origin,
+              methodName: "GetPropertyRatesRawData",
+              params: {
+                unit_id: Number(unitId),
+                use_yielding_with_dates: "yes",
+                startdate: ratesStartDateUs,
+                enddate: ratesEndDateUs,
+              },
+            })
+          : null;
 
-    const ratesPayload =
-      ratesStartDateUs && ratesEndDateUs
-        ? await callStreamlineApi(origin, "GetPropertyRatesRawData", {
-            unit_id: Number(unitId),
-            use_yielding_with_dates: "yes",
-            startdate: ratesStartDateUs,
-            enddate: ratesEndDateUs,
-          })
-        : null;
-
-    const ratesRowsRaw = parseRateRows(ratesPayload);
-    const normalizedRateDays = expandRateDays(
-      ratesRowsRaw,
-      availabilityByDate,
-      changeoverByDate,
-    );
-
-    const rateValues = normalizedRateDays
-      .map((row) => row.nightly_rate)
-      .filter((value): value is number => Number.isFinite(value));
-    const minRate = rateValues.length > 0 ? Math.min(...rateValues) : null;
-    const maxRate = rateValues.length > 0 ? Math.max(...rateValues) : null;
-    const avgRate =
-      rateValues.length > 0
-        ? Number(
-            (
-              rateValues.reduce((sum, value) => sum + value, 0) /
-              rateValues.length
-            ).toFixed(2),
-          )
-        : null;
-
-    const normalizedDays = availabilityDays.map((day, index) => {
-      const previousDay = index > 0 ? availabilityDays[index - 1] : undefined;
-      const rateForDay = normalizedRateDays.find(
-        (rate) => rate.date === day.date,
+      const ratesRowsRaw = parseRateRows(ratesPayload);
+      const normalizedRateDays = expandRateDays(
+        ratesRowsRaw,
+        availabilityByDate,
+        changeoverByDate,
       );
-      const isCheckInAllowed =
-        day.code === "Y" &&
-        day.changeOverCode !== "X" &&
-        day.changeOverCode !== "O";
-      const isCheckOutAllowed =
-        (day.code === "Y" &&
+
+      const rateValues = normalizedRateDays
+        .map((row) => row.nightly_rate)
+        .filter((value): value is number => Number.isFinite(value));
+      const minRate = rateValues.length > 0 ? Math.min(...rateValues) : null;
+      const maxRate = rateValues.length > 0 ? Math.max(...rateValues) : null;
+      const avgRate =
+        rateValues.length > 0
+          ? Number(
+              (
+                rateValues.reduce((sum, value) => sum + value, 0) /
+                rateValues.length
+              ).toFixed(2),
+            )
+          : null;
+
+      const normalizedDays = availabilityDays.map((day, index) => {
+        const previousDay = index > 0 ? availabilityDays[index - 1] : undefined;
+        const rateForDay = normalizedRateDays.find(
+          (rate) => rate.date === day.date,
+        );
+        const isCheckInAllowed =
+          day.code === "Y" &&
           day.changeOverCode !== "X" &&
-          day.changeOverCode !== "I") ||
-        (day.code === "N" && previousDay?.code === "Y");
+          day.changeOverCode !== "O";
+        const isCheckOutAllowed =
+          (day.code === "Y" &&
+            day.changeOverCode !== "X" &&
+            day.changeOverCode !== "I") ||
+          (day.code === "N" && previousDay?.code === "Y");
 
-      const statusCode: ThirtyABeachNormalizedStatusCode =
-        day.code === "X"
-          ? "X"
-          : isCheckInAllowed && isCheckOutAllowed
-            ? "A"
-            : isCheckInAllowed
-              ? "I"
-              : isCheckOutAllowed
-                ? "O"
-                : "U";
+        const statusCode: ThirtyABeachNormalizedStatusCode =
+          day.code === "X"
+            ? "X"
+            : isCheckInAllowed && isCheckOutAllowed
+              ? "A"
+              : isCheckInAllowed
+                ? "I"
+                : isCheckOutAllowed
+                  ? "O"
+                  : "U";
 
-      const normalizedDayCode: "Y" | "N" =
-        statusCode === "A" || statusCode === "O" ? "Y" : "N";
-      const normalizedChangeoverCode: ThirtyABeachChangeOverCode =
-        statusCode === "I"
-          ? "I"
-          : statusCode === "O"
-            ? "O"
-            : statusCode === "A"
-              ? "C"
-              : "X";
-      const bookingDayState: "bookable" | "blocked" | "unknown" =
-        statusCode === "A" || statusCode === "O"
-          ? "bookable"
-          : statusCode === "U" || statusCode === "I"
-            ? "blocked"
-            : "unknown";
-      const isAvailable = statusCode === "A" || statusCode === "O";
+        const normalizedDayCode: "Y" | "N" =
+          statusCode === "A" || statusCode === "O" ? "Y" : "N";
+        const normalizedChangeoverCode: ThirtyABeachChangeOverCode =
+          statusCode === "I"
+            ? "I"
+            : statusCode === "O"
+              ? "O"
+              : statusCode === "A"
+                ? "C"
+                : "X";
+        const bookingDayState: "bookable" | "blocked" | "unknown" =
+          statusCode === "A" || statusCode === "O"
+            ? "bookable"
+            : statusCode === "U" || statusCode === "I"
+              ? "blocked"
+              : "unknown";
+        const isAvailable = statusCode === "A" || statusCode === "O";
+
+        return {
+          date: day.date,
+          day_code: normalizedDayCode,
+          changeover_code: normalizedChangeoverCode,
+          is_available: isAvailable,
+          status_code: statusCode,
+          is_available_for_checkin: isCheckInAllowed,
+          is_available_for_checkout: isCheckOutAllowed,
+          booking_day_state: bookingDayState,
+          min_nights_required: rateForDay?.min_nights ?? null,
+        };
+      });
+
+      const available = normalizedDays.filter(
+        (day) => day.status_code === "A" || day.status_code === "O",
+      ).length;
+      const notAvailable = normalizedDays.filter(
+        (day) => day.status_code === "U" || day.status_code === "I",
+      ).length;
+      const other = normalizedDays.filter(
+        (day) => day.status_code === "X",
+      ).length;
+
+      const description =
+        descriptionExpanded || listingRow?.description || metaDescription;
+      const name = stripHtml(h1 || title || listingRow?.name || "").slice(
+        0,
+        240,
+      );
+      const descriptionNormalized = normalizeForMatch(description);
+      const titleNormalized = normalizeForMatch(name);
+
+      const mediaImageUrls = filterCanonicalGalleryImageUrls([
+        ...extractImageUrlsFromListingRow(listingRow),
+        ...Array.from(
+          html.matchAll(/https?:\/\/gallery\.streamlinevrs\.com\/[^"'\s>]*/gi),
+        ).map((match) => match[0] ?? ""),
+      ]);
 
       return {
-        date: day.date,
-        day_code: normalizedDayCode,
-        changeover_code: normalizedChangeoverCode,
-        is_available: isAvailable,
-        status_code: statusCode,
-        is_available_for_checkin: isCheckInAllowed,
-        is_available_for_checkout: isCheckOutAllowed,
-        booking_day_state: bookingDayState,
-        min_nights_required: rateForDay?.min_nights ?? null,
-      };
-    });
-
-    const available = normalizedDays.filter(
-      (day) => day.status_code === "A" || day.status_code === "O",
-    ).length;
-    const notAvailable = normalizedDays.filter(
-      (day) => day.status_code === "U" || day.status_code === "I",
-    ).length;
-    const other = normalizedDays.filter(
-      (day) => day.status_code === "X",
-    ).length;
-
-    const description =
-      descriptionExpanded || listingRow?.description || metaDescription;
-    const name = stripHtml(h1 || title || listingRow?.name || "").slice(0, 240);
-    const descriptionNormalized = normalizeForMatch(description);
-    const titleNormalized = normalizeForMatch(name);
-
-    const mediaImageUrls = filterCanonicalGalleryImageUrls([
-      ...extractImageUrlsFromListingRow(listingRow),
-      ...Array.from(
-        html.matchAll(/https?:\/\/gallery\.streamlinevrs\.com\/[^"'\s>]*/gi),
-      ).map((match) => match[0] ?? ""),
-    ]);
-
-    return {
-      external_listing_id: externalListingId,
-      detail_url: normalizeLink(canonicalDetailUrl),
-      quote_context: {
-        listing_id: unitId,
-        unit_id: unitId,
+        external_listing_id: externalListingId,
         detail_url: normalizeLink(canonicalDetailUrl),
-      },
-      fetched_at: new Date().toISOString(),
-      title,
-      h1,
-      canonical_url: canonicalUrl,
-      meta_description: metaDescription,
-      description_expanded: description,
-      rooms_guidance: roomDetailsGuidance,
-      amenities: {
-        categories: amenitiesCategories,
-        all: amenitiesAll,
-      },
-      location: {
-        address: fullAddress,
-        location_label: [
-          listingRow?.city ?? jsonLdAddress.city,
-          listingRow?.state ?? jsonLdAddress.state,
-        ]
-          .filter((part) => part.length > 0)
-          .join(", "),
-        directions_url: directionsUrl,
-        directions_daddr: directionsDaddr,
-        latitude:
-          latitude !== null && Number.isFinite(latitude) ? latitude : null,
-        longitude:
-          longitude !== null && Number.isFinite(longitude) ? longitude : null,
-      },
-      media_gallery: {
-        image_count: mediaImageUrls.length,
-        image_urls: mediaImageUrls,
-      },
-      property_profile: {
-        unit_id: unitId,
-        area: listingRow?.city ?? "",
-        location: [listingRow?.city ?? "", listingRow?.state ?? ""]
-          .filter((part) => part.length > 0)
-          .join(", "),
-        beds: listingRow?.bedrooms ?? roomDetailsStats.beds ?? null,
-        baths: listingRow?.bathrooms ?? roomDetailsStats.baths ?? null,
-        sleeps: listingRow?.sleeps ?? roomDetailsStats.sleeps ?? null,
-        city: listingRow?.city ?? "",
-        state: listingRow?.state ?? "",
-      },
-      normalized_matching_profile: {
-        source: "pm_30abeach",
-        external_listing_id: externalListingId,
-        name,
-        description,
-        match_signals: {
-          description_normalized: descriptionNormalized,
-          description_sha256: hashSha256(descriptionNormalized),
-          title_normalized: titleNormalized,
-          title_sha256: hashSha256(titleNormalized),
-          listing_composite_key: [
-            "pm_30abeach",
-            externalListingId,
-            hashSha256(descriptionNormalized),
-            hashSha256(titleNormalized),
-          ].join("::"),
+        quote_context: {
+          listing_id: unitId,
+          unit_id: unitId,
+          detail_url: normalizeLink(canonicalDetailUrl),
         },
-      },
-      normalized_availability: {
-        source: "pm_30abeach",
-        external_listing_id: externalListingId,
-        captured_at: new Date().toISOString(),
-        window_start: availabilityDays[0]?.date ?? "",
-        window_end: availabilityDays[availabilityDays.length - 1]?.date ?? "",
-        code_legend: {
-          Y: "available",
-          N: "not_available",
-          X: "other",
+        fetched_at: new Date().toISOString(),
+        title,
+        h1,
+        canonical_url: canonicalUrl,
+        meta_description: metaDescription,
+        description_expanded: description,
+        rooms_guidance: roomDetailsGuidance,
+        amenities: {
+          categories: amenitiesCategories,
+          all: amenitiesAll,
         },
-        day_codes: availabilityDays.map((day) => day.code).join(""),
-        days: normalizedDays,
-        counts: {
-          available,
-          not_available: notAvailable,
-          other,
-          booking_available: normalizedDays.filter(
-            (day) => day.booking_day_state === "bookable",
-          ).length,
-          booking_unavailable: normalizedDays.filter(
-            (day) => day.booking_day_state === "blocked",
-          ).length,
-          booking_unknown: normalizedDays.filter(
-            (day) => day.booking_day_state === "unknown",
-          ).length,
+        location: {
+          address: fullAddress,
+          location_label: [
+            listingRow?.city ?? jsonLdAddress.city,
+            listingRow?.state ?? jsonLdAddress.state,
+          ]
+            .filter((part) => part.length > 0)
+            .join(", "),
+          directions_url: directionsUrl,
+          directions_daddr: directionsDaddr,
+          latitude:
+            latitude !== null && Number.isFinite(latitude) ? latitude : null,
+          longitude:
+            longitude !== null && Number.isFinite(longitude) ? longitude : null,
         },
-      },
-      availability_raw: {
-        begin_date: rawBeginDate,
-        end_date: rawEndDate,
-        day_codes: rawAvailabilityCodes,
-        changeover_codes: rawChangeoverCodes,
-      },
-      normalized_rates: {
-        source: "pm_30abeach",
-        external_listing_id: externalListingId,
-        captured_at: new Date().toISOString(),
-        currency: "USD",
-        window_start: normalizedRateDays[0]?.date ?? "",
-        window_end:
-          normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
-        days: normalizedRateDays,
-        stats: {
-          days_with_rate: rateValues.length,
-          min_nightly_rate: minRate,
-          max_nightly_rate: maxRate,
-          avg_nightly_rate: avgRate,
+        media_gallery: {
+          image_count: mediaImageUrls.length,
+          image_urls: mediaImageUrls,
         },
-      },
-      rates_raw: {
-        request_start_date: ratesStartDateUs,
-        request_end_date: ratesEndDateUs,
-        rows: ratesRowsRaw,
-      },
-      pricing_api_hints: {
-        provider: "streamlinecore-api-request",
-        endpoint_path: "/wp-admin/admin-ajax.php",
-        method_names: {
-          availability: "GetPropertyAvailabilityRawData",
-          room_details: "GetPropertyRoomDetails",
-          rates: "GetPropertyRatesRawData",
-          pre_reservation_price: "GetPreReservationPrice",
+        property_profile: {
+          unit_id: unitId,
+          area: listingRow?.city ?? "",
+          location: [listingRow?.city ?? "", listingRow?.state ?? ""]
+            .filter((part) => part.length > 0)
+            .join(", "),
+          beds: listingRow?.bedrooms ?? roomDetailsStats.beds ?? null,
+          baths: listingRow?.bathrooms ?? roomDetailsStats.baths ?? null,
+          sleeps: listingRow?.sleeps ?? roomDetailsStats.sleeps ?? null,
+          city: listingRow?.city ?? "",
+          state: listingRow?.state ?? "",
         },
-        notes:
-          "GetPreReservationPrice appears available on this Streamline-backed adapter for ad-hoc full quote requests (date/guest/stay inputs); schema and required params vary by manager and should be probed separately.",
-      },
-      html_path: htmlPath,
-    };
+        normalized_matching_profile: {
+          source: "pm_30abeach",
+          external_listing_id: externalListingId,
+          name,
+          description,
+          match_signals: {
+            description_normalized: descriptionNormalized,
+            description_sha256: hashSha256(descriptionNormalized),
+            title_normalized: titleNormalized,
+            title_sha256: hashSha256(titleNormalized),
+            listing_composite_key: [
+              "pm_30abeach",
+              externalListingId,
+              hashSha256(descriptionNormalized),
+              hashSha256(titleNormalized),
+            ].join("::"),
+          },
+        },
+        normalized_availability: {
+          source: "pm_30abeach",
+          external_listing_id: externalListingId,
+          captured_at: new Date().toISOString(),
+          window_start: availabilityDays[0]?.date ?? "",
+          window_end: availabilityDays[availabilityDays.length - 1]?.date ?? "",
+          code_legend: {
+            Y: "available",
+            N: "not_available",
+            X: "other",
+          },
+          day_codes: availabilityDays.map((day) => day.code).join(""),
+          days: normalizedDays,
+          counts: {
+            available,
+            not_available: notAvailable,
+            other,
+            booking_available: normalizedDays.filter(
+              (day) => day.booking_day_state === "bookable",
+            ).length,
+            booking_unavailable: normalizedDays.filter(
+              (day) => day.booking_day_state === "blocked",
+            ).length,
+            booking_unknown: normalizedDays.filter(
+              (day) => day.booking_day_state === "unknown",
+            ).length,
+          },
+        },
+        availability_raw: {
+          begin_date: rawBeginDate,
+          end_date: rawEndDate,
+          day_codes: rawAvailabilityCodes,
+          changeover_codes: rawChangeoverCodes,
+        },
+        normalized_rates: {
+          source: "pm_30abeach",
+          external_listing_id: externalListingId,
+          captured_at: new Date().toISOString(),
+          currency: "USD",
+          window_start: normalizedRateDays[0]?.date ?? "",
+          window_end:
+            normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
+          days: normalizedRateDays,
+          stats: {
+            days_with_rate: rateValues.length,
+            min_nightly_rate: minRate,
+            max_nightly_rate: maxRate,
+            avg_nightly_rate: avgRate,
+          },
+        },
+        rates_raw: {
+          request_start_date: ratesStartDateUs,
+          request_end_date: ratesEndDateUs,
+          rows: ratesRowsRaw,
+        },
+        pricing_api_hints: {
+          provider: "streamlinecore-api-request",
+          endpoint_path: "/wp-admin/admin-ajax.php",
+          method_names: {
+            availability: "GetPropertyAvailabilityRawData",
+            room_details: "GetPropertyRoomDetails",
+            rates: "GetPropertyRatesRawData",
+            pre_reservation_price: "GetPreReservationPrice",
+          },
+          notes:
+            "GetPreReservationPrice appears available on this Streamline-backed adapter for ad-hoc full quote requests (date/guest/stay inputs); schema and required params vary by manager and should be probed separately.",
+        },
+        html_path: htmlPath,
+      };
+    } finally {
+      await page.close();
+    }
   } catch {
     return null;
   }
@@ -1998,7 +2011,10 @@ export function create30ABeachAdapter(): ScraperAdapter<ThirtyABeachDetailRecord
         context.networkIdleWaitMs,
         logger,
       );
-      const apiLinks = await discoverListingsFromApi(context.anchorUrl);
+      const apiLinks = await discoverListingsFromApi(
+        context.anchorUrl,
+        context.page,
+      );
 
       logger.expected({
         source: "api",
@@ -2018,9 +2034,14 @@ export function create30ABeachAdapter(): ScraperAdapter<ThirtyABeachDetailRecord
       return merged;
     },
     async fetchDetail(context) {
-      void context.browser;
       void context.maxCalendarAdvanceMonths;
-      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+      return fetchDetail(
+        context.browser as unknown as {
+          newPage: () => Promise<DiscoverContext["page"]>;
+        },
+        context.detailUrl,
+        context.availabilityHorizonDays,
+      );
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(

@@ -6,6 +6,10 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
+import {
+  navigateDetailWithChallenge,
+  postStreamlineApiRequestWithPage,
+} from "../shared/streamline-browser-session";
 import type {
   DetailRecordBase,
   DiscoverContext,
@@ -175,8 +179,7 @@ const OUTPUT_ROOT = resolve(
   "dunevr30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
-const USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const DETAIL_NAV_TIMEOUT_MS = 20000;
 
 const listingCache = new Map<string, Promise<DuneListingRow[]>>();
 
@@ -660,34 +663,18 @@ function extractImageUrlsFromListingRow(row: DuneListingRow | null): string[] {
   return filterCanonicalGalleryImageUrls(row.imageUrls);
 }
 
-async function callStreamlineApi<T = unknown>(
+async function callStreamlineApiWithPage<T = unknown>(
   origin: string,
+  page: BrowserPage,
   methodName: string,
   params: Record<string, unknown>,
 ): Promise<T | null> {
-  const url = `${origin}/wp-admin/admin-ajax.php?${new URLSearchParams({
-    action: "streamlinecore-api-request",
-    params: JSON.stringify({ methodName, params }),
-  }).toString()}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "user-agent": USER_AGENT,
-      accept: "application/json,text/plain,*/*",
-    },
+  return postStreamlineApiRequestWithPage<T>({
+    page,
+    origin,
+    methodName,
+    params,
   });
-
-  if (response.status !== 200) {
-    return null;
-  }
-
-  const raw = await response.text();
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
 }
 
 function mapListingRow(raw: Record<string, unknown>): DuneListingRow | null {
@@ -765,7 +752,10 @@ function mapListingRow(raw: Record<string, unknown>): DuneListingRow | null {
   };
 }
 
-async function loadListingRows(origin: string): Promise<DuneListingRow[]> {
+async function loadListingRows(
+  origin: string,
+  page: BrowserPage,
+): Promise<DuneListingRow[]> {
   const cacheKey = origin.toLowerCase();
   let pending = listingCache.get(cacheKey);
   if (!pending) {
@@ -774,9 +764,9 @@ async function loadListingRows(origin: string): Promise<DuneListingRow[]> {
       const seenIds = new Set<string>();
 
       for (let pageNumber = 1; pageNumber <= 8; pageNumber += 1) {
-        const payload = await callStreamlineApi<{
+        const payload = await callStreamlineApiWithPage<{
           data?: { property?: unknown };
-        }>(origin, "GetPropertyListWordPress", {
+        }>(origin, page, "GetPropertyListWordPress", {
           sort_by: "random",
           return_gallery: 1,
           max_images_number: "5",
@@ -840,11 +830,12 @@ function buildSeoMap(rows: DuneListingRow[]): Map<string, DuneListingRow> {
 
 async function discoverListings(
   anchorUrl: string,
+  page: BrowserPage,
   reportProgress: (message: string) => void,
 ): Promise<ScrapedLink[]> {
   const parsed = new URL(anchorUrl);
   const origin = parsed.origin;
-  const rows = await loadListingRows(origin);
+  const rows = await loadListingRows(origin, page);
   const links = rows
     .map((row): ScrapedLink | null => {
       const detailUrl = detailUrlFromSeoPath(origin, row.seoPageName);
@@ -1249,17 +1240,21 @@ function expandRateDays(
 }
 
 async function fetchDetail(
+  browser: { newPage(): Promise<BrowserPage> },
   detailUrl: string,
   availabilityHorizonDays: number,
+  reportDetailProgress?: (message: string) => void,
 ): Promise<DuneDetailRecord | null> {
+  let page: BrowserPage | null = null;
   try {
+    page = await browser.newPage();
     const parsedDetail = new URL(detailUrl);
     const origin = parsedDetail.origin;
     const seoPath = normalizeSeoLookupKey(
       extractSeoPathFromDetailUrl(detailUrl),
     );
 
-    const listingRows = await loadListingRows(origin);
+    const listingRows = await loadListingRows(origin, page);
     const seoMap = buildSeoMap(listingRows);
     let listingRow = seoMap.get(seoPath) ?? null;
 
@@ -1267,26 +1262,37 @@ async function fetchDetail(
       ? detailUrlFromSeoPath(origin, listingRow.seoPageName)
       : detailUrl;
 
-    let detailResponse = await fetch(resolvedDetailUrl, {
-      method: "GET",
-      headers: {
-        "user-agent": USER_AGENT,
-        accept: "text/html,application/xhtml+xml",
-      },
-    });
-
-    if (detailResponse.status === 404 && !listingRow) {
-      const sanitizedPath = parsedDetail.pathname.replace(/'/g, "");
-      const fallbackUrl = `${origin}${sanitizedPath}`;
-      detailResponse = await fetch(fallbackUrl, {
-        method: "GET",
-        headers: {
-          "user-agent": USER_AGENT,
-          accept: "text/html,application/xhtml+xml",
-        },
+    const navigateDetail = async (url: string) =>
+      navigateDetailWithChallenge({
+        page,
+        detailUrl: url,
+        origin,
+        timeoutMs: DETAIL_NAV_TIMEOUT_MS,
       });
 
-      if (detailResponse.status === 200) {
+    let detailResponse = await navigateDetail(resolvedDetailUrl);
+
+    const detailStatus = detailResponse.status ?? 0;
+    if (detailStatus === 403) {
+      reportDetailProgress?.(
+        `http_status=403 detail_url=${resolvedDetailUrl} provider=dunevr30a stage=detail_fetch_primary`,
+      );
+    }
+
+    if (detailStatus === 404 && !listingRow) {
+      const sanitizedPath = parsedDetail.pathname.replace(/'/g, "");
+      const fallbackUrl = `${origin}${sanitizedPath}`;
+      detailResponse = await navigateDetail(fallbackUrl);
+
+      const fallbackStatus = detailResponse.status ?? 0;
+
+      if (fallbackStatus === 403) {
+        reportDetailProgress?.(
+          `http_status=403 detail_url=${fallbackUrl} provider=dunevr30a stage=detail_fetch_fallback`,
+        );
+      }
+
+      if (fallbackStatus === 200) {
         const fallbackSeoPath = normalizeSeoLookupKey(
           extractSeoPathFromDetailUrl(fallbackUrl),
         );
@@ -1294,11 +1300,22 @@ async function fetchDetail(
       }
     }
 
-    if (detailResponse.status !== 200) {
+    const finalDetailStatus = detailResponse.status ?? 0;
+    if (finalDetailStatus !== 200) {
+      reportDetailProgress?.(
+        `detail fetch failed status=${finalDetailStatus} detail_url=${resolvedDetailUrl} provider=dunevr30a`,
+      );
       return null;
     }
 
-    const html = await detailResponse.text();
+    const html = detailResponse.html;
+
+    if (!html) {
+      reportDetailProgress?.(
+        `critical empty_html detail_url=${resolvedDetailUrl} provider=dunevr30a`,
+      );
+      return null;
+    }
 
     const extractedUnitId = extractUnitIdFromHtml(html);
     if (!listingRow && extractedUnitId) {
@@ -1308,6 +1325,9 @@ async function fetchDetail(
 
     const rentalId = listingRow?.id ?? extractedUnitId ?? "";
     if (!rentalId) {
+      reportDetailProgress?.(
+        `critical missing rentalId detail_url=${resolvedDetailUrl} provider=dunevr30a listing_rows=${listingRows.length}`,
+      );
       return null;
     }
 
@@ -1315,7 +1335,7 @@ async function fetchDetail(
       extractFirst(
         /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i,
         html,
-      ) || normalizeLink(detailUrl);
+      ) || normalizeLink(detailResponse.finalUrl || detailUrl);
     const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html);
     const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html);
     const metaDescription = extractFirst(
@@ -1333,8 +1353,9 @@ async function fetchDetail(
       Object.values(amenitiesCategories).flat(),
     );
     const roomDetailsApiPayload =
-      await callStreamlineApi<StreamlineRoomDetailsPayload>(
+      await callStreamlineApiWithPage<StreamlineRoomDetailsPayload>(
         origin,
+        page,
         "GetPropertyRoomDetails",
         {
           unit_id: Number(rentalId),
@@ -1383,13 +1404,13 @@ async function fetchDetail(
     );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
-    const availabilityPayload = await callStreamlineApi<{
+    const availabilityPayload = await callStreamlineApiWithPage<{
       data?: {
         range?: { beginDate?: string; endDate?: string };
         availability?: string;
         changeOver?: string;
       };
-    }>(origin, "GetPropertyAvailabilityRawData", {
+    }>(origin, page, "GetPropertyAvailabilityRawData", {
       unit_id: Number(rentalId),
       use_room_type_logic: "no",
       standard_pricing: 1,
@@ -1433,12 +1454,17 @@ async function fetchDetail(
 
     const ratesPayload =
       ratesStartDateUs && ratesEndDateUs
-        ? await callStreamlineApi(origin, "GetPropertyRatesRawData", {
-            unit_id: Number(rentalId),
-            use_yielding_with_dates: "yes",
-            startdate: ratesStartDateUs,
-            enddate: ratesEndDateUs,
-          })
+        ? await callStreamlineApiWithPage(
+            origin,
+            page,
+            "GetPropertyRatesRawData",
+            {
+              unit_id: Number(rentalId),
+              use_yielding_with_dates: "yes",
+              startdate: ratesStartDateUs,
+              enddate: ratesEndDateUs,
+            },
+          )
         : null;
 
     const ratesRowsRaw = parseRateRows(ratesPayload);
@@ -1720,7 +1746,14 @@ async function fetchDetail(
       html_path: htmlPath,
     };
   } catch {
+    reportDetailProgress?.(
+      `detail fetch request_error detail_url=${detailUrl} provider=dunevr30a`,
+    );
     return null;
+  } finally {
+    if (page) {
+      await page.close().catch(() => undefined);
+    }
   }
 }
 
@@ -1775,6 +1808,7 @@ export function createDuneVR30AAdapter(): ScraperAdapter<DuneDetailRecord> {
       );
       const apiLinks = await discoverListings(
         context.anchorUrl,
+        context.page,
         context.reportProgress,
       );
 
@@ -1785,9 +1819,13 @@ export function createDuneVR30AAdapter(): ScraperAdapter<DuneDetailRecord> {
       return merged;
     },
     async fetchDetail(context) {
-      void context.browser;
       void context.maxCalendarAdvanceMonths;
-      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+      return fetchDetail(
+        context.browser as { newPage(): Promise<BrowserPage> },
+        context.detailUrl,
+        context.availabilityHorizonDays,
+        context.reportDetailProgress,
+      );
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(

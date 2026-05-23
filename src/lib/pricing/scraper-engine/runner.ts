@@ -1226,8 +1226,8 @@ async function pullDetails<TDetail extends DetailRecordBase>(
         if (sawHttp403Signal) {
           total403Failures += 1;
           consecutive403Failures += 1;
-          progress.info(
-            `http-403 signal listing=${detailUrl} consecutive=${consecutive403Failures} total_403_failures=${total403Failures}`,
+          progress.failure(
+            `CRITICAL_HTTP_403 listing=${detailUrl} consecutive=${consecutive403Failures} total_403_failures=${total403Failures}`,
           );
           if (consecutive403Failures >= failFast403ConsecutiveThreshold) {
             throw new Error(
@@ -1308,8 +1308,8 @@ async function pullDetails<TDetail extends DetailRecordBase>(
           if (sawHttp403Signal) {
             total403Failures += 1;
             consecutive403Failures += 1;
-            progress.info(
-              `http-403 signal retry_attempt=${attempt} listing=${detailUrl} consecutive=${consecutive403Failures} total_403_failures=${total403Failures}`,
+            progress.failure(
+              `CRITICAL_HTTP_403 retry_attempt=${attempt} listing=${detailUrl} consecutive=${consecutive403Failures} total_403_failures=${total403Failures}`,
             );
             if (consecutive403Failures >= failFast403ConsecutiveThreshold) {
               throw new Error(
@@ -1394,6 +1394,27 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     process.env.SCRAPER_VERBOSE_DETAIL_PROGRESS === "true";
   const detailProgressStartedAtMs = Date.now();
   const reportDetailProgress = (message: string): void => {
+    const lowered = message.toLowerCase();
+    const isCriticalSignal =
+      messageHasHttp403Signal(message) ||
+      lowered.includes("challenge") ||
+      lowered.includes("failed") ||
+      lowered.includes("request_error") ||
+      lowered.includes("critical");
+
+    if (isCriticalSignal) {
+      progress.failure(
+        formatModeProgressLine({
+          mode: "detail",
+          completed: 0,
+          total: 0,
+          startedAtMs: detailProgressStartedAtMs,
+          text: message,
+        }),
+      );
+      return;
+    }
+
     if (verboseDetailProgress) {
       progress.tick(
         formatModeProgressLine({

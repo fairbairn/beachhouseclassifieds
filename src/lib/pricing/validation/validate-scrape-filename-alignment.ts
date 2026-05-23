@@ -107,12 +107,90 @@ type ValidationWarningCode =
   | "null_property_profile_capacity"
   | "image_url_pattern_outlier"
   | "image_url_double_https"
-  | "availability_validation_exempt";
+  | "availability_validation_exempt"
+  | "validation_exception_applied";
 
 type ValidationWarning = {
   code: ValidationWarningCode;
   message: string;
 };
+
+type ValidationExceptionEntry = {
+  external_listing_id?: unknown;
+  detail_url?: unknown;
+  codes?: unknown;
+  reason?: unknown;
+};
+
+type ValidationExceptionConfig = {
+  entries?: unknown;
+};
+
+function toExceptionCodeSet(value: unknown): Set<string> {
+  if (!Array.isArray(value)) {
+    return new Set();
+  }
+
+  const out = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+    const normalized = item.trim();
+    if (normalized.length > 0) {
+      out.add(normalized);
+    }
+  }
+  return out;
+}
+
+function normalizeExceptionListingId(
+  entry: ValidationExceptionEntry,
+): string | null {
+  const externalId =
+    typeof entry.external_listing_id === "string"
+      ? entry.external_listing_id.trim()
+      : "";
+  if (externalId) {
+    const canonical = canonicalizeExternalListingId(externalId);
+    if (canonical) {
+      return canonical;
+    }
+  }
+
+  const detailUrl =
+    typeof entry.detail_url === "string" ? entry.detail_url.trim() : "";
+  if (detailUrl) {
+    const canonicalFromUrl = externalListingIdFromDetailUrl(detailUrl);
+    if (canonicalFromUrl) {
+      return canonicalFromUrl;
+    }
+  }
+
+  return null;
+}
+
+function extractCanonicalIdFromIssueMessage(message: string): string | null {
+  const detailArtifactMatch = message.match(
+    /details\/(?:json|html|quotes|pricing)\/([^/]+)\.(?:json|html)/,
+  );
+  if (detailArtifactMatch?.[1]) {
+    const canonical = canonicalizeExternalListingId(detailArtifactMatch[1]);
+    if (canonical) {
+      return canonical;
+    }
+  }
+
+  const indexIdMatch = message.match(/external_listing_id='([^']+)'/);
+  if (indexIdMatch?.[1]) {
+    const canonical = canonicalizeExternalListingId(indexIdMatch[1]);
+    if (canonical) {
+      return canonical;
+    }
+  }
+
+  return null;
+}
 
 function parseArgs(argv: string[]): CliOptions {
   let adapterKey: string | null = null;
@@ -604,6 +682,54 @@ export async function runValidateScrapeFilenameAlignmentCli(
   const htmlDir = resolve(detailsRoot, "html");
   const quotesDir = resolve(detailsRoot, "quotes");
   const pricingDir = resolve(detailsRoot, "pricing");
+  const validationExceptionsPath = resolve(
+    root,
+    "src",
+    "lib",
+    "data",
+    "external-sources",
+    options.adapterKey,
+    "validation-exceptions.json",
+  );
+
+  const validationExceptions = new Map<
+    string,
+    { codes: Set<string>; reason: string }
+  >();
+  try {
+    const raw = await readFile(validationExceptionsPath, "utf8");
+    const parsed = JSON.parse(raw) as ValidationExceptionConfig;
+    const entries = Array.isArray(parsed)
+      ? (parsed as unknown[])
+      : Array.isArray(parsed?.entries)
+        ? parsed.entries
+        : [];
+
+    for (const item of entries) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const entry = item as ValidationExceptionEntry;
+      const canonicalId = normalizeExceptionListingId(entry);
+      if (!canonicalId) {
+        continue;
+      }
+
+      const codes = toExceptionCodeSet(entry.codes);
+      if (codes.size === 0) {
+        continue;
+      }
+
+      const reason =
+        typeof entry.reason === "string" && entry.reason.trim().length > 0
+          ? entry.reason.trim()
+          : "exception configured";
+
+      validationExceptions.set(canonicalId, { codes, reason });
+    }
+  } catch {
+    // Validation exceptions are optional per adapter.
+  }
 
   const issues: ValidationIssue[] = [];
   const warnings: ValidationWarning[] = [];
@@ -1256,6 +1382,32 @@ export async function runValidateScrapeFilenameAlignmentCli(
     }
   }
 
+  const remainingIssues: ValidationIssue[] = [];
+  for (const issue of issues) {
+    const canonicalId = extractCanonicalIdFromIssueMessage(issue.message);
+    if (!canonicalId) {
+      remainingIssues.push(issue);
+      continue;
+    }
+
+    const exception = validationExceptions.get(canonicalId);
+    const isExceptionApplied =
+      exception !== undefined &&
+      (exception.codes.has(issue.code) || exception.codes.has("*"));
+
+    if (!isExceptionApplied) {
+      remainingIssues.push(issue);
+      continue;
+    }
+
+    warnings.push({
+      code: "validation_exception_applied",
+      message:
+        `validation exception applied listing='${canonicalId}' code='${issue.code}' ` +
+        `reason='${exception.reason}'`,
+    });
+  }
+
   const occupancySuffix =
     occupancyErrors > 0
       ? chalk.magenta(
@@ -1263,14 +1415,14 @@ export async function runValidateScrapeFilenameAlignmentCli(
         )
       : "";
 
-  if (issues.length > 0) {
+  if (remainingIssues.length > 0) {
     console.error(
       chalk.red(
-        `Scrape filename validator failed for adapter=${options.adapterKey} primary_checked=${selectedIndexRecords.length} issues=${issues.length} warnings=${warnings.length}`,
+        `Scrape filename validator failed for adapter=${options.adapterKey} primary_checked=${selectedIndexRecords.length} issues=${remainingIssues.length} warnings=${warnings.length}`,
       ),
       occupancySuffix,
     );
-    printIssues(issues);
+    printIssues(remainingIssues);
     if (warnings.length > 0) {
       console.error(chalk.yellow("Warnings:"));
       printWarnings(warnings);

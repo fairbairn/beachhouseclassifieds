@@ -21,7 +21,7 @@ const DEFAULT_EXPECTED_NIGHTS = 7;
 const DEFAULT_MINIMUM_MAX_QUERIES = 24;
 const DEFAULT_MINIMUM_OBSERVATION_COUNT = 24;
 const MIN_VALID_BASE_TOTAL = 100;
-const ADAPTER_ALLOW_FEES_GE_BASE = new Set<string>(["keyco30a"]);
+const ADAPTER_ALLOW_FEES_GE_BASE = new Set<string>(["keyco30a", "dunevr30a"]);
 
 const ADAPTER_EXPECTED_HANDOFF_SIGNATURES: Record<string, string[]> = {
   scenicstays30a: [

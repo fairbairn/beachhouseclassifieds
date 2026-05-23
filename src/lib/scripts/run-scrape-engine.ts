@@ -6,6 +6,6 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`Adapter engine scrape failed: ${message}`);
+  console.error(`\u001b[31mAdapter engine scrape failed: ${message}\u001b[0m`);
   process.exit(1);
 });
