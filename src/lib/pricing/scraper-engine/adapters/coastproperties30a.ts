@@ -5,7 +5,16 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
-import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import {
+  navigateDetailWithChallenge,
+  postStreamlineApiRequestWithPage,
+} from "../shared/streamline-browser-session";
+import type {
+  DetailRecordBase,
+  DiscoverContext,
+  ScrapedLink,
+  ScraperAdapter,
+} from "../types";
 
 type CoastDetailRecord = DetailRecordBase & {
   title: string;
@@ -778,8 +787,10 @@ async function discoverListings(
 }
 
 async function fetchDetail(
+  browser: { newPage: () => Promise<DiscoverContext["page"]> },
   detailUrl: string,
   availabilityHorizonDays: number,
+  reportDetailProgress?: (message: string) => void,
 ): Promise<CoastDetailRecord | null> {
   const rentalId = extractRentalIdFromDetailUrl(detailUrl);
   if (!rentalId) {
@@ -788,611 +799,569 @@ async function fetchDetail(
 
   const parsedDetailUrl = new URL(detailUrl);
   const origin = parsedDetailUrl.origin;
-
-  const headers = {
-    "user-agent":
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    accept: "text/html,application/json,text/plain,*/*",
-    referer: detailUrl,
-  };
+  const page = await browser.newPage();
 
   try {
-    const detailResponse = await fetch(detailUrl, {
-      method: "GET",
-      redirect: "follow",
-      headers,
-    });
+    try {
+      const detailResponse = await navigateDetailWithChallenge({
+        page,
+        detailUrl,
+        origin,
+        timeoutMs: 120000,
+      });
+      const detailStatus = detailResponse.status;
 
-    const contentType = (
-      detailResponse.headers.get("content-type") ?? ""
-    ).toLowerCase();
-    if (detailResponse.status !== 200 || !contentType.includes("text/html")) {
-      return null;
-    }
-
-    const html = await detailResponse.text();
-
-    const title = extractFirst(/<title[^>]*>([\s\S]*?)<\/title>/i, html).slice(
-      0,
-      240,
-    );
-    const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html).slice(0, 240);
-    const canonicalUrl =
-      extractFirst(
-        /<link[^>]+rel=["']canonical["'][^>]+href=["']([\s\S]*?)["'][^>]*>/i,
-        html,
-      ) || detailUrl;
-
-    const metaDescription =
-      extractFirst(
-        /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
-        html,
-      ).slice(0, 2000) ||
-      extractFirst(
-        /<meta[^>]+content=["']([\s\S]*?)["'][^>]+name=["']description["'][^>]*>/i,
-        html,
-      ).slice(0, 2000);
-
-    const descriptionExpanded =
-      extractFirst(
-        /<div class="description block clearfix">[\s\S]*?<article>([\s\S]*?)<\/article>/i,
-        html,
-      ).slice(0, 20000) || stripHtml(metaDescription).slice(0, 20000);
-
-    const amenitiesCategories: Record<string, string[]> = {};
-    const amenitiesAll: string[] = [];
-    const seenAmenities = new Set<string>();
-    const amenitiesMatch = html.match(
-      /<div class="amenities block clearfix">([\s\S]*?)<\/div><!-- end block -->/i,
-    );
-    if (amenitiesMatch?.[1]) {
-      let currentCategory = "General";
-      for (const itemMatch of amenitiesMatch[1].matchAll(
-        /<li class="amenity_item"([^>]*)>([\s\S]*?)<\/li>/gi,
-      )) {
-        const attrs = (itemMatch[1] ?? "").toLowerCase();
-        const value = stripHtml(itemMatch[2] ?? "").trim();
-        if (!value) {
-          continue;
+      if (detailStatus !== 200) {
+        if (detailStatus === 403) {
+          reportDetailProgress?.(
+            `http_status=403 detail_url=${detailUrl} provider=coastproperties30a`,
+          );
+        } else {
+          reportDetailProgress?.(
+            `detail_request_non_200 status=${detailStatus} detail_url=${detailUrl} provider=coastproperties30a`,
+          );
         }
+        return null;
+      }
 
-        const isCategory = attrs.includes("font-weight:700");
-        if (isCategory) {
-          currentCategory = value;
+      const html = detailResponse.html;
+
+      const title = extractFirst(
+        /<title[^>]*>([\s\S]*?)<\/title>/i,
+        html,
+      ).slice(0, 240);
+      const h1 = extractFirst(/<h1[^>]*>([\s\S]*?)<\/h1>/i, html).slice(0, 240);
+      const canonicalUrl =
+        extractFirst(
+          /<link[^>]+rel=["']canonical["'][^>]+href=["']([\s\S]*?)["'][^>]*>/i,
+          html,
+        ) || detailUrl;
+
+      const metaDescription =
+        extractFirst(
+          /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
+          html,
+        ).slice(0, 2000) ||
+        extractFirst(
+          /<meta[^>]+content=["']([\s\S]*?)["'][^>]+name=["']description["'][^>]*>/i,
+          html,
+        ).slice(0, 2000);
+
+      const descriptionExpanded =
+        extractFirst(
+          /<div class="description block clearfix">[\s\S]*?<article>([\s\S]*?)<\/article>/i,
+          html,
+        ).slice(0, 20000) || stripHtml(metaDescription).slice(0, 20000);
+
+      const amenitiesCategories: Record<string, string[]> = {};
+      const amenitiesAll: string[] = [];
+      const seenAmenities = new Set<string>();
+      const amenitiesMatch = html.match(
+        /<div class="amenities block clearfix">([\s\S]*?)<\/div><!-- end block -->/i,
+      );
+      if (amenitiesMatch?.[1]) {
+        let currentCategory = "General";
+        for (const itemMatch of amenitiesMatch[1].matchAll(
+          /<li class="amenity_item"([^>]*)>([\s\S]*?)<\/li>/gi,
+        )) {
+          const attrs = (itemMatch[1] ?? "").toLowerCase();
+          const value = stripHtml(itemMatch[2] ?? "").trim();
+          if (!value) {
+            continue;
+          }
+
+          const isCategory = attrs.includes("font-weight:700");
+          if (isCategory) {
+            currentCategory = value;
+            if (!amenitiesCategories[currentCategory]) {
+              amenitiesCategories[currentCategory] = [];
+            }
+            continue;
+          }
+
           if (!amenitiesCategories[currentCategory]) {
             amenitiesCategories[currentCategory] = [];
           }
+          amenitiesCategories[currentCategory].push(value);
+
+          const key = value.toLowerCase();
+          if (seenAmenities.has(key)) {
+            continue;
+          }
+          seenAmenities.add(key);
+          amenitiesAll.push(value);
+        }
+      }
+
+      const imageUrls = new Set<string>();
+      const galleryBlock = html.match(
+        /<div class="galleryGo">([\s\S]*?)<\/div>\s*<\/div><!--End gallerySlick-->/i,
+      )?.[1];
+      const gallerySource = galleryBlock || html;
+      for (const imgMatch of gallerySource.matchAll(
+        /<img[^>]+src=["']([^"']+)["'][^>]*>/gi,
+      )) {
+        const src = (imgMatch[1] ?? "").trim();
+        if (!src || src.startsWith("data:")) {
           continue;
         }
-
-        if (!amenitiesCategories[currentCategory]) {
-          amenitiesCategories[currentCategory] = [];
+        try {
+          const absolute = new URL(src, detailUrl).toString();
+          const canonical = toCanonicalGalleryImageUrl(absolute);
+          if (canonical) {
+            imageUrls.add(canonical);
+          }
+        } catch {
+          // Ignore malformed image URLs.
         }
-        amenitiesCategories[currentCategory].push(value);
+      }
+      const ogImage = extractFirst(
+        /<meta[^>]+property=["']og:image["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
+        html,
+      );
+      if (ogImage) {
+        try {
+          const absolute = new URL(ogImage, detailUrl).toString();
+          const canonical = toCanonicalGalleryImageUrl(absolute);
+          if (canonical) {
+            imageUrls.add(canonical);
+          }
+        } catch {
+          // Ignore malformed og:image URL.
+        }
+      }
 
-        const key = value.toLowerCase();
-        if (seenAmenities.has(key)) {
+      let schemaAddress: Record<string, unknown> = {};
+      let schemaLatitude: number | null = null;
+      let schemaLongitude: number | null = null;
+      let schemaBedrooms: number | null = null;
+      let schemaBathrooms: number | null = null;
+      let schemaSleeps: number | null = null;
+      for (const schemaMatch of html.matchAll(
+        /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi,
+      )) {
+        const raw = (schemaMatch[1] ?? "").trim();
+        if (!raw) {
           continue;
         }
-        seenAmenities.add(key);
-        amenitiesAll.push(value);
-      }
-    }
+        try {
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          const schemaType = String(parsed["@type"] ?? "").toLowerCase();
+          if (!schemaType.includes("vacationrental")) {
+            continue;
+          }
 
-    const imageUrls = new Set<string>();
-    const galleryBlock = html.match(
-      /<div class="galleryGo">([\s\S]*?)<\/div>\s*<\/div><!--End gallerySlick-->/i,
-    )?.[1];
-    const gallerySource = galleryBlock || html;
-    for (const imgMatch of gallerySource.matchAll(
-      /<img[^>]+src=["']([^"']+)["'][^>]*>/gi,
-    )) {
-      const src = (imgMatch[1] ?? "").trim();
-      if (!src || src.startsWith("data:")) {
-        continue;
-      }
-      try {
-        const absolute = new URL(src, detailUrl).toString();
-        const canonical = toCanonicalGalleryImageUrl(absolute);
-        if (canonical) {
-          imageUrls.add(canonical);
-        }
-      } catch {
-        // Ignore malformed image URLs.
-      }
-    }
-    const ogImage = extractFirst(
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i,
-      html,
-    );
-    if (ogImage) {
-      try {
-        const absolute = new URL(ogImage, detailUrl).toString();
-        const canonical = toCanonicalGalleryImageUrl(absolute);
-        if (canonical) {
-          imageUrls.add(canonical);
-        }
-      } catch {
-        // Ignore malformed og:image URL.
-      }
-    }
+          const address = parsed.address;
+          if (address && typeof address === "object") {
+            schemaAddress = address as Record<string, unknown>;
+          }
 
-    let schemaAddress: Record<string, unknown> = {};
-    let schemaLatitude: number | null = null;
-    let schemaLongitude: number | null = null;
-    let schemaBedrooms: number | null = null;
-    let schemaBathrooms: number | null = null;
-    let schemaSleeps: number | null = null;
-    for (const schemaMatch of html.matchAll(
-      /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi,
-    )) {
-      const raw = (schemaMatch[1] ?? "").trim();
-      if (!raw) {
-        continue;
-      }
-      try {
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        const schemaType = String(parsed["@type"] ?? "").toLowerCase();
-        if (!schemaType.includes("vacationrental")) {
-          continue;
-        }
+          const containsPlace =
+            parsed.containsPlace && typeof parsed.containsPlace === "object"
+              ? (parsed.containsPlace as Record<string, unknown>)
+              : null;
 
-        const address = parsed.address;
-        if (address && typeof address === "object") {
-          schemaAddress = address as Record<string, unknown>;
-        }
-
-        const containsPlace =
-          parsed.containsPlace && typeof parsed.containsPlace === "object"
-            ? (parsed.containsPlace as Record<string, unknown>)
+          schemaLatitude = parseNumberLike(parsed.latitude);
+          schemaLongitude = parseNumberLike(parsed.longitude);
+          schemaBedrooms = containsPlace
+            ? parseNumberLike(containsPlace.numberOfBedrooms)
             : null;
-
-        schemaLatitude = parseNumberLike(parsed.latitude);
-        schemaLongitude = parseNumberLike(parsed.longitude);
-        schemaBedrooms = containsPlace
-          ? parseNumberLike(containsPlace.numberOfBedrooms)
-          : null;
-        schemaBathrooms = containsPlace
-          ? parseNumberLike(containsPlace.numberOfBathroomsTotal)
-          : null;
-        const occupancy =
-          containsPlace?.occupancy &&
-          typeof containsPlace.occupancy === "object"
-            ? (containsPlace.occupancy as Record<string, unknown>)
+          schemaBathrooms = containsPlace
+            ? parseNumberLike(containsPlace.numberOfBathroomsTotal)
             : null;
-        schemaSleeps = occupancy ? parseNumberLike(occupancy.value) : null;
-        break;
-      } catch {
-        // Ignore invalid JSON-LD script blocks.
+          const occupancy =
+            containsPlace?.occupancy &&
+            typeof containsPlace.occupancy === "object"
+              ? (containsPlace.occupancy as Record<string, unknown>)
+              : null;
+          schemaSleeps = occupancy ? parseNumberLike(occupancy.value) : null;
+          break;
+        } catch {
+          // Ignore invalid JSON-LD script blocks.
+        }
       }
-    }
 
-    const mapCenterMatch = html.match(
-      /<map[^>]+center="\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*"/i,
-    );
-    const markerMatch = html.match(
-      /<marker[^>]+position="\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*"/i,
-    );
-    const latitude =
-      schemaLatitude ??
-      (mapCenterMatch ? Number(mapCenterMatch[1]) : null) ??
-      (markerMatch ? Number(markerMatch[1]) : null);
-    const longitude =
-      schemaLongitude ??
-      (mapCenterMatch ? Number(mapCenterMatch[2]) : null) ??
-      (markerMatch ? Number(markerMatch[2]) : null);
+      const mapCenterMatch = html.match(
+        /<map[^>]+center="\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*"/i,
+      );
+      const markerMatch = html.match(
+        /<marker[^>]+position="\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*"/i,
+      );
+      const latitude =
+        schemaLatitude ??
+        (mapCenterMatch ? Number(mapCenterMatch[1]) : null) ??
+        (markerMatch ? Number(markerMatch[1]) : null);
+      const longitude =
+        schemaLongitude ??
+        (mapCenterMatch ? Number(mapCenterMatch[2]) : null) ??
+        (markerMatch ? Number(markerMatch[2]) : null);
 
-    const streetAddress = String(schemaAddress.streetAddress ?? "").trim();
-    const city = String(schemaAddress.addressLocality ?? "").trim();
-    const region = String(schemaAddress.addressRegion ?? "").trim();
-    const postal = String(schemaAddress.postalCode ?? "").trim();
-    const fullAddress = [streetAddress, city, region, postal]
-      .filter((part) => part.length > 0)
-      .join(", ");
-    const directionsDaddr = fullAddress;
-    const directionsUrl = directionsDaddr
-      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          directionsDaddr,
-        )}`
-      : "";
+      const streetAddress = String(schemaAddress.streetAddress ?? "").trim();
+      const city = String(schemaAddress.addressLocality ?? "").trim();
+      const region = String(schemaAddress.addressRegion ?? "").trim();
+      const postal = String(schemaAddress.postalCode ?? "").trim();
+      const fullAddress = [streetAddress, city, region, postal]
+        .filter((part) => part.length > 0)
+        .join(", ");
+      const directionsDaddr = fullAddress;
+      const directionsUrl = directionsDaddr
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+            directionsDaddr,
+          )}`
+        : "";
 
-    const externalListingId = slugifyExternalListingId({
-      name: h1 || title || rentalId,
-      rentalId,
-    });
+      const externalListingId = slugifyExternalListingId({
+        name: h1 || title || rentalId,
+        rentalId,
+      });
 
-    let roomDetailsApiPayload: StreamlineRoomDetailsPayload | null = null;
-    const roomDetailsApiUrl = `${origin}/wp-admin/admin-ajax.php?${new URLSearchParams(
-      {
-        action: "streamlinecore-api-request",
-        params: JSON.stringify({
+      const roomDetailsApiPayload =
+        await postStreamlineApiRequestWithPage<StreamlineRoomDetailsPayload>({
+          page,
+          origin,
           methodName: "GetPropertyRoomDetails",
           params: {
             unit_id: Number(rentalId),
             use_room_type_logic: "no",
             standard_pricing: 1,
           },
-        }),
-      },
-    ).toString()}`;
+        });
 
-    const roomDetailsResponse = await fetch(roomDetailsApiUrl, {
-      method: "GET",
-      headers,
-    });
+      const htmlPath = resolve(
+        OUTPUT_DETAILS_HTML_DIR,
+        `${externalListingId}.html`,
+      );
+      await writeFile(htmlPath, `${html}\n`, "utf8");
 
-    if (roomDetailsResponse.status === 200) {
-      const raw = await roomDetailsResponse.text();
-      try {
-        roomDetailsApiPayload = JSON.parse(raw) as StreamlineRoomDetailsPayload;
-      } catch {
-        // Ignore malformed room-details payload.
-      }
-    }
-
-    const htmlPath = resolve(
-      OUTPUT_DETAILS_HTML_DIR,
-      `${externalListingId}.html`,
-    );
-    await writeFile(htmlPath, `${html}\n`, "utf8");
-
-    const availabilityApiUrl = `${origin}/wp-admin/admin-ajax.php?${new URLSearchParams(
-      {
-        action: "streamlinecore-api-request",
-        params: JSON.stringify({
-          methodName: "GetPropertyAvailabilityRawData",
-          params: {
-            unit_id: Number(rentalId),
-            use_room_type_logic: "no",
-            standard_pricing: 1,
-          },
-        }),
-      },
-    ).toString()}`;
-
-    const availabilityResponse = await fetch(availabilityApiUrl, {
-      method: "GET",
-      headers,
-    });
-
-    let rawBeginDate = "";
-    let rawEndDate = "";
-    let rawAvailabilityCodes = "";
-    let rawChangeoverCodes = "";
-
-    if (availabilityResponse.status === 200) {
-      const raw = await availabilityResponse.text();
-      try {
-        const parsed = JSON.parse(raw) as {
-          data?: {
-            range?: { beginDate?: string; endDate?: string };
-            availability?: string;
-            changeOver?: string;
-          };
+      const availabilityPayload = await postStreamlineApiRequestWithPage<{
+        data?: {
+          range?: { beginDate?: string; endDate?: string };
+          availability?: string;
+          changeOver?: string;
         };
-        rawBeginDate = parsed.data?.range?.beginDate ?? "";
-        rawEndDate = parsed.data?.range?.endDate ?? "";
-        rawAvailabilityCodes = parsed.data?.availability ?? "";
-        rawChangeoverCodes = parsed.data?.changeOver ?? "";
-      } catch {
-        // Ignore malformed availability payload.
-      }
-    }
-
-    const allAvailabilityDays = decodeAvailabilityDays(
-      rawBeginDate,
-      rawAvailabilityCodes,
-      rawChangeoverCodes,
-    );
-
-    const now = new Date();
-    const today = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-    );
-    const horizonDate = new Date(today);
-    horizonDate.setUTCDate(horizonDate.getUTCDate() + availabilityHorizonDays);
-
-    const filteredDays = allAvailabilityDays.filter((day) => {
-      const dayDate = new Date(`${day.date}T00:00:00.000Z`);
-      return dayDate >= today && dayDate <= horizonDate;
-    });
-
-    const ratesStartIso = filteredDays[0]?.date ?? formatDateIso(today);
-    const ratesEndIso =
-      filteredDays[filteredDays.length - 1]?.date ?? formatDateIso(horizonDate);
-    const ratesStartDateUs = formatDateUsFromIso(ratesStartIso);
-    const ratesEndDateUs = formatDateUsFromIso(ratesEndIso);
-
-    let ratesRowsRaw: Array<Record<string, unknown>> = [];
-    if (ratesStartDateUs && ratesEndDateUs) {
-      const ratesApiUrl = `${origin}/wp-admin/admin-ajax.php?${new URLSearchParams(
-        {
-          action: "streamlinecore-api-request",
-          params: JSON.stringify({
-            methodName: "GetPropertyRates",
-            params: {
-              unit_id: Number(rentalId),
-              startdate: ratesStartDateUs,
-              enddate: ratesEndDateUs,
-            },
-          }),
+      }>({
+        page,
+        origin,
+        methodName: "GetPropertyAvailabilityRawData",
+        params: {
+          unit_id: Number(rentalId),
+          use_room_type_logic: "no",
+          standard_pricing: 1,
         },
-      ).toString()}`;
-
-      const ratesResponse = await fetch(ratesApiUrl, {
-        method: "GET",
-        headers,
       });
 
-      if (ratesResponse.status === 200) {
-        const rawRates = await ratesResponse.text();
-        try {
-          const parsed = JSON.parse(rawRates) as {
-            data?: unknown;
-          };
+      const rawBeginDate = availabilityPayload?.data?.range?.beginDate ?? "";
+      const rawEndDate = availabilityPayload?.data?.range?.endDate ?? "";
+      const rawAvailabilityCodes =
+        availabilityPayload?.data?.availability ?? "";
+      const rawChangeoverCodes = availabilityPayload?.data?.changeOver ?? "";
 
-          const data = parsed.data;
-          if (Array.isArray(data)) {
-            ratesRowsRaw = data.filter(
-              (row): row is Record<string, unknown> =>
-                row !== null && typeof row === "object",
-            );
-          } else if (data && typeof data === "object") {
-            ratesRowsRaw = Object.values(data).filter(
-              (row): row is Record<string, unknown> =>
-                row !== null && typeof row === "object",
-            );
-          }
-        } catch {
-          // Ignore malformed rates payload.
+      const allAvailabilityDays = decodeAvailabilityDays(
+        rawBeginDate,
+        rawAvailabilityCodes,
+        rawChangeoverCodes,
+      );
+
+      const now = new Date();
+      const today = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+      );
+      const horizonDate = new Date(today);
+      horizonDate.setUTCDate(
+        horizonDate.getUTCDate() + availabilityHorizonDays,
+      );
+
+      const filteredDays = allAvailabilityDays.filter((day) => {
+        const dayDate = new Date(`${day.date}T00:00:00.000Z`);
+        return dayDate >= today && dayDate <= horizonDate;
+      });
+
+      const ratesStartIso = filteredDays[0]?.date ?? formatDateIso(today);
+      const ratesEndIso =
+        filteredDays[filteredDays.length - 1]?.date ??
+        formatDateIso(horizonDate);
+      const ratesStartDateUs = formatDateUsFromIso(ratesStartIso);
+      const ratesEndDateUs = formatDateUsFromIso(ratesEndIso);
+
+      let ratesRowsRaw: Array<Record<string, unknown>> = [];
+      if (ratesStartDateUs && ratesEndDateUs) {
+        const ratesPayload = await postStreamlineApiRequestWithPage<{
+          data?: unknown;
+        }>({
+          page,
+          origin,
+          methodName: "GetPropertyRates",
+          params: {
+            unit_id: Number(rentalId),
+            startdate: ratesStartDateUs,
+            enddate: ratesEndDateUs,
+          },
+        });
+
+        const data = ratesPayload?.data;
+        if (Array.isArray(data)) {
+          ratesRowsRaw = data.filter(
+            (row): row is Record<string, unknown> =>
+              row !== null && typeof row === "object",
+          );
+        } else if (data && typeof data === "object") {
+          ratesRowsRaw = Object.values(data).filter(
+            (row): row is Record<string, unknown> =>
+              row !== null && typeof row === "object",
+          );
         }
       }
-    }
 
-    const normalizedRateDays = ratesRowsRaw
-      .map((row) => {
-        const date = normalizeDateLikeToIso(row.date);
-        if (!date) {
-          return null;
-        }
+      const normalizedRateDays = ratesRowsRaw
+        .map((row) => {
+          const date = normalizeDateLikeToIso(row.date);
+          if (!date) {
+            return null;
+          }
 
-        const nightlyRate = parseCurrencyLike(row.rate);
-        const minNights = parseNumberLike(row.minStay);
-        const bookedRaw = row.booked;
-        const isBooked =
-          typeof bookedRaw === "number"
-            ? bookedRaw === 1
-            : typeof bookedRaw === "string"
-              ? bookedRaw.trim() === "1"
-              : null;
-        const changeoverCode = String(row.changeOver ?? "").trim();
-        const seasonName = String(row.season ?? "")
-          .trim()
-          .slice(0, 160);
+          const nightlyRate = parseCurrencyLike(row.rate);
+          const minNights = parseNumberLike(row.minStay);
+          const bookedRaw = row.booked;
+          const isBooked =
+            typeof bookedRaw === "number"
+              ? bookedRaw === 1
+              : typeof bookedRaw === "string"
+                ? bookedRaw.trim() === "1"
+                : null;
+          const changeoverCode = String(row.changeOver ?? "").trim();
+          const seasonName = String(row.season ?? "")
+            .trim()
+            .slice(0, 160);
+
+          return {
+            date,
+            nightly_rate: nightlyRate,
+            min_nights: minNights,
+            is_booked: isBooked,
+            changeover_code: changeoverCode,
+            season_name: seasonName,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null)
+        .sort((left, right) => left.date.localeCompare(right.date));
+
+      const rateValues = normalizedRateDays
+        .map((row) => row.nightly_rate)
+        .filter((value): value is number => Number.isFinite(value));
+      const minRate = rateValues.length > 0 ? Math.min(...rateValues) : null;
+      const maxRate = rateValues.length > 0 ? Math.max(...rateValues) : null;
+      const avgRate =
+        rateValues.length > 0
+          ? Number(
+              (
+                rateValues.reduce((sum, value) => sum + value, 0) /
+                rateValues.length
+              ).toFixed(2),
+            )
+          : null;
+
+      const normalizedDays = filteredDays.map((day, index) => {
+        const previousDay = index > 0 ? filteredDays[index - 1] : undefined;
+        const bookingDayState: "bookable" | "blocked" | "unknown" =
+          day.code === "Y"
+            ? "bookable"
+            : day.code === "N"
+              ? "blocked"
+              : "unknown";
+
+        const isAvailable = day.code === "Y";
+        const isCheckInAllowed =
+          day.code === "Y" &&
+          day.changeOverCode !== "X" &&
+          day.changeOverCode !== "O";
+        const isCheckOutAllowed =
+          (day.code === "Y" &&
+            day.changeOverCode !== "X" &&
+            day.changeOverCode !== "I") ||
+          (day.code === "N" && previousDay?.code === "Y");
+
+        const statusCode: "A" | "U" | "I" | "O" | "X" =
+          day.code === "X"
+            ? "X"
+            : isCheckInAllowed && isCheckOutAllowed
+              ? "A"
+              : isCheckInAllowed
+                ? "I"
+                : isCheckOutAllowed
+                  ? "O"
+                  : "U";
 
         return {
-          date,
-          nightly_rate: nightlyRate,
-          min_nights: minNights,
-          is_booked: isBooked,
-          changeover_code: changeoverCode,
-          season_name: seasonName,
+          date: day.date,
+          day_code: toDayCodeFromStatus(statusCode),
+          changeover_code: toChangeoverCodeFromStatus(statusCode),
+          is_available: isAvailable,
+          is_available_for_checkin: isCheckInAllowed,
+          is_available_for_checkout: isCheckOutAllowed,
+          status_code: statusCode,
+          booking_day_state: bookingDayState,
         };
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null)
-      .sort((left, right) => left.date.localeCompare(right.date));
+      });
 
-    const rateValues = normalizedRateDays
-      .map((row) => row.nightly_rate)
-      .filter((value): value is number => Number.isFinite(value));
-    const minRate = rateValues.length > 0 ? Math.min(...rateValues) : null;
-    const maxRate = rateValues.length > 0 ? Math.max(...rateValues) : null;
-    const avgRate =
-      rateValues.length > 0
-        ? Number(
-            (
-              rateValues.reduce((sum, value) => sum + value, 0) /
-              rateValues.length
-            ).toFixed(2),
-          )
-        : null;
+      const conformanceDays = ensureMinimumAvailabilityDays(
+        normalizedDays,
+        365,
+      );
 
-    const normalizedDays = filteredDays.map((day, index) => {
-      const previousDay = index > 0 ? filteredDays[index - 1] : undefined;
-      const bookingDayState: "bookable" | "blocked" | "unknown" =
-        day.code === "Y"
-          ? "bookable"
-          : day.code === "N"
-            ? "blocked"
-            : "unknown";
+      const available = conformanceDays.filter(
+        (day) => day.day_code === "Y",
+      ).length;
+      const notAvailable = conformanceDays.filter(
+        (day) => day.day_code === "N",
+      ).length;
+      const other = conformanceDays.length - available - notAvailable;
 
-      const isAvailable = day.code === "Y";
-      const isCheckInAllowed =
-        day.code === "Y" &&
-        day.changeOverCode !== "X" &&
-        day.changeOverCode !== "O";
-      const isCheckOutAllowed =
-        (day.code === "Y" &&
-          day.changeOverCode !== "X" &&
-          day.changeOverCode !== "I") ||
-        (day.code === "N" && previousDay?.code === "Y");
+      const description = descriptionExpanded || stripHtml(metaDescription);
+      const roomDetailsGuidanceFromApi = extractRoomDetailsGuidanceFromApi(
+        roomDetailsApiPayload,
+      );
+      const roomDetailsGuidance =
+        roomDetailsGuidanceFromApi.length > 0
+          ? roomDetailsGuidanceFromApi
+          : extractRoomDetailsGuidanceFromDescription(description);
+      const name = stripHtml(h1 || title).slice(0, 240);
+      const descriptionNormalized = normalizeForMatch(description);
+      const titleNormalized = normalizeForMatch(name);
 
-      const statusCode: "A" | "U" | "I" | "O" | "X" =
-        day.code === "X"
-          ? "X"
-          : isCheckInAllowed && isCheckOutAllowed
-            ? "A"
-            : isCheckInAllowed
-              ? "I"
-              : isCheckOutAllowed
-                ? "O"
-                : "U";
+      const mediaImageUrls = Array.from(imageUrls);
 
       return {
-        date: day.date,
-        day_code: toDayCodeFromStatus(statusCode),
-        changeover_code: toChangeoverCodeFromStatus(statusCode),
-        is_available: isAvailable,
-        is_available_for_checkin: isCheckInAllowed,
-        is_available_for_checkout: isCheckOutAllowed,
-        status_code: statusCode,
-        booking_day_state: bookingDayState,
-      };
-    });
-
-    const conformanceDays = ensureMinimumAvailabilityDays(normalizedDays, 365);
-
-    const available = conformanceDays.filter(
-      (day) => day.day_code === "Y",
-    ).length;
-    const notAvailable = conformanceDays.filter(
-      (day) => day.day_code === "N",
-    ).length;
-    const other = conformanceDays.length - available - notAvailable;
-
-    const description = descriptionExpanded || stripHtml(metaDescription);
-    const roomDetailsGuidanceFromApi = extractRoomDetailsGuidanceFromApi(
-      roomDetailsApiPayload,
-    );
-    const roomDetailsGuidance =
-      roomDetailsGuidanceFromApi.length > 0
-        ? roomDetailsGuidanceFromApi
-        : extractRoomDetailsGuidanceFromDescription(description);
-    const name = stripHtml(h1 || title).slice(0, 240);
-    const descriptionNormalized = normalizeForMatch(description);
-    const titleNormalized = normalizeForMatch(name);
-
-    const mediaImageUrls = Array.from(imageUrls);
-
-    return {
-      external_listing_id: externalListingId,
-      detail_url: detailUrl,
-      fetched_at: new Date().toISOString(),
-      title,
-      h1,
-      canonical_url: canonicalUrl,
-      meta_description: metaDescription,
-      description_expanded: descriptionExpanded,
-      rooms_guidance: roomDetailsGuidance,
-      amenities: {
-        categories: amenitiesCategories,
-        all: amenitiesAll,
-      },
-      location: {
-        address: fullAddress,
-        location_label: city || region,
-        directions_url: directionsUrl,
-        directions_daddr: directionsDaddr,
-        latitude:
-          latitude !== null && Number.isFinite(latitude) ? latitude : null,
-        longitude:
-          longitude !== null && Number.isFinite(longitude) ? longitude : null,
-      },
-      media_gallery: {
-        image_count: mediaImageUrls.length,
-        image_urls: mediaImageUrls,
-      },
-      property_profile: {
-        unit_id: rentalId,
-        area: region,
-        location: city || region,
-        beds: schemaBedrooms,
-        baths: schemaBathrooms,
-        sleeps: schemaSleeps,
-        city,
-        state: "",
-      },
-      quote_context: {
-        source: "detail_url_path",
-        unit_id: rentalId,
+        external_listing_id: externalListingId,
         detail_url: detailUrl,
-      },
-      normalized_matching_profile: {
-        source: "pm_coastproperties30a",
-        external_listing_id: externalListingId,
-        name,
-        description,
-        match_signals: {
-          description_normalized: descriptionNormalized,
-          description_sha256: hashSha256(descriptionNormalized),
-          title_normalized: titleNormalized,
-          title_sha256: hashSha256(titleNormalized),
-          listing_composite_key: [
-            "pm_coastproperties30a",
-            externalListingId,
-            hashSha256(descriptionNormalized),
-            hashSha256(titleNormalized),
-          ].join("::"),
+        fetched_at: new Date().toISOString(),
+        title,
+        h1,
+        canonical_url: canonicalUrl,
+        meta_description: metaDescription,
+        description_expanded: descriptionExpanded,
+        rooms_guidance: roomDetailsGuidance,
+        amenities: {
+          categories: amenitiesCategories,
+          all: amenitiesAll,
         },
-      },
-      normalized_availability: {
-        source: "pm_coastproperties30a",
-        external_listing_id: externalListingId,
-        captured_at: new Date().toISOString(),
-        window_start: conformanceDays[0]?.date ?? "",
-        window_end: conformanceDays[conformanceDays.length - 1]?.date ?? "",
-        code_legend: {
-          Y: "available",
-          N: "not_available",
-          X: "other",
+        location: {
+          address: fullAddress,
+          location_label: city || region,
+          directions_url: directionsUrl,
+          directions_daddr: directionsDaddr,
+          latitude:
+            latitude !== null && Number.isFinite(latitude) ? latitude : null,
+          longitude:
+            longitude !== null && Number.isFinite(longitude) ? longitude : null,
         },
-        day_codes: conformanceDays.map((day) => day.status_code).join(""),
-        days: conformanceDays,
-        counts: {
-          available,
-          not_available: notAvailable,
-          other,
-          booking_available: conformanceDays.filter(
-            (day) => day.booking_day_state === "bookable",
-          ).length,
-          booking_unavailable: conformanceDays.filter(
-            (day) => day.booking_day_state === "blocked",
-          ).length,
-          booking_unknown: conformanceDays.filter(
-            (day) => day.booking_day_state === "unknown",
-          ).length,
+        media_gallery: {
+          image_count: mediaImageUrls.length,
+          image_urls: mediaImageUrls,
         },
-      },
-      availability_raw: {
-        begin_date: rawBeginDate,
-        end_date: rawEndDate,
-        day_codes: rawAvailabilityCodes,
-        changeover_codes: rawChangeoverCodes,
-      },
-      normalized_rates: {
-        source: "pm_coastproperties30a",
-        external_listing_id: externalListingId,
-        captured_at: new Date().toISOString(),
-        currency: "USD",
-        window_start: normalizedRateDays[0]?.date ?? "",
-        window_end:
-          normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
-        days: normalizedRateDays,
-        stats: {
-          days_with_rate: rateValues.length,
-          min_nightly_rate: minRate,
-          max_nightly_rate: maxRate,
-          avg_nightly_rate: avgRate,
+        property_profile: {
+          unit_id: rentalId,
+          area: region,
+          location: city || region,
+          beds: schemaBedrooms,
+          baths: schemaBathrooms,
+          sleeps: schemaSleeps,
+          city,
+          state: "",
         },
-      },
-      rates_raw: {
-        request_start_date: ratesStartDateUs,
-        request_end_date: ratesEndDateUs,
-        rows: ratesRowsRaw,
-      },
-      pricing_api_hints: {
-        provider: "streamlinecore-api-request",
-        endpoint_path: "/wp-admin/admin-ajax.php",
-        method_names: {
-          availability: "GetPropertyAvailabilityRawData",
-          room_details: "GetPropertyRoomDetails",
-          rates: "GetPropertyRates",
+        quote_context: {
+          source: "detail_url_path",
+          unit_id: rentalId,
+          detail_url: detailUrl,
         },
-        notes:
-          "GetPropertyRoomDetails is used as the primary rooms guidance source; description parsing remains as fallback when room details are empty.",
-      },
-      html_path: htmlPath,
-    };
+        normalized_matching_profile: {
+          source: "pm_coastproperties30a",
+          external_listing_id: externalListingId,
+          name,
+          description,
+          match_signals: {
+            description_normalized: descriptionNormalized,
+            description_sha256: hashSha256(descriptionNormalized),
+            title_normalized: titleNormalized,
+            title_sha256: hashSha256(titleNormalized),
+            listing_composite_key: [
+              "pm_coastproperties30a",
+              externalListingId,
+              hashSha256(descriptionNormalized),
+              hashSha256(titleNormalized),
+            ].join("::"),
+          },
+        },
+        normalized_availability: {
+          source: "pm_coastproperties30a",
+          external_listing_id: externalListingId,
+          captured_at: new Date().toISOString(),
+          window_start: conformanceDays[0]?.date ?? "",
+          window_end: conformanceDays[conformanceDays.length - 1]?.date ?? "",
+          code_legend: {
+            Y: "available",
+            N: "not_available",
+            X: "other",
+          },
+          day_codes: conformanceDays.map((day) => day.status_code).join(""),
+          days: conformanceDays,
+          counts: {
+            available,
+            not_available: notAvailable,
+            other,
+            booking_available: conformanceDays.filter(
+              (day) => day.booking_day_state === "bookable",
+            ).length,
+            booking_unavailable: conformanceDays.filter(
+              (day) => day.booking_day_state === "blocked",
+            ).length,
+            booking_unknown: conformanceDays.filter(
+              (day) => day.booking_day_state === "unknown",
+            ).length,
+          },
+        },
+        availability_raw: {
+          begin_date: rawBeginDate,
+          end_date: rawEndDate,
+          day_codes: rawAvailabilityCodes,
+          changeover_codes: rawChangeoverCodes,
+        },
+        normalized_rates: {
+          source: "pm_coastproperties30a",
+          external_listing_id: externalListingId,
+          captured_at: new Date().toISOString(),
+          currency: "USD",
+          window_start: normalizedRateDays[0]?.date ?? "",
+          window_end:
+            normalizedRateDays[normalizedRateDays.length - 1]?.date ?? "",
+          days: normalizedRateDays,
+          stats: {
+            days_with_rate: rateValues.length,
+            min_nightly_rate: minRate,
+            max_nightly_rate: maxRate,
+            avg_nightly_rate: avgRate,
+          },
+        },
+        rates_raw: {
+          request_start_date: ratesStartDateUs,
+          request_end_date: ratesEndDateUs,
+          rows: ratesRowsRaw,
+        },
+        pricing_api_hints: {
+          provider: "streamlinecore-api-request",
+          endpoint_path: "/wp-admin/admin-ajax.php",
+          method_names: {
+            availability: "GetPropertyAvailabilityRawData",
+            room_details: "GetPropertyRoomDetails",
+            rates: "GetPropertyRates",
+          },
+          notes:
+            "GetPropertyRoomDetails is used as the primary rooms guidance source; description parsing remains as fallback when room details are empty.",
+        },
+        html_path: htmlPath,
+      };
+    } finally {
+      await page.close();
+    }
   } catch {
     return null;
   }
@@ -1447,7 +1416,14 @@ export function createCoastProperties30AAdapter(): ScraperAdapter<CoastDetailRec
       );
     },
     async fetchDetail(context) {
-      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+      return fetchDetail(
+        context.browser as unknown as {
+          newPage: () => Promise<DiscoverContext["page"]>;
+        },
+        context.detailUrl,
+        context.availabilityHorizonDays,
+        context.reportDetailProgress,
+      );
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(

@@ -14,6 +14,7 @@ export type QuoteValidationOptions = {
   expectedNights?: number;
   expectedMaxQueries?: number;
   minimumObservationCount?: number;
+  minimumAvailableObservationCount?: number;
 };
 
 const DEFAULT_EXPECTED_NIGHTS = 7;
@@ -172,7 +173,6 @@ function validateObservationCadence(
 
 function validateAdaptiveObservationCadence(
   observation: CanonicalQuoteObservation,
-  expectedNights: number,
 ): QuoteValidationIssue[] {
   const issues: QuoteValidationIssue[] = [];
 
@@ -187,11 +187,6 @@ function validateAdaptiveObservationCadence(
     issues.push({
       code: "invalid_nights",
       message: "nights must be a finite positive number",
-    });
-  } else if (observation.nights > expectedNights) {
-    issues.push({
-      code: "invalid_nights",
-      message: `nights must be <= ${expectedNights}`,
     });
   }
 
@@ -274,8 +269,6 @@ export function validateCanonicalQuoteSidecar(
   const expectedNights = options.expectedNights ?? DEFAULT_EXPECTED_NIGHTS;
   const expectedMaxQueries =
     options.expectedMaxQueries ?? DEFAULT_MINIMUM_MAX_QUERIES;
-  const minimumObservationCount =
-    options.minimumObservationCount ?? DEFAULT_MINIMUM_OBSERVATION_COUNT;
   const requireNonNullPricingFields =
     options.requireNonNullPricingFields ?? true;
 
@@ -294,13 +287,6 @@ export function validateCanonicalQuoteSidecar(
     left.start_date.localeCompare(right.start_date),
   );
 
-  if (sidecar.quote_nights !== expectedNights) {
-    issues.push({
-      code: "invalid_quote_nights",
-      message: `quote_nights must equal ${expectedNights}`,
-    });
-  }
-
   const isStrictWeeklyCadence =
     sidecar.quote_window_cadence === "weekly_sat_to_sat";
   const isAdaptiveWeeklyCadence =
@@ -314,14 +300,36 @@ export function validateCanonicalQuoteSidecar(
     });
   }
 
-  const quoteMaxQueries = sidecar.quote_max_queries;
+  if (isStrictWeeklyCadence && sidecar.quote_nights !== expectedNights) {
+    issues.push({
+      code: "invalid_quote_nights",
+      message: `quote_nights must equal ${expectedNights}`,
+    });
+  }
+
   if (
-    !isFiniteNumber(quoteMaxQueries) ||
-    quoteMaxQueries < expectedMaxQueries
+    isAdaptiveWeeklyCadence &&
+    (!isFiniteNumber(sidecar.quote_nights) || sidecar.quote_nights <= 0)
   ) {
     issues.push({
+      code: "invalid_quote_nights",
+      message: "quote_nights must be a finite positive number",
+    });
+  }
+
+  const minimumObservationCount =
+    options.minimumObservationCount ??
+    (isAdaptiveWeeklyCadence ? 1 : DEFAULT_MINIMUM_OBSERVATION_COUNT);
+  const minimumAvailableObservationCount =
+    options.minimumAvailableObservationCount ??
+    (isAdaptiveWeeklyCadence ? 1 : 0);
+
+  const minimumMaxQueries = isAdaptiveWeeklyCadence ? 1 : expectedMaxQueries;
+  const quoteMaxQueries = sidecar.quote_max_queries;
+  if (!isFiniteNumber(quoteMaxQueries) || quoteMaxQueries < minimumMaxQueries) {
+    issues.push({
       code: "invalid_quote_max_queries",
-      message: `quote_max_queries must be >= ${expectedMaxQueries}`,
+      message: `quote_max_queries must be >= ${minimumMaxQueries}`,
     });
   }
 
@@ -338,6 +346,18 @@ export function validateCanonicalQuoteSidecar(
       message: "observations must contain at least one record",
     });
     return issues;
+  }
+
+  const availableObservationCount = observations.filter(
+    (observation) => observation.quote_available,
+  ).length;
+  if (availableObservationCount < minimumAvailableObservationCount) {
+    issues.push({
+      code: "invalid_available_observation_count",
+      message:
+        `observations must contain at least ${minimumAvailableObservationCount} available records ` +
+        `(received ${availableObservationCount})`,
+    });
   }
 
   const captureDate = sidecar.captured_at.slice(0, 10);
@@ -402,7 +422,7 @@ export function validateCanonicalQuoteSidecar(
           expectedNights,
           addDays(expectedAnchor, index * expectedNights),
         )
-      : validateAdaptiveObservationCadence(observation, expectedNights);
+      : validateAdaptiveObservationCadence(observation);
     for (const issue of cadenceIssues) {
       issues.push({
         code: issue.code,

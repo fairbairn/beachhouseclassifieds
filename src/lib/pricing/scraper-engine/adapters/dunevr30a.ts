@@ -4,10 +4,16 @@ import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-lis
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Page } from "playwright";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
-import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+import type {
+  DetailRecordBase,
+  DiscoverContext,
+  ScrapedLink,
+  ScraperAdapter,
+} from "../types";
+
+type BrowserPage = DiscoverContext["page"];
 
 type DuneListingRow = {
   id: string;
@@ -869,7 +875,7 @@ async function discoverListings(
 }
 
 async function scrollAndCollectListingLinks(
-  page: Page,
+  page: BrowserPage,
   sourceUrl: string,
   maxScrollSteps: number,
   scrollPauseMs: number,
@@ -1006,7 +1012,7 @@ async function scrollAndCollectListingLinks(
 }
 
 async function discoverListingsFromPage(
-  page: Page,
+  page: BrowserPage,
   anchorUrl: string,
   maxScrollSteps: number,
   scrollPauseMs: number,

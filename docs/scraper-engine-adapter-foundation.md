@@ -130,3 +130,50 @@ logger.summary({
 - Phase 3: Optional lint/check script to enforce canonical env names and minimum logging events for newly added adapter files.
 
 This avoids risky broad rewrites of already-working adapters.
+
+## Browser Engine Migration Policy (Playwright -> CloakBrowser)
+
+Use browser-engine migration only where needed. Playwright remains the default baseline unless an adapter shows repeatable blocking that is mitigated by CloakBrowser.
+
+### Scope and Rollout Rules
+
+1. Migrate one adapter at a time.
+2. Migrate one stage at a time:
+
+- detail fetch first
+- discovery second (only if required)
+
+3. Do not convert all adapters by default.
+4. Preserve shared runner CLI contract and adapter output schemas during migration.
+
+### Required Evidence Before Promotion
+
+1. Baseline Playwright run on constrained sample (for example 10 listings, no retries).
+2. Equivalent constrained CloakBrowser run.
+3. Comparison shows lower transport/blocking failures without introducing extraction regressions.
+
+### Minimal Adapter Integration Pattern
+
+1. Start with adapter-local helper that launches CloakBrowser and uses `browser.newPage()`.
+2. Keep lifecycle explicit: launch, navigate, extract, close page, close browser.
+3. Avoid introducing context-based flows unless required by proven adapter behavior.
+4. Keep existing parser and normalization paths unchanged while swapping browser fetch surface.
+
+### Validation Loop Per Adapter Change
+
+1. Run constrained scrape check:
+
+- `npm run managers:scrape:adapter:engine -- --adapter-key ADAPTER_KEY --refresh-known --max-listings 10 --detail-retry-attempts 0`
+
+2. Confirm report-level deltas:
+
+- detail pages pulled
+- detail pages failed
+- failed detail URL signatures/status patterns
+
+3. If behavior improved, run a broader but still controlled sample before considering next adapter.
+
+### Failure and Rollback Rule
+
+1. If CloakBrowser path fails to improve outcomes or causes parser/output instability, roll back that adapter stage and document findings.
+2. Do not proceed to the next adapter until current adapter stage is stable.

@@ -169,6 +169,79 @@ Expected outcome:
 
 3. Add migration notes to session/handoff docs if the adapter changed behavior materially.
 
+## Phase 8: Gradual Browser Runtime Migration (Playwright -> CloakBrowser)
+
+Use this phase only where anti-bot behavior or transport-level blocking creates repeatable failures in existing adapter flows.
+
+Scope rules:
+
+1. Do not do broad global browser swaps.
+2. Migrate one adapter at a time.
+3. Migrate one surface at a time inside an adapter:
+
+- scrape-engine detail fetch
+- scrape-engine discovery (only if required)
+- quote-runtime execution (only if required)
+
+4. Keep default behavior stable for unaffected adapters.
+
+Decision gate (when to migrate a surface):
+
+1. Baseline run shows meaningful failure pressure in the target surface.
+2. Evidence points to transport/browser fingerprint blocking rather than parser breakage.
+3. A/B probe or limited adapter run demonstrates improved pass rate with CloakBrowser.
+
+Recommended adapter-level rollout:
+
+1. Baseline with current Playwright flow:
+
+- `npm run managers:scrape:adapter:engine -- --adapter-key ADAPTER_KEY --refresh-known --max-listings 10 --detail-retry-attempts 0`
+
+2. Add CloakBrowser in detail fetch path only (keep discovery unchanged).
+3. Re-run the same constrained command and compare:
+
+- pulled details
+- failed detail URLs
+- HTTP/transport failure classes
+
+4. Promote only if failure reduction is clear and parser outputs remain stable.
+5. Consider discovery migration only when discovery itself is blocked and detail improvements are insufficient.
+6. Consider quote-runtime migration only when quote endpoint navigation/request steps are blocked in current runtime execution.
+
+Implementation notes:
+
+1. Prefer the minimal CloakBrowser pattern first:
+
+- `const browser = await launchCloakBrowser()`
+- `const page = await browser.newPage()`
+- navigate/extract
+- `await page.close()`
+- `await browser.close()`
+
+2. Introduce context-based APIs only when needed for a proven scenario (for example persistent state requirements).
+3. Keep adapter-level browser helpers local to that adapter until the pattern is validated across multiple adapters.
+4. Keep retry behavior explicit and deterministic during migration testing (`--detail-retry-attempts 0` for failure analysis runs).
+
+Validation gates after each surface migration:
+
+1. Scrape-engine sanity:
+
+- `npm run managers:scrape:adapter:engine -- --adapter-key ADAPTER_KEY --refresh-known --max-listings 10 --detail-retry-attempts 0`
+
+2. Quote runtime and validators (if quote surface changed):
+
+- `npm run pricing:quote:adapter -- --adapter-key ADAPTER_KEY --max-listings 1 --weeks 2 --listing-concurrency 1 --quote-concurrency 1`
+- `npm run pricing:validate:quotes -- --adapter-key ADAPTER_KEY`
+- `npm run pricing:validate:handoff -- --adapter-key ADAPTER_KEY --max-observations 1`
+
+3. Latency smoke (runtime path):
+
+- `npm run pricing:latency:adhoc -- --adapter-key ADAPTER_KEY --random-single`
+
+Rollback rule:
+
+1. If CloakBrowser does not reduce failures or causes extraction regressions, revert the adapter surface to the previous Playwright flow and document findings before moving to another adapter.
+
 ## Compliance Exit Checklist
 
 Treat migration as complete only when all items are true.
@@ -183,6 +256,7 @@ Treat migration as complete only when all items are true.
 8. quote-runtime isolation audit passes.
 9. Conformance docs updated with current status.
 10. Ad hoc latency run returns valid quote and checkout/handoff URL (final completion step).
+11. If browser runtime changed, migration notes include before/after failure behavior and selected surface scope (detail/discovery/runtime).
 
 ## Operator Notes
 

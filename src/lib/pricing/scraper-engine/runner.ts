@@ -8,6 +8,7 @@ import {
 } from "@/core/tooling/terminal/scrape-progress";
 import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 
+import { launchScraperBrowser } from "./shared/browser-engine";
 import type {
   DetailRecordBase,
   RunOptions,
@@ -268,19 +269,6 @@ async function writeTextFileDurable(
     await handle.sync();
   } finally {
     await handle.close();
-  }
-}
-
-async function loadPlaywright(): Promise<{
-  chromium: (typeof import("playwright"))["chromium"];
-}> {
-  try {
-    const module = await import("playwright");
-    return { chromium: module.chromium };
-  } catch {
-    throw new Error(
-      "Playwright is not installed. Run: npm install -D playwright && npx playwright install chromium",
-    );
   }
 }
 
@@ -1075,6 +1063,18 @@ async function loadKnownDetailUrlsFromArtifacts(
   return deduped;
 }
 
+function messageHasHttp403Signal(message: string): boolean {
+  const normalized = message.toLowerCase();
+  if (!normalized.includes("403")) {
+    return false;
+  }
+  return (
+    normalized.includes("status") ||
+    normalized.includes("http") ||
+    normalized.includes("forbidden")
+  );
+}
+
 async function pullDetails<TDetail extends DetailRecordBase>(
   root: string,
   browser: Browser,
@@ -1092,6 +1092,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
   refreshMode: ScraperRefreshMode,
   mode: ScraperRunMode,
   reportDetailProgress: (message: string) => void,
+  failFast403ConsecutiveThreshold: number,
   existingArtifactsByUrl?: Map<string, ExistingDetailArtifact>,
 ): Promise<{
   detailRecords: TDetail[];
@@ -1109,6 +1110,8 @@ async function pullDetails<TDetail extends DetailRecordBase>(
   let inFlight = 0;
   let processed = 0;
   let liveFailures = 0;
+  let total403Failures = 0;
+  let consecutive403Failures = 0;
   const pullStartedAtMs = Date.now();
   const workerCount = Math.min(detailFetchConcurrency, urls.length);
 
@@ -1163,6 +1166,13 @@ async function pullDetails<TDetail extends DetailRecordBase>(
 
       const detailUrl = urls[currentIndex] as string;
       const existingArtifact = existingArtifactsByUrl?.get(detailUrl);
+      let sawHttp403Signal = false;
+      const detailProgressReporter = (message: string): void => {
+        if (messageHasHttp403Signal(message)) {
+          sawHttp403Signal = true;
+        }
+        reportDetailProgress(message);
+      };
       started += 1;
       inFlight += 1;
       const detailStartedAtMs = Date.now();
@@ -1174,7 +1184,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
         refreshMode,
         mode,
         existingDetailJsonPath: existingArtifact?.jsonPath ?? null,
-        reportDetailProgress,
+        reportDetailProgress: detailProgressReporter,
       });
       const timed = await runTimedDetailFetch(fetchPromise, detailTimeoutMs);
       detailDurationsMs.push(Date.now() - detailStartedAtMs);
@@ -1213,6 +1223,22 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       processed += 1;
       if (!detail) {
         liveFailures += 1;
+        if (sawHttp403Signal) {
+          total403Failures += 1;
+          consecutive403Failures += 1;
+          progress.info(
+            `http-403 signal listing=${detailUrl} consecutive=${consecutive403Failures} total_403_failures=${total403Failures}`,
+          );
+          if (consecutive403Failures >= failFast403ConsecutiveThreshold) {
+            throw new Error(
+              `Fail-fast abort: observed ${consecutive403Failures} consecutive HTTP 403 detail failures (threshold=${failFast403ConsecutiveThreshold}). This indicates a systemic retrieval/tuning issue for ${adapter.managerKey}.`,
+            );
+          }
+        } else {
+          consecutive403Failures = 0;
+        }
+      } else {
+        consecutive403Failures = 0;
       }
       if (processed <= 20 || processed % 5 === 0 || processed === urls.length) {
         progress.progress(buildProgressLine("details progress"));
@@ -1258,6 +1284,13 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       const nextPending: string[] = [];
       for (const detailUrl of pending) {
         const existingArtifact = existingArtifactsByUrl?.get(detailUrl);
+        let sawHttp403Signal = false;
+        const detailProgressReporter = (message: string): void => {
+          if (messageHasHttp403Signal(message)) {
+            sawHttp403Signal = true;
+          }
+          reportDetailProgress(message);
+        };
         const fetchPromise = adapter.fetchDetail({
           browser,
           detailUrl,
@@ -1266,12 +1299,26 @@ async function pullDetails<TDetail extends DetailRecordBase>(
           refreshMode,
           mode,
           existingDetailJsonPath: existingArtifact?.jsonPath ?? null,
-          reportDetailProgress,
+          reportDetailProgress: detailProgressReporter,
         });
 
         const timed = await runTimedDetailFetch(fetchPromise, detailTimeoutMs);
         if (timed.timedOut || !timed.detail) {
           nextPending.push(detailUrl);
+          if (sawHttp403Signal) {
+            total403Failures += 1;
+            consecutive403Failures += 1;
+            progress.info(
+              `http-403 signal retry_attempt=${attempt} listing=${detailUrl} consecutive=${consecutive403Failures} total_403_failures=${total403Failures}`,
+            );
+            if (consecutive403Failures >= failFast403ConsecutiveThreshold) {
+              throw new Error(
+                `Fail-fast abort: observed ${consecutive403Failures} consecutive HTTP 403 detail failures (threshold=${failFast403ConsecutiveThreshold}) during retry. This indicates a systemic retrieval/tuning issue for ${adapter.managerKey}.`,
+              );
+            }
+          } else {
+            consecutive403Failures = 0;
+          }
           progress.tick(
             buildTickLine(
               `retry detail failed attempt=${attempt} listing=${detailUrl}`,
@@ -1279,6 +1326,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
           );
         } else {
           const detail = timed.detail;
+          consecutive403Failures = 0;
           const detailForStorage = {
             ...detail,
             html_path: toProjectRelativePath(detail.html_path, root),
@@ -1358,6 +1406,10 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       );
     }
   };
+  const failFast403ConsecutiveThreshold = Math.max(
+    1,
+    Number(process.env.SCRAPER_FAIL_FAST_403_CONSECUTIVE ?? "5") || 5,
+  );
   const availabilityHorizonDays =
     options.availHorizonDays ?? adapter.availabilityHorizonDays;
   const maxCalendarAdvanceMonths =
@@ -1375,6 +1427,9 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         : "collection-discovery";
   progress.info(
     `target_scope=${targetScope}, inventory_mode=${options.inventoryMode}, run_mode=${options.mode}, refresh_mode=${options.refreshMode}, avail_horizon_days=${availabilityHorizonDays}, avail_max_calendar_months=${maxCalendarAdvanceMonths}, scroll_steps=${options.maxScrollSteps}, scroll_pause_ms=${options.scrollPauseMs}, network_idle_wait_ms=${options.networkIdleWaitMs}, concurrency=${detailFetchConcurrency}, detail_delay_ms=${detailFetchDelayMs}, detail_timeout_ms=${options.detailTimeoutMs}, detail_retry_attempts=${options.detailRetryAttempts}, detail_retry_delay_ms=${options.detailRetryDelayMs}, skip_existing_details=${options.skipExistingDetails}, skip_fresh_details=${options.skipFreshDetails}, fresh_hours=${options.freshHours}, allow_canonical_prune=${options.allowCanonicalPrune}, allow_empty_canonical_index_prune=${options.allowEmptyCanonicalIndexPrune}`,
+  );
+  progress.info(
+    `http_403_fail_fast_consecutive_threshold=${failFast403ConsecutiveThreshold}`,
   );
 
   if (options.quoteWindowDays !== null) {
@@ -1417,8 +1472,14 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
   await mkdir(outputDetailsHtmlDir, { recursive: true });
   await mkdir(outputDetailsJsonDir, { recursive: true });
 
-  const { chromium } = await loadPlaywright();
-  const browser = await chromium.launch({ headless: true });
+  const envPrefix = adapter.managerKey
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_");
+  const browser = (await launchScraperBrowser({
+    adapterKey: adapter.managerKey,
+    envPrefix,
+    headless: true,
+  })) as unknown as Browser;
 
   try {
     if (options.detailUrl) {
@@ -1428,13 +1489,6 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         throw new Error(`Invalid detail URL: ${options.detailUrl}`);
       }
       progress.info(`direct_detail_validated=${valid}`);
-
-      const existingArtifacts = await loadExistingDetailArtifacts(
-        root,
-        outputDetailsJsonDir,
-        adapter.isValidDetailUrl,
-      );
-      const existingArtifact = existingArtifacts.get(valid);
 
       progress.phase("single-target pull: processing one listing");
       const timed = await runTimedDetailFetch(
@@ -1622,6 +1676,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         options.refreshMode,
         options.mode,
         reportDetailProgress,
+        failFast403ConsecutiveThreshold,
         existingArtifacts,
       );
 
@@ -1800,6 +1855,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         options.refreshMode,
         options.mode,
         reportDetailProgress,
+        failFast403ConsecutiveThreshold,
       );
       detailRecords = pulled.detailRecords;
       failedDetailUrls = pulled.failedDetailUrls;
