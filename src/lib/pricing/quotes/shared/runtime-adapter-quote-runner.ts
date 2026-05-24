@@ -124,6 +124,64 @@ function hasChallengeSignal(result: QuoteExecutionResult): boolean {
   return !result.success && result.error.code === "EDGE_CHALLENGE_BLOCKED";
 }
 
+function readHttpStatusFromErrorDetails(
+  details: Record<string, unknown> | null,
+): number | null {
+  if (!details) {
+    return null;
+  }
+
+  const keys = [
+    "detailStatus",
+    "detailInitialStatus",
+    "detailRetryStatus",
+    "pricingStatus",
+    "availabilityStatus",
+    "httpStatus",
+    "status",
+  ];
+
+  for (const key of keys) {
+    const value = Number(details[key] ?? NaN);
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function summarizeFailureReason(result: QuoteExecutionResult): {
+  code: string;
+  message: string;
+  httpStatus: number | null;
+} | null {
+  if (result.success) {
+    return null;
+  }
+
+  const details =
+    result.error.details && typeof result.error.details === "object"
+      ? (result.error.details as Record<string, unknown>)
+      : null;
+
+  const code =
+    typeof result.error.code === "string" && result.error.code.trim().length > 0
+      ? result.error.code.trim()
+      : "QUOTE_FAILED";
+  const message =
+    typeof result.error.message === "string" &&
+    result.error.message.trim().length > 0
+      ? result.error.message.trim()
+      : "quote_request_failed";
+
+  return {
+    code,
+    message,
+    httpStatus: readHttpStatusFromErrorDetails(details),
+  };
+}
+
 export type RuntimeAdapterQuoteRunnerConfig = {
   adapterKey: string;
   executeSingleQuote: (
@@ -689,7 +747,11 @@ async function loadListingSeeds(
     throw new Error(`Malformed canonical index for ${adapterKey}`);
   }
 
-  progress?.phase(`loading canonical listings entries=${parsed.length}`);
+  progress?.phase(
+    `planning canonical listings entries=${parsed.length} selection_mode=${
+      options.listingId ? "listing-id" : "max-listings"
+    }`,
+  );
 
   const missingQuoteContextEntries = parsed.filter((entry) => {
     const quoteContext = asObject(entry.quote_context);
@@ -748,9 +810,9 @@ async function loadListingSeeds(
     });
 
     scanned += 1;
-    if (scanned <= 20 || scanned % 200 === 0 || scanned === parsed.length) {
+    if (scanned <= 5 || scanned % 200 === 0 || scanned === parsed.length) {
       progress?.tick(
-        `canonical seed scan progress ${scanned}/${parsed.length} selected=${seeds.length}`,
+        `planning scan progress ${scanned}/${parsed.length} eligible=${seeds.length}`,
       );
     }
   }
@@ -767,6 +829,12 @@ async function loadListingSeeds(
   } else {
     selected = seeds.slice(0, options.maxListings);
   }
+
+  progress?.tick(
+    options.listingId
+      ? `planning selection complete mode=listing-id requested=${options.listingId} eligible=${seeds.length} selected=${selected.length}`
+      : `planning selection complete mode=max-listings requested=${options.maxListings} eligible=${seeds.length} selected=${selected.length}`,
+  );
 
   if (selected.length === 0) {
     throw new Error(
@@ -1466,7 +1534,16 @@ async function buildSidecarForListing(input: {
   existingRealQuoteObservations: CanonicalQuoteObservation[];
   progress?: QuoteProgress;
   onWindowsPlanned?: (windows: number) => void;
-  onWindowResult?: (result: { quoteAvailable: boolean }) => void;
+  onWindowResult?: (result: {
+    quoteAvailable: boolean;
+    http403: boolean;
+    challengeBlocked: boolean;
+    failureReason: {
+      code: string;
+      message: string;
+      httpStatus: number | null;
+    } | null;
+  }) => void;
   onListingComplete?: (result: {
     listingId: string;
     windows: number;
@@ -1596,6 +1673,7 @@ async function buildSidecarForListing(input: {
           quoteAvailable,
           http403: hasHttp403Signal(result),
           challengeBlocked: hasChallengeSignal(result),
+          failureReason: quoteAvailable ? null : summarizeFailureReason(result),
         });
         planResults.push({
           window,
@@ -1926,6 +2004,8 @@ export async function runRuntimeAdapterQuoteCli(
 
     let observedHttp403 = 0;
     let observedChallengeBlocked = 0;
+    const unavailableByCode = new Map<string, number>();
+    const unavailableByMessage = new Map<string, number>();
 
     let skippedCoveredListings = 0;
     const sidecars = await runWithConcurrency(
@@ -1952,7 +2032,12 @@ export async function runRuntimeAdapterQuoteCli(
           onWindowsPlanned: (windows) => {
             tracker.onWindowsPlanned(windows);
           },
-          onWindowResult: ({ quoteAvailable, http403, challengeBlocked }) => {
+          onWindowResult: ({
+            quoteAvailable,
+            http403,
+            challengeBlocked,
+            failureReason,
+          }) => {
             tracker.onWindowResult(quoteAvailable);
             if (http403) {
               observedHttp403 += 1;
@@ -1964,6 +2049,19 @@ export async function runRuntimeAdapterQuoteCli(
             }
             if (challengeBlocked) {
               observedChallengeBlocked += 1;
+            }
+            if (!quoteAvailable && failureReason) {
+              const reasonCode = failureReason.httpStatus
+                ? `${failureReason.code}:http_${failureReason.httpStatus}`
+                : failureReason.code;
+              unavailableByCode.set(
+                reasonCode,
+                (unavailableByCode.get(reasonCode) ?? 0) + 1,
+              );
+              unavailableByMessage.set(
+                failureReason.message,
+                (unavailableByMessage.get(failureReason.message) ?? 0) + 1,
+              );
             }
           },
           onListingComplete: ({ listingId, windows, available }) => {
@@ -2024,8 +2122,19 @@ export async function runRuntimeAdapterQuoteCli(
       0,
     );
 
+    const topUnavailableCodes = Array.from(unavailableByCode.entries())
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 5)
+      .map(([reason, count]) => `${reason}:${count}`)
+      .join(", ");
+    const topUnavailableMessages = Array.from(unavailableByMessage.entries())
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 3)
+      .map(([reason, count]) => `${reason}:${count}`)
+      .join(", ");
+
     progress?.success(
-      `quote-capture complete listings=${persistedSidecars.length} observations=${totalObservations} available=${availableObservations} skipped_fresh=${skippedFresh} skipped_covered=${skippedCoveredListings} observed_http_403=${observedHttp403} observed_challenge_blocked=${observedChallengeBlocked}`,
+      `quote-capture complete listings=${persistedSidecars.length} observations=${totalObservations} available=${availableObservations} skipped_fresh=${skippedFresh} skipped_covered=${skippedCoveredListings} observed_http_403=${observedHttp403} observed_challenge_blocked=${observedChallengeBlocked}${topUnavailableCodes ? ` unavailable_codes=[${topUnavailableCodes}]` : ""}${topUnavailableMessages ? ` unavailable_messages=[${topUnavailableMessages}]` : ""}`,
     );
   } finally {
     await cleanupProfiles();

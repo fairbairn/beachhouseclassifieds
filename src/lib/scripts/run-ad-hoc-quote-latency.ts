@@ -41,6 +41,17 @@ type QuotesSidecar = {
   observations?: QuoteObservation[];
 };
 
+type DetailAvailabilityDay = {
+  date?: string;
+  is_available?: boolean;
+};
+
+type DetailSidecar = {
+  normalized_availability?: {
+    days?: DetailAvailabilityDay[];
+  };
+};
+
 type ListingSample = {
   adapterKey: string;
   listingId: string;
@@ -120,6 +131,7 @@ const DEFAULT_SINGLE_OBSERVATION_TIMEOUT_MS = Math.max(
   Number(process.env.SCRAPER_ADHOC_SINGLE_OBSERVATION_TIMEOUT_MS ?? "20000") ||
     20000,
 );
+const DETAIL_WINDOW_NIGHTS_CANDIDATES = [3, 5, 7, 10, 14] as const;
 const BASE_DATA_ROOT = resolve(
   process.cwd(),
   "src",
@@ -581,6 +593,7 @@ async function collectListingSamplesForAdapter(
   maxSamplesOverride?: number | null,
 ): Promise<ListingSample[]> {
   const quotesDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "quotes");
+  const detailsJsonDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "json");
   const activeListings = await selectCanonicalListings({
     adapterKey,
     maxListings: null,
@@ -591,18 +604,19 @@ async function collectListingSamplesForAdapter(
   for (const listing of activeListings) {
     const fileName = `${listing.externalListingId}.json`;
     const sidecarPath = resolve(quotesDir, fileName);
-    let sidecar: QuotesSidecar;
+    let sidecar: QuotesSidecar | null = null;
     try {
       const sidecarRaw = await readFile(sidecarPath, "utf8");
       sidecar = JSON.parse(sidecarRaw) as QuotesSidecar;
     } catch {
-      continue;
+      sidecar = null;
     }
 
-    const listingId = sidecar.external_listing_id?.trim() ?? "";
-    const detailUrlRaw = sidecar.detail_url?.trim() ?? "";
+    const listingId =
+      sidecar?.external_listing_id?.trim() ?? listing.externalListingId;
+    const detailUrlRaw = sidecar?.detail_url?.trim() ?? listing.detailUrl;
     const detailUrl = canonicalizeDetailUrlForAdapter(adapterKey, detailUrlRaw);
-    const observations = sidecar.observations ?? [];
+    const observations = sidecar?.observations ?? [];
 
     if (!listingId || !detailUrl) {
       continue;
@@ -612,20 +626,12 @@ async function collectListingSamplesForAdapter(
       (observation) => observation.quote_available === true,
     );
 
-    if (availableObservations.length < options.minAvailableObservations) {
-      continue;
-    }
-
     const validAvailableObservations = availableObservations.filter(
       (observation) =>
         typeof observation.start_date === "string" &&
         typeof observation.end_date === "string" &&
         typeof observation.handoff_url === "string",
     );
-
-    if (validAvailableObservations.length === 0) {
-      continue;
-    }
 
     const fallbackWindows = [...validAvailableObservations]
       .sort((left, right) => {
@@ -641,25 +647,48 @@ async function collectListingSamplesForAdapter(
       }));
 
     const selectedObservation = fallbackWindows[0];
-    if (!selectedObservation) {
+    if (
+      selectedObservation &&
+      availableObservations.length >= options.minAvailableObservations
+    ) {
+      const canonicalEntry = activeListings.find(
+        (entry) => entry.externalListingId === listingId,
+      );
+      const quoteContext = canonicalEntry?.quoteContext ?? null;
+
+      candidates.push({
+        adapterKey,
+        listingId,
+        detailUrl,
+        quoteContext,
+        startDate: selectedObservation.startDate,
+        endDate: selectedObservation.endDate,
+        handoffUrl: selectedObservation.handoffUrl,
+        availableObservations: availableObservations.length,
+        fallbackWindows,
+      });
       continue;
     }
 
-    const canonicalEntry = activeListings.find(
-      (entry) => entry.externalListingId === listingId,
-    );
-    const quoteContext = canonicalEntry?.quoteContext ?? null;
+    const detailFallbackWindows = await loadAvailabilityWindowsFromDetail({
+      detailsJsonDir,
+      listing,
+    });
+    const selectedDetailWindow = detailFallbackWindows[0];
+    if (!selectedDetailWindow) {
+      continue;
+    }
 
     candidates.push({
       adapterKey,
       listingId,
       detailUrl,
-      quoteContext,
-      startDate: selectedObservation.startDate,
-      endDate: selectedObservation.endDate,
-      handoffUrl: selectedObservation.handoffUrl,
+      quoteContext: listing.quoteContext,
+      startDate: selectedDetailWindow.startDate,
+      endDate: selectedDetailWindow.endDate,
+      handoffUrl: "",
       availableObservations: availableObservations.length,
-      fallbackWindows,
+      fallbackWindows: detailFallbackWindows,
     });
   }
 
@@ -680,6 +709,120 @@ async function collectListingSamplesForAdapter(
   }
 
   return candidates.slice(0, maxSamples);
+}
+
+function toIsoDate(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return isIsoDate(trimmed) ? trimmed : null;
+}
+
+function addDays(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function buildWindowsFromAvailabilityDays(
+  days: DetailAvailabilityDay[],
+): Array<{ startDate: string; endDate: string; handoffUrl: string }> {
+  const availableDates = days
+    .map((day) => ({
+      date: toIsoDate(day.date),
+      available: day.is_available === true,
+    }))
+    .filter(
+      (day): day is { date: string; available: boolean } =>
+        day.date !== null && day.available,
+    )
+    .map((day) => day.date)
+    .sort((left, right) => left.localeCompare(right));
+
+  if (availableDates.length === 0) {
+    return [];
+  }
+
+  const uniqueDates = Array.from(new Set(availableDates));
+  const runs: string[][] = [];
+  let currentRun: string[] = [];
+
+  for (const date of uniqueDates) {
+    if (currentRun.length === 0) {
+      currentRun.push(date);
+      continue;
+    }
+
+    const previous = currentRun[currentRun.length - 1]!;
+    const nextExpected = addDays(previous, 1);
+    if (date === nextExpected) {
+      currentRun.push(date);
+      continue;
+    }
+
+    runs.push(currentRun);
+    currentRun = [date];
+  }
+  if (currentRun.length > 0) {
+    runs.push(currentRun);
+  }
+
+  const windows: Array<{
+    startDate: string;
+    endDate: string;
+    handoffUrl: string;
+  }> = [];
+  for (const run of runs) {
+    const runLength = run.length;
+    for (const nights of DETAIL_WINDOW_NIGHTS_CANDIDATES) {
+      if (runLength < nights) {
+        continue;
+      }
+      const startDate = run[0]!;
+      const endDate = addDays(startDate, nights);
+      windows.push({
+        startDate,
+        endDate,
+        handoffUrl: "",
+      });
+    }
+  }
+
+  return windows.slice(0, MAX_FALLBACK_WINDOWS_PER_LISTING);
+}
+
+async function loadAvailabilityWindowsFromDetail(input: {
+  detailsJsonDir: string;
+  listing: Awaited<ReturnType<typeof selectCanonicalListings>>[number];
+}): Promise<Array<{ startDate: string; endDate: string; handoffUrl: string }>> {
+  const candidates = Array.from(
+    new Set([
+      `${input.listing.fileId}.json`,
+      `${input.listing.externalListingId}.json`,
+      `${input.listing.detailFileBaseName}.json`,
+    ]),
+  );
+
+  for (const fileName of candidates) {
+    const detailPath = resolve(input.detailsJsonDir, fileName);
+    try {
+      const raw = await readFile(detailPath, "utf8");
+      const parsed = JSON.parse(raw) as DetailSidecar;
+      const days = parsed.normalized_availability?.days;
+      if (!Array.isArray(days)) {
+        continue;
+      }
+      const windows = buildWindowsFromAvailabilityDays(days);
+      if (windows.length > 0) {
+        return windows;
+      }
+    } catch {
+      // Ignore missing/malformed detail sidecars.
+    }
+  }
+
+  return [];
 }
 
 async function loadDetailQuoteContext(
@@ -1585,7 +1728,7 @@ async function main(): Promise<void> {
       );
       if (candidates.length === 0) {
         throw new Error(
-          "No random single-quote candidates found with >=3 bedrooms and available observations.",
+          "No random single-quote candidates found from quote observations or detail availability windows.",
         );
       }
 

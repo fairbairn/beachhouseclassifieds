@@ -114,6 +114,7 @@ export type ScraperAdapter<TDetail extends DetailRecordBase> = {
   managerKey: string;
   scriptLabel: string;
   defaultAnchorUrl: string;
+  useBrowserEngineProxy?: boolean;
   detailFetchDelayMs: number;
   detailFetchConcurrency: number;
   availabilityHorizonDays: number;

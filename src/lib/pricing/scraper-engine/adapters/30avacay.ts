@@ -475,11 +475,38 @@ function sanitizeUnitId(value: string): string {
     .slice(0, 140);
 }
 
-function isHexUnitId(value: string): boolean {
-  return /^[a-f0-9]{24}$/i.test(value);
+function isUsableUnitId(value: string): boolean {
+  // 30avacay has historically used 24-char hex IDs, but platform changes can
+  // emit alternate identifier shapes; keep this permissive while rejecting junk.
+  return /^[a-z0-9][a-z0-9_-]{2,139}$/i.test(value);
 }
 
-function resolveRequiredHexUnitId(input: {
+function summarizeMissingUnitIdContext(html: string): string {
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = stripHtml(titleMatch?.[1] ?? "").slice(0, 140);
+  const normalizedHtml = html.toLowerCase();
+  const challengeSignals = [
+    "cloudflare",
+    "captcha",
+    "challenge",
+    "cf-challenge",
+    "access denied",
+    "verify you are human",
+    "bot",
+  ].filter((signal) => normalizedHtml.includes(signal));
+
+  const parts: string[] = [];
+  if (title) {
+    parts.push(`title="${title}"`);
+  }
+  if (challengeSignals.length > 0) {
+    parts.push(`challenge_signals=${challengeSignals.join(",")}`);
+  }
+
+  return parts.length > 0 ? ` (${parts.join(" ")})` : "";
+}
+
+function resolveRequiredUnitId(input: {
   extractedUnitId: string;
   html: string;
   detailUrl: string;
@@ -490,13 +517,13 @@ function resolveRequiredHexUnitId(input: {
   ];
 
   for (const candidate of candidates) {
-    if (isHexUnitId(candidate)) {
+    if (isUsableUnitId(candidate)) {
       return candidate;
     }
   }
 
   throw new Error(
-    `Missing required hex unit_id for 30avacay detail: ${input.detailUrl}`,
+    `Missing required unit_id for 30avacay detail: ${input.detailUrl}${summarizeMissingUnitIdContext(input.html)}`,
   );
 }
 
@@ -1836,7 +1863,7 @@ async function fetchDetail(
     };
 
     const bookingRestrictions = new Set<string>();
-    let minNightRules: Array<{
+    const minNightRules: Array<{
       start_date: string;
       end_date: string;
       min_nights: number;
@@ -2009,7 +2036,7 @@ async function fetchDetail(
     const extractedUnitId = sanitizeUnitId(
       stripHtml(extracted.unitId).trim() || extractUnitIdFromHtml(html),
     );
-    const requiredUnitId = resolveRequiredHexUnitId({
+    const requiredUnitId = resolveRequiredUnitId({
       extractedUnitId,
       html,
       detailUrl,
@@ -2281,7 +2308,23 @@ async function fetchDetail(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "unknown detail pull error";
-    console.warn(`[30avacay] detail pull failed for ${detailUrl}: ${message}`);
+    const stack = error instanceof Error ? error.stack : undefined;
+    const currentUrl = (() => {
+      try {
+        return page.url();
+      } catch {
+        return "";
+      }
+    })();
+
+    console.error(`[30avacay] DETAIL_PULL_ERROR detail_url=${detailUrl}`);
+    if (currentUrl && currentUrl !== detailUrl) {
+      console.error(`[30avacay] DETAIL_PULL_ERROR page_url=${currentUrl}`);
+    }
+    console.error(`[30avacay] DETAIL_PULL_ERROR message=${message}`);
+    if (stack && stack.trim().length > 0) {
+      console.error(`[30avacay] DETAIL_PULL_ERROR stack:\n${stack}`);
+    }
     return null;
   } finally {
     await page.close();
@@ -2293,6 +2336,7 @@ export function createThirtyAVacayAdapter(): ScraperAdapter<LuxuryDetailRecord> 
     managerKey: "30avacay",
     scriptLabel: "30avacay",
     defaultAnchorUrl: DEFAULT_ANCHOR_URL,
+    useBrowserEngineProxy: true,
     detailFetchDelayMs: Math.max(
       0,
       Number(process.env.VACAY30A_DETAIL_FETCH_DELAY_MS ?? "40") || 40,
@@ -2351,6 +2395,8 @@ export function createThirtyAVacayAdapter(): ScraperAdapter<LuxuryDetailRecord> 
         {
           adapterKey: "30avacay",
           executeSingleQuote: execute30AvacaySingleQuote,
+          defaultListingConcurrency: 5,
+          defaultQuoteConcurrency: 5,
           defaultQuoteTimeoutMs: 20000,
           defaultQuoteMaxAttempts: 2,
           defaultEndpointPath: "/vacation-rentals/router/",

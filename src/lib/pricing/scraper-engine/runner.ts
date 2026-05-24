@@ -1500,6 +1500,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     adapterKey: adapter.managerKey,
     envPrefix,
     headless: true,
+    useProxy: adapter.useBrowserEngineProxy === true,
   })) as unknown as Browser;
 
   try {

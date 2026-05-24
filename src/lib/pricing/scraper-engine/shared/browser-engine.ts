@@ -1,9 +1,14 @@
-type BrowserEngine = "cloakbrowser" | "playwright";
-
 type LaunchInput = {
   adapterKey: string;
   envPrefix: string;
   headless?: boolean;
+  useProxy?: boolean;
+};
+
+type BrowserProxyConfig = {
+  server: string;
+  username?: string;
+  password?: string;
 };
 
 type PageGotoResponseLike = {
@@ -25,111 +30,51 @@ export type ScraperBrowserLike = {
   close(): Promise<void>;
 };
 
-// Keep CloakBrowser rollout explicit so we can migrate adapters safely one at a time.
-const CLOAK_BROWSER_DEFAULT_ADAPTERS = new Set<string>([
-  "rosemary30a",
-  "coastproperties30a",
-  "dunevr30a",
-  "stayon30a",
-  "30abeach",
-  "30abeachgirls",
-]);
-
-// For migrated Streamline adapters, keep scraper execution strictly on CloakBrowser.
-const CLOAK_BROWSER_LOCKED_ADAPTERS = new Set<string>([
-  "rosemary30a",
-  "coastproperties30a",
-  "dunevr30a",
-  "stayon30a",
-  "30abeach",
-]);
-
-function normalizeEngineValue(value: string | undefined): BrowserEngine | null {
-  if (!value) {
+function resolveProxyConfig(
+  rawProxy: string | undefined,
+): BrowserProxyConfig | null {
+  const normalized = rawProxy?.trim();
+  if (!normalized) {
     return null;
   }
 
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "cloakbrowser" || normalized === "cloak") {
-    return "cloakbrowser";
-  }
-  if (normalized === "playwright" || normalized === "pw") {
-    return "playwright";
-  }
-  return null;
-}
+  try {
+    const parsed = new URL(normalized);
+    const server = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`;
+    const username = parsed.username
+      ? decodeURIComponent(parsed.username)
+      : undefined;
+    const password = parsed.password
+      ? decodeURIComponent(parsed.password)
+      : undefined;
 
-function resolveEngine(input: {
-  adapterKey: string;
-  envPrefix: string;
-}): BrowserEngine {
-  if (CLOAK_BROWSER_LOCKED_ADAPTERS.has(input.adapterKey)) {
-    return "cloakbrowser";
+    return {
+      server,
+      ...(username ? { username } : {}),
+      ...(password ? { password } : {}),
+    };
+  } catch {
+    return { server: normalized };
   }
-
-  const adapterScraperScoped = normalizeEngineValue(
-    process.env[`${input.envPrefix}_SCRAPER_BROWSER_ENGINE`],
-  );
-  if (adapterScraperScoped) {
-    return adapterScraperScoped;
-  }
-
-  const adapterGlobalScoped = normalizeEngineValue(
-    process.env[`${input.envPrefix}_BROWSER_ENGINE`],
-  );
-  if (adapterGlobalScoped) {
-    return adapterGlobalScoped;
-  }
-
-  const scraperScoped = normalizeEngineValue(
-    process.env.SCRAPER_BROWSER_ENGINE,
-  );
-  if (scraperScoped) {
-    return scraperScoped;
-  }
-
-  const globalScoped = normalizeEngineValue(
-    process.env.STREAMLINE_BROWSER_ENGINE,
-  );
-  if (globalScoped) {
-    return globalScoped;
-  }
-
-  if (CLOAK_BROWSER_DEFAULT_ADAPTERS.has(input.adapterKey)) {
-    return "cloakbrowser";
-  }
-
-  return "playwright";
 }
 
 export async function launchScraperBrowser(
   input: LaunchInput,
 ): Promise<ScraperBrowserLike> {
-  const engine = resolveEngine({
-    adapterKey: input.adapterKey,
-    envPrefix: input.envPrefix,
-  });
-
-  if (engine === "cloakbrowser") {
-    const cloakBrowserModule = (await import("cloakbrowser")) as {
-      launch: (
-        options?: Record<string, unknown>,
-      ) => Promise<ScraperBrowserLike>;
-    };
-    return cloakBrowserModule.launch({
-      headless: input.headless ?? true,
-    });
-  }
-
-  const playwrightModule = (await import("playwright")) as {
-    chromium: {
-      launch: (
-        options?: Record<string, unknown>,
-      ) => Promise<ScraperBrowserLike>;
-    };
+  const cloakBrowserModule = (await import("cloakbrowser")) as {
+    launch: (options?: Record<string, unknown>) => Promise<ScraperBrowserLike>;
   };
 
-  return playwrightModule.chromium.launch({
+  const proxy = input.useProxy
+    ? (process.env.HTTPS_PROXY ??
+      process.env.HTTP_PROXY ??
+      process.env.https_proxy ??
+      process.env.http_proxy)
+    : undefined;
+  const resolvedProxy = resolveProxyConfig(proxy);
+
+  return cloakBrowserModule.launch({
     headless: input.headless ?? true,
+    ...(resolvedProxy ? { proxy: resolvedProxy } : {}),
   });
 }

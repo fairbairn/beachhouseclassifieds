@@ -1,3 +1,4 @@
+import { postJsonViaCloakBrowserEngine } from "../shared/cloakbrowser-browser-engine";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type RouterFeeLine = {
@@ -28,6 +29,12 @@ type RouterQuoteResult = {
   currency: string;
   handoffUrl: string;
   isRateLimited: boolean;
+  diagnostics?: {
+    httpStatus: number;
+    responseOk: boolean;
+    requestError: string | null;
+    responseBodySnippet: string | null;
+  };
 };
 
 const ADAPTER_KEY = "30avacay" as const;
@@ -90,6 +97,73 @@ function isRateLimitedMessage(value: string | null): boolean {
   );
 }
 
+function isTransientUnavailable(input: {
+  reason: string | null;
+  diagnostics?: {
+    httpStatus: number;
+    responseOk: boolean;
+    requestError: string | null;
+    responseBodySnippet: string | null;
+  };
+}): boolean {
+  const reason = (input.reason ?? "").toLowerCase();
+  const diagnostics = input.diagnostics;
+  const requestError = (diagnostics?.requestError ?? "").toLowerCase();
+  const responseSnippet = (
+    diagnostics?.responseBodySnippet ?? ""
+  ).toLowerCase();
+  const httpStatus = diagnostics?.httpStatus ?? 0;
+
+  if (httpStatus === 0 || httpStatus === 408 || httpStatus === 425) {
+    return true;
+  }
+
+  if (httpStatus >= 500) {
+    return true;
+  }
+
+  if (httpStatus === 429) {
+    return true;
+  }
+
+  if (httpStatus === 403) {
+    return true;
+  }
+
+  if (
+    requestError.includes("err_tunnel_connection_failed") ||
+    requestError.includes("timed out") ||
+    requestError.includes("timeout") ||
+    requestError.includes("econnreset") ||
+    requestError.includes("econnrefused") ||
+    requestError.includes("enotfound") ||
+    requestError.includes("proxy")
+  ) {
+    return true;
+  }
+
+  if (
+    reason.includes("invalid json") &&
+    (responseSnippet.includes("recaptcha") ||
+      responseSnippet.includes("unauthorized access") ||
+      responseSnippet.includes("access denied") ||
+      responseSnippet.includes("cloudflare") ||
+      responseSnippet.includes("captcha"))
+  ) {
+    return true;
+  }
+
+  if (
+    responseSnippet.includes("recaptcha") ||
+    responseSnippet.includes("cloudflare") ||
+    responseSnippet.includes("access denied")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function parseFeeLines(
   value: unknown,
 ): Array<{ name: string; amount: number }> {
@@ -121,6 +195,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolvePromise) => {
     setTimeout(resolvePromise, ms);
   });
+}
+
+function buildResponseSnippet(bodyText: string): string | null {
+  const normalized = bodyText.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return null;
+  }
+  return normalized.slice(0, 320);
 }
 
 function buildCheckoutUrl(input: {
@@ -227,57 +309,42 @@ async function fetchRouterQuote(input: {
   let lastRateLimitReason: string | null = null;
 
   for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt += 1) {
-    const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => controller.abort(), input.timeoutMs);
-    let response: Response;
-    try {
-      const headers: Record<string, string> = {
-        accept: "application/json, text/plain, */*",
-        "content-type": "application/json;charset=UTF-8",
-        "user-agent": USER_AGENT,
-        origin: BASE_HOST,
-      };
-      if (input.detailUrl.trim()) {
-        headers.referer = input.detailUrl.trim();
-      }
-
-      response = await fetch(ROUTER_ENDPOINT, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutHandle);
+    let responseStatus = 0;
+    let responseOk = false;
+    let responseBodyText = "";
+    let requestError: string | null = null;
+    const headers: Record<string, string> = {
+      accept: "application/json, text/plain, */*",
+      "content-type": "application/json;charset=UTF-8",
+      "user-agent": USER_AGENT,
+      origin: BASE_HOST,
+    };
+    if (input.detailUrl.trim()) {
+      headers.referer = input.detailUrl.trim();
     }
 
-    if (!response.ok) {
-      if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
-        lastRateLimitReason = `Router HTTP ${response.status}`;
-        await sleep(RATE_LIMIT_BACKOFF_MS * (attempt + 1));
-        continue;
-      }
+    const response = await postJsonViaCloakBrowserEngine({
+      adapterKey: ADAPTER_KEY,
+      listingId: input.request.listingId,
+      detailUrl: input.detailUrl,
+      endpoint: ROUTER_ENDPOINT,
+      timeoutMs: input.timeoutMs,
+      userAgent: USER_AGENT,
+      headers,
+      body: payload,
+      useProxy: true,
+      enablePersistentProfile: false,
+    });
 
+    responseStatus = response.httpStatus;
+    responseOk = response.ok;
+    responseBodyText = response.bodyText;
+    requestError = response.requestError;
+
+    if (requestError) {
       return {
         quoteAvailable: false,
-        quoteUnavailableReason: `Router HTTP ${response.status}`,
-        baseTotal: null,
-        taxesTotal: null,
-        feesTotalExclTaxes: null,
-        grandTotal: null,
-        currency: "USD",
-        handoffUrl,
-        isRateLimited: response.status === 429,
-      };
-    }
-
-    let rawPayload: RouterQuoteResponse;
-    try {
-      rawPayload = (await response.json()) as RouterQuoteResponse;
-    } catch {
-      return {
-        quoteAvailable: false,
-        quoteUnavailableReason: "Router returned invalid JSON",
+        quoteUnavailableReason: `Router request failed (HTTP ${responseStatus}): ${requestError}`,
         baseTotal: null,
         taxesTotal: null,
         feesTotalExclTaxes: null,
@@ -285,6 +352,62 @@ async function fetchRouterQuote(input: {
         currency: "USD",
         handoffUrl,
         isRateLimited: false,
+        diagnostics: {
+          httpStatus: responseStatus,
+          responseOk,
+          requestError,
+          responseBodySnippet: buildResponseSnippet(responseBodyText),
+        },
+      };
+    }
+
+    if (!responseOk) {
+      if (responseStatus === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
+        lastRateLimitReason = `Router HTTP ${responseStatus}`;
+        await sleep(RATE_LIMIT_BACKOFF_MS * (attempt + 1));
+        continue;
+      }
+
+      return {
+        quoteAvailable: false,
+        quoteUnavailableReason: `Router HTTP ${responseStatus}`,
+        baseTotal: null,
+        taxesTotal: null,
+        feesTotalExclTaxes: null,
+        grandTotal: null,
+        currency: "USD",
+        handoffUrl,
+        isRateLimited: responseStatus === 429,
+        diagnostics: {
+          httpStatus: responseStatus,
+          responseOk,
+          requestError,
+          responseBodySnippet: buildResponseSnippet(responseBodyText),
+        },
+      };
+    }
+
+    let rawPayload: RouterQuoteResponse;
+    try {
+      rawPayload = JSON.parse(responseBodyText) as RouterQuoteResponse;
+    } catch {
+      const snippet = buildResponseSnippet(responseBodyText);
+      return {
+        quoteAvailable: false,
+        quoteUnavailableReason: `Router returned invalid JSON (HTTP ${responseStatus})${snippet ? ` body: ${snippet}` : ""}`,
+        baseTotal: null,
+        taxesTotal: null,
+        feesTotalExclTaxes: null,
+        grandTotal: null,
+        currency: "USD",
+        handoffUrl,
+        isRateLimited: false,
+        diagnostics: {
+          httpStatus: responseStatus,
+          responseOk,
+          requestError,
+          responseBodySnippet: snippet,
+        },
       };
     }
 
@@ -431,6 +554,13 @@ export async function execute30AvacaySingleQuote(
   }
 
   if (!quote.quoteAvailable || quote.baseTotal === null) {
+    const retryableUnavailable =
+      quote.isRateLimited ||
+      isTransientUnavailable({
+        reason: quote.quoteUnavailableReason,
+        diagnostics: quote.diagnostics,
+      });
+
     return {
       success: false,
       elapsedMs: performance.now() - startedAt,
@@ -439,11 +569,15 @@ export async function execute30AvacaySingleQuote(
         message:
           quote.quoteUnavailableReason ??
           "Dates unavailable for selected stay window",
-        retryable: quote.isRateLimited,
+        retryable: retryableUnavailable,
         request,
         details: {
           unitId,
           handoffUrl: quote.handoffUrl,
+          httpStatus: quote.diagnostics?.httpStatus ?? null,
+          responseOk: quote.diagnostics?.responseOk ?? null,
+          requestError: quote.diagnostics?.requestError ?? null,
+          responseBodySnippet: quote.diagnostics?.responseBodySnippet ?? null,
         },
       }),
     };
