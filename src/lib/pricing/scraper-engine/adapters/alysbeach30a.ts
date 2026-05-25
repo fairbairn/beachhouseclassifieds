@@ -1,5 +1,6 @@
 import { executeAlysBeach30ASingleQuote } from "@/lib/pricing/quote-runtime/adapters/alysbeach30a";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
+import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -1118,10 +1119,9 @@ async function fetchDetail(
       .filter(Boolean)
       .join(", ");
 
-    const htmlPath = resolve(
-      OUTPUT_DETAILS_HTML_DIR,
-      `${externalListingId}.html`,
-    );
+    const detailFileBase =
+      canonicalizeExternalListingId(externalListingId) || externalListingId;
+    const htmlPath = resolve(OUTPUT_DETAILS_HTML_DIR, `${detailFileBase}.html`);
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
     let bookedDates: string[] = [];
