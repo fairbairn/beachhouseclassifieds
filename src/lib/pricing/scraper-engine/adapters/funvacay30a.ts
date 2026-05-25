@@ -320,10 +320,32 @@ function parseCityStateFromAddress(address: string): {
   return { city, state };
 }
 
+function unwrapTrackHsProxyUrl(value: string): string {
+  const wrappedPrefixMatch = value.match(
+    /^(?:https?:)?\/\/img\.trackhs\.com\/x\/(https?:\/\/.+)$/i,
+  );
+  if (!wrappedPrefixMatch?.[1]) {
+    return value;
+  }
+
+  const wrappedTarget = decodeURIComponent(wrappedPrefixMatch[1]);
+  try {
+    const resolvedWrappedTarget = new URL(wrappedTarget);
+    return `${resolvedWrappedTarget.origin}${resolvedWrappedTarget.pathname}${resolvedWrappedTarget.search}`;
+  } catch {
+    return wrappedTarget;
+  }
+}
+
 function normalizeGalleryUrl(rawUrl: string): string {
   const cleaned = rawUrl.trim();
   if (!cleaned) {
     return "";
+  }
+
+  const unwrappedPrefix = unwrapTrackHsProxyUrl(cleaned);
+  if (unwrappedPrefix !== cleaned) {
+    return unwrappedPrefix;
   }
 
   try {
@@ -843,7 +865,7 @@ function extractAmenityHintsFromDescription(description: string): string[] {
   ];
 
   const segments = text
-    .split(/[.;]|\u2022|\n/)
+    .split(/[.;]|\u2022|\n|\*/)
     .map((value) => value.replace(/\s+/g, " ").trim())
     .filter((value) => value.length >= 6 && value.length <= 140);
 
@@ -856,6 +878,26 @@ function extractAmenityHintsFromDescription(description: string): string[] {
     hints.add(segment.slice(0, 140));
     if (hints.size >= 24) {
       break;
+    }
+  }
+
+  if (hints.size === 0) {
+    const bulletRegex = /\*\s*([^*]{6,180})/g;
+    let bulletMatch: RegExpExecArray | null = bulletRegex.exec(text);
+    while (bulletMatch) {
+      const segment = bulletMatch[1]?.replace(/\s+/g, " ").trim() ?? "";
+      const lowered = segment.toLowerCase();
+      if (
+        segment.length >= 6 &&
+        segment.length <= 180 &&
+        hintKeywords.some((keyword) => lowered.includes(keyword))
+      ) {
+        hints.add(segment.slice(0, 140));
+        if (hints.size >= 24) {
+          break;
+        }
+      }
+      bulletMatch = bulletRegex.exec(text);
     }
   }
 
@@ -2378,6 +2420,14 @@ async function fetchDetail(
                   continue;
                 }
 
+                const unwrappedTrackHs = absolute.match(
+                  /^(?:https?:)?\/\/img\.trackhs\.com\/x\/(https?:\/\/.+)$/i,
+                );
+                if (unwrappedTrackHs?.[1]) {
+                  collected.add(decodeURIComponent(unwrappedTrackHs[1]));
+                  continue;
+                }
+
                 collected.add(absolute);
               } catch {
                 // Skip invalid URL fragments.
@@ -2826,7 +2876,7 @@ async function fetchDetail(
 
     const mediaUrls = dedupePreserveOrder(
       [...extracted.galleryUrls, ...jsonLdSignals.imageUrls]
-        .map((url) => normalizeGalleryUrl(url))
+        .map((url) => unwrapTrackHsProxyUrl(normalizeGalleryUrl(url)))
         .filter((url) => {
           if (!url.includes("/unitimages/")) {
             return true;
