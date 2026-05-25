@@ -118,6 +118,11 @@ type BeachBlueDetailRecord = DetailRecordBase & {
     city: string;
     state: string;
   };
+  quote_context: {
+    unit_id: string;
+    listing_id: string;
+    detail_url: string;
+  };
 };
 
 const DEFAULT_ANCHOR_URL =
@@ -732,6 +737,9 @@ async function fetchDetail(
       : "";
 
     const mediaImageUrls = Array.from(galleryUrls);
+    const resolvedUnitId =
+      String(propDetails.unit_id ?? "").trim() ||
+      String(externalListingId).trim();
 
     return {
       external_listing_id: externalListingId,
@@ -809,7 +817,7 @@ async function fetchDetail(
         min_day_rules: minDayRules,
       },
       property_profile: {
-        unit_id: String(propDetails.unit_id ?? externalListingId),
+        unit_id: resolvedUnitId,
         area: String(propDetails.area ?? ""),
         location: String(propDetails.location ?? ""),
         beds: Number.isFinite(Number(propDetails.bed))
@@ -823,6 +831,11 @@ async function fetchDetail(
           : null,
         city: String(propDetails.city ?? ""),
         state: String(propDetails.state ?? ""),
+      },
+      quote_context: {
+        unit_id: resolvedUnitId,
+        listing_id: resolvedUnitId,
+        detail_url: detailUrl,
       },
     };
   } catch {
