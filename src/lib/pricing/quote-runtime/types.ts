@@ -25,6 +25,7 @@ export type QuoteExecutionObservation = {
   quotedTotal: number | null;
   detailUrl?: string | null;
   handoffUrl: string | null;
+  diagnostics?: Record<string, unknown>;
 };
 
 export type QuoteExecutionError = {

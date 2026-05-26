@@ -24,6 +24,8 @@ type CliOptions = {
   continueOnError: boolean;
   summaryOnly: boolean;
   jsonOutput: boolean;
+  verboseRuntimeInsights: boolean;
+  traceTiming: boolean;
 };
 
 type QuoteObservation = {
@@ -75,6 +77,7 @@ type RequestResult = {
   bookingElapsedMs: number | null;
   success: boolean;
   reason: string | null;
+  runtimeDiagnostics?: Record<string, unknown> | null;
   runtimeError: {
     code: string;
     message: string;
@@ -285,6 +288,8 @@ function parseArgs(argv: string[]): CliOptions {
   let continueOnError = true;
   let summaryOnly = false;
   let jsonOutput = false;
+  let verboseRuntimeInsights = false;
+  let traceTiming = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -389,6 +394,16 @@ function parseArgs(argv: string[]): CliOptions {
       jsonOutput = true;
       continue;
     }
+
+    if (arg === "--verbose-runtime-insights") {
+      verboseRuntimeInsights = true;
+      continue;
+    }
+
+    if (arg === "--trace-timing") {
+      traceTiming = true;
+      continue;
+    }
   }
 
   return {
@@ -406,6 +421,8 @@ function parseArgs(argv: string[]): CliOptions {
     continueOnError,
     summaryOnly,
     jsonOutput,
+    verboseRuntimeInsights,
+    traceTiming,
   };
 }
 
@@ -906,6 +923,7 @@ function printSingleQuoteReport(input: {
   result: RequestResult;
   adults: number;
   children: number;
+  verboseRuntimeInsights: boolean;
 }): void {
   const { adapterKey, sample, result, adults, children } = input;
   const successColor = result.success ? COLOR.green : COLOR.red;
@@ -922,6 +940,95 @@ function printSingleQuoteReport(input: {
       ? result.runtimeError.details.handoff_url.trim()
       : "") ||
     "n/a";
+  const runtimeDiagnostics =
+    result.runtimeDiagnostics ??
+    (result.runtimeError?.details?.diagnostics &&
+    typeof result.runtimeError.details.diagnostics === "object" &&
+    !Array.isArray(result.runtimeError.details.diagnostics)
+      ? (result.runtimeError.details.diagnostics as Record<string, unknown>)
+      : null) ??
+    null;
+
+  const formatInsightValue = (value: unknown): string => {
+    if (typeof value === "string") {
+      return value;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    return JSON.stringify(value);
+  };
+
+  const buildCompactRuntimeInsightRows = (
+    diagnostics: Record<string, unknown>,
+  ): string[][] => {
+    const rows: string[][] = [];
+
+    const pushIfPresent = (label: string, key: string): void => {
+      if (!(key in diagnostics)) {
+        return;
+      }
+      rows.push([
+        paint(label, COLOR.cyan),
+        formatInsightValue(diagnostics[key]),
+      ]);
+    };
+
+    if ("flowElapsedMs" in diagnostics) {
+      const raw = diagnostics.flowElapsedMs;
+      if (typeof raw === "number" && Number.isFinite(raw)) {
+        rows.push([paint("Flow Elapsed", COLOR.cyan), fmtMs(raw)]);
+      }
+    }
+
+    const attempts = diagnostics.attempts;
+    const maxAttempts = diagnostics.maxAttempts;
+    if (
+      typeof attempts === "number" &&
+      Number.isFinite(attempts) &&
+      typeof maxAttempts === "number" &&
+      Number.isFinite(maxAttempts)
+    ) {
+      rows.push([
+        paint("Attempts", COLOR.cyan),
+        `${Math.floor(attempts)}/${Math.floor(maxAttempts)}`,
+      ]);
+    } else {
+      pushIfPresent("Attempts", "attempts");
+    }
+
+    pushIfPresent("Response Status", "responseStatus");
+    pushIfPresent("Body Length", "responseBodyLength");
+    pushIfPresent("Parsed Rows", "parsedRowCount");
+
+    const retryNoNativePost = Number(diagnostics.retryNoNativePostCount ?? 0);
+    const retryEmptyBody = Number(diagnostics.retryEmptyBodyCount ?? 0);
+    const retryChallenge = Number(diagnostics.retryChallengeCount ?? 0);
+    if (
+      Number.isFinite(retryNoNativePost) &&
+      Number.isFinite(retryEmptyBody) &&
+      Number.isFinite(retryChallenge)
+    ) {
+      const retrySummary =
+        `no_post=${Math.floor(retryNoNativePost)}, ` +
+        `empty_body=${Math.floor(retryEmptyBody)}, ` +
+        `challenge=${Math.floor(retryChallenge)}`;
+      rows.push([paint("Retries", COLOR.cyan), retrySummary]);
+    }
+
+    const attemptTimingsRaw = diagnostics.attemptTimings;
+    if (Array.isArray(attemptTimingsRaw) && attemptTimingsRaw.length > 0) {
+      const lastAttempt = attemptTimingsRaw[attemptTimingsRaw.length - 1];
+      if (lastAttempt && typeof lastAttempt === "object") {
+        const outcome = (lastAttempt as Record<string, unknown>).outcome;
+        if (typeof outcome === "string" && outcome.trim().length > 0) {
+          rows.push([paint("Last Attempt", COLOR.cyan), outcome]);
+        }
+      }
+    }
+
+    return rows;
+  };
 
   console.log(`\n${paint("Single Quote Result", COLOR.bold)}`);
 
@@ -1010,10 +1117,231 @@ function printSingleQuoteReport(input: {
     console.log(postStyle.curlCommand);
   }
 
+  if (runtimeDiagnostics && Object.keys(runtimeDiagnostics).length > 0) {
+    console.log(`\n${paint("Runtime Insights", COLOR.bold)}`);
+    const rows = input.verboseRuntimeInsights
+      ? Object.entries(runtimeDiagnostics).map(([key, value]) => [
+          paint(key, COLOR.cyan),
+          formatInsightValue(value),
+        ])
+      : buildCompactRuntimeInsightRows(runtimeDiagnostics);
+    console.log(
+      renderTable(
+        [paint("Field", COLOR.cyan), paint("Value", COLOR.cyan)],
+        rows,
+      ),
+    );
+    if (!input.verboseRuntimeInsights) {
+      console.log(
+        paint(
+          "Tip: pass --verbose-runtime-insights to print full diagnostics.",
+          COLOR.dim,
+        ),
+      );
+    }
+  }
+
   if (!result.success && result.reason) {
     console.log(`\n${paint("Failure Reason", COLOR.bold)}`);
     console.log(paint(result.reason, COLOR.red));
   }
+}
+
+function describeAdapterExecutionContext(adapterKey: string): {
+  runtimeEngine: string;
+  requestFlow: string;
+  proxyPolicy: string;
+  proxyConfigured: string;
+} {
+  if (adapterKey === "localvr30a") {
+    const proxyConfigured =
+      typeof process.env.HTTPS_PROXY === "string" ||
+      typeof process.env.HTTP_PROXY === "string" ||
+      typeof process.env.https_proxy === "string" ||
+      typeof process.env.http_proxy === "string";
+
+    return {
+      runtimeEngine: "cloakbrowser",
+      requestFlow: "GET seed + native page POST capture",
+      proxyPolicy: "hard-coded required",
+      proxyConfigured: proxyConfigured ? "yes" : "no",
+    };
+  }
+
+  return {
+    runtimeEngine: "adapter-defined",
+    requestFlow: "adapter-defined",
+    proxyPolicy: "adapter-defined",
+    proxyConfigured: "adapter-defined",
+  };
+}
+
+function printExecutionContext(adapterKey: string): void {
+  const context = describeAdapterExecutionContext(adapterKey);
+  console.log(`\n${paint("Execution Context", COLOR.bold)}`);
+  console.log(
+    renderTable(
+      [paint("Field", COLOR.cyan), paint("Value", COLOR.cyan)],
+      [
+        [paint("Adapter", COLOR.cyan), paint(adapterKey, COLOR.blue)],
+        [paint("Runtime Engine", COLOR.cyan), context.runtimeEngine],
+        [paint("Request Flow", COLOR.cyan), context.requestFlow],
+        [paint("Proxy Policy", COLOR.cyan), context.proxyPolicy],
+        [paint("Proxy Configured", COLOR.cyan), context.proxyConfigured],
+      ],
+    ),
+  );
+}
+
+function toFiniteNumberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function collectStatusCodes(input: {
+  diagnostics: Record<string, unknown> | null;
+  reason: string | null;
+}): number[] {
+  const statuses = new Set<number>();
+  const diagnostics = input.diagnostics;
+
+  const addStatus = (value: unknown): void => {
+    const status = toFiniteNumberOrNull(value);
+    if (status !== null) {
+      statuses.add(Math.floor(status));
+    }
+  };
+
+  if (diagnostics) {
+    addStatus(diagnostics.responseStatus);
+    addStatus(diagnostics.lastResponseStatus);
+
+    const gotoStatuses = diagnostics.gotoStatuses;
+    if (Array.isArray(gotoStatuses)) {
+      for (const status of gotoStatuses) {
+        addStatus(status);
+      }
+    }
+  }
+
+  const reason = (input.reason ?? "").toLowerCase();
+  const reasonStatusMatches = reason.match(/(?:^|\D)(403|429)(?:\D|$)/g);
+  if (reasonStatusMatches) {
+    for (const token of reasonStatusMatches) {
+      const parsed = Number(token.replace(/\D/g, ""));
+      if (Number.isFinite(parsed)) {
+        statuses.add(parsed);
+      }
+    }
+  }
+
+  return Array.from(statuses).sort((left, right) => left - right);
+}
+
+function buildRuntimeInsightsSummary(result: RequestResult): {
+  latency: {
+    totalElapsedMs: number;
+    flowElapsedMs: number | null;
+  };
+  attempts: {
+    used: number | null;
+    max: number | null;
+    retries: {
+      noNativePost: number;
+      emptyBody: number;
+      challenge: number;
+    };
+  };
+  challenge: {
+    blockerDetected: boolean;
+    statusCodes: number[];
+    checkpointDetectedCount: number;
+    checkpointResolvedCount: number;
+  };
+} {
+  const diagnostics = result.runtimeDiagnostics ?? null;
+
+  const flowElapsedMs = diagnostics
+    ? toFiniteNumberOrNull(diagnostics.flowElapsedMs)
+    : null;
+  const attemptsUsed = diagnostics
+    ? toFiniteNumberOrNull(diagnostics.attempts)
+    : null;
+  const maxAttempts = diagnostics
+    ? toFiniteNumberOrNull(diagnostics.maxAttempts)
+    : null;
+  const retryNoNativePost = diagnostics
+    ? Math.max(
+        0,
+        Math.floor(
+          toFiniteNumberOrNull(diagnostics.retryNoNativePostCount) ?? 0,
+        ),
+      )
+    : 0;
+  const retryEmptyBody = diagnostics
+    ? Math.max(
+        0,
+        Math.floor(toFiniteNumberOrNull(diagnostics.retryEmptyBodyCount) ?? 0),
+      )
+    : 0;
+  const retryChallenge = diagnostics
+    ? Math.max(
+        0,
+        Math.floor(toFiniteNumberOrNull(diagnostics.retryChallengeCount) ?? 0),
+      )
+    : 0;
+  const checkpointDetectedCount = diagnostics
+    ? Math.max(
+        0,
+        Math.floor(
+          toFiniteNumberOrNull(diagnostics.checkpointDetectedCount) ?? 0,
+        ),
+      )
+    : 0;
+  const checkpointResolvedCount = diagnostics
+    ? Math.max(
+        0,
+        Math.floor(
+          toFiniteNumberOrNull(diagnostics.checkpointResolvedCount) ?? 0,
+        ),
+      )
+    : 0;
+  const statusCodes = collectStatusCodes({
+    diagnostics,
+    reason: result.reason,
+  });
+
+  const reason = (result.reason ?? "").toLowerCase();
+  const blockerDetected =
+    checkpointDetectedCount > 0 ||
+    retryChallenge > 0 ||
+    statusCodes.includes(403) ||
+    statusCodes.includes(429) ||
+    reason.includes("challenge") ||
+    reason.includes("checkpoint") ||
+    reason.includes("http_403") ||
+    reason.includes("http_429");
+
+  return {
+    latency: {
+      totalElapsedMs: result.elapsedMs,
+      flowElapsedMs,
+    },
+    attempts: {
+      used: attemptsUsed,
+      max: maxAttempts,
+      retries: {
+        noNativePost: retryNoNativePost,
+        emptyBody: retryEmptyBody,
+        challenge: retryChallenge,
+      },
+    },
+    challenge: {
+      blockerDetected,
+      statusCodes,
+      checkpointDetectedCount,
+      checkpointResolvedCount,
+    },
+  };
 }
 
 function validateSingleModeInput(options: CliOptions): void {
@@ -1083,6 +1411,13 @@ async function runSingleQuoteRequestOnce(
           bookingElapsedMs: null,
           success: false,
           reason: `${result.error.code}: ${result.error.message}`,
+          runtimeDiagnostics:
+            result.error.details &&
+            typeof result.error.details.diagnostics === "object" &&
+            result.error.details.diagnostics !== null &&
+            !Array.isArray(result.error.details.diagnostics)
+              ? (result.error.details.diagnostics as Record<string, unknown>)
+              : null,
           runtimeError: result.error,
           observationSample: {
             startDate: sample.startDate,
@@ -1111,6 +1446,12 @@ async function runSingleQuoteRequestOnce(
           bookingElapsedMs: null,
           success: false,
           reason: unavailableReason,
+          runtimeDiagnostics:
+            result.observation.diagnostics &&
+            typeof result.observation.diagnostics === "object" &&
+            !Array.isArray(result.observation.diagnostics)
+              ? result.observation.diagnostics
+              : null,
           runtimeError: {
             code: "QUOTE_UNAVAILABLE",
             message: unavailableReason,
@@ -1118,6 +1459,12 @@ async function runSingleQuoteRequestOnce(
             details: {
               adapterKey: sample.adapterKey,
               listingId: sample.listingId,
+              diagnostics:
+                result.observation.diagnostics &&
+                typeof result.observation.diagnostics === "object" &&
+                !Array.isArray(result.observation.diagnostics)
+                  ? result.observation.diagnostics
+                  : undefined,
             },
           },
           observationSample: {
@@ -1143,6 +1490,12 @@ async function runSingleQuoteRequestOnce(
         bookingElapsedMs: null,
         success: true,
         reason: null,
+        runtimeDiagnostics:
+          result.observation.diagnostics &&
+          typeof result.observation.diagnostics === "object" &&
+          !Array.isArray(result.observation.diagnostics)
+            ? result.observation.diagnostics
+            : null,
         runtimeError: null,
         observationSample: {
           startDate: result.observation.startDate,
@@ -1166,6 +1519,7 @@ async function runSingleQuoteRequestOnce(
         bookingElapsedMs: null,
         success: false,
         reason: error instanceof Error ? error.message : "single_quote_failed",
+        runtimeDiagnostics: null,
         runtimeError: {
           code: "RUNTIME_EXCEPTION",
           message:
@@ -1196,6 +1550,7 @@ async function runSingleQuoteRequestOnce(
     bookingElapsedMs: null,
     success: false,
     reason: `quote_runtime_not_implemented:${sample.adapterKey}`,
+    runtimeDiagnostics: null,
     runtimeError: {
       code: "RUNTIME_NOT_IMPLEMENTED",
       message: `quote_runtime_not_implemented:${sample.adapterKey}`,
@@ -1237,6 +1592,7 @@ async function runSingleQuoteRequestOnceWithTimeout(
         bookingElapsedMs: null,
         success: false,
         reason: `timeout_${timeoutMs}ms`,
+        runtimeDiagnostics: null,
         runtimeError: {
           code: "RUNNER_TIMEOUT",
           message: `timeout_${timeoutMs}ms`,
@@ -1281,6 +1637,7 @@ async function runSingleQuoteRequestOnceWithTimeout(
           success: false,
           reason:
             error instanceof Error ? error.message : "single_quote_failed",
+          runtimeDiagnostics: null,
           runtimeError: {
             code: "RUNNER_EXCEPTION",
             message:
@@ -1354,6 +1711,7 @@ async function runSingleQuoteRequest(
     bookingElapsedMs: null,
     success: false,
     reason: "all_windows_failed: no_valid_windows",
+    runtimeDiagnostics: null,
     runtimeError: {
       code: "NO_VALID_WINDOWS",
       message: "all_windows_failed: no_valid_windows",
@@ -1727,6 +2085,10 @@ function printPerAdapterListingLatencyTable(result: AdapterRunResult): void {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
+  if (options.traceTiming) {
+    process.env.LOCALVR30A_QUOTE_TRACE_LOG = "1";
+    process.env.LOCALVR30A_QUOTE_TRACE_STDOUT = "1";
+  }
   validateSingleModeInput(options);
 
   if (options.adapters.length === 0) {
@@ -1797,6 +2159,17 @@ async function main(): Promise<void> {
       });
     }
 
+    if (!options.jsonOutput) {
+      console.log(paint("Ad-hoc Single Quote Latency Analyzer", COLOR.bold));
+      console.log(
+        paint(
+          `mode=single adapter=${adapterKey} listing=${sample.listingId} start=${sample.startDate} end=${sample.endDate} random_single=${options.randomSingle} trace_timing=${options.traceTiming} single_timeout_ms=${DEFAULT_SINGLE_OBSERVATION_TIMEOUT_MS}`,
+          COLOR.dim,
+        ),
+      );
+      printExecutionContext(adapterKey);
+    }
+
     const result = await runSingleQuoteRequestOnceWithTimeout(sample, options);
     if (options.jsonOutput) {
       const baseTotal = result.observationSample.baseTotal;
@@ -1805,6 +2178,7 @@ async function main(): Promise<void> {
         typeof baseTotal === "number" && typeof feesTotal === "number"
           ? roundCurrency(baseTotal + feesTotal)
           : null;
+      const runtimeInsightsSummary = buildRuntimeInsightsSummary(result);
 
       console.log(
         JSON.stringify(
@@ -1823,6 +2197,7 @@ async function main(): Promise<void> {
               endDate: sample.endDate,
             },
             result,
+            runtimeInsightsSummary,
             pricing: {
               currency: result.observationSample.currency,
               baseTotal,
@@ -1842,19 +2217,13 @@ async function main(): Promise<void> {
         ),
       );
     } else {
-      console.log(paint("Ad-hoc Single Quote Latency Analyzer", COLOR.bold));
-      console.log(
-        paint(
-          `mode=single adapter=${adapterKey} listing=${sample.listingId} start=${sample.startDate} end=${sample.endDate} random_single=${options.randomSingle}`,
-          COLOR.dim,
-        ),
-      );
       printSingleQuoteReport({
         adapterKey,
         sample,
         result,
         adults: options.adults,
         children: options.children,
+        verboseRuntimeInsights: options.verboseRuntimeInsights,
       });
     }
 
@@ -1868,10 +2237,13 @@ async function main(): Promise<void> {
     console.log(paint("Ad-hoc Single Quote Latency Analyzer", COLOR.bold));
     console.log(
       paint(
-        `adapters=${adapters.join(",")} sample_listings=${options.sampleListings} repeats=${options.repeats} min_available_observations=${options.minAvailableObservations} include_booking_fetch=${options.includeBookingFetch} summary_only=${options.summaryOnly}`,
+        `adapters=${adapters.join(",")} sample_listings=${options.sampleListings} repeats=${options.repeats} min_available_observations=${options.minAvailableObservations} include_booking_fetch=${options.includeBookingFetch} summary_only=${options.summaryOnly} trace_timing=${options.traceTiming} single_timeout_ms=${DEFAULT_SINGLE_OBSERVATION_TIMEOUT_MS}`,
         COLOR.dim,
       ),
     );
+    for (const adapterKey of adapters) {
+      printExecutionContext(adapterKey);
+    }
   }
 
   const results: AdapterRunResult[] = [];
@@ -1912,6 +2284,8 @@ async function main(): Promise<void> {
             includeBookingFetch: options.includeBookingFetch,
             continueOnError: options.continueOnError,
             summaryOnly: options.summaryOnly,
+            traceTiming: options.traceTiming,
+            singleObservationTimeoutMs: DEFAULT_SINGLE_OBSERVATION_TIMEOUT_MS,
           },
           results,
           overall: {

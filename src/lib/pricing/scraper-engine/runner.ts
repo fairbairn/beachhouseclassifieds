@@ -1077,6 +1077,53 @@ function messageHasHttp403Signal(message: string): boolean {
   );
 }
 
+function extractPrimaryHttpStatusSignal(message: string): number | null {
+  const match = message.match(
+    /(?:http[_\s]?|status=|status\s+)(400|403|404|429|5\d{2})\b/i,
+  );
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+type DetailPullTelemetry = {
+  attemptedFetches: number;
+  successfulFetches: number;
+  failedFetches: number;
+  timeoutFailures: number;
+  challengeSignalFailures: number;
+  otherFailures: number;
+  recoveredOnRetry: number;
+  statusFailures: Record<string, number>;
+};
+
+function createDetailPullTelemetry(): DetailPullTelemetry {
+  return {
+    attemptedFetches: 0,
+    successfulFetches: 0,
+    failedFetches: 0,
+    timeoutFailures: 0,
+    challengeSignalFailures: 0,
+    otherFailures: 0,
+    recoveredOnRetry: 0,
+    statusFailures: {},
+  };
+}
+
+function incrementCounter(bucket: Record<string, number>, key: string): void {
+  bucket[key] = (bucket[key] ?? 0) + 1;
+}
+
+function countStatusFailures(
+  statusFailures: Record<string, number>,
+  status: number,
+): number {
+  return statusFailures[String(status)] ?? 0;
+}
+
 async function pullDetails<TDetail extends DetailRecordBase>(
   root: string,
   browser: ScraperBrowserLike,
@@ -1099,6 +1146,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
 ): Promise<{
   detailRecords: TDetail[];
   failedDetailUrls: string[];
+  telemetry: DetailPullTelemetry;
 }> {
   const detailResults: Array<TDetail | null> = new Array(urls.length).fill(
     null,
@@ -1113,7 +1161,9 @@ async function pullDetails<TDetail extends DetailRecordBase>(
   let processed = 0;
   let liveFailures = 0;
   let total403Failures = 0;
+  let total429Failures = 0;
   let consecutive403Failures = 0;
+  const telemetry = createDetailPullTelemetry();
   const pullStartedAtMs = Date.now();
   const workerCount = Math.min(detailFetchConcurrency, urls.length);
 
@@ -1169,14 +1219,24 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       const detailUrl = urls[currentIndex] as string;
       const existingArtifact = existingArtifactsByUrl?.get(detailUrl);
       let sawHttp403Signal = false;
+      let lastFailureSignal: string | null = null;
       const detailProgressReporter = (message: string): void => {
         if (messageHasHttp403Signal(message)) {
           sawHttp403Signal = true;
+        }
+        if (
+          extractPrimaryHttpStatusSignal(message) !== null ||
+          message.toLowerCase().includes("failed") ||
+          message.toLowerCase().includes("request_error") ||
+          message.toLowerCase().includes("challenge")
+        ) {
+          lastFailureSignal = message;
         }
         reportDetailProgress(message);
       };
       started += 1;
       inFlight += 1;
+      telemetry.attemptedFetches += 1;
       const detailStartedAtMs = Date.now();
       const fetchPromise = adapter.fetchDetail({
         browser,
@@ -1224,7 +1284,46 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       }
       processed += 1;
       if (!detail) {
+        telemetry.failedFetches += 1;
+        if (timed.timedOut) {
+          telemetry.timeoutFailures += 1;
+        }
         liveFailures += 1;
+        const primaryFailureStatus = lastFailureSignal
+          ? extractPrimaryHttpStatusSignal(lastFailureSignal)
+          : null;
+        if (primaryFailureStatus !== null) {
+          incrementCounter(
+            telemetry.statusFailures,
+            String(primaryFailureStatus),
+          );
+          if (primaryFailureStatus === 429) {
+            total429Failures += 1;
+            progress.failure(
+              `HTTP_429 listing=${detailUrl} total_429_failures=${total429Failures}`,
+            );
+          }
+        }
+        const hasChallengeSignal =
+          typeof lastFailureSignal === "string" &&
+          lastFailureSignal.toLowerCase().includes("challenge");
+        if (hasChallengeSignal) {
+          telemetry.challengeSignalFailures += 1;
+        }
+        if (
+          !timed.timedOut &&
+          primaryFailureStatus === null &&
+          !hasChallengeSignal
+        ) {
+          telemetry.otherFailures += 1;
+        }
+        if (lastFailureSignal) {
+          progress.failure(
+            buildTickLine(
+              `detail failed listing=${detailUrl} reason=${lastFailureSignal}`,
+            ),
+          );
+        }
         if (sawHttp403Signal) {
           total403Failures += 1;
           consecutive403Failures += 1;
@@ -1240,6 +1339,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
           consecutive403Failures = 0;
         }
       } else {
+        telemetry.successfulFetches += 1;
         consecutive403Failures = 0;
       }
       if (processed <= 20 || processed % 5 === 0 || processed === urls.length) {
@@ -1287,9 +1387,18 @@ async function pullDetails<TDetail extends DetailRecordBase>(
       for (const detailUrl of pending) {
         const existingArtifact = existingArtifactsByUrl?.get(detailUrl);
         let sawHttp403Signal = false;
+        let lastFailureSignal: string | null = null;
         const detailProgressReporter = (message: string): void => {
           if (messageHasHttp403Signal(message)) {
             sawHttp403Signal = true;
+          }
+          if (
+            extractPrimaryHttpStatusSignal(message) !== null ||
+            message.toLowerCase().includes("failed") ||
+            message.toLowerCase().includes("request_error") ||
+            message.toLowerCase().includes("challenge")
+          ) {
+            lastFailureSignal = message;
           }
           reportDetailProgress(message);
         };
@@ -1304,9 +1413,49 @@ async function pullDetails<TDetail extends DetailRecordBase>(
           reportDetailProgress: detailProgressReporter,
         });
 
+        telemetry.attemptedFetches += 1;
         const timed = await runTimedDetailFetch(fetchPromise, detailTimeoutMs);
         if (timed.timedOut || !timed.detail) {
+          telemetry.failedFetches += 1;
+          if (timed.timedOut) {
+            telemetry.timeoutFailures += 1;
+          }
           nextPending.push(detailUrl);
+          const primaryFailureStatus = lastFailureSignal
+            ? extractPrimaryHttpStatusSignal(lastFailureSignal)
+            : null;
+          if (primaryFailureStatus !== null) {
+            incrementCounter(
+              telemetry.statusFailures,
+              String(primaryFailureStatus),
+            );
+            if (primaryFailureStatus === 429) {
+              total429Failures += 1;
+              progress.failure(
+                `HTTP_429 retry_attempt=${attempt} listing=${detailUrl} total_429_failures=${total429Failures}`,
+              );
+            }
+          }
+          const hasChallengeSignal =
+            typeof lastFailureSignal === "string" &&
+            lastFailureSignal.toLowerCase().includes("challenge");
+          if (hasChallengeSignal) {
+            telemetry.challengeSignalFailures += 1;
+          }
+          if (
+            !timed.timedOut &&
+            primaryFailureStatus === null &&
+            !hasChallengeSignal
+          ) {
+            telemetry.otherFailures += 1;
+          }
+          if (lastFailureSignal) {
+            progress.failure(
+              buildTickLine(
+                `retry detail failed attempt=${attempt} listing=${detailUrl} reason=${lastFailureSignal}`,
+              ),
+            );
+          }
           if (sawHttp403Signal) {
             total403Failures += 1;
             consecutive403Failures += 1;
@@ -1327,6 +1476,8 @@ async function pullDetails<TDetail extends DetailRecordBase>(
             ),
           );
         } else {
+          telemetry.successfulFetches += 1;
+          telemetry.recoveredOnRetry += 1;
           const detail = timed.detail;
           consecutive403Failures = 0;
           const detailForStorage = {
@@ -1374,7 +1525,7 @@ async function pullDetails<TDetail extends DetailRecordBase>(
     }
   }
 
-  return { detailRecords, failedDetailUrls };
+  return { detailRecords, failedDetailUrls, telemetry };
 }
 
 export async function runScraperEngine<TDetail extends DetailRecordBase>(
@@ -1397,7 +1548,9 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
   const detailProgressStartedAtMs = Date.now();
   const reportDetailProgress = (message: string): void => {
     const lowered = message.toLowerCase();
+    const primaryHttpStatus = extractPrimaryHttpStatusSignal(message);
     const isCriticalSignal =
+      primaryHttpStatus !== null ||
       messageHasHttp403Signal(message) ||
       lowered.includes("challenge") ||
       lowered.includes("failed") ||
@@ -1411,7 +1564,10 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
           completed: 0,
           total: 0,
           startedAtMs: detailProgressStartedAtMs,
-          text: message,
+          text:
+            primaryHttpStatus !== null
+              ? `HTTP_${primaryHttpStatus} ${message}`
+              : message,
         }),
       );
       return;
@@ -1683,7 +1839,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
 
       const refreshPullStartedAt = Date.now();
 
-      const { detailRecords, failedDetailUrls } = await pullDetails(
+      const { detailRecords, failedDetailUrls, telemetry } = await pullDetails(
         root,
         browser,
         urlsToPull,
@@ -1703,6 +1859,17 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
         failFast403ConsecutiveThreshold,
         existingArtifacts,
       );
+      const detailFailureRatePct =
+        urlsToPull.length > 0
+          ? Math.round((failedDetailUrls.length / urlsToPull.length) * 1000) /
+            10
+          : 0;
+      const detailAttemptFailureRatePct =
+        telemetry.attemptedFetches > 0
+          ? Math.round(
+              (telemetry.failedFetches / telemetry.attemptedFetches) * 1000,
+            ) / 10
+          : 0;
 
       const refreshPullElapsedMs = Date.now() - refreshPullStartedAt;
       const refreshPullElapsedSeconds = Math.max(
@@ -1722,6 +1889,9 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
 
       progress.info(
         `refresh pull metrics: elapsed_s=${refreshPullElapsedSeconds}, pulled=${detailRecords.length}, failed=${failedDetailUrls.length}, throughput_per_min=${throughputPerMinute}, avg_s_per_pulled=${avgSecondsPerPulled ?? "n/a"}`,
+      );
+      progress.info(
+        `detail failure metrics: final_failed=${failedDetailUrls.length}/${urlsToPull.length} (${detailFailureRatePct}%), fetch_failures=${telemetry.failedFetches}/${telemetry.attemptedFetches} (${detailAttemptFailureRatePct}%), recovered_on_retry=${telemetry.recoveredOnRetry}, timeout_failures=${telemetry.timeoutFailures}, http_403_failures=${countStatusFailures(telemetry.statusFailures, 403)}, http_429_failures=${countStatusFailures(telemetry.statusFailures, 429)}, challenge_signal_failures=${telemetry.challengeSignalFailures}, other_failures=${telemetry.otherFailures}`,
       );
 
       const reportPath = resolve(
@@ -1747,10 +1917,28 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
             detail_pages_skipped_fresh: skippedFreshUrls.length,
             detail_pages_pulled: detailRecords.length,
             detail_pages_failed: failedDetailUrls.length,
+            detail_failure_rate_pct: detailFailureRatePct,
             pull_elapsed_ms: refreshPullElapsedMs,
             pull_throughput_per_minute: throughputPerMinute,
             pull_avg_seconds_per_detail:
               avgSecondsPerPulled === null ? null : avgSecondsPerPulled,
+            detail_fetch_attempts: telemetry.attemptedFetches,
+            detail_fetch_successes: telemetry.successfulFetches,
+            detail_fetch_failures: telemetry.failedFetches,
+            detail_fetch_failure_rate_pct: detailAttemptFailureRatePct,
+            detail_retry_recovered_count: telemetry.recoveredOnRetry,
+            detail_timeout_failures: telemetry.timeoutFailures,
+            detail_status_failures: telemetry.statusFailures,
+            detail_http_403_failures: countStatusFailures(
+              telemetry.statusFailures,
+              403,
+            ),
+            detail_http_429_failures: countStatusFailures(
+              telemetry.statusFailures,
+              429,
+            ),
+            detail_challenge_signal_failures: telemetry.challengeSignalFailures,
+            detail_other_failures: telemetry.otherFailures,
             failed_detail_urls: failedDetailUrls,
             skipped_existing_urls: skippedExistingUrls,
             skipped_fresh_urls: skippedFreshUrls,
@@ -1785,6 +1973,16 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       progress.info(`- detail_pages_skipped_fresh: ${skippedFreshUrls.length}`);
       progress.info(`- detail_pages_pulled: ${detailRecords.length}`);
       progress.info(`- detail_pages_failed: ${failedDetailUrls.length}`);
+      progress.info(`- detail_failure_rate_pct: ${detailFailureRatePct}`);
+      progress.info(
+        `- detail_http_403_failures: ${countStatusFailures(telemetry.statusFailures, 403)}`,
+      );
+      progress.info(
+        `- detail_http_429_failures: ${countStatusFailures(telemetry.statusFailures, 429)}`,
+      );
+      progress.info(
+        `- detail_retry_recovered_count: ${telemetry.recoveredOnRetry}`,
+      );
       progress.info(`- pull_elapsed_ms: ${refreshPullElapsedMs}`);
       progress.info(`- pull_throughput_per_minute: ${throughputPerMinute}`);
       progress.info(
@@ -1856,6 +2054,7 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     const selectedUrls = subsetRows.map((row) => row.link);
     let detailRecords: TDetail[] = [];
     let failedDetailUrls: string[] = [];
+    let detailTelemetry = createDetailPullTelemetry();
 
     if (!options.discoverOnly) {
       progress.phase(
@@ -1883,6 +2082,15 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       );
       detailRecords = pulled.detailRecords;
       failedDetailUrls = pulled.failedDetailUrls;
+      detailTelemetry = pulled.telemetry;
+      const detailFailureRatePct =
+        selectedUrls.length > 0
+          ? Math.round((failedDetailUrls.length / selectedUrls.length) * 1000) /
+            10
+          : 0;
+      progress.info(
+        `detail failure metrics: final_failed=${failedDetailUrls.length}/${selectedUrls.length} (${detailFailureRatePct}%), fetch_failures=${detailTelemetry.failedFetches}/${detailTelemetry.attemptedFetches}, recovered_on_retry=${detailTelemetry.recoveredOnRetry}, timeout_failures=${detailTelemetry.timeoutFailures}, http_403_failures=${countStatusFailures(detailTelemetry.statusFailures, 403)}, http_429_failures=${countStatusFailures(detailTelemetry.statusFailures, 429)}, challenge_signal_failures=${detailTelemetry.challengeSignalFailures}, other_failures=${detailTelemetry.otherFailures}`,
+      );
     } else {
       progress.phase("discover-only mode: skipping detail page pulls");
     }
@@ -1897,6 +2105,22 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
       is_subset_mode: isSubsetMode,
       detail_pages_pulled: detailRecords.length,
       detail_pages_failed: failedDetailUrls.length,
+      detail_fetch_attempts: detailTelemetry.attemptedFetches,
+      detail_fetch_successes: detailTelemetry.successfulFetches,
+      detail_fetch_failures: detailTelemetry.failedFetches,
+      detail_timeout_failures: detailTelemetry.timeoutFailures,
+      detail_retry_recovered_count: detailTelemetry.recoveredOnRetry,
+      detail_status_failures: detailTelemetry.statusFailures,
+      detail_http_403_failures: countStatusFailures(
+        detailTelemetry.statusFailures,
+        403,
+      ),
+      detail_http_429_failures: countStatusFailures(
+        detailTelemetry.statusFailures,
+        429,
+      ),
+      detail_challenge_signal_failures: detailTelemetry.challengeSignalFailures,
+      detail_other_failures: detailTelemetry.otherFailures,
       failed_detail_urls: failedDetailUrls,
       links: subsetRows,
     };

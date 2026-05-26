@@ -42,6 +42,25 @@ Workarounds used:
 - Re-run targeted direct-detail pulls for non-`Oops` empty-day outliers before treating as parser failures.
 - Maintain live progress output for verification and adapter-wide refresh runs to surface stalled or slow listings quickly.
 
+## LocalVR (Guesty/Next) Quote Runtime and Challenge Behavior
+
+Observed:
+
+- Provider flow is effectively mixed-mode: initial page/session bootstrapping via browser, then quote attempts via API endpoint calls.
+- Security/challenge posture can vary per request window (intermittent challenge surfaces and request-level anti-bot behavior).
+- Some listings return persistent quote `HTTP 400` across sampled windows while still exposing valid detail and availability artifacts.
+- Two LocalVR listings are currently known to produce quote sidecars with zero observations despite repeated attempts:
+	- `blue-bird-beach-gulf-view-pool-6779f90068c10f0010a4aba2`
+	- `shore-me-the-way-close-to-beach-bikes-6779f9e8a238c10011093d23`
+
+Workarounds used:
+
+- CloakBrowser-backed runtime path for quote capture was adopted for LocalVR due repeatable anti-bot friction in default browser paths.
+- Keep profile lifecycle explicit (pre/post cleanup) to limit stale-session contamination between runs.
+- Run full-pass quote capture with explicit scope (`--all-listings`) and then resume interrupted runs with freshness skip (`--skip-fresh-quotes --fresh-hours 24`).
+- Treat persistent `HTTP 400` windows as unavailable outcomes at runtime, but track validator behavior separately because zero-observation sidecars still fail strict quote-sidecar validation.
+- Use adapter-suite validation after quote/cache passes to surface these residual sidecar-contract edge cases immediately.
+
 ## exclusive30a Checkout Cookie Gate
 
 Observed:

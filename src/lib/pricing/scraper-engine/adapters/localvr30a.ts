@@ -5,7 +5,39 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
+import type { ScraperBrowserPageLike } from "../shared/browser-engine";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+
+type LocalVrResponseLike = {
+  url(): string;
+  json(): Promise<unknown>;
+};
+
+type LocalVrLocatorLike = {
+  count(): Promise<number>;
+  click(options?: { timeout?: number }): Promise<void>;
+  waitFor(options?: { timeout?: number }): Promise<void>;
+  isEnabled(): Promise<boolean>;
+};
+
+type LocalVrPage = ScraperBrowserPageLike & {
+  waitForTimeout(ms: number): Promise<void>;
+  evaluate(expression: string): Promise<unknown>;
+  evaluate<TResult>(
+    pageFunction: () => TResult | Promise<TResult>,
+  ): Promise<TResult>;
+  evaluate<TArg, TResult>(
+    pageFunction: (arg: TArg) => TResult | Promise<TResult>,
+    arg: TArg,
+  ): Promise<TResult>;
+  locator(selector: string): {
+    first(): LocalVrLocatorLike;
+  };
+  mouse: {
+    wheel(deltaX: number, deltaY: number): Promise<void>;
+  };
+  on(event: "response", handler: (response: LocalVrResponseLike) => void): void;
+};
 
 type LocalVrDayCode = "A" | "U" | "I" | "O" | "X";
 type CanonicalDayCode = "Y" | "N";
@@ -101,7 +133,7 @@ type LocalVrDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
-  rooms_guidance: false;
+  rooms_guidance: false | string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -203,9 +235,15 @@ type GuestyProperty = {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://stay.golocalvr.com/listings?city=Inlet+Beach%2CRosemary+Beach%2CSanta+Rosa+Beach%2CSeacrest%2CSeagrove%2CWatersound&guests=1&view=list&adults=1&children=0&infants=0";
+  "https://stay.golocalvr.com/listings?guests=1&view=list&adults=1&children=0&infants=0&city=Inlet+Beach%2CPanama+City+Beach%2CSanta+Rosa+Beach%2CSeacrest%2CSeagrove%2CWatersound";
 
-const EXPECTED_LISTING_COUNT = 42;
+const EXPECTED_LISTING_COUNT = Math.max(
+  1,
+  Number(process.env.LOCALVR30A_EXPECTED_LISTING_COUNT ?? "33") || 33,
+);
+
+const LISTINGS_SCROLL_CONTAINER_SELECTOR =
+  "body > div.css-galqmk > div.css-jdlggv > div.css-bajvrw > div > div:nth-child(2) > div > div";
 
 const OUTPUT_ROOT = resolve(
   process.cwd(),
@@ -219,6 +257,7 @@ const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 
 const AVAILABILITY_VALIDATION_EXEMPT_EXTERNAL_LISTING_IDS = new Set<string>([
   "blue-bird-beach-gulf-view-pool-6779f90068c10f0010a4aba2",
+  "shore-me-the-way-close-to-beach-bikes-6779f9e8a238c10011093d23",
 ]);
 
 function normalizeForMatch(value: string): string {
@@ -241,6 +280,114 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+async function extractRoomDetailsGuidanceFromDom(
+  page: LocalVrPage,
+): Promise<string[]> {
+  // Nudge lazy-rendered middle-page sections (like Room Details cards) into the DOM.
+  for (let pass = 0; pass < 8; pass += 1) {
+    await page.mouse.wheel(0, 850);
+    await page.waitForTimeout(180);
+  }
+
+  await page.mouse.wheel(0, -1800);
+  await page.waitForTimeout(220);
+  await page.waitForTimeout(250);
+
+  const extractionScript = `(() => {
+    const normalize = (value) => String(value || "").replace(/\\s+/g, " ").trim();
+    const headingPattern = /(room\\s*details|sleeping\\s*arrangements|where\\s+you'?ll\\s+sleep)/i;
+    const roomHeaderPattern = /(primary|master|guest|kids?|bunk|loft)?\\s*bed(room)?\\s*\\d*/i;
+    const bedPattern = /(\\b\\d+\\b\\s*(x\\s*)?)?(king|queen|full|double|single|twin|bunk|sofa\\s*bed|sleeper|trundle|murphy)\\b/i;
+    const fallbackSelector = "body > div.css-galqmk > div.css-14lsfut > div.css-1blxm46 > div.css-fyk824 > section:nth-child(5)";
+
+    const seen = new Set();
+    const lines = [];
+    const push = (value) => {
+      const normalized = normalize(value);
+      if (!normalized || normalized.length < 3 || normalized.length > 180) return;
+      if (headingPattern.test(normalized)) return;
+      if (!bedPattern.test(normalized) && !roomHeaderPattern.test(normalized)) return;
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      lines.push(normalized);
+    };
+
+    const roomSectionFromHeading = Array.from(document.querySelectorAll("section")).find((section) => {
+      const h3 = section.querySelector("h3.chakra-heading, h3[class*='chakra-heading'], h3");
+      return headingPattern.test(normalize(h3 && h3.textContent));
+    });
+
+    const headingNode = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, [role='heading']")).find((node) =>
+      headingPattern.test(normalize(node && node.textContent)),
+    );
+
+    const roomSection =
+      roomSectionFromHeading ||
+      (headingNode ? headingNode.closest("section") : null) ||
+      document.querySelector(fallbackSelector);
+
+    if (roomSection) {
+      const roomHeadings = Array.from(
+        roomSection.querySelectorAll("h5.chakra-heading, h5[class*='chakra-heading'], h5"),
+      );
+
+      for (const heading of roomHeadings) {
+        const roomTitle = normalize(heading.textContent);
+        if (!roomTitle) continue;
+        const cardRoot = heading.closest("div") || heading.parentElement;
+        if (!cardRoot) continue;
+        const bedLines = Array.from(
+          cardRoot.querySelectorAll("p.chakra-text, p[class*='chakra-text'], p"),
+        )
+          .map((node) => normalize(node.textContent))
+          .filter((line) => line.length > 0 && bedPattern.test(line));
+
+        if (bedLines.length === 0) {
+          push(roomTitle);
+          continue;
+        }
+
+        for (const bedLine of bedLines) {
+          push(roomTitle + ": " + bedLine);
+        }
+      }
+
+      if (lines.length === 0) {
+        const sectionLines = normalize(roomSection.innerText || "")
+          .split(/\\s*\\n+\\s*/)
+          .map((line) => normalize(line));
+        for (const line of sectionLines) {
+          push(line);
+        }
+      }
+    }
+
+    if (lines.length === 0) {
+      const globalLines = (document.body && document.body.innerText ? document.body.innerText : "")
+        .split(/\\n+/)
+        .map((line) => normalize(line))
+        .filter((line) => line.length > 0 && line.length <= 180);
+      for (const line of globalLines) {
+        if (roomHeaderPattern.test(line) || bedPattern.test(line)) {
+          push(line);
+        }
+      }
+    }
+
+    return lines.slice(0, 30);
+  })()`;
+
+  const roomLinesResult = await page.evaluate(extractionScript);
+  if (!Array.isArray(roomLinesResult)) {
+    return [];
+  }
+
+  return roomLinesResult.filter(
+    (entry): entry is string => typeof entry === "string",
+  );
 }
 
 function extractNamePrefixBeforePipeOrHyphen(value: string): string {
@@ -416,6 +563,73 @@ function isUnavailableDetailHtml(html: string): boolean {
     title === "localvr" ||
     metaDescription.includes("property you are looking for is not available")
   );
+}
+
+function hasVercelCheckpointSignal(input: {
+  html: string;
+  url?: string;
+}): boolean {
+  const normalizedHtml = input.html.toLowerCase();
+  const normalizedUrl = (input.url ?? "").toLowerCase();
+
+  if (normalizedUrl.includes("security-checkpoint")) {
+    return true;
+  }
+
+  if (
+    normalizedHtml.includes("vercel security checkpoint") ||
+    (normalizedHtml.includes("security checkpoint") &&
+      normalizedHtml.includes("vercel"))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+async function waitForCheckpointRedirect(input: {
+  page: LocalVrPage;
+  detailUrl: string;
+  logStage: (stage: string, message: string) => void;
+}): Promise<{ detected: boolean; resolved: boolean; finalUrl: string }> {
+  let detected = false;
+
+  for (let attempt = 1; attempt <= 12; attempt += 1) {
+    const currentUrl = input.page.url();
+    let currentHtml = "";
+    try {
+      currentHtml = await input.page.content();
+    } catch {
+      currentHtml = "";
+    }
+
+    const checkpointDetected = hasVercelCheckpointSignal({
+      html: currentHtml,
+      url: currentUrl,
+    });
+
+    if (!checkpointDetected) {
+      return {
+        detected,
+        resolved: detected,
+        finalUrl: currentUrl,
+      };
+    }
+
+    detected = true;
+    input.logStage(
+      "SECURITY_CHECKPOINT",
+      `detected attempt=${attempt} current_url=${currentUrl}; waiting for redirect`,
+    );
+
+    await input.page.waitForTimeout(500);
+  }
+
+  return {
+    detected,
+    resolved: false,
+    finalUrl: input.page.url(),
+  };
 }
 
 function slugify(value: string): string {
@@ -760,9 +974,7 @@ function parseCalendarAriaLabelToIso(label: string): string | null {
 }
 
 async function extractAvailabilityFromCalendarDom(
-  page: Parameters<
-    ScraperAdapter<LocalVrDetailRecord>["discoverListings"]
-  >[0]["page"],
+  page: LocalVrPage,
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
 ): Promise<{
@@ -784,22 +996,43 @@ async function extractAvailabilityFromCalendarDom(
     "[role='button']:has-text('Select Date')",
   ];
 
-  let opened = false;
-  for (const selector of openSelectors) {
-    const control = page.locator(selector).first();
-    if ((await control.count()) === 0) {
+  const openCalendar = async (): Promise<boolean> => {
+    for (const selector of openSelectors) {
+      const control = page.locator(selector).first();
+      if ((await control.count()) === 0) {
+        continue;
+      }
+      try {
+        await control.click({ timeout: 2000 });
+        return true;
+      } catch {
+        // Try alternate selectors.
+      }
+    }
+
+    return false;
+  };
+
+  let calendarReady = false;
+  for (let openAttempt = 0; openAttempt < 2; openAttempt += 1) {
+    const opened = await openCalendar();
+    if (!opened) {
       continue;
     }
+
     try {
-      await control.click({ timeout: 2000 });
-      opened = true;
+      await page
+        .locator(".rdp-day_button,[role='gridcell'] button[aria-label]")
+        .first()
+        .waitFor({ timeout: openAttempt === 0 ? 3500 : 5200 });
+      calendarReady = true;
       break;
     } catch {
-      // Try alternate selectors.
+      await page.waitForTimeout(350);
     }
   }
 
-  if (!opened) {
+  if (!calendarReady) {
     return {
       days: [],
       dayCodes: "",
@@ -807,32 +1040,15 @@ async function extractAvailabilityFromCalendarDom(
     };
   }
 
-  try {
-    await page
-      .locator(".rdp-day_button,[role='gridcell'] button[aria-label]")
-      .first()
-      .waitFor({ timeout: 3500 });
-  } catch {
-    return {
-      days: [],
-      dayCodes: "",
-      observedStatusLabels: [],
-    };
-  }
-
-  const dayByDate = new Map<
-    string,
-    LocalVrDetailRecord["normalized_availability"]["days"][number]
-  >();
-  const observedStatusLabels = new Set<string>();
-  let maxSeenDate = "";
-
-  for (
-    let monthStep = 0;
-    monthStep < maxCalendarAdvanceMonths;
-    monthStep += 1
-  ) {
-    const snapshot = await page.evaluate(() => {
+  const readCalendarSnapshot = async (): Promise<{
+    entries: Array<{
+      ariaLabel: string;
+      disabled: boolean;
+      className: string;
+    }>;
+    signature: string;
+  }> =>
+    page.evaluate(() => {
       const rows = Array.from(document.querySelectorAll(".rdp-day"));
       const entries = rows
         .map((row) => {
@@ -873,6 +1089,24 @@ async function extractAvailabilityFromCalendarDom(
           .join("|"),
       };
     });
+
+  const dayByDate = new Map<
+    string,
+    LocalVrDetailRecord["normalized_availability"]["days"][number]
+  >();
+  const observedStatusLabels = new Set<string>();
+  let maxSeenDate = "";
+
+  for (
+    let monthStep = 0;
+    monthStep < maxCalendarAdvanceMonths;
+    monthStep += 1
+  ) {
+    let snapshot = await readCalendarSnapshot();
+    if (snapshot.entries.length === 0 && monthStep === 0) {
+      await page.waitForTimeout(450);
+      snapshot = await readCalendarSnapshot();
+    }
 
     for (const entry of snapshot.entries) {
       const dateIso = parseCalendarAriaLabelToIso(entry.ariaLabel);
@@ -954,7 +1188,7 @@ async function extractAvailabilityFromCalendarDom(
     await page.waitForTimeout(180);
 
     const signatureChanged = await page
-      .evaluate((priorSignature) => {
+      .evaluate((priorSignature: string) => {
         const rows = Array.from(document.querySelectorAll(".rdp-day"));
         const labels = rows
           .map((row) => {
@@ -1033,9 +1267,7 @@ function buildDetailUrlFromProperty(property: GuestyProperty): string | null {
 }
 
 async function discoverListings(
-  page: Parameters<
-    ScraperAdapter<LocalVrDetailRecord>["discoverListings"]
-  >[0]["page"],
+  page: LocalVrPage,
   anchorUrl: string,
   maxScrollSteps: number,
   scrollPauseMs: number,
@@ -1096,9 +1328,10 @@ async function discoverListings(
   await page.waitForTimeout(Math.max(1500, scrollPauseMs * 2));
 
   const ingestFromDom = async (): Promise<number> => {
-    const links = await page.evaluate(() => {
+    const links = await page.evaluate((containerSelector) => {
       const values = new Set<string>();
-      for (const anchor of Array.from(document.querySelectorAll("a[href]"))) {
+      const root = document.querySelector(containerSelector) ?? document;
+      for (const anchor of Array.from(root.querySelectorAll("a[href]"))) {
         const href = anchor.getAttribute("href") || "";
         if (!href) {
           continue;
@@ -1123,7 +1356,7 @@ async function discoverListings(
       }
 
       return Array.from(values);
-    });
+    }, LISTINGS_SCROLL_CONTAINER_SELECTOR);
 
     let added = 0;
     for (const link of links) {
@@ -1146,8 +1379,13 @@ async function discoverListings(
 
   let noGrowthRounds = 0;
   for (let step = 0; step < maxScrollSteps; step += 1) {
-    await page.evaluate(() => {
+    await page.evaluate((containerSelector) => {
       window.scrollTo(0, document.body.scrollHeight);
+
+      const explicitContainer = document.querySelector(containerSelector);
+      if (explicitContainer instanceof HTMLElement) {
+        explicitContainer.scrollTop = explicitContainer.scrollHeight;
+      }
 
       const scrollables = Array.from(document.querySelectorAll("*")).filter(
         (node) => {
@@ -1169,7 +1407,7 @@ async function discoverListings(
         }
         node.scrollTop = node.scrollHeight;
       }
-    });
+    }, LISTINGS_SCROLL_CONTAINER_SELECTOR);
 
     await page.mouse.wheel(0, 2600);
     await page.waitForTimeout(Math.max(700, scrollPauseMs));
@@ -1246,50 +1484,100 @@ async function fetchDetail(
   detailUrl: string,
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
+  refreshMode: "full" | "dynamic" | "static",
+  reportDetailProgress?: (message: string) => void,
 ): Promise<LocalVrDetailRecord | null> {
   const normalizedDetailUrl = normalizeDetailUrl(detailUrl);
   if (!normalizedDetailUrl) {
     return null;
   }
 
-  const page = await browser.newPage();
+  const { externalListingId: listingIdFromUrl } =
+    extractPropertySlugAndId(normalizedDetailUrl);
+  const logStage = (stage: string, message: string): void => {
+    if (!reportDetailProgress) {
+      return;
+    }
+    reportDetailProgress(
+      `detail ${listingIdFromUrl} [mode=${refreshMode}] [${stage}] ${message}`,
+    );
+  };
+
+  const page = (await browser.newPage()) as LocalVrPage;
 
   try {
-    await page.goto(normalizedDetailUrl, {
+    const response = await page.goto(normalizedDetailUrl, {
       waitUntil: "domcontentloaded",
       timeout: 120000,
     });
+    const detailStatus = response?.status() ?? null;
+    const finalUrl = page.url();
+
+    if (detailStatus !== 200) {
+      logStage(
+        "DETAIL_GATE",
+        `detail gate failed detail_url=${normalizedDetailUrl} status=${String(detailStatus)} final_url=${finalUrl}`,
+      );
+      return null;
+    }
 
     await page.waitForTimeout(1200);
 
+    const checkpointResult = await waitForCheckpointRedirect({
+      page,
+      detailUrl: normalizedDetailUrl,
+      logStage,
+    });
+    if (checkpointResult.detected && !checkpointResult.resolved) {
+      logStage(
+        "DETAIL_GATE",
+        `security checkpoint persisted without redirect detail_url=${normalizedDetailUrl} final_url=${checkpointResult.finalUrl}`,
+      );
+      return null;
+    }
+
     for (let cycle = 0; cycle < 3; cycle += 1) {
-      const clicks = await page.evaluate(() => {
-        let count = 0;
-        const nodes = Array.from(
-          document.querySelectorAll("button, a, [role='button']"),
-        );
-        for (const node of nodes) {
-          const element = node as HTMLElement;
-          if (element.offsetParent === null) {
-            continue;
+      let clicks = 0;
+      try {
+        clicks = await page.evaluate(() => {
+          let count = 0;
+          const nodes = Array.from(
+            document.querySelectorAll("button, a, [role='button']"),
+          );
+          for (const node of nodes) {
+            const element = node as HTMLElement;
+            if (element.offsetParent === null) {
+              continue;
+            }
+            const text =
+              `${element.textContent || ""} ${element.getAttribute("aria-label") || ""}`
+                .toLowerCase()
+                .replace(/\s+/g, " ")
+                .trim();
+            if (text.includes("read more") || text.includes("show more")) {
+              element.click();
+              count += 1;
+            }
           }
-          const text =
-            `${element.textContent || ""} ${element.getAttribute("aria-label") || ""}`
-              .toLowerCase()
-              .replace(/\s+/g, " ")
-              .trim();
-          if (text.includes("read more") || text.includes("show more")) {
-            element.click();
-            count += 1;
-          }
-        }
-        return count;
-      });
+          return count;
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logStage("READMORE_EVAL_ERROR", `message=${message}`);
+        break;
+      }
 
       if (clicks === 0) {
         break;
       }
-      await page.waitForTimeout(280);
+
+      try {
+        await page.waitForTimeout(280);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logStage("READMORE_WAIT_ERROR", `message=${message}`);
+        break;
+      }
     }
 
     const html = await page.content();
@@ -1297,25 +1585,72 @@ async function fetchDetail(
 
     if (isUnavailableDetailHtml(htmlForParsing)) {
       try {
-        const fallbackResponse = await fetch(normalizedDetailUrl, {
-          method: "GET",
-          headers: {
-            "user-agent":
-              "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            accept:
-              "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        const fallbackResponse = (await page.evaluate(
+          async (payload: { detailUrl: string; referer: string }) => {
+            try {
+              const request = await fetch(payload.detailUrl, {
+                method: "GET",
+                credentials: "include",
+                headers: {
+                  accept:
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                  referer: payload.referer,
+                },
+              });
+
+              return {
+                ok: request.ok,
+                status: request.status,
+                text: await request.text(),
+                error: null,
+              };
+            } catch (error: unknown) {
+              return {
+                ok: false,
+                status: 0,
+                text: "",
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "fallback_fetch_failed",
+              };
+            }
+          },
+          {
+            detailUrl: normalizedDetailUrl,
             referer: DEFAULT_ANCHOR_URL,
           },
-        });
+        )) as {
+          ok: boolean;
+          status: number;
+          text: string;
+          error: string | null;
+        };
 
         if (fallbackResponse.ok) {
-          const fallbackHtml = await fallbackResponse.text();
-          if (!isUnavailableDetailHtml(fallbackHtml)) {
-            htmlForParsing = fallbackHtml;
+          if (!isUnavailableDetailHtml(fallbackResponse.text)) {
+            htmlForParsing = fallbackResponse.text;
+            logStage(
+              "FALLBACK_FETCH",
+              `used browser-session fallback status=${fallbackResponse.status}`,
+            );
+          } else {
+            logStage(
+              "FALLBACK_FETCH",
+              `fallback returned unavailable shell status=${fallbackResponse.status}`,
+            );
           }
+        } else {
+          logStage(
+            "FALLBACK_FETCH_ERROR",
+            `status=${fallbackResponse.status} error=${fallbackResponse.error ?? "request_failed"}`,
+          );
         }
       } catch {
-        // Keep original Playwright HTML if fallback request fails.
+        logStage(
+          "FALLBACK_FETCH_ERROR",
+          "exception during browser-session fallback fetch",
+        );
       }
     }
 
@@ -1342,26 +1677,44 @@ async function fetchDetail(
         htmlForParsing,
       ).slice(0, 2000);
 
-    const summaryText = await page.evaluate(() => {
-      const sections = Array.from(document.querySelectorAll("section, div"));
-      for (const section of sections) {
-        const header = section.querySelector("h2, h3, h4");
-        if (!header) {
-          continue;
-        }
-        const headerText = (header.textContent || "").toLowerCase().trim();
-        if (headerText !== "summary") {
-          continue;
+    let summaryText = "";
+    try {
+      summaryText = await page.evaluate(() => {
+        const sections = Array.from(document.querySelectorAll("section, div"));
+        for (const section of sections) {
+          const header = section.querySelector("h2, h3, h4");
+          if (!header) {
+            continue;
+          }
+          const headerText = (header.textContent || "").toLowerCase().trim();
+          if (headerText !== "summary") {
+            continue;
+          }
+
+          const text = (section.textContent || "").replace(/\s+/g, " ").trim();
+          if (text.length > 40) {
+            return text;
+          }
         }
 
-        const text = (section.textContent || "").replace(/\s+/g, " ").trim();
-        if (text.length > 40) {
-          return text;
-        }
-      }
+        return "";
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logStage("SUMMARY_EVAL_ERROR", `message=${message}`);
+    }
 
-      return "";
-    });
+    let roomsGuidance: string[] = [];
+    try {
+      roomsGuidance = await extractRoomDetailsGuidanceFromDom(page);
+      logStage(
+        "ROOM_DETAILS_EXTRACT",
+        `count=${roomsGuidance.length} preview=${roomsGuidance.slice(0, 6).join(" || ") || "none"}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logStage("ROOM_DETAILS_EVAL_ERROR", `message=${message}`);
+    }
 
     const { externalListingId, listingId } =
       extractPropertySlugAndId(normalizedDetailUrl);
@@ -1518,6 +1871,14 @@ async function fetchDetail(
 
     availability.days = normalizeAvailabilityDays(availability.days);
     if (availability.days.length === 0) {
+      const checkpointSeen = hasVercelCheckpointSignal({
+        html: htmlForParsing,
+        url: page.url(),
+      });
+      logStage(
+        "AVAILABILITY_EMPTY",
+        `availability extraction failed (no days) status_labels=${availability.observedStatusLabels.join("|") || "none"} checkpoint_detected=${checkpointSeen ? "yes" : "no"}`,
+      );
       console.warn(
         `localvr30a availability extraction failed (no days) for ${normalizedDetailUrl}`,
       );
@@ -1578,7 +1939,7 @@ async function fetchDetail(
       canonical_url: canonicalUrl,
       meta_description: metaDescription,
       description_expanded: descriptionExpanded,
-      rooms_guidance: false,
+      rooms_guidance: roomsGuidance.length > 0 ? roomsGuidance : false,
       amenities: {
         categories: amenitiesCategories,
         all: amenitiesAll,
@@ -1672,6 +2033,7 @@ async function fetchDetail(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    logStage("REQUEST_ERROR", `message=${message}`);
     console.warn(
       `localvr30a fetchDetail failed for ${normalizedDetailUrl}: ${message}`,
     );
@@ -1686,6 +2048,7 @@ export function createLocalVR30AAdapter(): ScraperAdapter<LocalVrDetailRecord> {
     managerKey: "localvr30a",
     scriptLabel: "localvr30a",
     defaultAnchorUrl: DEFAULT_ANCHOR_URL,
+    useBrowserEngineProxy: true,
     detailFetchDelayMs: Math.max(
       0,
       Number(process.env.LOCALVR30A_DETAIL_FETCH_DELAY_MS ?? "500") || 500,
@@ -1707,7 +2070,7 @@ export function createLocalVR30AAdapter(): ScraperAdapter<LocalVrDetailRecord> {
     },
     async discoverListings(context) {
       return discoverListings(
-        context.page,
+        context.page as LocalVrPage,
         context.anchorUrl,
         context.maxScrollSteps,
         context.scrollPauseMs,
@@ -1720,6 +2083,8 @@ export function createLocalVR30AAdapter(): ScraperAdapter<LocalVrDetailRecord> {
         context.detailUrl,
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
+        context.refreshMode,
+        context.reportDetailProgress,
       );
     },
     async runQuoteCapture(argv, progress) {
@@ -1737,7 +2102,7 @@ export function createLocalVR30AAdapter(): ScraperAdapter<LocalVrDetailRecord> {
           defaultNights: 7,
           defaultListingConcurrency: 2,
           defaultQuoteConcurrency: 3,
-          defaultQuoteTimeoutMs: 20000,
+          defaultQuoteTimeoutMs: 45000,
           defaultQuoteMaxAttempts: 2,
           defaultEndpointPath: "/property/[slug] (next-action multipart)",
           defaultTaxPct: 0.12,
@@ -1763,8 +2128,8 @@ export function createLocalVR30AAdapter(): ScraperAdapter<LocalVrDetailRecord> {
             Number(
               process.env.LOCALVR30A_QUOTE_TIMEOUT_MS ??
                 process.env.QUOTE_CAPTURE_TIMEOUT_MS ??
-                "20000",
-            ) || 20000,
+                "45000",
+            ) || 45000,
         },
       });
 

@@ -297,3 +297,38 @@ Quote validation + cache build:
 npm run pricing:validate:quotes -- --adapter-key funvacay30a
 npm run pricing:cache:adapter -- --adapter-key funvacay30a --weeks 24
 ```
+
+## 10) Rapid Full-Pass Pipeline (No Code Reading)
+
+Use this sequence when you want a complete adapter refresh in the canonical runtime order:
+
+1. Run full quote capture for all listings
+2. Build pricing cache from refreshed quotes
+3. Run adapter-suite validator
+
+Template commands:
+
+```bash
+npm run pricing:quote:adapter -- --adapter-key <adapterKey> --all-listings
+npm run pricing:cache:adapter -- --adapter-key <adapterKey>
+npm run pricing:validate:adapter-suite -- --adapter-key <adapterKey>
+```
+
+Concrete example (`localvr30a`):
+
+```bash
+npm run pricing:quote:adapter -- --adapter-key localvr30a --all-listings
+npm run pricing:cache:adapter -- --adapter-key localvr30a
+npm run pricing:validate:adapter-suite -- --adapter-key localvr30a
+```
+
+Why `--all-listings` is explicit:
+
+- Quote-scoped adapters require one scope selector: `--listing-id`, `--max-listings`, or `--all-listings`.
+- Using `--all-listings` avoids accidental partial runs when you intended a full pass.
+
+Fast verification checkpoints:
+
+- Quote pass should complete with no fatal runner errors and produce/update `details/quotes/*.json`.
+- Cache build should complete and produce/update `details/pricing/*.json`.
+- Adapter suite should print per-validator summary (scrape filenames, media gallery, rooms guidance, availability status, quotes, pricing cache).

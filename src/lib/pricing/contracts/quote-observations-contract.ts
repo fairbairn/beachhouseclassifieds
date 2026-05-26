@@ -40,6 +40,15 @@ export type CanonicalQuoteAssumptionsSnapshot = {
   avg_all_in_multiplier: number;
 };
 
+export type CanonicalQuoteRunDiagnostics = {
+  queried_windows: number;
+  available_windows: number;
+  unavailable_windows: number;
+  internal_error_windows: number;
+  unavailable_reason_counts: Record<string, number>;
+  sample_internal_errors: string[];
+};
+
 export type CanonicalQuotesSidecarRecord = {
   adapter_key: string;
   quote_module_version?: string;
@@ -59,6 +68,7 @@ export type CanonicalQuotesSidecarRecord = {
   endpoint_path?: string;
   quote_coupon?: string;
   assumptions_snapshot?: CanonicalQuoteAssumptionsSnapshot;
+  quote_run_diagnostics?: CanonicalQuoteRunDiagnostics;
   observations: CanonicalQuoteObservation[];
 };
 

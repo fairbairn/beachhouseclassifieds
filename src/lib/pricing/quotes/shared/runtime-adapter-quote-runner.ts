@@ -1,4 +1,11 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
@@ -69,6 +76,12 @@ type QuoteWindow = {
   nights: number;
 };
 
+type WindowFailureReason = {
+  code: string;
+  message: string;
+  httpStatus: number | null;
+};
+
 type AvailabilityDay = {
   date: string;
   status_code?: string;
@@ -96,7 +109,11 @@ function hasUsableAvailableTotals(result: QuoteExecutionResult): boolean {
 
 function hasHttp403Signal(result: QuoteExecutionResult): boolean {
   if (result.success) {
-    return false;
+    const reason =
+      typeof result.observation.quoteUnavailableReason === "string"
+        ? result.observation.quoteUnavailableReason.toLowerCase()
+        : "";
+    return /(?:^|[^0-9])(http_403|http\s*403)(?:[^0-9]|$)/i.test(reason);
   }
 
   const details =
@@ -121,7 +138,20 @@ function hasHttp403Signal(result: QuoteExecutionResult): boolean {
 }
 
 function hasChallengeSignal(result: QuoteExecutionResult): boolean {
-  return !result.success && result.error.code === "EDGE_CHALLENGE_BLOCKED";
+  if (!result.success) {
+    return result.error.code === "EDGE_CHALLENGE_BLOCKED";
+  }
+
+  const reason =
+    typeof result.observation.quoteUnavailableReason === "string"
+      ? result.observation.quoteUnavailableReason.toLowerCase()
+      : "";
+  return (
+    reason.includes("http_429") ||
+    reason.includes("http 429") ||
+    reason.includes("challenge") ||
+    reason.includes("security_checkpoint")
+  );
 }
 
 function readHttpStatusFromErrorDetails(
@@ -151,13 +181,37 @@ function readHttpStatusFromErrorDetails(
   return null;
 }
 
-function summarizeFailureReason(result: QuoteExecutionResult): {
-  code: string;
-  message: string;
-  httpStatus: number | null;
-} | null {
+function summarizeFailureReason(
+  result: QuoteExecutionResult,
+): WindowFailureReason | null {
   if (result.success) {
-    return null;
+    if (result.observation.quoteAvailable) {
+      return null;
+    }
+
+    const rawReason =
+      typeof result.observation.quoteUnavailableReason === "string"
+        ? result.observation.quoteUnavailableReason.trim()
+        : "";
+    const reason = rawReason || "quote_unavailable";
+    const httpMatch = reason.match(
+      /(?:^|[^0-9])(?:http_|http\s*)(\d{3})(?:[^0-9]|$)/i,
+    );
+    const httpStatus = httpMatch?.[1] ? Number(httpMatch[1]) : null;
+    const normalizedCode = httpStatus
+      ? `HTTP_${httpStatus}`
+      : /^([A-Z0-9_]{4,})$/.test(reason)
+        ? reason
+        : "QUOTE_UNAVAILABLE";
+
+    return {
+      code: normalizedCode,
+      message: reason,
+      httpStatus:
+        typeof httpStatus === "number" && Number.isFinite(httpStatus)
+          ? httpStatus
+          : null,
+    };
   }
 
   const details =
@@ -180,6 +234,82 @@ function summarizeFailureReason(result: QuoteExecutionResult): {
     message,
     httpStatus: readHttpStatusFromErrorDetails(details),
   };
+}
+
+function isInternalRuntimeFailure(reason: WindowFailureReason): boolean {
+  const normalizedCode = reason.code.trim().toUpperCase();
+  const normalizedMessage = reason.message.trim().toLowerCase();
+
+  if (normalizedCode.startsWith("QUOTE_")) {
+    return true;
+  }
+
+  if (normalizedCode === "EDGE_CHALLENGE_BLOCKED") {
+    return true;
+  }
+
+  if (normalizedMessage.includes("processsingleton")) {
+    return true;
+  }
+
+  if (normalizedMessage.includes("launchpersistentcontext")) {
+    return true;
+  }
+
+  return false;
+}
+
+function summarizeFailureCounts(reasons: WindowFailureReason[]): {
+  counts: Record<string, number>;
+  sampleInternalErrors: string[];
+  internalErrorCount: number;
+} {
+  const counts = new Map<string, number>();
+  const sampleInternalErrors: string[] = [];
+  let internalErrorCount = 0;
+
+  for (const reason of reasons) {
+    const key = reason.httpStatus
+      ? `${reason.code}:http_${reason.httpStatus}`
+      : reason.code;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+
+    if (!isInternalRuntimeFailure(reason)) {
+      continue;
+    }
+
+    internalErrorCount += 1;
+    if (sampleInternalErrors.length < 3) {
+      sampleInternalErrors.push(
+        reason.message.length > 180
+          ? `${reason.message.slice(0, 177)}...`
+          : reason.message,
+      );
+    }
+  }
+
+  return {
+    counts: Object.fromEntries(
+      Array.from(counts.entries()).sort((left, right) =>
+        left[0].localeCompare(right[0]),
+      ),
+    ),
+    sampleInternalErrors,
+    internalErrorCount,
+  };
+}
+
+function shouldSurfaceInlineFailure(httpStatus: number | null): boolean {
+  if (httpStatus === null) {
+    return true;
+  }
+  return (
+    httpStatus === 400 ||
+    httpStatus === 403 ||
+    httpStatus === 404 ||
+    httpStatus === 429 ||
+    httpStatus >= 500
+  );
 }
 
 export type RuntimeAdapterQuoteRunnerConfig = {
@@ -216,6 +346,15 @@ const DEFAULT_BACKFILL_WINDOW_HOURS = 1;
 const DEFAULT_MIN_PROBE_NIGHTS = 3;
 const DEFAULT_MAX_PROBE_NIGHTS = 14;
 const DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS = 365;
+
+async function writeJsonFileDurable(
+  outputPath: string,
+  payload: unknown,
+): Promise<void> {
+  const tempPath = `${outputPath}.tmp-${process.pid}-${Date.now()}`;
+  await writeFile(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await rename(tempPath, outputPath);
+}
 
 function readToggle(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined) {
@@ -1085,6 +1224,58 @@ async function executeWithRetries(
     request: QuoteExecutionRequest,
   ) => Promise<QuoteExecutionResult>,
 ): Promise<QuoteExecutionResult> {
+  const attemptTimeoutMs = Math.max(
+    1000,
+    Number(request.options?.timeoutMs ?? DEFAULT_QUOTE_TIMEOUT_MS) ||
+      DEFAULT_QUOTE_TIMEOUT_MS,
+  );
+  const configuredWatchdogMs = Number(
+    process.env.QUOTE_CAPTURE_RUNTIME_EXECUTION_WATCHDOG_MS ??
+      String(attemptTimeoutMs + 15000),
+  );
+  const watchdogTimeoutMs = Math.max(
+    attemptTimeoutMs + 5000,
+    Number.isFinite(configuredWatchdogMs)
+      ? configuredWatchdogMs
+      : attemptTimeoutMs + 15000,
+  );
+
+  const timeoutFailure = (): QuoteExecutionResult => ({
+    success: false,
+    elapsedMs: watchdogTimeoutMs,
+    error: {
+      code: "QUOTE_EXECUTION_WATCHDOG_TIMEOUT",
+      message: `quote_execution_watchdog_timeout_${watchdogTimeoutMs}ms`,
+      retryable: true,
+      details: {
+        watchdog_timeout_ms: watchdogTimeoutMs,
+        configured_timeout_ms: attemptTimeoutMs,
+        listing_id: request.listingId,
+        check_in_iso: request.checkInIso,
+        check_out_iso: request.checkOutIso,
+      },
+    },
+  });
+
+  const executeSingleQuoteWithWatchdog =
+    async (): Promise<QuoteExecutionResult> => {
+      let watchdogHandle: ReturnType<typeof setTimeout> | null = null;
+      try {
+        return await Promise.race([
+          executeSingleQuote(request),
+          new Promise<QuoteExecutionResult>((resolve) => {
+            watchdogHandle = setTimeout(() => {
+              resolve(timeoutFailure());
+            }, watchdogTimeoutMs);
+          }),
+        ]);
+      } finally {
+        if (watchdogHandle) {
+          clearTimeout(watchdogHandle);
+        }
+      }
+    };
+
   const isRateLimitedResult = (result: QuoteExecutionResult): boolean => {
     if (result.success) {
       return false;
@@ -1105,7 +1296,7 @@ async function executeWithRetries(
     await new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
   };
 
-  let lastResult = await executeSingleQuote(request);
+  let lastResult = await executeSingleQuoteWithWatchdog();
   if (lastResult.success || !lastResult.error.retryable || maxAttempts <= 1) {
     return lastResult;
   }
@@ -1117,7 +1308,7 @@ async function executeWithRetries(
     const jitterMs = Math.floor(Math.random() * 400);
     await sleep(backoffMs + jitterMs);
 
-    lastResult = await executeSingleQuote(request);
+    lastResult = await executeSingleQuoteWithWatchdog();
     if (lastResult.success || !lastResult.error.retryable) {
       return lastResult;
     }
@@ -1535,6 +1726,9 @@ async function buildSidecarForListing(input: {
   progress?: QuoteProgress;
   onWindowsPlanned?: (windows: number) => void;
   onWindowResult?: (result: {
+    listingId: string;
+    startDate: string;
+    endDate: string;
     quoteAvailable: boolean;
     http403: boolean;
     challengeBlocked: boolean;
@@ -1670,6 +1864,9 @@ async function buildSidecarForListing(input: {
         }
 
         input.onWindowResult?.({
+          listingId: listing.externalListingId,
+          startDate: window.startDate,
+          endDate: window.endDate,
           quoteAvailable,
           http403: hasHttp403Signal(result),
           challengeBlocked: hasChallengeSignal(result),
@@ -1691,6 +1888,12 @@ async function buildSidecarForListing(input: {
     },
   );
   const runtimeResults = runtimeResultsNested.flat();
+
+  const failedReasons = runtimeResults
+    .filter((entry) => !entry.quoteAvailable)
+    .map((entry) => summarizeFailureReason(entry.result))
+    .filter((reason): reason is WindowFailureReason => reason !== null);
+  const failureSummary = summarizeFailureCounts(failedReasons);
 
   const observations: CanonicalQuoteObservation[] = runtimeResults
     .filter((entry) => entry.quoteAvailable)
@@ -1735,8 +1938,29 @@ async function buildSidecarForListing(input: {
     quote_nights: options.nights,
     quote_max_queries: runtimeResults.length,
     endpoint_path: endpointPath,
+    quote_run_diagnostics: {
+      queried_windows: runtimeResults.length,
+      available_windows: observations.length,
+      unavailable_windows: Math.max(
+        0,
+        runtimeResults.length - observations.length,
+      ),
+      internal_error_windows: failureSummary.internalErrorCount,
+      unavailable_reason_counts: failureSummary.counts,
+      sample_internal_errors: failureSummary.sampleInternalErrors,
+    },
     observations,
   };
+
+  if (observations.length === 0 && failureSummary.internalErrorCount > 0) {
+    const sample =
+      failureSummary.sampleInternalErrors.length > 0
+        ? failureSummary.sampleInternalErrors.join(" | ")
+        : "internal_runtime_failure_detected";
+    throw new Error(
+      `internal quote runtime failure listing=${listing.externalListingId} windows=${runtimeResults.length} internal_error_windows=${failureSummary.internalErrorCount} sample=${sample}`,
+    );
+  }
 
   assertCanonicalQuotesSidecarRecord(sidecar);
   input.onListingComplete?.({
@@ -1794,25 +2018,53 @@ export async function runRuntimeAdapterQuoteCli(
   const configuredProfileRoot =
     process.env[`${adapterEnvPrefix}_PERSISTENT_PROFILE_DIR`] ??
     process.env.STREAMLINE_PERSISTENT_PROFILE_DIR;
-  const adapterProfileRoot = configuredProfileRoot
-    ? resolve(
-        process.cwd(),
-        configuredProfileRoot,
-        config.adapterKey.toLowerCase(),
-      )
-    : resolve(process.cwd(), ".tmp", "cloak-profiles", config.adapterKey);
+  const profileRootBase = configuredProfileRoot
+    ? resolve(process.cwd(), configuredProfileRoot)
+    : resolve(process.cwd(), ".tmp", "cloak-profiles");
+  const adapterProfileRootLegacy = resolve(
+    profileRootBase,
+    config.adapterKey.toLowerCase(),
+  );
+  const adapterProfilePrefix = `${config.adapterKey.toLowerCase()}-`;
 
-  const cleanupProfiles = async (): Promise<void> => {
+  const cleanupProfiles = async (stage: "pre" | "post"): Promise<void> => {
     if (!cleanupPersistentProfiles) {
       return;
     }
-    await rm(adapterProfileRoot, { recursive: true, force: true });
+
+    let removed = 0;
+
+    await rm(adapterProfileRootLegacy, { recursive: true, force: true });
+    removed += 1;
+
+    try {
+      const entries = await readdir(profileRootBase, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) {
+          continue;
+        }
+        if (!entry.name.startsWith(adapterProfilePrefix)) {
+          continue;
+        }
+
+        await rm(resolve(profileRootBase, entry.name), {
+          recursive: true,
+          force: true,
+        });
+        removed += 1;
+      }
+    } catch {
+      // Ignore missing profile root directories.
+    }
+
     progress?.info(
-      `quote-capture profile cleanup complete path=${adapterProfileRoot}`,
+      `quote-capture profile cleanup (${stage}) complete root=${profileRootBase} prefix=${adapterProfilePrefix} removed=${removed}`,
     );
   };
 
   try {
+    await cleanupProfiles("pre");
+
     const retentionDaysFromEnv = Number(
       process.env.QUOTE_CAPTURE_OBSERVATION_RETENTION_DAYS ??
         String(DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS),
@@ -2033,6 +2285,9 @@ export async function runRuntimeAdapterQuoteCli(
             tracker.onWindowsPlanned(windows);
           },
           onWindowResult: ({
+            listingId,
+            startDate,
+            endDate,
             quoteAvailable,
             http403,
             challengeBlocked,
@@ -2062,6 +2317,12 @@ export async function runRuntimeAdapterQuoteCli(
                 failureReason.message,
                 (unavailableByMessage.get(failureReason.message) ?? 0) + 1,
               );
+
+              if (shouldSurfaceInlineFailure(failureReason.httpStatus)) {
+                progress?.failure(
+                  `quote failure listing=${listingId} window=${startDate}->${endDate} code=${failureReason.code} status=${failureReason.httpStatus ?? "n/a"} message=${failureReason.message}`,
+                );
+              }
             }
           },
           onListingComplete: ({ listingId, windows, available }) => {
@@ -2090,11 +2351,7 @@ export async function runRuntimeAdapterQuoteCli(
           observations: mergedObservations,
         };
         assertCanonicalQuotesSidecarRecord(persistedSidecar);
-        await writeFile(
-          outputPath,
-          `${JSON.stringify(persistedSidecar, null, 2)}\n`,
-          "utf8",
-        );
+        await writeJsonFileDurable(outputPath, persistedSidecar);
         progress?.tick(
           `quote sidecar flushed listing=${sidecar.external_listing_id}`,
         );
@@ -2137,6 +2394,6 @@ export async function runRuntimeAdapterQuoteCli(
       `quote-capture complete listings=${persistedSidecars.length} observations=${totalObservations} available=${availableObservations} skipped_fresh=${skippedFresh} skipped_covered=${skippedCoveredListings} observed_http_403=${observedHttp403} observed_challenge_blocked=${observedChallengeBlocked}${topUnavailableCodes ? ` unavailable_codes=[${topUnavailableCodes}]` : ""}${topUnavailableMessages ? ` unavailable_messages=[${topUnavailableMessages}]` : ""}`,
     );
   } finally {
-    await cleanupProfiles();
+    await cleanupProfiles("post");
   }
 }
