@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
-import type { Browser, Page } from "playwright";
+import type {
+  ScraperBrowserLike,
+  ScraperBrowserPageLike,
+} from "../shared/browser-engine";
 
 import {
   assertCanonicalQuotesSidecarRecord,
@@ -67,7 +70,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
   canonical_url: string;
   meta_description: string;
   description_expanded: string;
-  rooms_guidance: false;
+  rooms_guidance: false | string[];
   amenities: {
     categories: Record<string, string[]>;
     all: string[];
@@ -213,7 +216,7 @@ const OUTPUT_ROOT = resolve(
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 const OUTPUT_DETAILS_QUOTES_DIR = resolve(OUTPUT_ROOT, "details", "quotes");
 
-const HOMEOWNERS_ORIGIN = "https://homeownerscollection.com";
+const HOMEOWNERS_ORIGIN = "https://www.homeownerscollection.com";
 const HOMEOWNERS_RCAPI_PATH = "/rcapi/item/avail/search";
 
 function roundCurrency(value: number): number {
@@ -504,6 +507,22 @@ function parseCityStateFromAddress(address: string): {
   return { city, state };
 }
 
+function extractStreetFromDescription(description: string): string {
+  const text = description.replace(/\s+/g, " ").trim();
+  if (!text) {
+    return "";
+  }
+
+  const match = text.match(
+    /\b(\d{1,6}\s+[A-Za-z0-9' .-]{2,120}?(?:STREET|ST|AVENUE|AVE|ROAD|RD|DRIVE|DR|LANE|LN|COURT|CT|WAY|PLACE|PL|BLVD|BOULEVARD))\b/i,
+  );
+  if (!match?.[1]) {
+    return "";
+  }
+
+  return match[1].replace(/\s+/g, " ").trim().slice(0, 240);
+}
+
 function normalizeGalleryUrl(rawUrl: string): string {
   const cleaned = rawUrl.trim();
   if (!cleaned) {
@@ -524,7 +543,7 @@ function extractFieldLocationFromHtml(html: string): {
   longitude: number | null;
 } {
   const fieldLocationChunkMatch = html.match(
-    /["']field_location["']\s*:\s*\{[\s\S]*?\}\s*,\s*["']field_teaser_image["']/i,
+    /["']field_location["']\s*:\s*\{[\s\S]*?\}(?:\s*,\s*["'][^"']+["'])?/i,
   );
   const fieldLocationChunk = fieldLocationChunkMatch
     ? fieldLocationChunkMatch[0]
@@ -540,8 +559,13 @@ function extractFieldLocationFromHtml(html: string): {
     /["']longitude["']\s*:\s*["']?(-?\d+(?:\.\d+)?)["']?/i,
   );
 
-  const street = streetMatch?.[1]
-    ? streetMatch[1]
+  const mapPtMatch = html.match(
+    /"pt"\s*:\s*"(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)"/i,
+  );
+
+  const streetRaw = streetMatch?.[1] ?? "";
+  const street = streetRaw
+    ? streetRaw
         .replace(/\\\//g, "/")
         .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
           String.fromCharCode(Number.parseInt(hex, 16)),
@@ -550,8 +574,16 @@ function extractFieldLocationFromHtml(html: string): {
         .trim()
     : "";
 
-  const latitude = latitudeMatch ? Number(latitudeMatch[1]) : NaN;
-  const longitude = longitudeMatch ? Number(longitudeMatch[1]) : NaN;
+  const latitude = latitudeMatch
+    ? Number(latitudeMatch[1])
+    : mapPtMatch
+      ? Number(mapPtMatch[1])
+      : NaN;
+  const longitude = longitudeMatch
+    ? Number(longitudeMatch[1])
+    : mapPtMatch
+      ? Number(mapPtMatch[2])
+      : NaN;
 
   return {
     street,
@@ -605,7 +637,10 @@ function parseBuyPageChargeSummary(html: string): BuyPageChargeSummary | null {
     const normalizedText = text.toLowerCase();
 
     if (rowClass.includes("line-item")) {
-      if (normalizedText.includes("lodging:")) {
+      if (
+        normalizedText.includes("lodging:") ||
+        /\brent\b/.test(normalizedText)
+      ) {
         baseTotal = amount;
         continue;
       }
@@ -722,6 +757,7 @@ function buildBuyUrlFromQuote(
 }
 
 async function fetchRcapiQuote(
+  page: ScraperBrowserPageLike,
   eid: number,
   checkInIso: string,
   checkOutIso: string,
@@ -745,15 +781,43 @@ async function fetchRcapiQuote(
   params.set("rcav[flex_type]", "d");
 
   const url = `${HOMEOWNERS_ORIGIN}${HOMEOWNERS_RCAPI_PATH}?${params.toString()}`;
-  const response = await fetch(url, {
-    headers: {
-      accept: "application/json, text/plain, */*",
-      "x-requested-with": "XMLHttpRequest",
-      referer,
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+  const response = await page.evaluate(
+    async (input) => {
+      try {
+        const result = await fetch(input.url, {
+          method: "GET",
+          credentials: "include",
+          headers: input.headers,
+        });
+        return {
+          ok: result.ok,
+          status: result.status,
+          body: await result.text(),
+          requestError: null,
+        };
+      } catch (error: unknown) {
+        return {
+          ok: false,
+          status: 0,
+          body: "",
+          requestError:
+            error instanceof Error ? error.message : "browser fetch failed",
+        };
+      }
     },
-  });
+    {
+      url,
+      headers: {
+        accept: "application/json, text/plain, */*",
+        "x-requested-with": "XMLHttpRequest",
+        referer,
+      },
+    },
+  );
+
+  if (response.requestError) {
+    throw new TypeError(`fetch failed: ${response.requestError}`);
+  }
 
   if (!response.ok) {
     return {
@@ -765,7 +829,7 @@ async function fetchRcapiQuote(
     };
   }
 
-  const payload = (await response.json()) as unknown;
+  const payload = JSON.parse(response.body) as unknown;
   const list = Array.isArray(payload) ? (payload as RcapiSearchItem[]) : [];
   const first = list[0];
   const priceNode = first?.prices?.[0] ?? null;
@@ -788,24 +852,52 @@ async function fetchRcapiQuote(
 }
 
 async function fetchBuyPageSummary(
+  page: ScraperBrowserPageLike,
   buyUrl: string,
   referer: string,
 ): Promise<BuyPageChargeSummary | null> {
-  const response = await fetch(buyUrl, {
-    headers: {
-      accept: "text/html,application/xhtml+xml",
-      referer,
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+  const response = await page.evaluate(
+    async (input) => {
+      try {
+        const result = await fetch(input.url, {
+          method: "GET",
+          credentials: "include",
+          headers: input.headers,
+        });
+        return {
+          ok: result.ok,
+          status: result.status,
+          body: await result.text(),
+          requestError: null,
+        };
+      } catch (error: unknown) {
+        return {
+          ok: false,
+          status: 0,
+          body: "",
+          requestError:
+            error instanceof Error ? error.message : "browser fetch failed",
+        };
+      }
     },
-  });
+    {
+      url: buyUrl,
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        referer,
+      },
+    },
+  );
+
+  if (response.requestError) {
+    throw new TypeError(`fetch failed: ${response.requestError}`);
+  }
 
   if (!response.ok) {
     return null;
   }
 
-  const html = await response.text();
-  return parseBuyPageChargeSummary(html);
+  return parseBuyPageChargeSummary(response.body);
 }
 
 function buildAvailabilityCounts(
@@ -829,6 +921,7 @@ function buildAvailabilityCounts(
 }
 
 async function buildWeeklyRateArtifacts(input: {
+  browser: ScraperBrowserLike;
   externalListingId: string;
   detailUrl: string;
   entityId: number;
@@ -951,93 +1044,108 @@ async function buildWeeklyRateArtifacts(input: {
   const sampledRatesByDate = new Map<string, number>();
   let currency = "USD";
 
-  for (const startDate of sampleStartDates) {
-    const availabilityDay = availabilityByDate.get(startDate);
-    if (!availabilityDay) {
-      continue;
-    }
+  const sessionPage = await input.browser.newPage();
+  await installEvaluateNameShim(sessionPage);
+  await sessionPage.goto(input.detailUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: 120000,
+  });
+  await sessionPage.waitForTimeout(800);
 
-    const endDate = addDaysToIsoDate(startDate, quoteNights);
-    const quote = await fetchRcapiQuote(
-      input.entityId,
-      startDate,
-      endDate,
-      quoteCoupon,
-      input.detailUrl,
-    );
-    currency = quote.currency || currency;
+  try {
+    for (const startDate of sampleStartDates) {
+      const availabilityDay = availabilityByDate.get(startDate);
+      if (!availabilityDay) {
+        continue;
+      }
 
-    if (!quote.quote_available) {
-      const unavailableBuyUrl = buildBuyUrlFromQuote(
+      const endDate = addDaysToIsoDate(startDate, quoteNights);
+      const quote = await fetchRcapiQuote(
+        sessionPage,
+        input.entityId,
+        startDate,
+        endDate,
+        quoteCoupon,
+        input.detailUrl,
+      );
+      currency = quote.currency || currency;
+
+      if (!quote.quote_available) {
+        const unavailableBuyUrl = buildBuyUrlFromQuote(
+          input.entityId,
+          startDate,
+          endDate,
+          quote.quote_node,
+        );
+
+        observations.push({
+          start_date: startDate,
+          end_date: endDate,
+          nights: quoteNights,
+          quote_available: false,
+          quoted_total: null,
+          buy_url: unavailableBuyUrl,
+          base_total: null,
+          taxes_total: null,
+          fees_total_excl_taxes: null,
+          fee_lines: [],
+          grand_total: null,
+          nightly_rate_proxy: null,
+          discount_name: quote.discount_name,
+          reliability: "unavailable",
+        });
+        continue;
+      }
+
+      const buyUrl = buildBuyUrlFromQuote(
         input.entityId,
         startDate,
         endDate,
         quote.quote_node,
       );
 
+      const buySummary = buyUrl
+        ? await fetchBuyPageSummary(sessionPage, buyUrl, input.detailUrl)
+        : null;
+
+      const baseTotal =
+        buySummary?.base_total ??
+        (quote.quoted_total !== null
+          ? roundCurrency(quote.quoted_total)
+          : null);
+      const nightlyRateProxy =
+        baseTotal !== null && quoteNights > 0
+          ? roundCurrency(baseTotal / quoteNights)
+          : null;
+
+      if (nightlyRateProxy !== null) {
+        sampledRatesByDate.set(startDate, nightlyRateProxy);
+      }
+
       observations.push({
         start_date: startDate,
         end_date: endDate,
         nights: quoteNights,
-        quote_available: false,
-        quoted_total: null,
-        buy_url: unavailableBuyUrl,
-        base_total: null,
-        taxes_total: null,
-        fees_total_excl_taxes: null,
-        fee_lines: [],
-        grand_total: null,
-        nightly_rate_proxy: null,
+        quote_available: true,
+        quoted_total: quote.quoted_total,
+        buy_url: buyUrl,
+        base_total: baseTotal,
+        taxes_total: buySummary?.taxes_total ?? null,
+        fees_total_excl_taxes: buySummary?.fees_total_excl_taxes ?? null,
+        fee_lines: buySummary?.fee_lines ?? [],
+        grand_total: buySummary?.grand_total ?? null,
+        nightly_rate_proxy: nightlyRateProxy,
         discount_name: quote.discount_name,
-        reliability: "unavailable",
+        reliability:
+          buySummary && buySummary.base_total !== null
+            ? "buy_page_charges"
+            : quote.quoted_total !== null
+              ? "rcapi_total_proxy"
+              : "parse_failed",
       });
-      continue;
     }
-
-    const buyUrl = buildBuyUrlFromQuote(
-      input.entityId,
-      startDate,
-      endDate,
-      quote.quote_node,
-    );
-
-    const buySummary = buyUrl
-      ? await fetchBuyPageSummary(buyUrl, input.detailUrl)
-      : null;
-
-    const baseTotal =
-      buySummary?.base_total ??
-      (quote.quoted_total !== null ? roundCurrency(quote.quoted_total) : null);
-    const nightlyRateProxy =
-      baseTotal !== null && quoteNights > 0
-        ? roundCurrency(baseTotal / quoteNights)
-        : null;
-
-    if (nightlyRateProxy !== null) {
-      sampledRatesByDate.set(startDate, nightlyRateProxy);
-    }
-
-    observations.push({
-      start_date: startDate,
-      end_date: endDate,
-      nights: quoteNights,
-      quote_available: true,
-      quoted_total: quote.quoted_total,
-      buy_url: buyUrl,
-      base_total: baseTotal,
-      taxes_total: buySummary?.taxes_total ?? null,
-      fees_total_excl_taxes: buySummary?.fees_total_excl_taxes ?? null,
-      fee_lines: buySummary?.fee_lines ?? [],
-      grand_total: buySummary?.grand_total ?? null,
-      nightly_rate_proxy: nightlyRateProxy,
-      discount_name: quote.discount_name,
-      reliability:
-        buySummary && buySummary.base_total !== null
-          ? "buy_page_charges"
-          : quote.quoted_total !== null
-            ? "rcapi_total_proxy"
-            : "parse_failed",
-    });
+  } finally {
+    await sessionPage.close();
   }
 
   const sampledPoints = Array.from(sampledRatesByDate.entries())
@@ -1209,13 +1317,18 @@ async function buildWeeklyRateArtifacts(input: {
   };
 }
 
-async function installEvaluateNameShim(page: Page): Promise<void> {
+async function installEvaluateNameShim(
+  page: ScraperBrowserPageLike,
+): Promise<void> {
   const shim = "window.__name = window.__name || ((target) => target);";
   await page.addInitScript(shim);
   await page.evaluate(shim);
 }
 
-async function clickTab(page: Page, tabText: string): Promise<boolean> {
+async function clickTab(
+  page: ScraperBrowserPageLike,
+  tabText: string,
+): Promise<boolean> {
   const target = tabText.toLowerCase();
   const result = await page.evaluate((targetText) => {
     const nodes = Array.from(
@@ -1254,7 +1367,7 @@ async function clickTab(page: Page, tabText: string): Promise<boolean> {
 }
 
 async function discoverListings(
-  page: Page,
+  page: ScraperBrowserPageLike,
   anchorUrl: string,
   maxScrollSteps: number,
   scrollPauseMs: number,
@@ -1311,7 +1424,27 @@ async function discoverListings(
         }
       };
 
-      for (const anchor of Array.from(document.querySelectorAll("a[href]"))) {
+      for (const anchor of Array.from(
+        document.querySelectorAll(
+          "#riot-solr-search > riot-solr-result-list a[href]",
+        ),
+      )) {
+        const isRecommended = (() => {
+          const container =
+            anchor.closest(
+              "section, article, aside, .block, .view, .item-list, .panel, .region",
+            ) ?? anchor.parentElement;
+          const contextText = (
+            container?.textContent ??
+            anchor.textContent ??
+            ""
+          ).toLowerCase();
+          return contextText.includes("recommended for you");
+        })();
+        if (isRecommended) {
+          continue;
+        }
+
         const hrefRaw =
           (anchor as HTMLAnchorElement).getAttribute("href") ?? "";
         if (!hrefRaw) {
@@ -1415,7 +1548,9 @@ async function discoverListings(
   }));
 }
 
-async function extractAvailabilitySnapshot(page: Page): Promise<{
+async function extractAvailabilitySnapshot(
+  page: ScraperBrowserPageLike,
+): Promise<{
   hasCalendarWidget: boolean;
   months: string[];
   items: Array<{ date: string; code: LuxuryDayCode }>;
@@ -1701,8 +1836,25 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
   });
 }
 
-async function extractDescriptionText(page: Page): Promise<string> {
+async function extractDescriptionText(
+  page: ScraperBrowserPageLike,
+): Promise<string> {
   await clickTab(page, "Description");
+
+  await page.evaluate(() => {
+    for (const trigger of Array.from(
+      document.querySelectorAll(
+        "a.toggle-desc, button.toggle-desc, a[data-alt-text], button[data-alt-text]",
+      ),
+    )) {
+      const text = (trigger.textContent ?? "").toLowerCase();
+      const alt = (trigger.getAttribute("data-alt-text") ?? "").toLowerCase();
+      if (text.includes("read more") || alt.includes("show less")) {
+        (trigger as HTMLElement).click();
+      }
+    }
+  });
+  await page.waitForTimeout(300);
 
   return page.evaluate(() => {
     const candidates: string[] = [];
@@ -1718,6 +1870,14 @@ async function extractDescriptionText(page: Page): Promise<string> {
 
     for (const selector of selectors) {
       for (const node of Array.from(document.querySelectorAll(selector))) {
+        const container =
+          node.closest("section, article, aside, .block, .view, .item-list") ??
+          node;
+        const containerText = (container.textContent ?? "").toLowerCase();
+        if (containerText.includes("recommended for you")) {
+          continue;
+        }
+
         const text = (node.textContent ?? "").replace(/\s+/g, " ").trim();
         if (text.length < 80) {
           continue;
@@ -1742,7 +1902,7 @@ async function extractDescriptionText(page: Page): Promise<string> {
 }
 
 async function fetchDetail(
-  browser: Browser,
+  browser: ScraperBrowserLike,
   detailUrl: string,
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
@@ -1820,6 +1980,7 @@ async function fetchDetail(
             `start eid=${entityId} availability_days=${availabilityDays.length}`,
           );
           const rateArtifacts = await buildWeeklyRateArtifacts({
+            browser,
             externalListingId,
             detailUrl,
             entityId,
@@ -1876,10 +2037,12 @@ async function fetchDetail(
           "missing entity id for quote API; falling back to full pull",
         );
       }
-    } catch {
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "unknown baseline read error";
       logStage(
         "DYNAMIC_BASELINE",
-        "unable to load baseline detail; falling back to full pull",
+        `baseline load failed: ${message}; falling back to full pull`,
       );
     }
   }
@@ -1990,56 +2153,136 @@ async function fetchDetail(
         })(),
         amenitiesCategories: (() => {
           const categories: Record<string, string[]> = {};
-          const wrappers = Array.from(
+          const collect = (root: ParentNode): void => {
+            for (const listBlock of Array.from(
+              root.querySelectorAll(".item-list"),
+            )) {
+              const context =
+                listBlock.closest("section, article, aside, .block, .view") ??
+                listBlock;
+              const contextText = (context.textContent ?? "").toLowerCase();
+              if (contextText.includes("recommended for you")) {
+                continue;
+              }
+
+              const heading =
+                listBlock.querySelector("h3")?.textContent ??
+                listBlock.querySelector("h4")?.textContent ??
+                listBlock
+                  .closest(
+                    ".group-vr-property-amenities, .field-group-format-wrapper",
+                  )
+                  ?.querySelector(".field-group-format-title")?.textContent ??
+                "";
+              const category = heading
+                .replace(/:\s*$/, "")
+                .replace(/\s+/g, " ")
+                .trim();
+              if (!category) {
+                continue;
+              }
+
+              const items = Array.from(listBlock.querySelectorAll("li"))
+                .map((li) => (li.textContent ?? "").replace(/\s+/g, " ").trim())
+                .filter(Boolean);
+              if (items.length > 0) {
+                categories[category] = items;
+              }
+            }
+          };
+
+          const amenityRoot =
+            document.querySelector(".group-vr-property-amenities") ??
+            document.querySelector(
+              "#node-vr-listing-full-group-tabs-wrapper",
+            ) ??
+            document.querySelector("#amenities");
+
+          if (amenityRoot) {
+            collect(amenityRoot);
+          }
+
+          if (Object.keys(categories).length === 0) {
+            collect(document);
+          }
+          return categories;
+        })(),
+        roomsGuidance: (() => {
+          const lines: string[] = [];
+          const cards = Array.from(
             document.querySelectorAll(
-              "#amenities .amenity-wrapper, section#amenities .amenity-wrapper, [id='amenities'] .amenity-wrapper",
+              ".rc-core-item-room-bedroom.card, .group-beds-baths-wrapper .card",
             ),
           );
-          for (const field of wrappers) {
-            const heading =
-              field.querySelector("h3.label-above")?.textContent ??
-              field.querySelector("h3")?.textContent ??
-              field.querySelector("h2")?.textContent ??
-              "";
-            const category = heading
-              .replace(/:\s*$/, "")
-              .replace(/\s+/g, " ")
-              .trim();
-            if (!category) {
+
+          for (const card of cards) {
+            const context =
+              card.closest(
+                "section, article, aside, .block, .view, .item-list",
+              ) ?? card;
+            const contextText = (context.textContent ?? "").toLowerCase();
+            if (contextText.includes("recommended for you")) {
               continue;
             }
 
-            const items = Array.from(field.querySelectorAll("li"))
-              .map((li) => (li.textContent ?? "").replace(/\s+/g, " ").trim())
-              .filter(Boolean);
-            if (items.length > 0) {
-              categories[category] = items;
+            const roomName =
+              card
+                .querySelector(
+                  ".bedding-name, .room-name, [class*='bedroom'] .name",
+                )
+                ?.textContent?.replace(/\s+/g, " ")
+                .trim() ?? "";
+            const roomBeds =
+              card
+                .querySelector(
+                  ".bedding-description, .room-beds, [class*='bedroom'] .description",
+                )
+                ?.textContent?.replace(/\s+/g, " ")
+                .trim() ?? "";
+
+            if (!roomName && !roomBeds) {
+              continue;
             }
+
+            lines.push(
+              roomName && roomBeds
+                ? `${roomName}: ${roomBeds}`
+                : roomName || roomBeds,
+            );
           }
-          return categories;
+
+          return lines;
         })(),
         galleryUrls: (() => {
           const urls: string[] = [];
           const mediaRoot =
             document.querySelector("#Media") ??
-            document.querySelector('[id="media"]');
-          if (!mediaRoot) {
-            return urls;
-          }
+            document.querySelector('[id="media"]') ??
+            document;
 
           const attrValues = Array.from(
             mediaRoot.querySelectorAll(
-              "a[href], img[src], img[data-src], img[data-rsTmb], [data-rsBigImg], [data-image]",
+              "a[href], img[src], img[data-src], img[data-rsTmb], [data-rsBigImg], [data-rsbigimg], [data-image]",
             ),
           );
 
           for (const node of attrValues) {
+            const context =
+              node.closest(
+                "section, article, aside, .block, .view, .item-list",
+              ) ?? node;
+            const contextText = (context.textContent ?? "").toLowerCase();
+            if (contextText.includes("recommended for you")) {
+              continue;
+            }
+
             const attrs = [
               node.getAttribute("href"),
               node.getAttribute("src"),
               node.getAttribute("data-src"),
               node.getAttribute("data-rsTmb"),
               node.getAttribute("data-rsBigImg"),
+              node.getAttribute("data-rsbigimg"),
               node.getAttribute("data-image"),
             ];
             for (const raw of attrs) {
@@ -2053,6 +2296,7 @@ async function fetchDetail(
                 ).toString();
                 if (
                   /\.(jpe?g|png|webp|gif)(\?|$)/i.test(absolute) ||
+                  absolute.includes("images.rezfusion.com/evrn/") ||
                   absolute.includes("/evrn/") ||
                   absolute.includes("/images.")
                 ) {
@@ -2063,6 +2307,29 @@ async function fetchDetail(
               }
             }
           }
+
+          const ogImage = document
+            .querySelector("meta[property='og:image']")
+            ?.getAttribute("content");
+          if (ogImage) {
+            urls.push(ogImage.trim());
+          }
+
+          for (const script of Array.from(
+            document.querySelectorAll("script[type='application/ld+json']"),
+          )) {
+            const raw = script.textContent ?? "";
+            const matches = raw.match(
+              /https?:\/\/images\.rezfusion\.com\/evrn\/[^"'\s]+/gi,
+            );
+            if (!matches) {
+              continue;
+            }
+            for (const match of matches) {
+              urls.push(match.replaceAll("\\/", "/"));
+            }
+          }
+
           return urls;
         })(),
       };
@@ -2240,6 +2507,7 @@ async function fetchDetail(
         : extractEntityIdFromHtml(html);
     const rateArtifacts = entityId
       ? await buildWeeklyRateArtifacts({
+          browser,
           externalListingId,
           detailUrl,
           entityId,
@@ -2277,6 +2545,10 @@ async function fetchDetail(
         };
 
     const locationPayload = extractFieldLocationFromHtml(html);
+    const descriptionStreet = extractStreetFromDescription(descriptionExpanded);
+    const parsedAddress = parseCityStateFromAddress(
+      descriptionStreet || locationPayload.street,
+    );
 
     const beds = parseFirstNumber(extracted.bedroomsText);
     const baths = parseFirstNumber(extracted.bathroomsText);
@@ -2290,8 +2562,8 @@ async function fetchDetail(
       beds,
       baths,
       sleeps,
-      city: parseCityStateFromAddress(locationPayload.street).city,
-      state: parseCityStateFromAddress(locationPayload.street).state,
+      city: parsedAddress.city,
+      state: parsedAddress.state,
     };
 
     const amenitiesCategories: Record<string, string[]> = {};
@@ -2319,6 +2591,7 @@ async function fetchDetail(
     const mediaUrls = dedupePreserveOrder(
       extracted.galleryUrls
         .map((url) => normalizeGalleryUrl(url))
+        .filter((url) => /images\.rezfusion\.com\/evrn\//i.test(url))
         .filter(Boolean),
     );
     const mediaGallery: LuxuryDetailRecord["media_gallery"] = {
@@ -2326,7 +2599,15 @@ async function fetchDetail(
       image_urls: mediaUrls,
     };
 
-    const streetAddress = stripHtml(locationPayload.street).slice(0, 240);
+    const roomsGuidance = dedupePreserveOrder(
+      extracted.roomsGuidance
+        .map((line) => stripHtml(line).slice(0, 200))
+        .filter(Boolean),
+    );
+
+    const streetAddress = (
+      descriptionStreet || stripHtml(locationPayload.street)
+    ).slice(0, 240);
     const directionsQuery =
       streetAddress ||
       (locationPayload.latitude !== null && locationPayload.longitude !== null
@@ -2453,7 +2734,7 @@ async function fetchDetail(
       canonical_url: extracted.canonical || detailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
-      rooms_guidance: false,
+      rooms_guidance: roomsGuidance.length > 0 ? roomsGuidance : false,
       amenities,
       location,
       media_gallery: mediaGallery,
@@ -2504,8 +2785,13 @@ async function fetchDetail(
       },
     };
   } catch (error) {
+    const errorName = error instanceof Error ? error.name : "UnknownError";
     const message =
       error instanceof Error ? error.message : "unknown detail pull error";
+    logStage(
+      "DETAIL_FETCH_FAILED",
+      `url=${detailUrl} error_name=${errorName} error_message=${message}`,
+    );
     console.warn(
       `[homeownerscollection30a] detail pull failed for ${detailUrl}: ${message}`,
     );

@@ -148,7 +148,12 @@ function parseBuyPageChargeSummary(html: string): BuyPageChargeSummary | null {
     const normalizedText = text.toLowerCase();
 
     if (rowClass.includes("line-item")) {
-      if (normalizedText.includes("lodging:")) {
+      const isBaseRentRow =
+        normalizedText.includes("lodging:") ||
+        /^rent\b/.test(normalizedText) ||
+        /\brent\b/.test(normalizedText);
+
+      if (isBaseRentRow) {
         baseTotal = amount;
         continue;
       }

@@ -1100,6 +1100,42 @@ async function runSingleQuoteRequestOnce(
         };
       }
 
+      if (!result.observation.quoteAvailable) {
+        const unavailableReason =
+          result.observation.quoteUnavailableReason?.trim() ||
+          "quote_unavailable";
+        return {
+          adapterKey: sample.adapterKey,
+          listingId: sample.listingId,
+          elapsedMs: result.elapsedMs,
+          bookingElapsedMs: null,
+          success: false,
+          reason: unavailableReason,
+          runtimeError: {
+            code: "QUOTE_UNAVAILABLE",
+            message: unavailableReason,
+            retryable: false,
+            details: {
+              adapterKey: sample.adapterKey,
+              listingId: sample.listingId,
+            },
+          },
+          observationSample: {
+            startDate: result.observation.startDate,
+            endDate: result.observation.endDate,
+            quoteAvailable: false,
+            currency: result.observation.currency,
+            baseTotal: result.observation.baseTotal,
+            taxesTotal: result.observation.taxesTotal,
+            feesTotalExclTaxes: result.observation.feesTotalExclTaxes,
+            grandTotal: result.observation.grandTotal,
+            quotedTotal: result.observation.quotedTotal,
+            detailUrl: result.observation.detailUrl,
+            handoffUrl: result.observation.handoffUrl,
+          },
+        };
+      }
+
       return {
         adapterKey: sample.adapterKey,
         listingId: sample.listingId,

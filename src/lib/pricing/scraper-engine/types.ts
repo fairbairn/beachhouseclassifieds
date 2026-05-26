@@ -1,5 +1,8 @@
 import type { QuoteProgress } from "@/lib/pricing/quotes/types";
-import type { Browser, Page } from "playwright";
+import type {
+  ScraperBrowserLike,
+  ScraperBrowserPageLike,
+} from "./shared/browser-engine";
 
 export type ScraperRefreshMode = "full" | "dynamic" | "static";
 export type ScraperInventoryMode = "full-scan" | "refresh-known";
@@ -62,7 +65,7 @@ export type DetailRecordBase = {
 };
 
 export type DiscoverContext = {
-  page: Page;
+  page: ScraperBrowserPageLike;
   anchorUrl: string;
   maxScrollSteps: number;
   scrollPauseMs: number;
@@ -71,7 +74,7 @@ export type DiscoverContext = {
 };
 
 export type FetchDetailContext = {
-  browser: Browser;
+  browser: ScraperBrowserLike;
   detailUrl: string;
   availabilityHorizonDays: number;
   maxCalendarAdvanceMonths: number;

@@ -1,6 +1,5 @@
 import { access, mkdir, open, readFile, readdir, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import type { Browser } from "playwright";
 
 import {
   createScrapeProgress,
@@ -8,7 +7,10 @@ import {
 } from "@/core/tooling/terminal/scrape-progress";
 import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 
-import { launchScraperBrowser } from "./shared/browser-engine";
+import {
+  launchScraperBrowser,
+  type ScraperBrowserLike,
+} from "./shared/browser-engine";
 import type {
   DetailRecordBase,
   RunOptions,
@@ -1077,7 +1079,7 @@ function messageHasHttp403Signal(message: string): boolean {
 
 async function pullDetails<TDetail extends DetailRecordBase>(
   root: string,
-  browser: Browser,
+  browser: ScraperBrowserLike,
   urls: string[],
   adapter: ScraperAdapter<TDetail>,
   outputDetailsJsonDir: string,
@@ -1496,12 +1498,12 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
   const envPrefix = adapter.managerKey
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_");
-  const browser = (await launchScraperBrowser({
+  const browser = await launchScraperBrowser({
     adapterKey: adapter.managerKey,
     envPrefix,
     headless: true,
     useProxy: adapter.useBrowserEngineProxy === true,
-  })) as unknown as Browser;
+  });
 
   try {
     if (options.detailUrl) {
