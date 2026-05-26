@@ -50,8 +50,8 @@ Observed:
 - Security/challenge posture can vary per request window (intermittent challenge surfaces and request-level anti-bot behavior).
 - Some listings return persistent quote `HTTP 400` across sampled windows while still exposing valid detail and availability artifacts.
 - Two LocalVR listings are currently known to produce quote sidecars with zero observations despite repeated attempts:
-	- `blue-bird-beach-gulf-view-pool-6779f90068c10f0010a4aba2`
-	- `shore-me-the-way-close-to-beach-bikes-6779f9e8a238c10011093d23`
+  - `blue-bird-beach-gulf-view-pool-6779f90068c10f0010a4aba2`
+  - `shore-me-the-way-close-to-beach-bikes-6779f9e8a238c10011093d23`
 
 Workarounds used:
 

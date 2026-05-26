@@ -40,14 +40,15 @@ const DEFAULT_TIMEOUT_MS = 20000;
 const GUESTY_QUOTES_ENDPOINT =
   "https://app.guesty.com/api/pm-websites-backend/reservations/quotes";
 const BROWSER_USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36";
 const DEFAULT_X_REQUEST_CONTEXT = {
   v: 1,
-  w: 1973369,
-  s: "xqkii9nw",
-  u: "9319cb88",
-  h: "2b1d3d38c9877de12ec05b9bbb3b1bc4",
+  w: 1977593,
+  s: "r5f4ih7q",
+  u: "6927f41b",
+  h: "cf6629c4299f0d66132d5f27cdc750f0",
 };
+const DEFAULT_G_AID_CS = "G-89C7E-9FB65-B6F69";
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -224,28 +225,41 @@ export async function executeLuxe30aSingleQuote(
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
   const xRequestContext = buildXRequestContextHeader();
+  const guestsCount = Math.max(1, input.adults + input.children);
+  const requestHeaders = {
+    "content-type": "application/json",
+    accept: "application/json, text/plain, */*",
+    "accept-language": "en-US,en;q=0.9",
+    authorization: "Bearer null",
+    "cache-control": "no-cache",
+    pragma: "no-cache",
+    origin: "https://luxe30a.guestybookings.com",
+    referer: "https://luxe30a.guestybookings.com/",
+    "user-agent": BROWSER_USER_AGENT,
+    "g-aid-cs": process.env.LUXE30A_G_AID_CS ?? DEFAULT_G_AID_CS,
+    "x-request-context": xRequestContext,
+  };
+  const requestPayload = {
+    checkInDateLocalized: input.checkInIso,
+    checkOutDateLocalized: input.checkOutIso,
+    guestsCount,
+    listingId: quoteContext.listingId,
+  };
 
   let response: Response;
   let bodyText = "";
+  let responseContentType: string | null = null;
+  let responseContentLength: string | null = null;
   try {
     response = await fetch(GUESTY_QUOTES_ENDPOINT, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/plain, */*",
-        origin: "https://luxe30a.guestybookings.com",
-        "user-agent": BROWSER_USER_AGENT,
-        "x-request-context": xRequestContext,
-      },
-      body: JSON.stringify({
-        checkInDateLocalized: input.checkInIso,
-        checkOutDateLocalized: input.checkOutIso,
-        guestsCount: String(Math.max(1, input.adults + input.children)),
-        listingId: quoteContext.listingId,
-      }),
+      headers: requestHeaders,
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     });
 
+    responseContentType = response.headers.get("content-type");
+    responseContentLength = response.headers.get("content-length");
     bodyText = await response.text();
   } catch (error: unknown) {
     clearTimeout(timeoutHandle);
@@ -303,7 +317,19 @@ export async function executeLuxe30aSingleQuote(
         checkOutIso: input.checkOutIso,
         details: {
           status: response.status,
+          response_content_type: responseContentType,
+          response_content_length: responseContentLength,
           response_preview: bodyText.slice(0, 220),
+          request_payload: requestPayload,
+          request_header_profile: {
+            accept: requestHeaders.accept,
+            authorization: requestHeaders.authorization,
+            content_type: requestHeaders["content-type"],
+            g_aid_cs: requestHeaders["g-aid-cs"],
+            origin: requestHeaders.origin,
+            referer: requestHeaders.referer,
+            x_request_context: requestHeaders["x-request-context"],
+          },
           handoff_url: runtimeHandoffUrl,
         },
       }),
