@@ -16,6 +16,15 @@ type CliOptions = {
 type DetailRecord = {
   external_listing_id?: unknown;
   rooms_guidance?: unknown;
+  listing_flags?: {
+    non_bookable_online?: unknown;
+    availability_validation_exempt?: unknown;
+    availability_validation_exempt_reason_code?: unknown;
+  };
+  normalized_availability?: {
+    validation_exempt?: unknown;
+    validation_exempt_reason_code?: unknown;
+  };
 };
 
 type ListingValidationFailure = {
@@ -129,6 +138,30 @@ function asStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function isNonBookableOnlineExempt(record: DetailRecord): boolean {
+  if (record.listing_flags?.non_bookable_online === true) {
+    return true;
+  }
+
+  if (
+    record.listing_flags?.availability_validation_exempt === true ||
+    record.normalized_availability?.validation_exempt === true
+  ) {
+    return true;
+  }
+
+  const reasonCandidates = [
+    record.listing_flags?.availability_validation_exempt_reason_code,
+    record.normalized_availability?.validation_exempt_reason_code,
+  ];
+
+  return reasonCandidates.some(
+    (value) =>
+      typeof value === "string" &&
+      value.trim().toLowerCase() === "non_bookable_online",
+  );
+}
+
 function printListingStatus(input: {
   index: number;
   total: number;
@@ -217,6 +250,7 @@ export async function runValidateRoomsGuidanceCoverageCli(
   let emptyAfterNormalization = 0;
   let strictLowSignal = 0;
   let waivedFalse = 0;
+  let exemptWaived = 0;
   let totalGuidanceEntries = 0;
 
   const failures: ListingValidationFailure[] = [];
@@ -351,6 +385,22 @@ export async function runValidateRoomsGuidanceCoverageCli(
     }
 
     processedItems += 1;
+    if (issues.length > 0 && isNonBookableOnlineExempt(parsed)) {
+      exemptWaived += 1;
+      passed += 1;
+      if (!options.summaryOnly) {
+        printListingStatus({
+          index: processedItems,
+          total: totalItems,
+          listingId,
+          fileName,
+          status: "PASS",
+          details: "waived_non_bookable_online",
+        });
+      }
+      continue;
+    }
+
     if (issues.length > 0) {
       failed += 1;
       failures.push({ listingId, fileName, issues });
@@ -397,6 +447,7 @@ export async function runValidateRoomsGuidanceCoverageCli(
   console.log(`- empty_after_normalization: ${emptyAfterNormalization}`);
   console.log(`- strict_low_signal: ${strictLowSignal}`);
   console.log(`- waived_false: ${waivedFalse}`);
+  console.log(`- waived_non_bookable_online: ${exemptWaived}`);
 
   if (failed > 0) {
     console.error(

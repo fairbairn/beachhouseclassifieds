@@ -17,6 +17,15 @@ type DetailRecord = {
   media_gallery?: {
     image_urls?: unknown;
   };
+  listing_flags?: {
+    non_bookable_online?: unknown;
+    availability_validation_exempt?: unknown;
+    availability_validation_exempt_reason_code?: unknown;
+  };
+  normalized_availability?: {
+    validation_exempt?: unknown;
+    validation_exempt_reason_code?: unknown;
+  };
 };
 
 const chalk = new Chalk({ level: 1 });
@@ -125,6 +134,30 @@ function asStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function isNonBookableOnlineExempt(record: DetailRecord): boolean {
+  if (record.listing_flags?.non_bookable_online === true) {
+    return true;
+  }
+
+  if (
+    record.listing_flags?.availability_validation_exempt === true ||
+    record.normalized_availability?.validation_exempt === true
+  ) {
+    return true;
+  }
+
+  const reasonCandidates = [
+    record.listing_flags?.availability_validation_exempt_reason_code,
+    record.normalized_availability?.validation_exempt_reason_code,
+  ];
+
+  return reasonCandidates.some(
+    (value) =>
+      typeof value === "string" &&
+      value.trim().toLowerCase() === "non_bookable_online",
+  );
+}
+
 export async function runValidateMediaGalleryCountCoverageCli(
   argv: string[] = process.argv.slice(2),
 ): Promise<number> {
@@ -155,6 +188,7 @@ export async function runValidateMediaGalleryCountCoverageCli(
   );
 
   let belowThreshold = 0;
+  let belowThresholdWaivedNonBookable = 0;
   let missingFile = 0;
   let processed = 0;
 
@@ -205,6 +239,18 @@ export async function runValidateMediaGalleryCountCoverageCli(
 
     const count = asStringArray(detail.media_gallery?.image_urls).length;
     if (count < options.minImages) {
+      if (isNonBookableOnlineExempt(detail)) {
+        belowThresholdWaivedNonBookable += 1;
+        if (!options.summaryOnly) {
+          console.log(
+            chalk.gray(
+              `[${processed}/${listings.length}] waived low image count listing=${listing.externalListingId} file=${fileName} images=${count} reason=non_bookable_online`,
+            ),
+          );
+        }
+        continue;
+      }
+
       belowThreshold += 1;
       if (!options.summaryOnly) {
         console.log(
@@ -221,6 +267,9 @@ export async function runValidateMediaGalleryCountCoverageCli(
   console.log(`- listings_selected: ${listings.length}`);
   console.log(`- listings_missing_file: ${missingFile}`);
   console.log(`- listings_below_threshold: ${belowThreshold}`);
+  console.log(
+    `- listings_below_threshold_waived_non_bookable_online: ${belowThresholdWaivedNonBookable}`,
+  );
   console.log(`- min_images_threshold: ${options.minImages}`);
   console.log(`- strict_mode: ${options.strict}`);
 

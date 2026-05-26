@@ -33,6 +33,7 @@ type OceanReefDetailRecord = DetailRecordBase & {
     availability_validation_exempt: boolean;
     availability_validation_exempt_reason_code: string | null;
     availability_validation_exempt_reason: string | null;
+    orphaned_inventory?: boolean;
   };
   quote_context?: {
     unit_id: string;
@@ -145,8 +146,16 @@ const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 const AVAILABILITY_VALIDATION_EXEMPT_EXTERNAL_LISTING_IDS = new Set<string>([
   "key-lime-cottage",
   "rising-tide",
+  "seas-the-day",
   "who-sells-sea-shells",
 ]);
+
+const ORPHAN_INVENTORY_MARKERS = [
+  "this property is no longer in our inventory",
+  "property is no longer in our inventory",
+  "no longer in our inventory",
+  "no longer in inventory",
+];
 
 function normalizeForMatch(value: string): string {
   return value
@@ -168,6 +177,51 @@ function stripHtml(value: string): string {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function detectOrphanInventoryPage(input: {
+  html: string;
+  title: string;
+  h1: string;
+  mediaCount: number;
+  availabilityDayCount: number;
+}): {
+  orphaned: boolean;
+  evidence: string[];
+} {
+  const evidence: string[] = [];
+  const normalizedTitle = input.title.trim().toLowerCase();
+  const normalizedH1 = input.h1.trim().toLowerCase();
+  const text = stripHtml(input.html).toLowerCase();
+
+  const marker = ORPHAN_INVENTORY_MARKERS.find((candidate) =>
+    text.includes(candidate),
+  );
+  if (marker) {
+    evidence.push(`orphan marker found in detail html: '${marker}'`);
+  }
+
+  const hasFallbackSearchShell =
+    normalizedTitle === "search" && normalizedH1 === "all properties";
+  if (hasFallbackSearchShell) {
+    evidence.push(
+      "detail page resolved to fallback shell title=Search h1=All Properties",
+    );
+  }
+
+  const hasSparseExtractionSignals =
+    input.mediaCount === 0 && input.availabilityDayCount === 0;
+  if (hasSparseExtractionSignals) {
+    evidence.push("detail extraction is sparse: media=0 availability_days=0");
+  }
+
+  const orphaned =
+    marker !== undefined ||
+    (hasFallbackSearchShell && hasSparseExtractionSignals);
+  return {
+    orphaned,
+    evidence,
+  };
 }
 
 function extractFirst(regex: RegExp, value: string): string {
@@ -327,7 +381,9 @@ function normalizeOceanReefGalleryUrl(value: string): string | null {
       return null;
     }
 
-    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+    // Canonicalize the legacy dual-bucket hosts so validators see one stable pattern.
+    const canonicalHost = "track-pm.s3.amazonaws.com";
+    return `${parsed.protocol}//${canonicalHost}${parsed.pathname}`;
   } catch {
     return null;
   }
@@ -901,10 +957,12 @@ async function fetchDetail(
         /<div[^>]+id=["']pdpDescription["'][^>]*>[\s\S]*?<div[^>]+class=["'][^"']*pdp-section-body[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
         html,
       ) || schemaDescription;
-    const descriptionExpanded = stripHtml(descriptionExpandedRaw).slice(
+    const descriptionExpandedClean = stripHtml(descriptionExpandedRaw).slice(
       0,
       50000,
     );
+    const descriptionExpanded =
+      descriptionExpandedClean || stripHtml(metaDescription).slice(0, 50000);
     const roomsGuidance = extractRoomsGuidance(html);
 
     const amenitiesAll = extractAmenities(html);
@@ -935,9 +993,22 @@ async function fetchDetail(
     const baths = extractBathersCount(html);
 
     const mediaUrls = collectMediaUrls(html);
+    const unitId = extractPropertyUnitId(html);
+    const availability = extractAvailabilityFromHtml(
+      html,
+      availabilityHorizonDays,
+    );
 
     const externalListingId = extractExternalListingId(normalizedDetailUrl);
+    const orphanDetection = detectOrphanInventoryPage({
+      html,
+      title,
+      h1,
+      mediaCount: mediaUrls.length,
+      availabilityDayCount: availability.days.length,
+    });
     const availabilityValidationExempt =
+      orphanDetection.orphaned ||
       AVAILABILITY_VALIDATION_EXEMPT_EXTERNAL_LISTING_IDS.has(
         externalListingId,
       );
@@ -949,21 +1020,20 @@ async function fetchDetail(
       : null;
     const availabilityValidationExemptEvidence = availabilityValidationExempt
       ? [
-          "normalized_availability.day_codes is all 'U' for the captured horizon",
-          "listing is in known oceanreef non-bookable online set",
+          ...(orphanDetection.orphaned
+            ? orphanDetection.evidence
+            : [
+                "normalized_availability.day_codes is all 'U' for the captured horizon",
+                "listing is in known oceanreef non-bookable online set",
+              ]),
         ]
       : [];
-    const unitId = extractPropertyUnitId(html);
     const htmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
     );
     await writeFile(htmlPath, `${html}\n`, "utf8");
 
-    const availability = extractAvailabilityFromHtml(
-      html,
-      availabilityHorizonDays,
-    );
     const description = stripHtml(metaDescription).slice(0, 20000);
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
@@ -1006,6 +1076,11 @@ async function fetchDetail(
           availabilityValidationExemptReasonCode,
         availability_validation_exempt_reason:
           availabilityValidationExemptReason,
+        ...(orphanDetection.orphaned
+          ? {
+              orphaned_inventory: true,
+            }
+          : {}),
       },
       fetched_at: new Date().toISOString(),
       title,

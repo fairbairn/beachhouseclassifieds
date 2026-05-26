@@ -323,6 +323,10 @@ function toFiniteNumber(value: unknown): number | null {
 }
 
 function isAvailabilityValidationExempt(record: DetailRecord): boolean {
+  if (isNonBookableOnlineExempt(record)) {
+    return true;
+  }
+
   if (record.normalized_availability?.validation_exempt === true) {
     return true;
   }
@@ -331,6 +335,19 @@ function isAvailabilityValidationExempt(record: DetailRecord): boolean {
     return true;
   }
 
+  const reasonCandidates = [
+    record.normalized_availability?.validation_exempt_reason_code,
+    record.listing_flags?.availability_validation_exempt_reason_code,
+  ];
+
+  return reasonCandidates.some(
+    (value) =>
+      typeof value === "string" &&
+      value.trim().toLowerCase() === "non_bookable_online",
+  );
+}
+
+function isNonBookableOnlineExempt(record: DetailRecord): boolean {
   const reasonCandidates = [
     record.normalized_availability?.validation_exempt_reason_code,
     record.listing_flags?.availability_validation_exempt_reason_code,
@@ -983,20 +1000,35 @@ export async function runValidateScrapeFilenameAlignmentCli(
       typeof parsed.description_expanded === "string"
         ? parsed.description_expanded.trim()
         : "";
+    const nonBookableOnlineExempt = isNonBookableOnlineExempt(parsed);
     if (descriptionExpanded.length === 0) {
-      issues.push({
-        code: "missing_description_expanded",
-        message:
-          `details/json/${fileName} must include description_expanded ` +
-          `with length > 0`,
-      });
+      if (nonBookableOnlineExempt) {
+        warnings.push({
+          code: "availability_validation_exempt",
+          message: `details/json/${fileName} has empty description_expanded, tolerated because listing is marked non_bookable_online`,
+        });
+      } else {
+        issues.push({
+          code: "missing_description_expanded",
+          message:
+            `details/json/${fileName} must include description_expanded ` +
+            `with length > 0`,
+        });
+      }
     } else if (descriptionExpanded.length < MIN_DESCRIPTION_EXPANDED_CHARS) {
-      issues.push({
-        code: "description_expanded_too_short",
-        message:
-          `details/json/${fileName} description_expanded length=${descriptionExpanded.length} ` +
-          `must be >= ${MIN_DESCRIPTION_EXPANDED_CHARS}`,
-      });
+      if (nonBookableOnlineExempt) {
+        warnings.push({
+          code: "availability_validation_exempt",
+          message: `details/json/${fileName} description_expanded length=${descriptionExpanded.length} is below threshold, tolerated because listing is marked non_bookable_online`,
+        });
+      } else {
+        issues.push({
+          code: "description_expanded_too_short",
+          message:
+            `details/json/${fileName} description_expanded length=${descriptionExpanded.length} ` +
+            `must be >= ${MIN_DESCRIPTION_EXPANDED_CHARS}`,
+        });
+      }
     }
 
     const amenitiesCategories =
@@ -1041,12 +1073,19 @@ export async function runValidateScrapeFilenameAlignmentCli(
     }
 
     if (!hasLatLon && !hasAddress) {
-      issues.push({
-        code: "missing_location_signal",
-        message:
-          `details/json/${fileName} must include valid latitude/longitude ` +
-          `or a credible address fallback`,
-      });
+      if (nonBookableOnlineExempt) {
+        warnings.push({
+          code: "availability_validation_exempt",
+          message: `details/json/${fileName} has no location signal, tolerated because listing is marked non_bookable_online`,
+        });
+      } else {
+        issues.push({
+          code: "missing_location_signal",
+          message:
+            `details/json/${fileName} must include valid latitude/longitude ` +
+            `or a credible address fallback`,
+        });
+      }
     }
 
     const profile = parsed.property_profile;
@@ -1100,18 +1139,32 @@ export async function runValidateScrapeFilenameAlignmentCli(
         : [];
 
       if (imageUrls.length === 0) {
-        issues.push({
-          code: "empty_media_gallery_image_urls",
-          message: `details/json/${fileName} has empty media_gallery.image_urls; expected one or more images`,
-        });
+        if (nonBookableOnlineExempt) {
+          warnings.push({
+            code: "availability_validation_exempt",
+            message: `details/json/${fileName} has empty media_gallery.image_urls, tolerated because listing is marked non_bookable_online`,
+          });
+        } else {
+          issues.push({
+            code: "empty_media_gallery_image_urls",
+            message: `details/json/${fileName} has empty media_gallery.image_urls; expected one or more images`,
+          });
+        }
       }
 
       const imageCount = toFiniteNumber(mediaGallery.image_count);
       if (imageCount === null || imageCount <= 0) {
-        issues.push({
-          code: "invalid_media_gallery_image_count",
-          message: `details/json/${fileName} must include media_gallery.image_count > 0`,
-        });
+        if (nonBookableOnlineExempt) {
+          warnings.push({
+            code: "availability_validation_exempt",
+            message: `details/json/${fileName} has invalid media_gallery.image_count, tolerated because listing is marked non_bookable_online`,
+          });
+        } else {
+          issues.push({
+            code: "invalid_media_gallery_image_count",
+            message: `details/json/${fileName} must include media_gallery.image_count > 0`,
+          });
+        }
       }
 
       if (imageCount !== null && imageCount !== imageUrls.length) {
@@ -1231,12 +1284,19 @@ export async function runValidateScrapeFilenameAlignmentCli(
     }
 
     if (!availability.hasDays) {
-      issues.push({
-        code: "missing_availability_days",
-        message:
-          `details/json/${fileName} must include normalized_availability.days ` +
-          `with valid ISO dates`,
-      });
+      if (nonBookableOnlineExempt) {
+        warnings.push({
+          code: "availability_validation_exempt",
+          message: `details/json/${fileName} has no normalized_availability.days, tolerated because listing is marked non_bookable_online`,
+        });
+      } else {
+        issues.push({
+          code: "missing_availability_days",
+          message:
+            `details/json/${fileName} must include normalized_availability.days ` +
+            `with valid ISO dates`,
+        });
+      }
     } else if (availability.unknownDays === availability.totalDays) {
       issues.push({
         code: "all_days_unknown",

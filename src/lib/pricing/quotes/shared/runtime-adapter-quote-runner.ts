@@ -240,6 +240,12 @@ function isInternalRuntimeFailure(reason: WindowFailureReason): boolean {
   const normalizedCode = reason.code.trim().toUpperCase();
   const normalizedMessage = reason.message.trim().toLowerCase();
 
+  // Availability misses are expected business outcomes and should not abort
+  // a full adapter run.
+  if (normalizedCode === "QUOTE_UNAVAILABLE") {
+    return false;
+  }
+
   if (normalizedCode.startsWith("QUOTE_")) {
     return true;
   }
