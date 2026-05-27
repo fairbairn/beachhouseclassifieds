@@ -1,0 +1,55 @@
+{
+  "adapter_key": "realjoy30a",
+  "external_listing_id": "peaceful-easy-feeling",
+  "detail_url": "https://www.realjoy.com/beach-rentals/peaceful-easy-feeling",
+  "captured_at": "2026-05-27T17:28:56.668Z",
+  "currency": "USD",
+  "quote_window_cadence": "weekly_anchor_adaptive_span",
+  "quote_window_gap_policy": "probe_longest_available_span",
+  "quote_window_anchor_date": "2026-05-30",
+  "quote_window_days": 168,
+  "quote_sample_step_days": 1,
+  "quote_nights": 7,
+  "quote_max_queries": 2,
+  "endpoint_path": "/ajax/quote",
+  "quote_run_diagnostics": {
+    "queried_windows": 2,
+    "available_windows": 1,
+    "unavailable_windows": 1,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {
+      "QUOTE_UNAVAILABLE": 1
+    },
+    "sample_internal_errors": []
+  },
+  "observations": [
+    {
+      "sampled_at": "2026-05-27T17:28:56.668Z",
+      "captured_at": "2026-05-27T17:28:56.668Z",
+      "source_listing_id": "peaceful-easy-feeling",
+      "currency": "USD",
+      "start_date": "2026-08-19",
+      "end_date": "2026-08-28",
+      "check_in_date": "2026-08-19",
+      "check_out_date": "2026-08-28",
+      "nights": 9,
+      "base_nightly": 288.73,
+      "all_in_nightly": 349.53,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 2598.61,
+      "taxes_total": 337.04,
+      "fees_total_excl_taxes": 567,
+      "fee_lines": [],
+      "grand_total": 3145.8,
+      "quoted_total": 3145.8,
+      "fee_pct_of_base": 0.218194,
+      "tax_pct_of_base": 0.1297,
+      "non_base_pct_of_total": 0.173943,
+      "all_in_multiplier": 1.21057,
+      "handoff_url": "https://www.realjoy.com/beach-rentals/book-now?propertyID=871&checkin=08/19/2026&checkout=08/28/2026&promocode=STAY5SAVE15",
+      "source": "quote_api",
+      "pricing_source": "runtime_parsed"
+    }
+  ]
+}
