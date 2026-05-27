@@ -350,7 +350,8 @@ const DEFAULT_FRESH_HOURS = 24;
 const DEFAULT_MIN_OVERLAP_NIGHTS = 3;
 const DEFAULT_BACKFILL_WINDOW_HOURS = 1;
 const DEFAULT_MIN_PROBE_NIGHTS = 3;
-const DEFAULT_MAX_PROBE_NIGHTS = 14;
+const DEFAULT_MAX_PROBE_NIGHTS = 28;
+const DEFAULT_PREFERRED_PROBE_NIGHTS = 14;
 const DEFAULT_QUOTE_OBSERVATION_RETENTION_DAYS = 365;
 
 async function writeJsonFileDurable(
@@ -1143,30 +1144,17 @@ function buildAdaptiveQuoteWindows(input: {
   }
 
   const byDate = new Map(input.availabilityDays.map((day) => [day.date, day]));
-  const explicitMinNightValues = input.availabilityDays
-    .map((day) =>
-      typeof day.min_nights_required === "number" && day.min_nights_required > 0
-        ? Math.floor(day.min_nights_required)
-        : null,
-    )
-    .filter((value): value is number => value !== null);
-  const inferredMinNights =
-    explicitMinNightValues.length > 0
-      ? Math.max(1, Math.min(...explicitMinNightValues))
-      : Math.max(1, input.defaultMinProbeNights);
-  const targetMinNights = Math.max(1, Math.floor(input.targetNights));
-  const minProbeNights = Math.min(
-    14,
-    Math.max(
-      3,
-      input.defaultMinProbeNights,
-      inferredMinNights,
-      targetMinNights,
-    ),
+  const configuredMinProbeNights = Math.min(
+    28,
+    Math.max(3, input.defaultMinProbeNights),
   );
-  const maxProbeNights = Math.max(
-    minProbeNights,
-    Math.min(14, Math.max(input.defaultMaxProbeNights, input.targetNights)),
+  const configuredMaxProbeNights = Math.max(
+    configuredMinProbeNights,
+    Math.min(28, Math.max(input.defaultMaxProbeNights, input.targetNights)),
+  );
+  const preferredProbeNights = Math.min(
+    configuredMaxProbeNights,
+    Math.max(configuredMinProbeNights, DEFAULT_PREFERRED_PROBE_NIGHTS),
   );
 
   const sortedDays = [...input.availabilityDays]
@@ -1186,12 +1174,33 @@ function buildAdaptiveQuoteWindows(input: {
       continue;
     }
 
-    let selectedNights: number | null = null;
-    for (let nights = maxProbeNights; nights >= minProbeNights; nights -= 1) {
+    const startMinNights =
+      typeof day.min_nights_required === "number" && day.min_nights_required > 0
+        ? Math.min(28, Math.floor(day.min_nights_required))
+        : configuredMinProbeNights;
+    const minProbeNightsForStart = Math.max(
+      configuredMinProbeNights,
+      startMinNights,
+    );
+    const maxProbeNightsForStart =
+      startMinNights > preferredProbeNights
+        ? configuredMaxProbeNights
+        : Math.max(minProbeNightsForStart, preferredProbeNights);
+
+    const candidateNights: number[] = [];
+    for (
+      let nights = minProbeNightsForStart;
+      nights <= maxProbeNightsForStart;
+      nights += 1
+    ) {
       if (canQuoteWindow({ byDate, startDate: day.date, nights })) {
-        selectedNights = nights;
-        break;
+        candidateNights.push(nights);
       }
+    }
+
+    let selectedNights: number | null = null;
+    if (candidateNights.length > 0) {
+      selectedNights = Math.max(...candidateNights);
     }
 
     if (selectedNights === null) {

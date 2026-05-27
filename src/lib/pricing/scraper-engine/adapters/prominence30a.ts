@@ -2266,7 +2266,6 @@ export function createProminence30Adapter(): ScraperAdapter<LuxuryDetailRecord> 
     managerKey: "prominence30a",
     scriptLabel: "prominence30a",
     defaultAnchorUrl: DEFAULT_ANCHOR_URL,
-    useBrowserEngineProxy: true,
     detailFetchDelayMs: Math.max(
       0,
       Number(
