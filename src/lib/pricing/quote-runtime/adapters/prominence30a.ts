@@ -1,30 +1,24 @@
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
-type RcapiPriceEntry = {
-  p?: unknown;
-  c?: unknown;
+type QuoteRequestContext = {
+  propertyId: string;
+  propertyName: string;
+  roomTypeId: string;
+  hash: string;
+  detailUrl: string;
 };
 
-type RcapiSearchResult = {
-  prices?: unknown;
+type ProminenceUnavailableClassification = {
+  code: string;
+  retryable: boolean;
+  httpStatus: number | null;
 };
 
-type DetailedQuoteResponse = {
-  status?: unknown;
-  content?: unknown;
-  message?: unknown;
-};
-
-type ParsedDetailedQuote = {
-  baseTotal: number | null;
-  taxesTotal: number | null;
-  feesTotal: number | null;
-  grandTotal: number | null;
-};
-
-type RawQuote = {
+type RawObservation = {
+  startDate: string;
+  endDate: string;
   quoteAvailable: boolean;
-  reason: string | null;
+  quoteUnavailableReason: string | null;
   baseTotal: number | null;
   taxesTotal: number | null;
   feesTotal: number | null;
@@ -33,43 +27,15 @@ type RawQuote = {
   handoffUrl: string;
 };
 
-type Prominence30QuoteContext = {
-  itemEid: string;
-  typeId: string;
-  inventoryId: string;
-  detailUrl: string;
-};
-
 const ADAPTER_KEY = "prominence30a" as const;
 const BASE_HOST = "https://www.prominenceon30a.com";
-const RCAPI_ENDPOINT = `${BASE_HOST}/rcapi/item/avail/search`;
-const DETAILED_QUOTE_ENDPOINT = `${BASE_HOST}/rescms/ajax/item/pricing/quote`;
-const DEFAULT_TIMEOUT_MS = 20000;
-const MIN_VALID_BASE_TOTAL = 100;
+const DEFAULT_QUOTE_RETRY_DELAYS_MS = [0, 1200, 3000, 6000];
+const DEFAULT_QUOTE_TIMEOUT_MS = 20000;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function parseMoney(value: unknown): number | null {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? roundCurrency(value) : null;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value.trim().replace(/,/g, ""));
-    return Number.isFinite(parsed) ? roundCurrency(parsed) : null;
-  }
-  return null;
-}
-
-function asOptionalString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 function toUsDate(isoDate: string): string {
@@ -80,102 +46,156 @@ function toUsDate(isoDate: string): string {
   return `${match[2]}/${match[3]}/${match[1]}`;
 }
 
-function decodeBasicHtmlEntities(value: string): string {
+function stripHtmlTags(value: string): string {
   return value
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'");
-}
-
-function stripHtmlToText(value: string): string {
-  return decodeBasicHtmlEntities(value)
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function parseClassSummaryAmount(
-  html: string,
-  className: "sub-total" | "tax" | "total",
-): number | null {
-  const escapedClass = className.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
-  const regex = new RegExp(
-    `<tr[^>]*class="${escapedClass}[^"]*"[^>]*>\\s*<th>[^<]+<\\/th>\\s*<td class="amount">\\s*(?:<b>)?\\$([0-9,]+\\.[0-9]{2})(?:<\\/b>)?\\s*<\\/td>`,
+function parseAmount(value: string): number | null {
+  const parsed = Number(value.trim().replace(/,/g, ""));
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return roundCurrency(parsed);
+}
+
+function parsePriceByLabelContains(html: string, label: string): number | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `<span\\s+class="pdp-quote-item-text">\\s*[^<]*${escaped}[^<]*\\s*<\\/span>[\\s\\S]*?<span\\s+class="pdp-quote-item-price"\\s+data-price="([^"]+)"`,
     "i",
   );
-  const match = html.match(regex);
+  const match = html.match(pattern);
   if (!match?.[1]) {
     return null;
   }
-  return parseMoney(match[1]);
+  return parseAmount(match[1]);
 }
 
-function parseDetailedQuoteContent(contentHtml: string): ParsedDetailedQuote {
-  const rowRegex =
-    /<tr[^>]*class="line-item[^"]*"[^>]*>\s*<td>([\s\S]*?)<\/td>\s*<td class="amount">\$([0-9,]+\.[0-9]{2})<\/td>/gi;
-
-  let baseTotal: number | null = null;
-  let feeLinesTotal = 0;
-
-  for (const match of contentHtml.matchAll(rowRegex)) {
-    const name = stripHtmlToText(match[1] ?? "");
-    const amount = parseMoney(match[2]);
-    if (!name || amount === null) {
-      continue;
-    }
-    if (/^(lodging|rent)\s*:/i.test(name)) {
-      baseTotal = amount;
-      continue;
-    }
-    if (/\(optional\)/i.test(name)) {
-      continue;
-    }
-    feeLinesTotal += amount;
+function parseUnavailableReason(html: string): string | null {
+  const trimmed = html.trim();
+  if (trimmed === "No") {
+    return "Dates unavailable for selected stay window";
+  }
+  if (trimmed === "API Error") {
+    return "Quote API returned an error";
   }
 
-  const subTotal = parseClassSummaryAmount(contentHtml, "sub-total");
-  const taxesTotal = parseClassSummaryAmount(contentHtml, "tax");
-  const grandTotal = parseClassSummaryAmount(contentHtml, "total");
+  const alertMatch = html.match(
+    /<div\s+class="alert-sm\s+alert-danger[^>]*>([\s\S]*?)<\/div>/i,
+  );
+  if (!alertMatch?.[1]) {
+    return null;
+  }
 
-  const feesTotal =
-    subTotal !== null && baseTotal !== null
-      ? roundCurrency(Math.max(0, subTotal - baseTotal))
-      : roundCurrency(feeLinesTotal);
+  const reason = stripHtmlTags(alertMatch[1]).trim();
+  return reason.length > 0 ? reason : null;
+}
+
+function classifyUnavailableReason(
+  reason: string | null,
+): ProminenceUnavailableClassification {
+  const normalized = (reason ?? "Quote unavailable").trim();
+  const lower = normalized.toLowerCase();
+
+  if (
+    lower.includes("timed out") ||
+    lower.includes("timeout") ||
+    lower.includes("etimedout")
+  ) {
+    return {
+      code: "QUOTE_TIMEOUT_TRANSIENT",
+      retryable: true,
+      httpStatus: null,
+    };
+  }
+
+  const statusMatch = normalized.match(/status\s+(\d{3})/i);
+  const httpStatus = statusMatch?.[1] ? Number(statusMatch[1]) : null;
+  if (httpStatus !== null && Number.isFinite(httpStatus)) {
+    const hardFail =
+      httpStatus === 400 ||
+      httpStatus === 403 ||
+      httpStatus === 404 ||
+      httpStatus === 429 ||
+      httpStatus >= 500;
+
+    return {
+      code: `QUOTE_HTTP_${httpStatus}`,
+      retryable: !hardFail,
+      httpStatus,
+    };
+  }
 
   return {
-    baseTotal,
-    taxesTotal,
-    feesTotal,
-    grandTotal,
+    code: "QUOTE_UNAVAILABLE",
+    retryable: true,
+    httpStatus: null,
   };
 }
 
-function buildHandoffUrl(input: {
-  itemEid: string;
-  typeId: string;
-  inventoryId: string;
-  startDate: string;
-  endDate: string;
-  adults: number;
-  children: number;
+function extractBookNowUrl(html: string): string | null {
+  const match = html.match(/id="bookNowURL"[^>]*value="([^"]+)"/i);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const decoded = match[1]
+    .replace(/&amp;/g, "&")
+    .replace(/&#x2F;/g, "/")
+    .trim();
+  return decoded.length > 0 ? decoded : null;
+}
+
+function buildFallbackHandoffUrl(input: {
+  propertyId: string;
+  checkInIso: string;
+  checkOutIso: string;
 }): string {
-  const params = new URLSearchParams();
-  params.set("rcav[begin]", toUsDate(input.startDate));
-  params.set("rcav[end]", toUsDate(input.endDate));
-  params.set("rcav[adult]", String(Math.max(1, input.adults)));
-  params.set("rcav[child]", String(Math.max(0, input.children)));
-  params.set("rcav[eid]", input.itemEid);
-  params.set("rcav[coupon]", "");
-  params.set(`rcav[IDs][${input.typeId}][0]`, input.inventoryId);
-  return `${BASE_HOST}/rescms/item/${input.itemEid}/buy?${params.toString()}`;
+  return `${BASE_HOST}/rentals/book-now?propertyID=${input.propertyId}&checkin=${input.checkInIso}&checkout=${input.checkOutIso}`;
+}
+
+function toFormBody(input: {
+  propertyId: string;
+  propertyName: string;
+  roomTypeId: string;
+  hash: string;
+  checkInIso: string;
+  checkOutIso: string;
+}): URLSearchParams {
+  const body = new URLSearchParams();
+  body.set("checkin", toUsDate(input.checkInIso));
+  body.set("checkout", toUsDate(input.checkOutIso));
+  body.set("propertyID", input.propertyId);
+  body.set("roomTypeID", input.roomTypeId);
+  body.set("propertyName", input.propertyName);
+  body.set("hash", input.hash);
+  return body;
+}
+
+function parseRetryDelaysMs(raw: string): number[] {
+  const parsed = raw
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .map((value) => Math.floor(value));
+  if (parsed.length >= 2) {
+    return parsed;
+  }
+  return DEFAULT_QUOTE_RETRY_DELAYS_MS;
 }
 
 function normalizeTimeoutMs(raw: number | undefined): number {
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
-    return DEFAULT_TIMEOUT_MS;
+    return DEFAULT_QUOTE_TIMEOUT_MS;
   }
   return Math.max(1000, Math.floor(raw));
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 }
 
 function toError(input: {
@@ -201,9 +221,17 @@ function toError(input: {
   };
 }
 
+function asOptionalString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function extractQuoteContext(
   input: QuoteExecutionRequest,
-): Prominence30QuoteContext {
+): QuoteRequestContext {
   const context =
     input.quoteContext &&
     typeof input.quoteContext === "object" &&
@@ -211,228 +239,167 @@ function extractQuoteContext(
       ? input.quoteContext
       : null;
 
-  const itemEid =
-    asOptionalString(context?.item_eid) ?? asOptionalString(context?.eid);
-  const typeId =
-    asOptionalString(context?.type_id) ?? asOptionalString(context?.type);
-  const inventoryId =
-    asOptionalString(context?.inventory_id) ?? asOptionalString(context?.id);
-  const detailUrl = asOptionalString(context?.detail_url);
+  const propertyId =
+    asOptionalString(context?.property_id) ??
+    asOptionalString(context?.propertyID);
+  const propertyName =
+    asOptionalString(context?.property_name) ??
+    asOptionalString(context?.propertyName) ??
+    propertyId;
+  const roomTypeId =
+    asOptionalString(context?.room_type_id) ??
+    asOptionalString(context?.roomTypeID) ??
+    "";
+  const hash = asOptionalString(context?.hash) ?? "";
+  const detailUrl =
+    asOptionalString(context?.detail_url) ??
+    asOptionalString(context?.detailUrl) ??
+    "";
 
-  if (!itemEid || !typeId || !inventoryId || !detailUrl) {
+  if (!propertyId || !detailUrl) {
     throw new Error(
-      `Missing required quote_context values for ${ADAPTER_KEY} listing ${input.listingId}. Required: item_eid, type_id, inventory_id, detail_url`,
+      `Missing required quote_context values for ${ADAPTER_KEY} listing ${input.listingId}. Required: property_id, detail_url`,
     );
   }
 
   return {
-    itemEid,
-    typeId,
-    inventoryId,
+    propertyId,
+    propertyName: propertyName || propertyId,
+    roomTypeId,
+    hash,
     detailUrl,
   };
 }
 
-async function fetchRcapiQuote(input: {
-  context: Prominence30QuoteContext;
+async function fetchProminenceQuote(input: {
+  quoteContext: QuoteRequestContext;
   checkInIso: string;
   checkOutIso: string;
-  adults: number;
-  children: number;
-  signal: AbortSignal;
-}): Promise<RawQuote> {
-  const query = new URLSearchParams();
-  query.set("rcav[begin]", toUsDate(input.checkInIso));
-  query.set("rcav[end]", toUsDate(input.checkOutIso));
-  query.set("rcav[adult]", String(Math.max(1, input.adults)));
-  query.set("rcav[child]", String(Math.max(0, input.children)));
-  query.set("rcav[eid]", input.context.itemEid);
-  query.set("rcav[coupon]", "");
-  query.set(`rcav[IDs][${input.context.typeId}][0]`, input.context.inventoryId);
-
-  const handoffUrl = buildHandoffUrl({
-    itemEid: input.context.itemEid,
-    typeId: input.context.typeId,
-    inventoryId: input.context.inventoryId,
-    startDate: input.checkInIso,
-    endDate: input.checkOutIso,
-    adults: input.adults,
-    children: input.children,
+  timeoutMs: number;
+}): Promise<RawObservation> {
+  const endpoint = `${BASE_HOST}/ajax/quote`;
+  const fallbackHandoffUrl = buildFallbackHandoffUrl({
+    propertyId: input.quoteContext.propertyId,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
   });
 
-  const response = await fetch(`${RCAPI_ENDPOINT}?${query.toString()}`, {
-    method: "GET",
-    headers: {
-      accept: "application/json, text/plain, */*",
-      "user-agent": USER_AGENT,
-      referer: input.context.detailUrl,
-      origin: BASE_HOST,
-    },
-    signal: input.signal,
-  });
+  const retryDelaysMs = parseRetryDelaysMs(
+    process.env.PROMINENCE30A_QUOTE_RETRY_DELAYS_MS ??
+      process.env.PROMINENCE30_QUOTE_RETRY_DELAYS_MS ??
+      "",
+  );
 
-  if (!response.ok) {
-    return {
-      quoteAvailable: false,
-      reason: `RCAPI HTTP ${response.status}`,
-      baseTotal: null,
-      taxesTotal: null,
-      feesTotal: null,
-      grandTotal: null,
-      currency: "USD",
-      handoffUrl,
-    };
-  }
+  let lastFailureReason = "Quote request failed";
 
-  let rawPayload: unknown;
-  try {
-    rawPayload = await response.json();
-  } catch {
-    return {
-      quoteAvailable: false,
-      reason: "RCAPI returned invalid JSON",
-      baseTotal: null,
-      taxesTotal: null,
-      feesTotal: null,
-      grandTotal: null,
-      currency: "USD",
-      handoffUrl,
-    };
-  }
+  for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+    const delayMs = retryDelaysMs[attempt] ?? 0;
+    if (delayMs > 0) {
+      await sleep(delayMs);
+    }
 
-  if (!Array.isArray(rawPayload)) {
-    return {
-      quoteAvailable: false,
-      reason: "RCAPI response shape was not an array",
-      baseTotal: null,
-      taxesTotal: null,
-      feesTotal: null,
-      grandTotal: null,
-      currency: "USD",
-      handoffUrl,
-    };
-  }
+    try {
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(
+        () => controller.abort(),
+        input.timeoutMs,
+      );
 
-  const firstEntry = rawPayload[0] as RcapiSearchResult | undefined;
-  const prices = Array.isArray(firstEntry?.prices)
-    ? (firstEntry.prices as RcapiPriceEntry[])
-    : [];
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            accept: "text/html, */*; q=0.01",
+            "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "x-requested-with": "XMLHttpRequest",
+            "user-agent": USER_AGENT,
+            referer: input.quoteContext.detailUrl,
+            origin: BASE_HOST,
+          },
+          signal: controller.signal,
+          body: toFormBody({
+            propertyId: input.quoteContext.propertyId,
+            propertyName: input.quoteContext.propertyName,
+            roomTypeId: input.quoteContext.roomTypeId,
+            hash: input.quoteContext.hash,
+            checkInIso: input.checkInIso,
+            checkOutIso: input.checkOutIso,
+          }),
+        });
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
 
-  const firstPrice = prices[0];
-  const baseTotal = parseMoney(firstPrice?.p);
-  const currency = asOptionalString(firstPrice?.c) ?? "USD";
+      if (!response.ok) {
+        lastFailureReason = `Quote request failed with status ${response.status}`;
+        if (attempt < retryDelaysMs.length - 1) {
+          continue;
+        }
+        break;
+      }
 
-  if (baseTotal === null || baseTotal <= 0) {
-    return {
-      quoteAvailable: false,
-      reason: "No prices returned for selected stay window",
-      baseTotal: null,
-      taxesTotal: null,
-      feesTotal: null,
-      grandTotal: null,
-      currency,
-      handoffUrl,
-    };
-  }
+      const html = await response.text();
+      const reason = parseUnavailableReason(html);
 
-  if (baseTotal < MIN_VALID_BASE_TOTAL) {
-    return {
-      quoteAvailable: false,
-      reason: `RCAPI base total (${baseTotal}) appears to be placeholder pricing`,
-      baseTotal: null,
-      taxesTotal: null,
-      feesTotal: null,
-      grandTotal: null,
-      currency,
-      handoffUrl,
-    };
+      const baseTotal = parsePriceByLabelContains(html, "Rent");
+      const taxesTotal = parsePriceByLabelContains(html, "Taxes");
+      const feesTotal = parsePriceByLabelContains(html, "Fees");
+      const grandTotal = parsePriceByLabelContains(html, "Total");
+      const handoffUrl = extractBookNowUrl(html) ?? fallbackHandoffUrl;
+
+      const quoteAvailable =
+        reason === null &&
+        baseTotal !== null &&
+        baseTotal > 0 &&
+        grandTotal !== null &&
+        grandTotal >= baseTotal;
+
+      if (
+        !quoteAvailable &&
+        reason === null &&
+        attempt < retryDelaysMs.length - 1
+      ) {
+        lastFailureReason = "Quote response missing totals";
+        continue;
+      }
+
+      return {
+        startDate: input.checkInIso,
+        endDate: input.checkOutIso,
+        quoteAvailable,
+        quoteUnavailableReason: reason,
+        baseTotal,
+        taxesTotal,
+        feesTotal,
+        grandTotal,
+        currency: "USD",
+        handoffUrl,
+      };
+    } catch (error: unknown) {
+      lastFailureReason =
+        error instanceof Error && error.name === "AbortError"
+          ? `Quote request timed out after ${input.timeoutMs}ms`
+          : error instanceof Error
+            ? error.message
+            : "Quote request threw";
+      if (attempt < retryDelaysMs.length - 1) {
+        continue;
+      }
+    }
   }
 
   return {
-    quoteAvailable: true,
-    reason: null,
-    baseTotal,
+    startDate: input.checkInIso,
+    endDate: input.checkOutIso,
+    quoteAvailable: false,
+    quoteUnavailableReason: lastFailureReason,
+    baseTotal: null,
     taxesTotal: null,
     feesTotal: null,
     grandTotal: null,
-    currency,
-    handoffUrl,
-  };
-}
-
-async function fetchDetailedQuote(input: {
-  context: Prominence30QuoteContext;
-  checkInIso: string;
-  checkOutIso: string;
-  adults: number;
-  children: number;
-  signal: AbortSignal;
-}): Promise<{
-  parsed: ParsedDetailedQuote | null;
-  unavailableReason: string | null;
-}> {
-  const query = new URLSearchParams();
-  query.set("rcav[begin]", toUsDate(input.checkInIso));
-  query.set("rcav[end]", toUsDate(input.checkOutIso));
-  query.set("rcav[adult]", String(Math.max(1, input.adults)));
-  query.set("rcav[child]", String(Math.max(0, input.children)));
-  query.set("rcav[eid]", input.context.itemEid);
-  query.set("rcav[coupon]", "");
-  query.set(`rcav[IDs][${input.context.typeId}][]`, input.context.inventoryId);
-  query.set("eid", input.context.itemEid);
-  query.set("buy_text", "Book Now");
-
-  const response = await fetch(
-    `${DETAILED_QUOTE_ENDPOINT}?${query.toString()}`,
-    {
-      method: "GET",
-      headers: {
-        accept: "application/json, text/plain, */*",
-        "user-agent": USER_AGENT,
-        referer: input.context.detailUrl,
-        origin: BASE_HOST,
-      },
-      signal: input.signal,
-    },
-  );
-
-  if (!response.ok) {
-    return {
-      parsed: null,
-      unavailableReason: `Detailed quote HTTP ${response.status}`,
-    };
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return {
-      parsed: null,
-      unavailableReason: "Detailed quote returned invalid JSON",
-    };
-  }
-
-  const parsedPayload = payload as DetailedQuoteResponse;
-  const status =
-    typeof parsedPayload.status === "number"
-      ? parsedPayload.status
-      : Number(parsedPayload.status);
-  const content =
-    typeof parsedPayload.content === "string" ? parsedPayload.content : "";
-  const message = asOptionalString(parsedPayload.message);
-
-  if (!Number.isFinite(status) || status !== 1 || content.length === 0) {
-    return {
-      parsed: null,
-      unavailableReason:
-        message ?? "Detailed quote endpoint returned no pricing content",
-    };
-  }
-
-  return {
-    parsed: parseDetailedQuoteContent(content),
-    unavailableReason: null,
+    currency: "USD",
+    handoffUrl: fallbackHandoffUrl,
   };
 }
 
@@ -445,13 +412,13 @@ export async function executeProminence30SingleQuote(
       Number(
         process.env.PROMINENCE30A_QUOTE_TIMEOUT_MS ??
           process.env.PROMINENCE30_QUOTE_TIMEOUT_MS ??
-          DEFAULT_TIMEOUT_MS,
+          DEFAULT_QUOTE_TIMEOUT_MS,
       ),
   );
 
-  let context: Prominence30QuoteContext;
+  let quoteContext: QuoteRequestContext;
   try {
-    context = extractQuoteContext(input);
+    quoteContext = extractQuoteContext(input);
   } catch (error: unknown) {
     return {
       success: false,
@@ -468,196 +435,51 @@ export async function executeProminence30SingleQuote(
     };
   }
 
-  const fallbackHandoffUrl = buildHandoffUrl({
-    itemEid: context.itemEid,
-    typeId: context.typeId,
-    inventoryId: context.inventoryId,
-    startDate: input.checkInIso,
-    endDate: input.checkOutIso,
-    adults: input.adults,
-    children: input.children,
+  const raw = await fetchProminenceQuote({
+    quoteContext,
+    checkInIso: input.checkInIso,
+    checkOutIso: input.checkOutIso,
+    timeoutMs,
   });
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const base = await fetchRcapiQuote({
-      context,
-      checkInIso: input.checkInIso,
-      checkOutIso: input.checkOutIso,
-      adults: input.adults,
-      children: input.children,
-      signal: controller.signal,
-    });
-
-    if (!base.quoteAvailable || base.baseTotal === null) {
-      return {
-        success: true,
-        elapsedMs: performance.now() - startedAt,
-        observation: {
-          startDate: input.checkInIso,
-          endDate: input.checkOutIso,
-          quoteAvailable: false,
-          quoteUnavailableReason: base.reason,
-          currency: base.currency,
-          baseTotal: null,
-          taxesTotal: null,
-          feesTotalExclTaxes: null,
-          grandTotal: null,
-          quotedTotal: null,
-          handoffUrl: base.handoffUrl,
-        },
-      };
-    }
-
-    const detailed = await fetchDetailedQuote({
-      context,
-      checkInIso: input.checkInIso,
-      checkOutIso: input.checkOutIso,
-      adults: input.adults,
-      children: input.children,
-      signal: controller.signal,
-    });
-
-    if (!detailed.parsed) {
-      return {
-        success: true,
-        elapsedMs: performance.now() - startedAt,
-        observation: {
-          startDate: input.checkInIso,
-          endDate: input.checkOutIso,
-          quoteAvailable: false,
-          quoteUnavailableReason:
-            detailed.unavailableReason ??
-            "Detailed quote data missing for selected stay window",
-          currency: base.currency,
-          baseTotal: null,
-          taxesTotal: null,
-          feesTotalExclTaxes: null,
-          grandTotal: null,
-          quotedTotal: null,
-          handoffUrl: base.handoffUrl,
-        },
-      };
-    }
-
-    const resolvedBase = detailed.parsed.baseTotal ?? base.baseTotal;
-    const resolvedTaxes = detailed.parsed.taxesTotal;
-    const resolvedGrand = detailed.parsed.grandTotal;
-
-    if (
-      resolvedBase === null ||
-      resolvedBase < MIN_VALID_BASE_TOTAL ||
-      resolvedTaxes === null ||
-      resolvedTaxes <= 0 ||
-      resolvedGrand === null ||
-      resolvedGrand <= resolvedBase
-    ) {
-      return {
-        success: true,
-        elapsedMs: performance.now() - startedAt,
-        observation: {
-          startDate: input.checkInIso,
-          endDate: input.checkOutIso,
-          quoteAvailable: false,
-          quoteUnavailableReason:
-            "Detailed quote totals were incomplete or inconsistent",
-          currency: base.currency,
-          baseTotal: null,
-          taxesTotal: null,
-          feesTotalExclTaxes: null,
-          grandTotal: null,
-          quotedTotal: null,
-          handoffUrl: base.handoffUrl,
-        },
-      };
-    }
-
-    const resolvedFees = roundCurrency(
-      resolvedGrand - resolvedBase - resolvedTaxes,
+  const elapsedMs = performance.now() - startedAt;
+  if (!raw.quoteAvailable) {
+    const classification = classifyUnavailableReason(
+      raw.quoteUnavailableReason,
     );
-    if (resolvedFees < 0) {
-      return {
-        success: true,
-        elapsedMs: performance.now() - startedAt,
-        observation: {
-          startDate: input.checkInIso,
-          endDate: input.checkOutIso,
-          quoteAvailable: false,
-          quoteUnavailableReason:
-            "Detailed quote totals produced negative derived fees",
-          currency: base.currency,
-          baseTotal: null,
-          taxesTotal: null,
-          feesTotalExclTaxes: null,
-          grandTotal: null,
-          quotedTotal: null,
-          handoffUrl: base.handoffUrl,
-        },
-      };
-    }
-
-    if (resolvedFees >= resolvedBase) {
-      return {
-        success: true,
-        elapsedMs: performance.now() - startedAt,
-        observation: {
-          startDate: input.checkInIso,
-          endDate: input.checkOutIso,
-          quoteAvailable: false,
-          quoteUnavailableReason:
-            "Detailed quote totals produced fees greater than or equal to base",
-          currency: base.currency,
-          baseTotal: null,
-          taxesTotal: null,
-          feesTotalExclTaxes: null,
-          grandTotal: null,
-          quotedTotal: null,
-          handoffUrl: base.handoffUrl,
-        },
-      };
-    }
-
-    return {
-      success: true,
-      elapsedMs: performance.now() - startedAt,
-      observation: {
-        startDate: input.checkInIso,
-        endDate: input.checkOutIso,
-        quoteAvailable: true,
-        currency: base.currency,
-        baseTotal: resolvedBase,
-        taxesTotal: resolvedTaxes,
-        feesTotalExclTaxes: resolvedFees,
-        grandTotal: resolvedGrand,
-        quotedTotal: resolvedGrand,
-        handoffUrl: base.handoffUrl,
-      },
-    };
-  } catch (error: unknown) {
-    const isAbort =
-      error instanceof DOMException && error.name === "AbortError";
     return {
       success: false,
-      elapsedMs: performance.now() - startedAt,
-      error: toError({
-        code: isAbort ? "QUOTE_TIMEOUT" : "QUOTE_EXECUTION_FAILED",
-        message: isAbort
-          ? `Quote request timed out after ${timeoutMs}ms`
-          : error instanceof Error
-            ? error.message
-            : "Unknown quote execution error",
-        retryable: isAbort,
-        listingId: input.listingId,
-        checkInIso: input.checkInIso,
-        checkOutIso: input.checkOutIso,
+      elapsedMs,
+      error: {
+        code: classification.code,
+        message: raw.quoteUnavailableReason ?? "Quote unavailable",
+        retryable: classification.retryable,
         details: {
-          handoffUrl: fallbackHandoffUrl,
+          adapterKey: ADAPTER_KEY,
+          listingId: input.listingId,
+          startDate: raw.startDate,
+          endDate: raw.endDate,
+          httpStatus: classification.httpStatus,
+          handoff_url: raw.handoffUrl,
         },
-      }),
+      },
     };
-  } finally {
-    clearTimeout(timeout);
   }
+
+  return {
+    success: true,
+    elapsedMs,
+    observation: {
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      quoteAvailable: true,
+      currency: raw.currency || null,
+      baseTotal: raw.baseTotal,
+      taxesTotal: raw.taxesTotal,
+      feesTotalExclTaxes: raw.feesTotal,
+      grandTotal: raw.grandTotal,
+      quotedTotal: raw.grandTotal,
+      handoffUrl: raw.handoffUrl,
+    },
+  };
 }

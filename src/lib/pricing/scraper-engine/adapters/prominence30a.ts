@@ -1,12 +1,32 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Browser, Page } from "playwright";
 
 import { executeProminence30SingleQuote } from "@/lib/pricing/quote-runtime/adapters/prominence30a";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
+import type {
+  ScraperBrowserLike,
+  ScraperBrowserPageLike,
+} from "../shared/browser-engine";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+
+type ProminenceBrowserPage = ScraperBrowserPageLike & {
+  addInitScript(script: string): Promise<void>;
+  evaluate<Result>(
+    pageFunction: string | ((...args: unknown[]) => Result),
+    ...args: unknown[]
+  ): Promise<Result>;
+  waitForTimeout(timeoutMs: number): Promise<void>;
+  mouse: {
+    wheel(deltaX: number, deltaY: number): Promise<void>;
+  };
+  viewportSize(): { width: number; height: number } | null;
+};
+
+type ProminenceBrowser = ScraperBrowserLike & {
+  newPage(): Promise<ProminenceBrowserPage>;
+};
 
 type LuxuryDayCode = "A" | "U" | "I" | "O" | "X";
 type CanonicalDayCode = "Y" | "N";
@@ -116,10 +136,11 @@ type LuxuryDetailRecord = DetailRecordBase & {
     state: string;
   };
   quote_context: {
-    source: "description_expanded";
-    item_eid: string;
-    type_id: string;
-    inventory_id: string;
+    source: "detail_hidden_inputs";
+    property_id: string;
+    property_name: string;
+    room_type_id: string;
+    hash: string;
     detail_url: string;
   };
   normalized_matching_profile: {
@@ -260,73 +281,40 @@ function stripHtml(value: string): string {
     .trim();
 }
 
-function safeDecodeURIComponent(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function extractRcavIdentity(input: {
-  listingId: string;
-  descriptionExpanded: string;
-  detailHtml: string;
-}): {
-  itemEid: string;
-  typeId: string;
-  inventoryId: string;
-} {
-  const source = `${input.detailHtml}\n${input.descriptionExpanded}`;
-  const decodedSource = safeDecodeURIComponent(source);
-
-  const rcavIdPattern = /rcav\[IDs\]\[(\d+)\]\[(?:0)?\]=(\d+)/i;
-  const encodedRcavIdPattern = /rcav%5BIDs%5D%5B(\d+)\]%5B(?:0)?%5D=(\d+)/i;
-  const rcavEidPattern = /rcav\[eid\]=(\d+)/i;
-  const encodedRcavEidPattern = /rcav%5Beid%5D=(\d+)/i;
-
-  const decodedIdMatch = decodedSource.match(rcavIdPattern);
-  const encodedIdMatch = source.match(encodedRcavIdPattern);
-  const typeId = decodedIdMatch?.[1] ?? encodedIdMatch?.[1] ?? null;
-  const inventoryId = decodedIdMatch?.[2] ?? encodedIdMatch?.[2] ?? null;
-
-  const decodedEidMatch = decodedSource.match(rcavEidPattern);
-  const encodedEidMatch = source.match(encodedRcavEidPattern);
-  const itemEid = decodedEidMatch?.[1] ?? encodedEidMatch?.[1] ?? null;
-
-  if (itemEid && typeId && inventoryId) {
-    return {
-      itemEid,
-      typeId,
-      inventoryId,
-    };
-  }
-
-  const exactEntityMatch = source.match(
-    /'entity':\{'eid':'(\d+)'.*?'id':'(\d+)'.*?'type':'(\d+)'/s,
+function extractQuoteContextFromHtml(input: {
+  html: string;
+  fallbackListingId: string;
+  fallbackName: string;
+  detailUrl: string;
+}): LuxuryDetailRecord["quote_context"] {
+  const propertyIdMatch = input.html.match(
+    /<input[^>]*name="propertyID"[^>]*value="([^"]*)"[^>]*>/i,
   );
-  if (exactEntityMatch) {
-    return {
-      itemEid: exactEntityMatch[1],
-      inventoryId: exactEntityMatch[2],
-      typeId: exactEntityMatch[3],
-    };
-  }
-
-  const fallbackMatch = source.match(
-    /'eid':'(\d+)','engine_eid':'\d+','id':'(\d+)'.*?'type':'(\d+)'/s,
+  const propertyNameMatch = input.html.match(
+    /<input[^>]*name="propertyName"[^>]*value="([^"]*)"[^>]*>/i,
   );
-  if (fallbackMatch) {
-    return {
-      itemEid: fallbackMatch[1],
-      inventoryId: fallbackMatch[2],
-      typeId: fallbackMatch[3],
-    };
-  }
-
-  throw new Error(
-    `Missing rcav identity fields for listing ${input.listingId}`,
+  const roomTypeIdMatch = input.html.match(
+    /<input[^>]*name="roomTypeID"[^>]*value="([^"]*)"[^>]*>/i,
   );
+  const hashMatch = input.html.match(
+    /<input[^>]*name="hash"[^>]*value="([^"]*)"[^>]*>/i,
+  );
+
+  const propertyId =
+    propertyIdMatch?.[1]?.trim() || input.fallbackListingId.trim();
+  const propertyName =
+    propertyNameMatch?.[1]?.replace(/&amp;/g, "&").trim() ||
+    input.fallbackName.trim() ||
+    input.fallbackListingId.trim();
+
+  return {
+    source: "detail_hidden_inputs",
+    property_id: propertyId,
+    property_name: propertyName,
+    room_type_id: roomTypeIdMatch?.[1]?.trim() ?? "",
+    hash: hashMatch?.[1]?.trim() ?? "",
+    detail_url: input.detailUrl,
+  };
 }
 
 function normalizeListingName(value: string): string {
@@ -711,14 +699,6 @@ function dedupePreferLargestGalleryVariants(values: string[]): string[] {
 }
 
 function filterGallerySourceNoise(values: string[]): string[] {
-  const hasRezfusion = values.some(
-    (value) =>
-      /images\.rezfusion\.com/i.test(value) || /\/vrm-img\//i.test(value),
-  );
-  if (!hasRezfusion) {
-    return values;
-  }
-
   return values.filter((value) => !/picturehandler\.ashx/i.test(value));
 }
 
@@ -901,13 +881,18 @@ function extractExternalListingId(detailUrl: string): string {
   }
 }
 
-async function installEvaluateNameShim(page: Page): Promise<void> {
+async function installEvaluateNameShim(
+  page: ProminenceBrowserPage,
+): Promise<void> {
   const shim = "window.__name = window.__name || ((target) => target);";
   await page.addInitScript(shim);
   await page.evaluate(shim);
 }
 
-async function clickTab(page: Page, tabText: string): Promise<boolean> {
+async function clickTab(
+  page: ProminenceBrowserPage,
+  tabText: string,
+): Promise<boolean> {
   const target = tabText.toLowerCase();
   const result = await page.evaluate((targetText) => {
     const nodes = Array.from(
@@ -953,7 +938,7 @@ async function clickTab(page: Page, tabText: string): Promise<boolean> {
 }
 
 async function clickVisibleControlsByLabel(
-  page: Page,
+  page: ProminenceBrowserPage,
   labels: string[],
 ): Promise<number> {
   const lowered = labels.map((label) => label.toLowerCase());
@@ -1011,7 +996,7 @@ async function clickVisibleControlsByLabel(
 }
 
 async function discoverListings(
-  page: Page,
+  page: ProminenceBrowserPage,
   anchorUrl: string,
   maxScrollSteps: number,
   scrollPauseMs: number,
@@ -1062,11 +1047,8 @@ async function discoverListings(
           const normalizedPath = absolute.pathname
             .toLowerCase()
             .replace(/\/+$/, "");
-          const matchesExpectedPrefix = [
-            "/30a-vacation-rentals/",
-            "/all-30a-vacation-rentals/",
-            "/vacation-rentals/",
-          ].some((prefix) => normalizedPath.startsWith(prefix));
+          const matchesExpectedPrefix =
+            normalizedPath.startsWith("/vacation-rentals/");
           if (!matchesExpectedPrefix) {
             return "";
           }
@@ -1096,16 +1078,13 @@ async function discoverListings(
 
       const resultRoots = Array.from(
         document.querySelectorAll(
-          "#properties, .props-container, .properties, .property-wrap, riot-solr-result-list, .result-list",
+          "body > div.be-wrapper > div.be-main > div > div.srp-results-wrap, .srp-results-wrap",
         ),
       );
 
-      const resultAnchors =
-        resultRoots.length > 0
-          ? resultRoots.flatMap((root) =>
-              Array.from(root.querySelectorAll("a[href]")),
-            )
-          : Array.from(document.querySelectorAll("a[href]"));
+      const resultAnchors = resultRoots.flatMap((root) =>
+        Array.from(root.querySelectorAll("a[href]")),
+      );
 
       for (const anchor of resultAnchors) {
         const hrefRaw =
@@ -1128,16 +1107,13 @@ async function discoverListings(
         });
       }
 
-      const resultNodesWithHref =
-        resultRoots.length > 0
-          ? resultRoots.flatMap((root) =>
-              Array.from(
-                root.querySelectorAll<HTMLElement>(
-                  "[data-href], [data-url], [data-link]",
-                ),
-              ),
-            )
-          : [];
+      const resultNodesWithHref = resultRoots.flatMap((root) =>
+        Array.from(
+          root.querySelectorAll<HTMLElement>(
+            "[data-href], [data-url], [data-link]",
+          ),
+        ),
+      );
 
       for (const node of resultNodesWithHref) {
         const hrefRaw =
@@ -1251,7 +1227,9 @@ async function discoverListings(
   }));
 }
 
-async function extractAvailabilitySnapshot(page: Page): Promise<{
+async function extractAvailabilitySnapshot(
+  page: ProminenceBrowserPage,
+): Promise<{
   hasCalendarWidget: boolean;
   months: string[];
   items: Array<{ date: string; code: LuxuryDayCode }>;
@@ -1390,7 +1368,9 @@ async function extractAvailabilitySnapshot(page: Page): Promise<{
   });
 }
 
-async function extractDescriptionText(page: Page): Promise<string> {
+async function extractDescriptionText(
+  page: ProminenceBrowserPage,
+): Promise<string> {
   await clickTab(page, "Description");
 
   return page.evaluate(() => {
@@ -1425,7 +1405,7 @@ async function extractDescriptionText(page: Page): Promise<string> {
 }
 
 async function extractRoomDetailsGuidanceFromDom(
-  page: Page,
+  page: ProminenceBrowserPage,
 ): Promise<string[]> {
   await clickTab(page, "Room Details");
 
@@ -1494,7 +1474,7 @@ async function extractRoomDetailsGuidanceFromDom(
 }
 
 async function fetchDetail(
-  browser: Browser,
+  browser: ProminenceBrowser,
   detailUrl: string,
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
@@ -1506,10 +1486,19 @@ async function fetchDetail(
     await installEvaluateNameShim(page);
 
     const beforeLoad = Date.now();
-    await page.goto(detailUrl, {
+    const initialResponse = await page.goto(detailUrl, {
       waitUntil: "domcontentloaded",
       timeout: 120000,
     });
+    const initialStatus = initialResponse?.status?.() ?? null;
+    if (
+      typeof initialStatus === "number" &&
+      Number.isFinite(initialStatus) &&
+      (initialStatus === 403 || initialStatus === 429 || initialStatus >= 500)
+    ) {
+      throw new Error(`detail_http_${initialStatus} status=${initialStatus}`);
+    }
+
     await page.waitForTimeout(1800);
 
     await clickVisibleControlsByLabel(page, [
@@ -1524,6 +1513,8 @@ async function fetchDetail(
     ]);
 
     const pageLoadMs = Date.now() - beforeLoad;
+    const html = await page.content();
+    const loweredHtml = html.toLowerCase();
 
     const extracted = await page.evaluate(() => {
       const getMeta = (name: string): string => {
@@ -1811,7 +1802,6 @@ async function fetchDetail(
                 }
                 if (
                   /\.(jpe?g|png|webp|gif)(\?|$)/i.test(absolute) ||
-                  absolute.includes("picturehandler.ashx") ||
                   absolute.includes("/vrm-img/") ||
                   absolute.includes("images.rezfusion.com")
                 ) {
@@ -1826,6 +1816,27 @@ async function fetchDetail(
         })(),
       };
     });
+
+    const blockedTitleRegex =
+      /(attention required|access denied|forbidden|just a moment|verify you are human|security check)/i;
+    const titleOrHeading =
+      `${extracted.title ?? ""} ${extracted.h1 ?? ""}`.trim();
+    const hasBlockedTitleSignal = blockedTitleRegex.test(titleOrHeading);
+    const blockedHtmlSignals = [
+      "403 forbidden",
+      "cf-challenge",
+      "cf-mitigated",
+      "cdn-cgi/challenge-platform",
+      "error 1020",
+      "request blocked",
+    ];
+    const blockedHtmlSignal = blockedHtmlSignals.find((signal) =>
+      loweredHtml.includes(signal),
+    );
+    if (blockedHtmlSignal || hasBlockedTitleSignal) {
+      const signal = blockedHtmlSignal ?? "blocked-title";
+      throw new Error(`detail_http_403 challenge signal='${signal}'`);
+    }
 
     const descriptionText = (await extractDescriptionText(page)).slice(
       0,
@@ -1999,7 +2010,6 @@ async function fetchDetail(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
     );
-    const html = await page.content();
     await writeFile(htmlPath, html, "utf8");
 
     const descriptionExpanded = (
@@ -2008,10 +2018,11 @@ async function fetchDetail(
     ).slice(0, 30000);
     const domRoomDetailsGuidance =
       await extractRoomDetailsGuidanceFromDom(page);
-    const rcavIdentity = extractRcavIdentity({
-      listingId: externalListingId,
-      descriptionExpanded,
-      detailHtml: html,
+    const quoteContext = extractQuoteContextFromHtml({
+      html,
+      fallbackListingId: externalListingId,
+      fallbackName: extracted.h1 || extracted.title || externalListingId,
+      detailUrl,
     });
     const htmlRoomDetailsGuidance = extractRoomDetailsGuidanceFromHtml(html);
     const descriptionRoomDetailsGuidance =
@@ -2183,13 +2194,7 @@ async function fetchDetail(
       location,
       media_gallery: mediaGallery,
       property_profile: propertyProfile,
-      quote_context: {
-        source: "description_expanded",
-        item_eid: rcavIdentity.itemEid,
-        type_id: rcavIdentity.typeId,
-        inventory_id: rcavIdentity.inventoryId,
-        detail_url: detailUrl,
-      },
+      quote_context: quoteContext,
       normalized_matching_profile: normalizedMatchingProfile,
       normalized_availability: {
         source: "pm_prominence30a",
@@ -2261,6 +2266,7 @@ export function createProminence30Adapter(): ScraperAdapter<LuxuryDetailRecord> 
     managerKey: "prominence30a",
     scriptLabel: "prominence30a",
     defaultAnchorUrl: DEFAULT_ANCHOR_URL,
+    useBrowserEngineProxy: true,
     detailFetchDelayMs: Math.max(
       0,
       Number(
@@ -2310,7 +2316,7 @@ export function createProminence30Adapter(): ScraperAdapter<LuxuryDetailRecord> 
     },
     async discoverListings(context) {
       return discoverListings(
-        context.page,
+        context.page as ProminenceBrowserPage,
         context.anchorUrl,
         context.maxScrollSteps,
         context.scrollPauseMs,
@@ -2320,7 +2326,7 @@ export function createProminence30Adapter(): ScraperAdapter<LuxuryDetailRecord> 
     },
     async fetchDetail(context) {
       return fetchDetail(
-        context.browser,
+        context.browser as ProminenceBrowser,
         context.detailUrl,
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,

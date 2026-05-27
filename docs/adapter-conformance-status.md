@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-05-27T14:45:39.423Z
+Audit date: 2026-05-27T14:51:14.116Z
 
 Data source:
 
@@ -85,8 +85,8 @@ Preferred (non-blocking):
 | oversee30a              |   108 |  108 |     108 |          108 |          108 |        108 |       108 |    108 |                                                       108 |   6866 |                                                      63.57 |             ✅ |     ✅ |
 | panhandle30a            |    57 |   57 |      57 |           57 |           57 |         57 |        57 |     57 |   <span style="color:#c62828;"><strong>56</strong></span> |   2796 |                                                      49.05 |             ✅ |     ❌ |
 | paradise30a             |    89 |   89 |      89 |           89 |           89 |         89 |        89 |     89 |                                                        89 |   5007 |                                                      56.26 |             ✅ |     ✅ |
-| prominence30a           |    58 |   58 |      58 |           58 |           58 |         58 |        58 |     58 |                                                        58 |   3357 |                                                      57.88 |             ✅ |     ✅ |
-| realjoy30a              |   137 |  137 |     137 |          137 |          137 |        137 |       137 |    137 |                                                       137 |   7882 |                                                      57.53 |             ✅ |     ✅ |
+| prominence30a           |    58 |   58 |      58 |           58 |           58 |         58 |        58 |     58 |    <span style="color:#c62828;"><strong>0</strong></span> |   3357 |                                                      57.88 |             ✅ |     ❌ |
+| realjoy30a              |   137 |  137 |     137 |          137 |          137 |        137 |       137 |    137 |    <span style="color:#c62828;"><strong>0</strong></span> |   7882 |                                                      57.53 |             ✅ |     ❌ |
 | rosemary30a             |   221 |  221 |     221 |          221 |          221 |        221 |       221 |    221 |                                                       221 |   9289 |                                                      42.03 |             ✅ |     ✅ |
 | royaldestinations       |   142 |  142 |     142 |          142 |          142 |        142 |       142 |    142 |                                                       142 |   6749 |                                                      47.53 |             ✅ |     ✅ |
 | sandersbeach30a         |    74 |   74 |      74 |           74 |           74 |         74 |        74 |     74 |                                                        74 |   3670 |                                                      49.59 |             ✅ |     ✅ |
@@ -94,14 +94,14 @@ Preferred (non-blocking):
 | scenicstays30a          |    45 |   45 |      45 |           45 |           45 |         45 |        45 |     45 |                                                        45 |   2522 |                                                      56.04 |             ✅ |     ✅ |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |                                                        37 |   2264 |                                                      61.19 |             ✅ |     ✅ |
 | stayon30a               |   123 |  123 |     123 |          123 |          123 |        123 |       123 |    123 |                                                       123 |   5612 |                                                      45.63 |             ✅ |     ✅ |
-| **TOTAL**               |  3515 | 3515 |    3515 |         3515 |         3515 |       3515 |      3515 |   3515 | <span style="color:#c62828;"><strong>3514</strong></span> | 176726 |                                                      50.28 |             — | 33/34 |
+| **TOTAL**               |  3515 | 3515 |    3515 |         3515 |         3515 |       3515 |      3515 |   3515 | <span style="color:#c62828;"><strong>3319</strong></span> | 176726 |                                                      50.28 |             — | 31/34 |
 ## Current Snapshot Summary
 
 - 34 adapters audited.
 - All 34 adapters are at full required-core parity for the current captured files.
-- Combined-ready adapters (Ready = ✅): 33 / 34.
+- Combined-ready adapters (Ready = ✅): 31 / 34.
 
-- Pricing-records coverage signal: 3514 / 3515 files currently have per-listing pricing JSON records.
+- Pricing-records coverage signal: 3319 / 3515 files currently have per-listing pricing JSON records.
 
 - Quote API capability signal: 34 / 34 adapters expose pre-reservation quote APIs.
 - Geo location minimum (required): 34 / 34 adapters currently have 100% numeric lat/lng coverage.
@@ -236,6 +236,7 @@ Expected impact:
 
 - As stricter checks roll out, more adapters will likely show warnings initially.
 - That is intended and should be treated as a quality-discovery phase, not validator noise.
+
 
 
 
