@@ -1,6 +1,6 @@
 # Pricing Conformity Runtime Learnings
 
-Last updated: 2026-04-12T16:55:00Z
+Last updated: 2026-05-26T23:55:00Z
 
 ## 360blue (Completed Learnings)
 
@@ -28,6 +28,25 @@ Last updated: 2026-04-12T16:55:00Z
 - Quote sampling completed for 143 listings over a 24-week horizon.
 - Pricing cache fulfillment completed for 143 listings.
 - Quote sidecar conformity validation passed: `validated=143`, `failed=0`.
+
+## OceanReef30A (Quote Refresh + Validation Learnings)
+
+- Canonical rerun sequence that produced stable totals:
+  - `npm run pricing:quote:adapter:raw -- --adapter-key oceanreef30a --all-listings`
+  - `npm run pricing:cache:adapter -- --adapter-key oceanreef30a`
+  - `npm run pricing:validate:quotes -- --adapter-key oceanreef30a`
+  - `npm run pricing:validate:cache -- --adapter-key oceanreef30a`
+- Matrix sync/validation sequence for status totals:
+  - `npm run pricing:sync:conformance-matrix`
+  - `npm run pricing:validate:ready-conformance-matrix`
+  - `npm run pricing:validate:ready-conformance-matrix:strict`
+- Practical runtime behavior observed:
+  - `QUOTE_UNAVAILABLE` windows are common and expected for blocked/non-bookable windows; treat as non-fatal at run level.
+  - A full all-listings quote rerun removed most `invalid_fees_total` noise seen in earlier validation after mixed-history quote artifacts.
+- Remaining quote-sidecar validator failures after clean rerun were narrow and explicit:
+  - two listings with empty observations (`invalid_observation_count` / `missing_observations`): `amor-fati`, `cinnamon-fern`
+  - one listing with `invalid_fees_total`: `eventide`
+- Pricing cache validator result after rerun/build remained clean for OceanReef (`validated=108`, `failed=0`).
 
 ## LocalVR30A (Runtime Migration Learnings)
 

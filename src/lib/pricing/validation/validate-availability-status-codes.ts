@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const chalk = new Chalk({ level: 1 });
+const MAX_REASONABLE_MIN_NIGHTS = 14;
 
 const CANONICAL_STATUS_CODES = new Set(["A", "U", "I", "O", "X"]);
 
@@ -68,6 +69,7 @@ type ValidationIssueCode =
   | "non_canonical_status_code"
   | "missing_checkin_boolean"
   | "missing_checkout_boolean"
+  | "min_nights_required_exceeds_cap"
   | "uniform_day_codes_red_flag"
   | "uniform_status_code_red_flag"
   | "effectively_uniform_unavailable_red_flag"
@@ -418,13 +420,19 @@ function analyzeYearSplitAxPattern(days: AvailabilityDayRecord[]): {
   const firstYearStatuses = statuses.slice(0, 365);
   const secondYearStatuses = statuses.slice(365, 730);
 
-  const firstYearA = firstYearStatuses.filter((status) => status === "A").length;
-  const firstYearX = firstYearStatuses.filter((status) => status === "X").length;
+  const firstYearA = firstYearStatuses.filter(
+    (status) => status === "A",
+  ).length;
+  const firstYearX = firstYearStatuses.filter(
+    (status) => status === "X",
+  ).length;
   const firstYearNonAX = firstYearStatuses.filter(
     (status) => status !== "A" && status !== "X",
   ).length;
 
-  const secondYearX = secondYearStatuses.filter((status) => status === "X").length;
+  const secondYearX = secondYearStatuses.filter(
+    (status) => status === "X",
+  ).length;
   const secondYearNonX = secondYearStatuses.length - secondYearX;
 
   const hasTwoYearWindow =
@@ -454,7 +462,8 @@ function analyzeYearSplitAxPattern(days: AvailabilityDayRecord[]): {
       x: secondYearX,
       nonX: secondYearNonX,
     },
-    isSuspicious: hasTwoYearWindow && isFirstYearPredominantlyA && isSecondYearMostlyX,
+    isSuspicious:
+      hasTwoYearWindow && isFirstYearPredominantlyA && isSecondYearMostlyX,
   };
 }
 
@@ -697,6 +706,18 @@ async function validateAdapterAvailabilityStatusCodes(
           issues,
           "missing_checkout_boolean",
           `${label}: is_available_for_checkout must be boolean`,
+        );
+      }
+
+      if (
+        typeof day.min_nights_required === "number" &&
+        Number.isFinite(day.min_nights_required) &&
+        day.min_nights_required > MAX_REASONABLE_MIN_NIGHTS
+      ) {
+        pushIssue(
+          issues,
+          "min_nights_required_exceeds_cap",
+          `${label}: min_nights_required=${day.min_nights_required} exceeds cap=${MAX_REASONABLE_MIN_NIGHTS}`,
         );
       }
 

@@ -1031,7 +1031,7 @@ function normalizeAvailabilityDays(raw: unknown): AvailabilityDay[] {
       typeof minNightsRaw === "number" &&
       Number.isFinite(minNightsRaw) &&
       minNightsRaw > 0
-        ? Math.floor(minNightsRaw)
+        ? Math.min(14, Math.floor(minNightsRaw))
         : null;
 
     out.push({
@@ -1138,9 +1138,8 @@ function buildAdaptiveQuoteWindows(input: {
   const todayIso = new Date().toISOString().slice(0, 10);
   const horizonDays = Math.max(1, input.weeks * 7);
   const horizonEndIso = addDays(todayIso, horizonDays - 1);
-  const fallback = buildQuoteWindows(input.weeks, input.targetNights);
   if (input.availabilityDays.length === 0) {
-    return fallback;
+    return [];
   }
 
   const byDate = new Map(input.availabilityDays.map((day) => [day.date, day]));
@@ -1211,7 +1210,7 @@ function buildAdaptiveQuoteWindows(input: {
   }
 
   if (windows.length === 0) {
-    return fallback;
+    return [];
   }
 
   return windows.sort((left, right) => {
@@ -2274,15 +2273,16 @@ export async function runRuntimeAdapterQuoteCli(
         const existingObservations = await loadExistingRealQuoteObservations({
           outputPath,
         });
+        const availabilityDays = await loadAvailabilityDays({
+          detailsJsonDir,
+          fileId: listing.fileId,
+        });
 
         const sidecar = await buildSidecarForListing({
           config,
           listing,
           options,
-          availabilityDays: await loadAvailabilityDays({
-            detailsJsonDir,
-            fileId: listing.fileId,
-          }),
+          availabilityDays,
           defaultMinProbeNights,
           defaultMaxProbeNights,
           existingRealQuoteObservations: existingObservations,
@@ -2341,8 +2341,30 @@ export async function runRuntimeAdapterQuoteCli(
         });
 
         if (sidecar.quote_max_queries === 0) {
-          skippedCoveredListings += 1;
-          return null;
+          const persistedSidecar: CanonicalQuotesSidecarRecord = {
+            ...sidecar,
+            observations: mergeRealQuoteObservations({
+              existing: existingObservations,
+              latest: sidecar.observations,
+              nowMs: Date.now(),
+              retentionDays: observationRetentionDays,
+            }),
+          };
+          assertCanonicalQuotesSidecarRecord(persistedSidecar);
+          await writeJsonFileDurable(outputPath, persistedSidecar);
+
+          if (availabilityDays.length === 0) {
+            progress?.tick(
+              `quote sidecar flushed listing=${sidecar.external_listing_id} windows=0 reason=no_availability_data`,
+            );
+          } else {
+            skippedCoveredListings += 1;
+            progress?.tick(
+              `quote sidecar flushed listing=${sidecar.external_listing_id} windows=0 reason=no_quotable_windows_or_covered`,
+            );
+          }
+
+          return persistedSidecar;
         }
 
         const mergedObservations = mergeRealQuoteObservations({

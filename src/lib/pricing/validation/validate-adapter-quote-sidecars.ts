@@ -7,6 +7,7 @@ const chalk = new Chalk({ level: 1 });
 
 import type { CanonicalQuotesSidecarRecord } from "@/lib/pricing/contracts/quote-observations-contract";
 import { selectCanonicalArtifactFiles } from "@/lib/pricing/shared/canonical-index-listings";
+import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 import {
   validateCanonicalQuoteSidecar,
   type QuoteValidationIssue,
@@ -26,12 +27,30 @@ type ListingValidationFailure = {
   issues: QuoteValidationIssue[];
 };
 
+type DetailRecord = {
+  listing_flags?: {
+    non_bookable_online?: unknown;
+    availability_validation_exempt?: unknown;
+    availability_validation_exempt_reason_code?: unknown;
+  };
+  normalized_availability?: {
+    validation_exempt?: unknown;
+    validation_exempt_reason_code?: unknown;
+  };
+};
+
+const WAIVABLE_UNAVAILABLE_QUOTE_ISSUES = new Set([
+  "invalid_quote_max_queries",
+  "invalid_observation_count",
+  "missing_observations",
+]);
+
 function printListingStatus(input: {
   index: number;
   total: number;
   listingId: string;
   fileName: string;
-  status: "PASS" | "FAIL" | "MISSING";
+  status: "PASS" | "FAIL" | "MISSING" | "WAIVED";
   issueCount?: number;
   firstIssue?: QuoteValidationIssue;
 }): void {
@@ -43,6 +62,13 @@ function printListingStatus(input: {
     return;
   }
 
+  if (input.status === "WAIVED") {
+    console.log(
+      `${counter} ${chalk.yellow("WAIVED")} ${listing} ${chalk.gray("(non_bookable_online exemption)")}`,
+    );
+    return;
+  }
+
   const issueCount = Math.max(1, input.issueCount ?? 1);
   const issueSummary = input.firstIssue
     ? `${chalk.yellow(`[${input.firstIssue.code}]`)} ${input.firstIssue.message}`
@@ -51,6 +77,63 @@ function printListingStatus(input: {
     input.status === "MISSING" ? chalk.yellow("MISSING") : chalk.red("FAIL");
   console.log(
     `${counter} ${label} ${listing} issues=${issueCount} ${issueSummary}`,
+  );
+}
+
+function isNonBookableOnlineExempt(detail: DetailRecord | null): boolean {
+  if (!detail) {
+    return false;
+  }
+
+  if (detail.listing_flags?.non_bookable_online === true) {
+    return true;
+  }
+
+  if (
+    detail.listing_flags?.availability_validation_exempt === true ||
+    detail.normalized_availability?.validation_exempt === true
+  ) {
+    return true;
+  }
+
+  const reasonCandidates = [
+    detail.listing_flags?.availability_validation_exempt_reason_code,
+    detail.normalized_availability?.validation_exempt_reason_code,
+  ];
+
+  return reasonCandidates.some(
+    (value) =>
+      typeof value === "string" &&
+      value.trim().toLowerCase() === "non_bookable_online",
+  );
+}
+
+async function loadDetailRecordForListing(input: {
+  detailsJsonDir: string;
+  listingIdOrFileBase: string;
+}): Promise<DetailRecord | null> {
+  const canonicalFileBase = canonicalizeExternalListingId(
+    input.listingIdOrFileBase,
+  );
+  if (!canonicalFileBase) {
+    return null;
+  }
+
+  const detailPath = resolve(input.detailsJsonDir, `${canonicalFileBase}.json`);
+  try {
+    const raw = await readFile(detailPath, "utf8");
+    return JSON.parse(raw) as DetailRecord;
+  } catch {
+    return null;
+  }
+}
+
+function isWaivableUnavailableIssueSet(
+  issues: QuoteValidationIssue[],
+): boolean {
+  return (
+    issues.length > 0 &&
+    issues.every((issue) => WAIVABLE_UNAVAILABLE_QUOTE_ISSUES.has(issue.code))
   );
 }
 
@@ -161,6 +244,16 @@ export async function runValidateAdapterQuoteSidecarsCli(
     "details",
     "quotes",
   );
+  const detailsJsonDir = resolve(
+    root,
+    "src",
+    "lib",
+    "data",
+    "external-sources",
+    options.adapterKey,
+    "details",
+    "json",
+  );
 
   const files = await collectQuoteFiles(
     options.adapterKey,
@@ -178,6 +271,7 @@ export async function runValidateAdapterQuoteSidecarsCli(
 
   const validated = files.listingIds.length;
   let failed = files.missingListingIds.length;
+  let waived = 0;
   const failures: ListingValidationFailure[] = [];
   const totalItems = files.missingListingIds.length + files.fileNames.length;
   let processedItems = 0;
@@ -191,6 +285,26 @@ export async function runValidateAdapterQuoteSidecarsCli(
   }
 
   for (const missingListingId of files.missingListingIds) {
+    const detail = await loadDetailRecordForListing({
+      detailsJsonDir,
+      listingIdOrFileBase: missingListingId,
+    });
+    if (isNonBookableOnlineExempt(detail)) {
+      failed -= 1;
+      waived += 1;
+      processedItems += 1;
+      if (!options.summaryOnly) {
+        printListingStatus({
+          index: processedItems,
+          total: totalItems,
+          listingId: missingListingId,
+          fileName: `${missingListingId}.json`,
+          status: "WAIVED",
+        });
+      }
+      continue;
+    }
+
     const missingFailure: ListingValidationFailure = {
       listingId: missingListingId,
       fileName: `${missingListingId}.json`,
@@ -253,11 +367,33 @@ export async function runValidateAdapterQuoteSidecarsCli(
     }
 
     const listingId = parsed.external_listing_id || fallbackListingId;
+    const detail = await loadDetailRecordForListing({
+      detailsJsonDir,
+      listingIdOrFileBase: listingId,
+    });
+    const nonBookableOnlineExempt = isNonBookableOnlineExempt(detail);
 
     const issues = validateCanonicalQuoteSidecar(parsed, {
       expectedNights: 7,
       requireNonNullPricingFields: !options.allowNullPricingFields,
     });
+
+    if (issues.length > 0 && nonBookableOnlineExempt) {
+      if (isWaivableUnavailableIssueSet(issues)) {
+        waived += 1;
+        processedItems += 1;
+        if (!options.summaryOnly) {
+          printListingStatus({
+            index: processedItems,
+            total: totalItems,
+            listingId,
+            fileName,
+            status: "WAIVED",
+          });
+        }
+        continue;
+      }
+    }
 
     if (issues.length > 0) {
       failed += 1;
@@ -306,7 +442,7 @@ export async function runValidateAdapterQuoteSidecarsCli(
 
   console.log(
     chalk.green(
-      `Quote validator passed for adapter=${options.adapterKey} validated=${validated} failed=0`,
+      `Quote validator passed for adapter=${options.adapterKey} validated=${validated} failed=0 waived=${waived}`,
     ),
   );
   return 0;

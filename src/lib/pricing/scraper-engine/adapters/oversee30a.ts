@@ -1,7 +1,8 @@
 import { executeOversee30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/oversee30a";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
+import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
@@ -683,26 +684,91 @@ function parseMinNightRules(value: unknown): ParsedMinNightRule[] {
   );
 }
 
+function diffIsoDays(startIso: string, endIso: string): number {
+  const start = parseIsoDate(startIso);
+  const end = parseIsoDate(endIso);
+  if (!start || !end) {
+    return 0;
+  }
+  const diffMs = end.getTime() - start.getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) {
+    return 0;
+  }
+  return Math.floor(diffMs / 86_400_000) + 1;
+}
+
+function isBroadLongStayRule(rule: ParsedMinNightRule): boolean {
+  return (
+    rule.min_nights >= 30 && diffIsoDays(rule.start_date, rule.end_date) >= 60
+  );
+}
+
+function toValidMinNights(value: number | null | undefined): number | null {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return null;
+  }
+  const floored = Math.floor(numeric);
+  if (floored > 14) {
+    return 14;
+  }
+  return Math.max(3, floored);
+}
+
 function resolveMinNightsForDate(
   isoDate: string,
   rules: ParsedMinNightRule[],
   bookingWindowDay: BookingWindowDay | null,
 ): number | null {
-  const windowMin = Number(bookingWindowDay?.stay?.min ?? 0);
-  if (Number.isFinite(windowMin) && windowMin > 0) {
-    return Math.floor(windowMin);
-  }
+  const FALLBACK_MIN_NIGHTS = 3;
+  const matchingRules = rules.filter(
+    (rule) => isoDate >= rule.start_date && isoDate <= rule.end_date,
+  );
 
-  let result: number | null = null;
-  for (const rule of rules) {
-    if (isoDate < rule.start_date || isoDate > rule.end_date) {
-      continue;
+  const focusedRules = matchingRules.filter(
+    (rule) => !isBroadLongStayRule(rule),
+  );
+  const applicableRules =
+    focusedRules.length > 0 ? focusedRules : matchingRules;
+
+  const normalizedRules = applicableRules
+    .map((rule) => {
+      const validMin = toValidMinNights(rule.min_nights);
+      if (validMin === null) {
+        return null;
+      }
+      return {
+        min_nights: validMin,
+        span_days: diffIsoDays(rule.start_date, rule.end_date),
+      };
+    })
+    .filter(
+      (
+        value,
+      ): value is {
+        min_nights: number;
+        span_days: number;
+      } => value !== null,
+    );
+
+  if (normalizedRules.length > 0) {
+    const shortestSpan = Math.min(
+      ...normalizedRules.map((rule) => rule.span_days),
+    );
+    const mostSpecificMins = normalizedRules
+      .filter((rule) => rule.span_days === shortestSpan)
+      .map((rule) => rule.min_nights);
+    if (mostSpecificMins.length > 0) {
+      return Math.min(...mostSpecificMins);
     }
-    result =
-      result === null ? rule.min_nights : Math.max(result, rule.min_nights);
   }
 
-  return result;
+  const windowMin = toValidMinNights(bookingWindowDay?.stay?.min ?? null);
+  if (windowMin !== null) {
+    return windowMin;
+  }
+
+  return FALLBACK_MIN_NIGHTS;
 }
 
 function inferMaxPageFromHtml(html: string): number {
@@ -970,11 +1036,20 @@ async function fetchDetail(
       .filter(Boolean)
       .join(", ");
 
+    const normalizedHtmlFileBase =
+      canonicalizeExternalListingId(externalListingId) || externalListingId;
     const htmlPath = resolve(
+      OUTPUT_DETAILS_HTML_DIR,
+      `${normalizedHtmlFileBase}.html`,
+    );
+    const legacyHtmlPath = resolve(
       OUTPUT_DETAILS_HTML_DIR,
       `${externalListingId}.html`,
     );
     await writeFile(htmlPath, `${html}\n`, "utf8");
+    if (legacyHtmlPath !== htmlPath) {
+      await rm(legacyHtmlPath, { force: true });
+    }
 
     let bookedDates: string[] = [];
     let noCheckinDates: string[] = [];
@@ -1073,9 +1148,10 @@ async function fetchDetail(
         statusCode = "O";
       }
 
-      const minNightsRequired =
+      const resolvedMinNights =
         resolveMinNightsForDate(isoDate, minNightRules, bookingWindowDay) ??
         minLOS;
+      const minNightsRequired = toValidMinNights(resolvedMinNights) ?? 3;
 
       const bookingDayState: "bookable" | "blocked" | "unknown" =
         statusCode === "A"
