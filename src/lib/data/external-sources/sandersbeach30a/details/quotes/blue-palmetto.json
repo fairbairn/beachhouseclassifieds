@@ -1,0 +1,55 @@
+{
+  "adapter_key": "sandersbeach30a",
+  "external_listing_id": "blue-palmetto",
+  "detail_url": "https://www.sandersbeachrentals.com/30a-vacation-rentals/blue-palmetto",
+  "captured_at": "2026-05-27T18:33:40.649Z",
+  "currency": "USD",
+  "quote_window_cadence": "weekly_anchor_adaptive_span",
+  "quote_window_gap_policy": "probe_longest_available_span",
+  "quote_window_anchor_date": "2026-05-30",
+  "quote_window_days": 168,
+  "quote_sample_step_days": 1,
+  "quote_nights": 7,
+  "quote_max_queries": 11,
+  "endpoint_path": "/rcapi/item/avail/search",
+  "quote_run_diagnostics": {
+    "queried_windows": 11,
+    "available_windows": 1,
+    "unavailable_windows": 10,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {
+      "QUOTE_UNAVAILABLE": 10
+    },
+    "sample_internal_errors": []
+  },
+  "observations": [
+    {
+      "sampled_at": "2026-05-27T18:33:40.649Z",
+      "captured_at": "2026-05-27T18:33:40.649Z",
+      "source_listing_id": "blue-palmetto",
+      "currency": "USD",
+      "start_date": "2026-07-12",
+      "end_date": "2026-07-18",
+      "check_in_date": "2026-07-12",
+      "check_out_date": "2026-07-18",
+      "nights": 6,
+      "base_nightly": 1618.34,
+      "all_in_nightly": 1812.54,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 9710.05,
+      "taxes_total": 1165.21,
+      "fees_total_excl_taxes": 0,
+      "fee_lines": [],
+      "grand_total": 10875.26,
+      "quoted_total": 10875.26,
+      "fee_pct_of_base": 0,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.107143,
+      "all_in_multiplier": 1.12,
+      "handoff_url": "https://www.sandersbeachrentals.com/rescms/item/165/buy?rcav%5Bbegin%5D=07%2F12%2F2026&rcav%5Bend%5D=07%2F18%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=165&rcav%5BIDs%5D%5B8%5D%5B%5D=1012465&eid=165",
+      "source": "quote_api",
+      "pricing_source": "runtime_parsed"
+    }
+  ]
+}

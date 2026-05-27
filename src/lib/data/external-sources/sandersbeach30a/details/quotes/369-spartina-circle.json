@@ -1,0 +1,55 @@
+{
+  "adapter_key": "sandersbeach30a",
+  "external_listing_id": "369-spartina-circle",
+  "detail_url": "https://www.sandersbeachrentals.com/30a-vacation-rentals/369-spartina-circle",
+  "captured_at": "2026-05-27T18:32:55.955Z",
+  "currency": "USD",
+  "quote_window_cadence": "weekly_anchor_adaptive_span",
+  "quote_window_gap_policy": "probe_longest_available_span",
+  "quote_window_anchor_date": "2026-05-30",
+  "quote_window_days": 168,
+  "quote_sample_step_days": 1,
+  "quote_nights": 7,
+  "quote_max_queries": 8,
+  "endpoint_path": "/rcapi/item/avail/search",
+  "quote_run_diagnostics": {
+    "queried_windows": 8,
+    "available_windows": 1,
+    "unavailable_windows": 7,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {
+      "QUOTE_UNAVAILABLE": 7
+    },
+    "sample_internal_errors": []
+  },
+  "observations": [
+    {
+      "sampled_at": "2026-05-27T18:32:55.955Z",
+      "captured_at": "2026-05-27T18:32:55.955Z",
+      "source_listing_id": "369-spartina-circle",
+      "currency": "USD",
+      "start_date": "2026-08-10",
+      "end_date": "2026-08-13",
+      "check_in_date": "2026-08-10",
+      "check_out_date": "2026-08-13",
+      "nights": 3,
+      "base_nightly": 845.07,
+      "all_in_nightly": 946.47,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 2535.2,
+      "taxes_total": 304.22,
+      "fees_total_excl_taxes": 0,
+      "fee_lines": [],
+      "grand_total": 2839.42,
+      "quoted_total": 2839.42,
+      "fee_pct_of_base": 0,
+      "tax_pct_of_base": 0.119998,
+      "non_base_pct_of_total": 0.107142,
+      "all_in_multiplier": 1.119998,
+      "handoff_url": "https://www.sandersbeachrentals.com/rescms/item/29/buy?rcav%5Bbegin%5D=08%2F10%2F2026&rcav%5Bend%5D=08%2F13%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=29&rcav%5BIDs%5D%5B8%5D%5B%5D=599853&eid=29",
+      "source": "quote_api",
+      "pricing_source": "runtime_parsed"
+    }
+  ]
+}
