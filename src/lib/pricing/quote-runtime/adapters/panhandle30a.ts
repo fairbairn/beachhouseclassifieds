@@ -5,6 +5,12 @@ type QuoteRequestContext = {
   propertyName: string;
 };
 
+type PanhandleUnavailableClassification = {
+  code: string;
+  retryable: boolean;
+  httpStatus: number | null;
+};
+
 type RawObservation = {
   startDate: string;
   endDate: string;
@@ -83,6 +89,48 @@ function parseUnavailableReason(html: string): string | null {
 
   const reason = stripHtmlTags(alertMatch[1]).trim();
   return reason.length > 0 ? reason : null;
+}
+
+function classifyUnavailableReason(
+  reason: string | null,
+): PanhandleUnavailableClassification {
+  const normalized = (reason ?? "Quote unavailable").trim();
+  const lower = normalized.toLowerCase();
+
+  if (
+    lower.includes("timed out") ||
+    lower.includes("timeout") ||
+    lower.includes("etimedout")
+  ) {
+    return {
+      code: "QUOTE_TIMEOUT_TRANSIENT",
+      retryable: true,
+      httpStatus: null,
+    };
+  }
+
+  const statusMatch = normalized.match(/status\s+(\d{3})/i);
+  const httpStatus = statusMatch?.[1] ? Number(statusMatch[1]) : null;
+  if (httpStatus !== null && Number.isFinite(httpStatus)) {
+    const hardFail =
+      httpStatus === 400 ||
+      httpStatus === 403 ||
+      httpStatus === 404 ||
+      httpStatus === 429 ||
+      httpStatus >= 500;
+
+    return {
+      code: `QUOTE_HTTP_${httpStatus}`,
+      retryable: !hardFail,
+      httpStatus,
+    };
+  }
+
+  return {
+    code: "QUOTE_UNAVAILABLE",
+    retryable: true,
+    httpStatus: null,
+  };
 }
 
 function extractBookNowUrl(html: string): string | null {
@@ -337,18 +385,22 @@ export async function executePanhandle30aSingleQuote(
 
   const elapsedMs = performance.now() - startedAt;
   if (!raw.quoteAvailable) {
+    const classification = classifyUnavailableReason(
+      raw.quoteUnavailableReason,
+    );
     return {
       success: false,
       elapsedMs,
       error: {
-        code: "QUOTE_UNAVAILABLE",
+        code: classification.code,
         message: raw.quoteUnavailableReason ?? "Quote unavailable",
-        retryable: true,
+        retryable: classification.retryable,
         details: {
           adapterKey: ADAPTER_KEY,
           listingId: input.listingId,
           startDate: raw.startDate,
           endDate: raw.endDate,
+          httpStatus: classification.httpStatus,
           handoff_url: raw.handoffUrl,
         },
       },

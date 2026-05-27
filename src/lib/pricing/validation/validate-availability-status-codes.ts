@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const chalk = new Chalk({ level: 1 });
-const MAX_REASONABLE_MIN_NIGHTS = 14;
+const MAX_REASONABLE_MIN_NIGHTS = 28;
 
 const CANONICAL_STATUS_CODES = new Set(["A", "U", "I", "O", "X"]);
 

@@ -1154,9 +1154,15 @@ function buildAdaptiveQuoteWindows(input: {
     explicitMinNightValues.length > 0
       ? Math.max(1, Math.min(...explicitMinNightValues))
       : Math.max(1, input.defaultMinProbeNights);
+  const targetMinNights = Math.max(1, Math.floor(input.targetNights));
   const minProbeNights = Math.min(
     14,
-    Math.max(3, input.defaultMinProbeNights, inferredMinNights),
+    Math.max(
+      3,
+      input.defaultMinProbeNights,
+      inferredMinNights,
+      targetMinNights,
+    ),
   );
   const maxProbeNights = Math.max(
     minProbeNights,
