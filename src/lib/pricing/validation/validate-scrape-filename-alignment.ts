@@ -1298,13 +1298,23 @@ export async function runValidateScrapeFilenameAlignmentCli(
         });
       }
     } else if (availability.unknownDays === availability.totalDays) {
-      issues.push({
-        code: "all_days_unknown",
-        message:
-          `details/json/${fileName} availability is 100% unknown/X ` +
-          `(${availability.unknownDays}/${availability.totalDays} days), ` +
-          `which indicates a likely calendar scrape failure`,
-      });
+      if (isAvailabilityValidationExempt(parsed)) {
+        warnings.push({
+          code: "availability_validation_exempt",
+          message:
+            `details/json/${fileName} availability is 100% unknown/X ` +
+            `(${availability.unknownDays}/${availability.totalDays} days), ` +
+            `but listing is flagged as availability-validation exempt`,
+        });
+      } else {
+        issues.push({
+          code: "all_days_unknown",
+          message:
+            `details/json/${fileName} availability is 100% unknown/X ` +
+            `(${availability.unknownDays}/${availability.totalDays} days), ` +
+            `which indicates a likely calendar scrape failure`,
+        });
+      }
     }
 
     const expectedFromDetailUrl = externalListingIdFromDetailUrl(detailUrl);

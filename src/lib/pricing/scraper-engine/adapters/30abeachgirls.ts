@@ -360,62 +360,6 @@ function normalizeMediaUrl(value: string): string {
   return parsed.toString();
 }
 
-function extractImagePatternKey(value: string): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return value;
-  }
-
-  const parts = parsed.pathname.split("/").filter((part) => part.length > 0);
-
-  if (parts.length >= 3) {
-    return `${parsed.hostname.toLowerCase()}/${parts[0]}/${parts[1]}/${parts[2]}`;
-  }
-
-  return `${parsed.hostname.toLowerCase()}/${parts.join("/")}`;
-}
-
-function keepDominantImagePattern(urls: string[]): string[] {
-  if (urls.length <= 1) {
-    return urls;
-  }
-
-  const counts = new Map<string, number>();
-  const firstSeen = new Map<string, number>();
-
-  for (let index = 0; index < urls.length; index += 1) {
-    const key = extractImagePatternKey(urls[index]);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    if (!firstSeen.has(key)) {
-      firstSeen.set(key, index);
-    }
-  }
-
-  let dominantKey = "";
-  let dominantCount = -1;
-  let dominantFirstIndex = Number.POSITIVE_INFINITY;
-
-  for (const [key, count] of counts) {
-    const seenAt = firstSeen.get(key) ?? Number.POSITIVE_INFINITY;
-    if (
-      count > dominantCount ||
-      (count === dominantCount && seenAt < dominantFirstIndex)
-    ) {
-      dominantKey = key;
-      dominantCount = count;
-      dominantFirstIndex = seenAt;
-    }
-  }
-
-  if (!dominantKey) {
-    return urls;
-  }
-
-  return urls.filter((url) => extractImagePatternKey(url) === dominantKey);
-}
-
 function keepHomeScopedImages(urls: string[], homeId: string): string[] {
   const normalizedHomeId = homeId.trim();
   if (!normalizedHomeId) {

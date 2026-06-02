@@ -1480,7 +1480,7 @@ function extractAvailabilityFromRenderedAvailabilityHtml(html: string): Array<{
     const parsedMonth = parseMonthHeader(monthLabel);
     if (parsedMonth) {
       const calendarHtml = calendarMatch[0] ?? "";
-      const dayRegex = /<div class="day\s+([^\"]*)">([^<]*)/gi;
+      const dayRegex = /<div class="day\s+([^"]*)">([^<]*)/gi;
       let dayMatch: RegExpExecArray | null = dayRegex.exec(calendarHtml);
       while (dayMatch) {
         const className = (dayMatch[1] ?? "").trim();

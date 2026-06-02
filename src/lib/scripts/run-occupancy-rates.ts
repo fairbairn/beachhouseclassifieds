@@ -45,11 +45,6 @@ type AdapterRollup = {
   monthStats: ListingMonthRollup[];
 };
 
-type ListingSelection = {
-  fileName: string;
-  listingId: string;
-};
-
 const CANONICAL_CODES = new Set(["A", "U", "I", "O", "X"]);
 
 function printUsage(): void {

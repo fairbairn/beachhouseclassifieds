@@ -256,7 +256,7 @@ function extractCanonicalNameFromMetaDescription(
     const candidate = leadingDashMatch[1].trim();
     if (candidate) {
       const repeatedInEscapeTo = new RegExp(
-        `\\bescape to\\s+['\"]?${escapeRegex(candidate)}['\"]?(?:\\b|,)`,
+        `\\bescape to\\s+['"]?${escapeRegex(candidate)}['"]?(?:\\b|,)`,
         "i",
       );
       if (repeatedInEscapeTo.test(cleaned)) {

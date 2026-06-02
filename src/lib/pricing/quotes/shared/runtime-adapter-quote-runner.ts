@@ -344,8 +344,6 @@ const DEFAULT_QUOTE_CONCURRENCY = 3;
 const DEFAULT_QUOTE_TIMEOUT_MS = 12000;
 const DEFAULT_QUOTE_MAX_ATTEMPTS = 2;
 const DEFAULT_ENDPOINT_PATH = "/api/nrbe/reservation-quotes.json";
-const DEFAULT_TAX_PCT = 0.12;
-const DEFAULT_BASE_NIGHTLY = 500;
 const DEFAULT_FRESH_HOURS = 24;
 const DEFAULT_MIN_OVERLAP_NIGHTS = 3;
 const DEFAULT_BACKFILL_WINDOW_HOURS = 1;
@@ -814,64 +812,6 @@ function firstSaturdayOnOrAfter(isoDate: string): string {
   return date.toISOString().slice(0, 10);
 }
 
-function median(values: number[]): number | null {
-  if (values.length === 0) {
-    return null;
-  }
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) {
-    return sorted[middle] ?? null;
-  }
-  const left = sorted[middle - 1];
-  const right = sorted[middle];
-  if (left === undefined || right === undefined) {
-    return null;
-  }
-  return Math.round(((left + right) / 2) * 100) / 100;
-}
-
-function createEstimatedPricing(input: {
-  baseNightly: number;
-  nights: number;
-  taxPctOfBase: number;
-}): EstimatedPricing {
-  const baseTotal = Math.round(input.baseNightly * input.nights * 100) / 100;
-  const taxesTotal =
-    Math.round(baseTotal * Math.max(0, input.taxPctOfBase) * 100) / 100;
-  const feesTotalExclTaxes = 0;
-  const grandTotal =
-    Math.round((baseTotal + taxesTotal + feesTotalExclTaxes) * 100) / 100;
-  const allInNightly =
-    input.nights > 0 ? Math.round((grandTotal / input.nights) * 100) / 100 : 0;
-  const allInMultiplier =
-    baseTotal > 0
-      ? Math.round((grandTotal / baseTotal) * 1_000_000) / 1_000_000
-      : 1;
-  const nonBasePctOfTotal =
-    grandTotal > 0
-      ? Math.round(((grandTotal - baseTotal) / grandTotal) * 1_000_000) /
-        1_000_000
-      : 0;
-
-  return {
-    baseNightly: Math.round(input.baseNightly * 100) / 100,
-    allInNightly,
-    baseTotal,
-    taxesTotal,
-    feesTotalExclTaxes,
-    grandTotal,
-    quotedTotal: grandTotal,
-    feePctOfBase: 0,
-    taxPctOfBase:
-      baseTotal > 0
-        ? Math.round((taxesTotal / baseTotal) * 1_000_000) / 1_000_000
-        : 0,
-    nonBasePctOfTotal,
-    allInMultiplier,
-  };
-}
-
 async function loadListingSeeds(
   adapterKey: string,
   options: CliOptions,
@@ -991,21 +931,6 @@ async function loadListingSeeds(
   }
 
   return selected;
-}
-
-function buildQuoteWindows(weeks: number, nights: number): QuoteWindow[] {
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const anchor = firstSaturdayOnOrAfter(todayIso);
-  const windows: QuoteWindow[] = [];
-  for (let index = 0; index < weeks; index += 1) {
-    const startDate = addDays(anchor, index * 7);
-    windows.push({
-      startDate,
-      endDate: addDays(startDate, nights),
-      nights,
-    });
-  }
-  return windows;
 }
 
 function normalizeAvailabilityDays(raw: unknown): AvailabilityDay[] {
@@ -1773,7 +1698,7 @@ async function buildSidecarForListing(input: {
     defaultMaxProbeNights: input.defaultMaxProbeNights,
   });
 
-  const windowsToQuery = options.skipCoveredWindows
+  let windowsToQuery = options.skipCoveredWindows
     ? windows.filter(
         (window) =>
           !windowCoveredByFreshObservation({
@@ -1784,6 +1709,28 @@ async function buildSidecarForListing(input: {
           }),
       )
     : windows;
+
+  if (
+    options.skipCoveredWindows &&
+    windowsToQuery.length === 0 &&
+    windows.length > 0
+  ) {
+    const widestWindow = [...windows].sort((left, right) => {
+      const nightsCompare = right.nights - left.nights;
+      if (nightsCompare !== 0) {
+        return nightsCompare;
+      }
+      return left.startDate.localeCompare(right.startDate);
+    })[0];
+
+    if (widestWindow) {
+      windowsToQuery = [widestWindow];
+      input.progress?.tick(
+        `quotes listing=${listing.externalListingId} forcing_probe=widest_window start=${widestWindow.startDate} end=${widestWindow.endDate} nights=${widestWindow.nights}`,
+      );
+    }
+  }
+
   input.onWindowsPlanned?.(windowsToQuery.length);
 
   if (windowsToQuery.length === 0) {

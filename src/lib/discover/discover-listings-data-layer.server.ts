@@ -566,29 +566,6 @@ function dayTypeFromAvailabilityStatusCode(
   return "unavailable";
 }
 
-function deriveCalendarDayType(input: {
-  isNightAvailable: boolean;
-  isCheckInAllowed: boolean;
-  isCheckOutAllowed: boolean;
-}): "available" | "checkin_only" | "checkout_only" | "unavailable" {
-  if (!input.isNightAvailable && !input.isCheckOutAllowed) {
-    return "unavailable";
-  }
-  if (!input.isNightAvailable && input.isCheckOutAllowed) {
-    return "checkout_only";
-  }
-  if (input.isCheckInAllowed && input.isCheckOutAllowed) {
-    return "available";
-  }
-  if (input.isCheckInAllowed) {
-    return "checkin_only";
-  }
-  if (input.isCheckOutAllowed) {
-    return "checkout_only";
-  }
-  return "unavailable";
-}
-
 async function loadPricingContextByListingSlug(input: {
   listingRows: Array<{
     slug: string;

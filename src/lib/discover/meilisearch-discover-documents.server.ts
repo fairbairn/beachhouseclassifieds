@@ -85,14 +85,6 @@ function pricingStatusPriority(
   return 3;
 }
 
-function utcTodayDayInt(): number {
-  const now = new Date();
-  const year = String(now.getUTCFullYear()).padStart(4, "0");
-  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(now.getUTCDate()).padStart(2, "0");
-  return Number(`${year}${month}${day}`);
-}
-
 function availabilityFieldNames(
   maxStayNights = AVAILABILITY_INDEX_MAX_STAY_NIGHTS,
 ): string[] {
