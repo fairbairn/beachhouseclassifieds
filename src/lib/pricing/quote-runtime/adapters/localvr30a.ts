@@ -6,6 +6,7 @@ import {
   launch as launchCloakBrowser,
   launchPersistentContext as launchPersistentCloakContext,
 } from "cloakbrowser";
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type LocalVrInvoiceItem = {
@@ -559,10 +560,8 @@ async function requestQuoteViaCloakBrowser(input: {
   timeoutMs: number;
 }): Promise<BrowserQuoteRequestResult> {
   const headless = readToggle("LOCALVR30A_QUOTE_HEADLESS", true);
-  // Keep proxy behavior deterministic for localvr30a.
-  // Runtime flags are intentionally not supported for this adapter.
-  const useProxy = true;
-  const requireProxy = true;
+  const useProxy = shouldAdapterUseProxy(ADAPTER_KEY);
+  const requireProxy = useProxy;
   const proxy = resolveProxy(useProxy);
   const userAgent =
     process.env.LOCALVR30A_QUOTE_USER_AGENT?.trim() || USER_AGENT;

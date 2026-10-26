@@ -2,16 +2,26 @@
   "adapter_key": "30acottages",
   "external_listing_id": "olives-cottage",
   "detail_url": "https://www.30acottagesandconcierge.com/vacation-rentals/olives-cottage",
-  "captured_at": "2026-05-23T23:37:09.319Z",
+  "captured_at": "2026-10-26T18:28:45.040Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_anchor_adaptive_span",
   "quote_window_gap_policy": "probe_longest_available_span",
-  "quote_window_anchor_date": "2026-05-23",
+  "quote_window_anchor_date": "2026-10-31",
   "quote_window_days": 168,
   "quote_sample_step_days": 1,
   "quote_nights": 7,
-  "quote_max_queries": 5,
+  "quote_max_queries": 1,
   "endpoint_path": "/rescms/ajax/item/pricing/quote",
+  "quote_run_diagnostics": {
+    "queried_windows": 1,
+    "available_windows": 0,
+    "unavailable_windows": 1,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {
+      "QUOTE_UNAVAILABLE": 1
+    },
+    "sample_internal_errors": []
+  },
   "observations": [
     {
       "sampled_at": "2026-04-26T21:10:39.130Z",

@@ -1,3 +1,5 @@
+import "@/core/tooling/env/load-env-profile";
+
 import { runAdapterScrapeCli } from "@/lib/pricing/scraper-engine/run-adapter-scrape";
 
 async function main(): Promise<void> {

@@ -1,3 +1,5 @@
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
+import { postJsonViaCloakBrowserEngine } from "../shared/cloakbrowser-browser-engine";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type QuoteRequestContext = {
@@ -10,6 +12,7 @@ type QuoteRequestContext = {
 };
 
 const ADAPTER_KEY = "scenicstays30a" as const;
+const USE_PROXY = shouldAdapterUseProxy(ADAPTER_KEY);
 const MIN_VALID_BASE_TOTAL = 100;
 const DEFAULT_TIMEOUT_MS = 20000;
 const USER_AGENT =
@@ -270,9 +273,6 @@ export async function executeScenicstays30aSingleQuote(
     checkOutIso: input.checkOutIso,
   });
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
     const body = new URLSearchParams();
     body.set("checkin", toUsDate(input.checkInIso));
@@ -282,40 +282,67 @@ export async function executeScenicstays30aSingleQuote(
     body.set("propertyName", quoteContext.propertyName);
     body.set("hash", quoteContext.hash);
 
-    const response = await fetch(quoteContext.quoteEndpoint, {
-      method: "POST",
-      headers: {
-        accept: "text/html, */*; q=0.01",
-        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "x-requested-with": "XMLHttpRequest",
-        "user-agent": USER_AGENT,
-        referer: quoteContext.detailUrl,
-        origin: new URL(quoteContext.detailUrl).origin,
-      },
+    const headers: Record<string, string> = {
+      accept: "text/html, */*; q=0.01",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "x-requested-with": "XMLHttpRequest",
+      "user-agent": USER_AGENT,
+      referer: quoteContext.detailUrl,
+      origin: new URL(quoteContext.detailUrl).origin,
+    };
+
+    const response = await postJsonViaCloakBrowserEngine({
+      adapterKey: ADAPTER_KEY,
+      listingId: input.listingId,
+      detailUrl: quoteContext.detailUrl,
+      endpoint: quoteContext.quoteEndpoint,
+      timeoutMs,
+      userAgent: USER_AGENT,
+      headers,
       body: body.toString(),
-      signal: controller.signal,
+      useProxy: USE_PROXY,
+      enablePersistentProfile: false,
     });
 
-    if (!response.ok) {
+    if (response.requestError) {
+      const timeoutLike = /timed?\s*out|timeout/i.test(response.requestError);
       return {
         success: false,
         elapsedMs: performance.now() - startedAt,
         error: toError({
-          code: "QUOTE_HTTP_ERROR",
-          message: `Quote request failed with status ${response.status}`,
-          retryable: response.status >= 500 || response.status === 429,
+          code: timeoutLike ? "QUOTE_TIMEOUT" : "QUOTE_REQUEST_FAILED",
+          message: response.requestError,
+          retryable: true,
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
           details: {
-            status: response.status,
             handoffUrl: runtimeHandoffUrl,
           },
         }),
       };
     }
 
-    const responseText = (await response.text()).trim();
+    if (!response.ok) {
+      return {
+        success: false,
+        elapsedMs: performance.now() - startedAt,
+        error: toError({
+          code: response.httpStatus === 429 ? "QUOTE_RATE_LIMITED" : "QUOTE_HTTP_ERROR",
+          message: `Quote request failed with status ${response.httpStatus}`,
+          retryable: response.httpStatus >= 500 || response.httpStatus === 429,
+          listingId: input.listingId,
+          checkInIso: input.checkInIso,
+          checkOutIso: input.checkOutIso,
+          details: {
+            status: response.httpStatus,
+            handoffUrl: runtimeHandoffUrl,
+          },
+        }),
+      };
+    }
+
+    const responseText = response.bodyText.trim();
     if (
       !responseText ||
       responseText === "No" ||
@@ -563,10 +590,7 @@ export async function executeScenicstays30aSingleQuote(
       success: false,
       elapsedMs: performance.now() - startedAt,
       error: toError({
-        code:
-          error instanceof Error && error.name === "AbortError"
-            ? "QUOTE_TIMEOUT"
-            : "QUOTE_REQUEST_FAILED",
+        code: "QUOTE_REQUEST_FAILED",
         message:
           error instanceof Error
             ? error.message
@@ -580,7 +604,5 @@ export async function executeScenicstays30aSingleQuote(
         },
       }),
     };
-  } finally {
-    clearTimeout(timer);
   }
 }

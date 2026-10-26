@@ -1,3 +1,5 @@
+import "@/core/tooling/env/load-env-profile";
+
 import { SHARED_LISTING_CACHE_ADAPTER_DEFINITIONS } from "@/lib/pricing/cache/listing-pricing-cache-adapter-definitions";
 import { runSharedListingPricingCacheCli } from "@/lib/pricing/cache/run-shared-listing-pricing-cache-cli";
 

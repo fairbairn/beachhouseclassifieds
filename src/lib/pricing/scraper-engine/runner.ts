@@ -5,6 +5,7 @@ import {
   createScrapeProgress,
   formatModeProgressLine,
 } from "@/core/tooling/terminal/scrape-progress";
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import { canonicalizeExternalListingId } from "@/lib/pricing/shared/external-listing-id";
 
 import {
@@ -1654,11 +1655,12 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
   const envPrefix = adapter.managerKey
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_");
+  const useProxy = shouldAdapterUseProxy(adapter.managerKey);
   const browser = await launchScraperBrowser({
     adapterKey: adapter.managerKey,
     envPrefix,
     headless: true,
-    useProxy: adapter.useBrowserEngineProxy === true,
+    useProxy,
   });
 
   try {

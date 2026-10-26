@@ -37,6 +37,7 @@ const STAYAT_FRAGMENT_WAIT_TIMEOUT_MS = 45_000;
 let validationHttpActive = 0;
 let validationHttpLastStartMs = 0;
 const validationHttpWaiters: Array<() => void> = [];
+let handoffRetryDelaysOverride: number[] | null = null;
 
 type CliOptions = {
   adapterKey: string;
@@ -44,10 +45,13 @@ type CliOptions = {
   maxListings: number | null;
   maxObservations: number;
   minLeadDays: number;
+  strictMinLeadDays: boolean;
+  handoffRetryDelaysMs: number[];
   concurrency: number;
   tolerance: number;
   useLiveRuntimeQuote: boolean;
   liveQuoteTimeoutMs: number;
+  mode: "full" | "syntax-smoke";
 };
 
 type ObservationCandidate = {
@@ -114,10 +118,14 @@ function parseArgs(argv: string[]): CliOptions {
   let maxListings: number | null = null;
   let maxObservations = DEFAULT_MAX_OBSERVATIONS;
   let minLeadDays = 0;
+  let strictMinLeadDays = false;
+  let handoffRetryDelaysMs = [...DEFAULT_HANDOFF_RETRY_DELAYS_MS];
+  let retryPolicyOverridden = false;
   let concurrency = DEFAULT_CONCURRENCY;
   let tolerance = DEFAULT_TOLERANCE;
   let useLiveRuntimeQuote = true;
   let liveQuoteTimeoutMs = DEFAULT_LIVE_QUOTE_TIMEOUT_MS;
+  let mode: "full" | "syntax-smoke" = "full";
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -188,6 +196,37 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--strict-min-lead-days") {
+      strictMinLeadDays = true;
+      continue;
+    }
+
+    if (arg === "--retry-delays-ms" && value) {
+      handoffRetryDelaysMs = parseRetryDelaysMs(value);
+      retryPolicyOverridden = true;
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--max-retries" && value) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 1) {
+        const maxRetries = Math.max(1, Math.floor(parsed));
+        handoffRetryDelaysMs = handoffRetryDelaysMs.slice(0, maxRetries);
+        if (handoffRetryDelaysMs.length === 0) {
+          handoffRetryDelaysMs = [0];
+        }
+        retryPolicyOverridden = true;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--syntax-smoke") {
+      mode = "syntax-smoke";
+      continue;
+    }
+
     if (arg === "--live-quote-timeout-ms" && value) {
       const parsed = Number(value);
       if (Number.isFinite(parsed) && parsed > 0) {
@@ -207,16 +246,37 @@ function parseArgs(argv: string[]): CliOptions {
     );
   }
 
+  // Fast syntax-check mode: run a small sample using existing quote sidecars
+  // so we validate handoff URL behavior without full runtime re-quote overhead.
+  if (mode === "syntax-smoke") {
+    useLiveRuntimeQuote = false;
+    maxObservations = 1;
+    strictMinLeadDays = true;
+    if (!retryPolicyOverridden) {
+      handoffRetryDelaysMs = [0, 1000];
+    }
+    if (minLeadDays <= 0) {
+      minLeadDays = 14;
+    }
+    if (maxListings === null) {
+      maxListings = 5;
+    }
+    concurrency = Math.min(concurrency, 1);
+  }
+
   return {
     adapterKey,
     listingId,
     maxListings,
     maxObservations,
     minLeadDays,
+    strictMinLeadDays,
+    handoffRetryDelaysMs,
     concurrency,
     tolerance,
     useLiveRuntimeQuote,
     liveQuoteTimeoutMs,
+    mode,
   };
 }
 
@@ -401,6 +461,8 @@ function extractCandidateTotals(html: string): number[] {
     /(?:^|>)\s*total\s*(?:<|:|\s)[^$]{0,100}\$\s*([0-9,]+(?:\.[0-9]{2})?)/gi,
     /name=["']amount["'][^>]*value=["']([0-9,]+(?:\.[0-9]{2})?)["']/gi,
     /value=["']([0-9,]+(?:\.[0-9]{2})?)["'][^>]*name=["']amount["']/gi,
+    /["'](?:grand[_\s-]?total|reservation[_\s-]?total|total[_\s-]?amount|totaldue|amountdue|amount_due)["']\s*[:=]\s*["']?\$?\s*([0-9]{3,}(?:,[0-9]{3})*(?:\.[0-9]{2})?)["']?/gi,
+    /\b(?:grand[_\s-]?total|reservation[_\s-]?total|total[_\s-]?amount|totaldue|amountdue|amount_due)\b\s*[:=]\s*\$?\s*([0-9]{3,}(?:,[0-9]{3})*(?:\.[0-9]{2})?)/gi,
   ];
 
   for (const pattern of htmlPatterns) {
@@ -487,6 +549,10 @@ function parseRetryDelaysMs(raw: string): number[] {
 }
 
 function getHandoffRetryDelaysMs(adapterKey: string): number[] {
+  if (handoffRetryDelaysOverride && handoffRetryDelaysOverride.length > 0) {
+    return handoffRetryDelaysOverride;
+  }
+
   const adapter = adapterKey.toLowerCase();
   if (adapter === "30aescapes") {
     return parseRetryDelaysMs(
@@ -1345,6 +1411,221 @@ async function tryExtract30AVacayRenderedCheckoutTotal(
     kind: "request_error",
     message:
       "30avacay checkout total not rendered from visible DOM after retries",
+  };
+}
+
+async function tryExtract30ABeachRenderedCheckoutTotal(
+  candidate: ObservationCandidate,
+  reportProgress?: ObservationProgressReporter,
+): Promise<DirectTotalResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.handoffUrl);
+  } catch {
+    return { kind: "unsupported" };
+  }
+
+  if (
+    !parsed.hostname.endsWith("30abeachproperties.com") ||
+    !parsed.pathname.includes("/checkout/")
+  ) {
+    return { kind: "unsupported" };
+  }
+
+  const cloakBrowserModule = (await import("cloakbrowser").catch(
+    () => null,
+  )) as {
+    launch: (options?: Record<string, unknown>) => Promise<{
+      newPage: () => Promise<{
+        goto: (
+          url: string,
+          options?: Record<string, unknown>,
+        ) => Promise<unknown>;
+        waitForLoadState: (
+          state: string,
+          options?: Record<string, unknown>,
+        ) => Promise<void>;
+        waitForTimeout: (ms: number) => Promise<void>;
+        locator: (selector: string) => {
+          innerText: () => Promise<string>;
+          allInnerTexts: () => Promise<string[]>;
+        };
+      }>;
+      close: () => Promise<void>;
+    }>;
+  } | null;
+  if (!cloakBrowserModule?.launch) {
+    return {
+      kind: "request_error",
+      message: "cloakbrowser unavailable for 30abeach checkout validation",
+    };
+  }
+
+  const retryDelaysMs = getHandoffRetryDelaysMs(candidate.adapterKey);
+  const browser = await cloakBrowserModule.launch({
+    headless: true,
+    userAgent: USER_AGENT,
+  });
+  let lastStatus: number | null = null;
+  let lastSignal: string | null = null;
+  let lastUrl = "";
+  let lastTitle = "";
+  let lastNavError = "";
+
+  const blockedSignals = [
+    "access denied",
+    "forbidden",
+    "unauthorized",
+    "verify you are human",
+    "just a moment",
+    "cf-challenge",
+    "cf-mitigated",
+    "captcha",
+    "request blocked",
+  ];
+
+  try {
+    const page = await browser.newPage();
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      try {
+        const gotoResult = await page.goto(candidate.handoffUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: THIRTYA_VACAY_NAVIGATION_TIMEOUT_MS,
+        });
+
+        const maybeResponse = gotoResult as { status?: () => number } | null;
+        const statusValue =
+          maybeResponse && typeof maybeResponse.status === "function"
+            ? maybeResponse.status()
+            : NaN;
+        if (Number.isFinite(statusValue)) {
+          lastStatus = Math.floor(statusValue);
+        }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        lastNavError = message;
+        reportProgress?.(
+          `30abeach checkout retry ${attempt + 1}/${retryDelaysMs.length} navigation_error=${message}`,
+        );
+        continue;
+      }
+
+      await page
+        .waitForLoadState("networkidle", { timeout: 10_000 })
+        .catch(() => null);
+      await page.waitForTimeout(THIRTYA_VACAY_RENDER_WAIT_MS);
+
+      const renderProbeDelaysMs = [0, 2000, 5000];
+      for (let probeIndex = 0; probeIndex < renderProbeDelaysMs.length; probeIndex += 1) {
+        const probeDelayMs = renderProbeDelaysMs[probeIndex] ?? 0;
+        if (probeDelayMs > 0) {
+          await page.waitForTimeout(probeDelayMs);
+        }
+
+        const bodyText = await page
+          .locator("body")
+          .innerText()
+          .catch(() => "");
+        const loweredBody = bodyText.toLowerCase();
+
+        const pageUrl = (page as { url?: () => string }).url?.() ?? "";
+        if (pageUrl) {
+          lastUrl = pageUrl;
+        }
+
+        const titleText = await page
+          .locator("title")
+          .innerText()
+          .catch(() => "");
+        if (titleText) {
+          lastTitle = titleText;
+        }
+
+        const blockedSignal = blockedSignals.find((signal) =>
+          loweredBody.includes(signal),
+        );
+        if (blockedSignal) {
+          lastSignal = blockedSignal;
+        }
+
+        if (/unauthorized access|access denied|forbidden/i.test(bodyText)) {
+          return {
+            kind: "status_error",
+            message:
+              `30abeach checkout page denied access while rendering total` +
+              `${lastStatus !== null ? ` (status=${lastStatus})` : ""}` +
+              `${lastSignal ? ` signal=${lastSignal}` : ""}`,
+          };
+        }
+
+        if (/this unit is not available for online booking/i.test(bodyText)) {
+          return {
+            kind: "status_error",
+            message:
+              `30abeach checkout reports unit not bookable for selected dates` +
+              `${lastStatus !== null ? ` (status=${lastStatus})` : ""}` +
+              `${lastUrl ? ` url=${lastUrl}` : ""}`,
+          };
+        }
+
+        const selectorTexts = await page
+          .locator(
+            "[id*='total' i], [class*='total' i], [data-testid*='total' i]",
+          )
+          .allInnerTexts()
+          .catch(() => []);
+        const selectorTotals = selectorTexts
+          .map((text) => parseMoney(text))
+          .filter(
+            (value): value is number => typeof value === "number" && value > 0,
+          );
+
+        const scriptTexts = await page
+          .locator("script")
+          .allInnerTexts()
+          .catch(() => []);
+        const scriptTotals = extractCandidateTotals(scriptTexts.join(" "));
+
+        const bodyTotals = extractCandidateTotals(bodyText);
+        const allTotals = [...selectorTotals, ...bodyTotals, ...scriptTotals];
+        const best = pickClosestTotal(allTotals, candidate.observedGrandTotal);
+        if (best) {
+          return {
+            kind: "success",
+            total: best.total,
+          };
+        }
+      }
+
+      reportProgress?.(
+        `30abeach checkout retry ${attempt + 1}/${retryDelaysMs.length} total_not_rendered` +
+          `${lastStatus !== null ? ` status=${lastStatus}` : ""}` +
+          `${lastSignal ? ` signal=${lastSignal}` : ""}` +
+          `${lastUrl ? ` url=${lastUrl}` : ""}`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    kind: "request_error",
+    message: [
+      "30abeach checkout total not rendered from visible DOM after retries",
+      lastStatus !== null ? `last_status=${lastStatus}` : null,
+      lastSignal ? `last_signal=${lastSignal}` : null,
+      lastTitle ? `last_title=${lastTitle}` : null,
+      lastUrl ? `last_url=${lastUrl}` : null,
+      lastNavError ? `last_navigation_error=${lastNavError}` : null,
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join("; "),
   };
 }
 
@@ -3612,6 +3893,56 @@ async function validateObservation(
     };
   }
 
+  if (candidate.adapterKey === "30abeach") {
+    const beachCheckout = await tryExtract30ABeachRenderedCheckoutTotal(
+      candidate,
+      reportProgress,
+    );
+
+    if (beachCheckout.kind === "success") {
+      const diff = Math.abs(beachCheckout.total - candidate.observedGrandTotal);
+      if (diff > tolerance) {
+        return {
+          listingId: candidate.listingId,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          observedGrandTotal: candidate.observedGrandTotal,
+          handoffUrl: candidate.handoffUrl,
+          code: "grand_total_mismatch",
+          message: `Observed grand_total=${candidate.observedGrandTotal.toFixed(2)} differs from rendered checkout total=${beachCheckout.total.toFixed(2)} (diff=${diff.toFixed(2)})`,
+          extractedTotal: beachCheckout.total,
+        };
+      }
+      return null;
+    }
+
+    if (beachCheckout.kind === "status_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "direct_status_error",
+        message: `30abeach rendered checkout returned status error: ${beachCheckout.message}`,
+        extractedTotal: null,
+      };
+    }
+
+    if (beachCheckout.kind === "request_error") {
+      return {
+        listingId: candidate.listingId,
+        startDate: candidate.startDate,
+        endDate: candidate.endDate,
+        observedGrandTotal: candidate.observedGrandTotal,
+        handoffUrl: candidate.handoffUrl,
+        code: "request_error",
+        message: `30abeach rendered checkout extraction failed: ${beachCheckout.message}`,
+        extractedTotal: null,
+      };
+    }
+  }
+
   if (candidate.adapterKey === "fivestar30a") {
     const fivestarCheckout = await tryExtractFivestarRenderedCheckoutTotal(
       candidate,
@@ -4059,6 +4390,7 @@ function collectCandidates(
   sidecar: CanonicalQuotesSidecarRecord,
   maxObservations: number,
   minLeadDays: number,
+  strictMinLeadDays: boolean,
   utcTodayStartMs: number,
 ): ObservationCandidate[] {
   const listingId = sidecar.external_listing_id || "unknown";
@@ -4085,7 +4417,9 @@ function collectCandidates(
       : availableObservations;
 
   const selectedObservations =
-    minLeadDays > 0 && leadFilteredObservations.length === 0
+    minLeadDays > 0 &&
+    leadFilteredObservations.length === 0 &&
+    !strictMinLeadDays
       ? availableObservations
       : leadFilteredObservations;
 
@@ -4131,6 +4465,7 @@ export async function runValidateQuoteHandoffAlignmentCli(
   argv: string[] = process.argv.slice(2),
 ): Promise<number> {
   const options = parseArgs(argv);
+  handoffRetryDelaysOverride = options.handoffRetryDelaysMs;
   const progress = createScrapeProgress({
     script: `${options.adapterKey}-handoff-qa`,
   });
@@ -4185,6 +4520,7 @@ export async function runValidateQuoteHandoffAlignmentCli(
         sidecar,
         options.maxObservations,
         options.minLeadDays,
+        options.strictMinLeadDays,
         utcTodayStartMs,
       ),
     );
@@ -4192,13 +4528,13 @@ export async function runValidateQuoteHandoffAlignmentCli(
 
   if (candidates.length === 0) {
     progress.failure(
-      `No quote_available observations with handoff URLs found for adapter=${options.adapterKey}.`,
+      `No quote_available observations with handoff URLs found for adapter=${options.adapterKey} (min_lead_days=${options.minLeadDays}, strict_min_lead_days=${options.strictMinLeadDays}).`,
     );
     return 1;
   }
 
   progress.phase(
-    `Running handoff alignment validation adapter=${options.adapterKey} observations=${candidates.length} min_lead_days=${options.minLeadDays} tolerance=${options.tolerance.toFixed(2)} live_runtime_quote=${options.useLiveRuntimeQuote} live_quote_timeout_ms=${options.liveQuoteTimeoutMs}`,
+    `Running handoff alignment validation mode=${options.mode} adapter=${options.adapterKey} observations=${candidates.length} min_lead_days=${options.minLeadDays} strict_min_lead_days=${options.strictMinLeadDays} retries=${options.handoffRetryDelaysMs.length} retry_delays_ms=${options.handoffRetryDelaysMs.join(",")} tolerance=${options.tolerance.toFixed(2)} live_runtime_quote=${options.useLiveRuntimeQuote} live_quote_timeout_ms=${options.liveQuoteTimeoutMs}`,
   );
 
   let completed = 0;
@@ -4250,6 +4586,7 @@ export async function runValidateQuoteHandoffAlignmentCli(
       `Handoff alignment failed for adapter=${options.adapterKey} tested=${result.tested} matched=${result.matched} failed=${result.failures.length}`,
     );
     printFailures(result.failures);
+    handoffRetryDelaysOverride = null;
     return 1;
   }
 
@@ -4257,6 +4594,7 @@ export async function runValidateQuoteHandoffAlignmentCli(
     `Handoff alignment passed for adapter=${options.adapterKey} tested=${result.tested} matched=${result.matched} failed=0`,
   );
 
+  handoffRetryDelaysOverride = null;
   return 0;
 }
 

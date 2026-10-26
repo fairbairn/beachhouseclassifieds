@@ -1,4 +1,5 @@
 import { postJsonViaCloakBrowserEngine } from "../shared/cloakbrowser-browser-engine";
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type RouterFeeLine = {
@@ -45,6 +46,8 @@ const USER_AGENT =
 const DEFAULT_TIMEOUT_MS = 20000;
 const RATE_LIMIT_BACKOFF_MS = 900;
 const MAX_RATE_LIMIT_RETRIES = 3;
+const USE_PROXY = shouldAdapterUseProxy(ADAPTER_KEY);
+
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -332,7 +335,7 @@ async function fetchRouterQuote(input: {
       userAgent: USER_AGENT,
       headers,
       body: payload,
-      useProxy: true,
+      useProxy: USE_PROXY,
       enablePersistentProfile: false,
     });
 

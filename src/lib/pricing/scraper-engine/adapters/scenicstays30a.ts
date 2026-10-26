@@ -1,12 +1,45 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Browser } from "playwright";
 
 import { executeScenicstays30aSingleQuote } from "@/lib/pricing/quote-runtime/adapters/scenicstays30a";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { normalizeAdapterQuoteScopeArgs } from "../quote-scope";
+import type {
+  ScraperBrowserLike,
+  ScraperBrowserPageLike,
+} from "../shared/browser-engine";
 import type { DetailRecordBase, ScrapedLink, ScraperAdapter } from "../types";
+
+type ScenicPageGotoResponse = {
+  status(): number;
+};
+
+type ScenicBrowserPage = ScraperBrowserPageLike & {
+  goto(
+    url: string,
+    options?: {
+      waitUntil?: "commit" | "domcontentloaded";
+      timeout?: number;
+    },
+  ): Promise<ScenicPageGotoResponse | null>;
+  evaluate<Result>(
+    pageFunction: string | ((...args: unknown[]) => Result),
+    ...args: unknown[]
+  ): Promise<Result>;
+  waitForTimeout(timeoutMs: number): Promise<void>;
+  on(
+    event: "response",
+    listener: (response: {
+      url(): string;
+      text(): Promise<string>;
+    }) => void,
+  ): void;
+};
+
+type ScenicBrowser = ScraperBrowserLike & {
+  newPage(): Promise<ScenicBrowserPage>;
+};
 
 type ScenicStatusCode = "A" | "U" | "I" | "O" | "X";
 type CanonicalDayCode = "Y" | "N";
@@ -1130,10 +1163,122 @@ function extractDescriptionExpanded(html: string): string {
   return "";
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+function extractBrowserResponseBody(pageHtml: string): string {
+  const raw = pageHtml.trim();
+  if (!raw) {
+    return "";
+  }
+
+  if (
+    raw.startsWith("{") ||
+    raw.startsWith("[") ||
+    raw.startsWith('"')
+  ) {
+    return raw;
+  }
+
+  const preMatch = raw.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+  if (preMatch?.[1]) {
+    return decodeHtmlEntities(preMatch[1]).trim();
+  }
+
+  return decodeHtmlEntities(stripHtml(raw)).trim();
+}
+
+function throwCriticalHttpStatus(input: {
+  status: number;
+  stage: string;
+  url: string;
+  reportDetailProgress?: (message: string) => void;
+}): never {
+  const reason = `critical_http_status status=${input.status} stage=${input.stage} url=${input.url}`;
+  input.reportDetailProgress?.(reason);
+  throw new Error(reason);
+}
+
+function assertCriticalHttpStatus(input: {
+  status: number | null;
+  stage: string;
+  url: string;
+  reportDetailProgress?: (message: string) => void;
+}): void {
+  if (
+    input.status === null ||
+    !Number.isFinite(input.status) ||
+    input.status < 400
+  ) {
+    return;
+  }
+
+  if (
+    input.status === 403 ||
+    input.status === 404 ||
+    input.status === 429 ||
+    input.status >= 500
+  ) {
+    throwCriticalHttpStatus({
+      status: input.status,
+      stage: input.stage,
+      url: input.url,
+      reportDetailProgress: input.reportDetailProgress,
+    });
+  }
+}
+
+function detectBlockingSignalFromHtml(html: string): string | null {
+  const lowered = html.toLowerCase();
+  const blockedSignals = [
+    "403 forbidden",
+    "429 too many requests",
+    "access denied",
+    "just a moment",
+    "verify you are human",
+    "security check",
+    "cf-challenge",
+    "cf-mitigated",
+    "cdn-cgi/challenge-platform",
+    "error 1020",
+    "request blocked",
+  ];
+
+  const matchedSignal = blockedSignals.find((signal) => lowered.includes(signal));
+  return matchedSignal ?? null;
+}
+
+async function readTextResponseViaBrowser(
+  browser: ScenicBrowser,
+  url: string,
+): Promise<{ status: number | null; body: string }> {
+  const page = await browser.newPage();
+
+  try {
+    const response = await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: 120000,
+    });
+    const status = response?.status?.() ?? null;
+    const body = extractBrowserResponseBody(await page.content());
+    return { status, body };
+  } finally {
+    await page.close().catch(() => undefined);
+  }
+}
+
 async function collectInteractiveDetailSnapshot(
-  browser: Browser,
+  browser: ScenicBrowser,
   detailUrl: string,
   maxCalendarAdvanceMonths: number,
+  reportDetailProgress?: (message: string) => void,
 ): Promise<{
   html: string;
   availabilityDays: Array<{ date: string; code: string }>;
@@ -1149,10 +1294,26 @@ async function collectInteractiveDetailSnapshot(
   const page = await browser.newPage();
 
   try {
-    await page.goto(detailUrl, {
+    const response = await page.goto(detailUrl, {
       waitUntil: "domcontentloaded",
       timeout: 120000,
     });
+    const responseStatus = response?.status?.() ?? null;
+    assertCriticalHttpStatus({
+      status: responseStatus,
+      stage: "detail_page",
+      url: detailUrl,
+      reportDetailProgress,
+    });
+
+    const initialHtml = await page.content();
+    const blockedSignal = detectBlockingSignalFromHtml(initialHtml);
+    if (blockedSignal) {
+      const reason = `critical_http_status status=403 stage=detail_page_blocked url=${detailUrl} signal=${blockedSignal}`;
+      reportDetailProgress?.(reason);
+      throw new Error(reason);
+    }
+
     await page.waitForTimeout(1200);
 
     const clickByText = async (needle: string): Promise<void> => {
@@ -1417,10 +1578,25 @@ async function discoverListings(
     })();
   });
 
-  await page.goto(anchorUrl, {
+  const collectionResponse = await page.goto(anchorUrl, {
     waitUntil: "domcontentloaded",
     timeout: 120000,
   });
+  const collectionStatus = collectionResponse?.status?.() ?? null;
+  assertCriticalHttpStatus({
+    status: collectionStatus,
+    stage: "collection_discovery",
+    url: anchorUrl,
+    reportDetailProgress: reportProgress,
+  });
+
+  const collectionHtml = await page.content();
+  const collectionBlockedSignal = detectBlockingSignalFromHtml(collectionHtml);
+  if (collectionBlockedSignal) {
+    const reason = `critical_http_status status=403 stage=collection_discovery_blocked url=${anchorUrl} signal=${collectionBlockedSignal}`;
+    reportProgress(reason);
+    throw new Error(reason);
+  }
 
   await page.waitForTimeout(Math.max(1800, scrollPauseMs * 2));
   await collectDetailUrls();
@@ -1581,56 +1757,31 @@ async function discoverListings(
 }
 
 async function fetchDetail(
-  browser: Browser,
+  browser: ScenicBrowser,
   detailUrl: string,
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
+  reportDetailProgress?: (message: string) => void,
 ): Promise<ScenicStaysDetailRecord | null> {
   const rentalIdFromUrl = extractRentalIdFromDetailUrl(detailUrl);
   const rentalSlugFromUrl = extractRentalSlugFromDetailUrl(detailUrl);
 
-  const headers = {
-    "user-agent":
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    accept: "text/html,application/json,text/plain,*/*",
-    referer: detailUrl,
-  };
-
   try {
     const detailOrigin = new URL(detailUrl).origin;
-    const detailResponse = await fetch(detailUrl, {
-      method: "GET",
-      redirect: "follow",
-      headers,
-    });
-
-    const contentType = (
-      detailResponse.headers.get("content-type") ?? ""
-    ).toLowerCase();
-    if (detailResponse.status !== 200 || !contentType.includes("text/html")) {
-      return null;
-    }
-
-    const html = await detailResponse.text();
-
     const interactiveSnapshot = await collectInteractiveDetailSnapshot(
       browser,
       detailUrl,
       maxCalendarAdvanceMonths,
-    ).catch(() => ({
-      html: "",
-      availabilityDays: [] as Array<{ date: string; code: string }>,
-      rateDays: [] as Array<{
-        date: string;
-        nightly_rate: number | null;
-        min_nights: number | null;
-        is_booked: boolean | null;
-        changeover_code: string;
-        season_name: string;
-      }>,
-    }));
+      reportDetailProgress,
+    );
 
-    const parsingHtml = interactiveSnapshot.html || html;
+    const parsingHtml = interactiveSnapshot.html;
+    if (!parsingHtml.trim()) {
+      reportDetailProgress?.(
+        `detail failed listing=${detailUrl} reason=empty_html_after_browser_navigation`,
+      );
+      return null;
+    }
 
     const title = extractFirst(
       /<title[^>]*>([\s\S]*?)<\/title>/i,
@@ -1803,7 +1954,9 @@ async function fetchDetail(
 
     const bedsResolved =
       beds ??
-      parsePositiveNumberLike(extractWidgetDataAttr(html, "data-dblbeds")) ??
+      parsePositiveNumberLike(
+        extractWidgetDataAttr(parsingHtml, "data-dblbeds"),
+      ) ??
       bedsFromWidgetLabels;
     const bathsResolved = baths ?? bathsFromWidgetLabels;
     const sleepsResolved =
@@ -1847,16 +2000,21 @@ async function fetchDetail(
         },
       ).toString()}`;
 
-      const roomDetailsResponse = await fetch(roomDetailsApiUrl, {
-        method: "GET",
-        headers,
+      const roomDetailsResponse = await readTextResponseViaBrowser(
+        browser,
+        roomDetailsApiUrl,
+      );
+      assertCriticalHttpStatus({
+        status: roomDetailsResponse.status,
+        stage: "room_details",
+        url: roomDetailsApiUrl,
+        reportDetailProgress,
       });
 
       if (roomDetailsResponse.status === 200) {
-        const raw = await roomDetailsResponse.text();
         try {
           roomDetailsApiPayload = JSON.parse(
-            raw,
+            roomDetailsResponse.body,
           ) as StreamlineRoomDetailsPayload;
         } catch {
           // Ignore malformed room-details payload.
@@ -1889,15 +2047,20 @@ async function fetchDetail(
         },
       ).toString()}`;
 
-      const availabilityResponse = await fetch(availabilityApiUrl, {
-        method: "GET",
-        headers,
+      const availabilityResponse = await readTextResponseViaBrowser(
+        browser,
+        availabilityApiUrl,
+      );
+      assertCriticalHttpStatus({
+        status: availabilityResponse.status,
+        stage: "availability",
+        url: availabilityApiUrl,
+        reportDetailProgress,
       });
 
       if (availabilityResponse.status === 200) {
-        const raw = await availabilityResponse.text();
         try {
-          const parsed = JSON.parse(raw) as {
+          const parsed = JSON.parse(availabilityResponse.body) as {
             data?: {
               range?: { beginDate?: string; endDate?: string };
               availability?: string;
@@ -1917,11 +2080,9 @@ async function fetchDetail(
       rawAvailabilityCodes,
     );
     const allAvailabilityDaysFromStored = mergeAvailabilityDays(
-      extractStoredDatesAvailability(html),
       extractStoredDatesAvailability(parsingHtml),
     );
     const allAvailabilityDaysFromHtml = mergeAvailabilityDays(
-      parseAvailabilityDaysFromCalendarHtml(html),
       parseAvailabilityDaysFromCalendarHtml(parsingHtml),
     );
     const allAvailabilityDays = mergeAvailabilityDays(
@@ -1991,15 +2152,20 @@ async function fetchDetail(
         },
       ).toString()}`;
 
-      const ratesResponse = await fetch(ratesApiUrl, {
-        method: "GET",
-        headers,
+      const ratesResponse = await readTextResponseViaBrowser(
+        browser,
+        ratesApiUrl,
+      );
+      assertCriticalHttpStatus({
+        status: ratesResponse.status,
+        stage: "rates",
+        url: ratesApiUrl,
+        reportDetailProgress,
       });
 
       if (ratesResponse.status === 200) {
-        const rawRates = await ratesResponse.text();
         try {
-          const parsed = JSON.parse(rawRates) as {
+          const parsed = JSON.parse(ratesResponse.body) as {
             data?: unknown;
           };
 
@@ -2060,7 +2226,7 @@ async function fetchDetail(
 
     if (normalizedRateDays.length === 0) {
       normalizedRateDays = mergeRateDays(
-        parseRateDaysFromCalendarHtml(html),
+        parseRateDaysFromCalendarHtml(parsingHtml),
         parseRateDaysFromCalendarHtml(parsingHtml),
       );
     }
@@ -2296,7 +2462,15 @@ async function fetchDetail(
       },
       html_path: htmlPath,
     };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const errorType =
+      error && typeof error === "object" && "name" in error
+        ? String((error as { name?: unknown }).name ?? "Error")
+        : "Error";
+    reportDetailProgress?.(
+      `detail_exception listing=${detailUrl} type=${errorType} reason=${message}`,
+    );
     return null;
   }
 }
@@ -2306,6 +2480,7 @@ export function createScenicStays30AAdapter(): ScraperAdapter<ScenicStaysDetailR
     managerKey: "scenicstays30a",
     scriptLabel: "scenicstays30a",
     defaultAnchorUrl: DEFAULT_ANCHOR_URL,
+    useBrowserEngineProxy: true,
     detailFetchDelayMs: Math.max(
       0,
       Number(process.env.SCENICSTAYS30A_DETAIL_FETCH_DELAY_MS ?? "250") || 250,
@@ -2356,6 +2531,7 @@ export function createScenicStays30AAdapter(): ScraperAdapter<ScenicStaysDetailR
         context.detailUrl,
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
+        context.reportDetailProgress,
       );
     },
     async runQuoteCapture(argv, progress) {

@@ -1,3 +1,5 @@
+import "@/core/tooling/env/load-env-profile";
+
 import { getKnownAdapterKeys } from "@/lib/pricing/scraper-engine/adapter-registry";
 import { runValidateAdapterQuoteSidecarsCli } from "@/lib/pricing/validation/validate-adapter-quote-sidecars";
 import { runValidateAvailabilityStatusCodesCli } from "@/lib/pricing/validation/validate-availability-status-codes";

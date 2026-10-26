@@ -1,3 +1,5 @@
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
+import { postJsonViaCloakBrowserEngine } from "../shared/cloakbrowser-browser-engine";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type CartPriceResponse = {
@@ -20,6 +22,7 @@ const GRAPHQL_ENDPOINT =
 const DEFAULT_TIMEOUT_MS = 20000;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const USE_PROXY = shouldAdapterUseProxy(ADAPTER_KEY);
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -120,12 +123,14 @@ function resolveRuntimeQuoteContext(input: QuoteExecutionRequest): {
 }
 
 async function fetchCartPrice(input: {
+  listingId: string;
+  detailUrl: string;
+  timeoutMs: number;
   homeId: string;
   checkInIso: string;
   checkOutIso: string;
   adults: number;
   children: number;
-  signal: AbortSignal;
 }): Promise<CartPriceResponse> {
   const query =
     "query($bookingRequest: BookingRequestInput!){ cartPrice(bookingRequest:$bookingRequest){ cartId creditCard { totalOfStay { total withDiscount } subtotal { total withDiscount } taxesAndFees { total } } } }";
@@ -144,29 +149,57 @@ async function fetchCartPrice(input: {
     },
   };
 
-  const response = await fetch(GRAPHQL_ENDPOINT, {
-    method: "POST",
+  const response = await postJsonViaCloakBrowserEngine({
+    adapterKey: ADAPTER_KEY,
+    listingId: input.listingId,
+    detailUrl: input.detailUrl,
+    endpoint: GRAPHQL_ENDPOINT,
+    timeoutMs: input.timeoutMs,
+    userAgent: USER_AGENT,
     headers: {
       accept: "application/json",
       "content-type": "application/json",
       "user-agent": USER_AGENT,
     },
-    body: JSON.stringify({ query, variables }),
-    signal: input.signal,
+    body: { query, variables },
+    useProxy: USE_PROXY,
+    enablePersistentProfile: false,
   });
 
-  if (!response.ok) {
+  if (response.requestError) {
     return {
       errors: [
         {
-          message: `Quote request failed with status ${response.status}`,
-          code: "HTTP_ERROR",
+          message: response.requestError,
+          code: "REQUEST_ERROR",
         },
       ],
     };
   }
 
-  return (await response.json()) as CartPriceResponse;
+  if (!response.ok) {
+    return {
+      errors: [
+        {
+          message: `Quote request failed with status ${response.httpStatus}`,
+          code: response.httpStatus === 429 ? "RATE_LIMITED" : "HTTP_ERROR",
+        },
+      ],
+    };
+  }
+
+  try {
+    return JSON.parse(response.bodyText) as CartPriceResponse;
+  } catch {
+    return {
+      errors: [
+        {
+          message: "Quote response JSON parse failed",
+          code: "JSON_PARSE_ERROR",
+        },
+      ],
+    };
+  }
 }
 
 export async function execute30ABeachGirlsSingleQuote(
@@ -202,17 +235,16 @@ export async function execute30ABeachGirlsSingleQuote(
     children: Math.max(0, input.children),
   });
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
     const payload = await fetchCartPrice({
+      listingId: input.listingId,
+      detailUrl: fallbackHandoffUrl,
+      timeoutMs,
       homeId: runtimeContext.homeId,
       checkInIso: input.checkInIso,
       checkOutIso: input.checkOutIso,
       adults: Math.max(1, input.adults),
       children: Math.max(0, input.children),
-      signal: controller.signal,
     });
 
     if (Array.isArray(payload.errors) && payload.errors.length > 0) {
@@ -324,7 +356,5 @@ export async function execute30ABeachGirlsSingleQuote(
         },
       }),
     };
-  } finally {
-    clearTimeout(timer);
   }
 }

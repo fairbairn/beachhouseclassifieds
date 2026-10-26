@@ -1,4 +1,5 @@
 import { chromium, type Browser, type BrowserContext } from "playwright";
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 export type StreamlineEnvelope<TData = unknown> = {
@@ -578,15 +579,22 @@ function resolveUserAgent(input: {
   return candidates[index] ?? DEFAULT_USER_AGENT_CANDIDATES[0];
 }
 
-function resolvePlaywrightProxy(envPrefix: string): {
+function resolvePlaywrightProxy(input: {
+  envPrefix: string;
+  enableProxy: boolean;
+}): {
   server: string;
   username?: string;
   password?: string;
 } | null {
+  if (!input.enableProxy) {
+    return null;
+  }
+
   const proxyUrl = readFirstEnv([
-    `${envPrefix}_HTTPS_PROXY`,
-    `${envPrefix}_HTTP_PROXY`,
-    `${envPrefix}_PROXY`,
+    `${input.envPrefix}_HTTPS_PROXY`,
+    `${input.envPrefix}_HTTP_PROXY`,
+    `${input.envPrefix}_PROXY`,
     "HTTPS_PROXY",
     "HTTP_PROXY",
     "https_proxy",
@@ -622,6 +630,7 @@ export async function executeStreamlinePlaywrightQuote(input: {
   adapterKey: string;
   envPrefix: string;
   request: QuoteExecutionRequest;
+  useProxy?: boolean;
 }): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
   const timeoutMs = normalizeTimeoutMs(input.request.options?.timeoutMs);
@@ -662,12 +671,19 @@ export async function executeStreamlinePlaywrightQuote(input: {
     true,
   );
   const skipLanding = readToggle(`${input.envPrefix}_SKIP_LANDING`, true);
+  const useProxy =
+    typeof input.useProxy === "boolean"
+      ? input.useProxy
+      : shouldAdapterUseProxy(input.adapterKey);
   const userAgent = resolveUserAgent({
     envPrefix: input.envPrefix,
     adapterKey: input.adapterKey,
     request: input.request,
   });
-  const proxy = resolvePlaywrightProxy(input.envPrefix);
+  const proxy = resolvePlaywrightProxy({
+    envPrefix: input.envPrefix,
+    enableProxy: useProxy,
+  });
   const detailLoadTimeoutMs = resolveDetailLoadTimeoutMs(timeoutMs);
   const detailChallengeWaitMs = resolveChallengeWaitMs({
     timeoutMs,
@@ -685,6 +701,7 @@ export async function executeStreamlinePlaywrightQuote(input: {
     stealthRequested: launchState.stealthRequested,
     stealthActive: launchState.stealthActive,
     realChromeRequested: launchState.realChromeRequested,
+    proxyEnabledByPolicy: useProxy,
     proxyConfigured: Boolean(proxy),
     proxyServer: proxy?.server ?? null,
     proxyAuthConfigured: Boolean(proxy?.username || proxy?.password),

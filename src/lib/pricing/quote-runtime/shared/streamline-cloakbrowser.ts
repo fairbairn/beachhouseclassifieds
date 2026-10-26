@@ -5,6 +5,7 @@ import {
   launch as launchCloakBrowser,
   launchPersistentContext as launchPersistentCloakContext,
 } from "cloakbrowser";
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type BrowserProxyConfig = {
@@ -713,15 +714,22 @@ function resolveUserAgent(input: {
   return candidates[index] ?? DEFAULT_USER_AGENT_CANDIDATES[0];
 }
 
-function resolveBrowserProxy(envPrefix: string): {
+function resolveBrowserProxy(input: {
+  envPrefix: string;
+  enableProxy: boolean;
+}): {
   server: string;
   username?: string;
   password?: string;
 } | null {
+  if (!input.enableProxy) {
+    return null;
+  }
+
   const proxyUrl = readFirstEnv([
-    `${envPrefix}_HTTPS_PROXY`,
-    `${envPrefix}_HTTP_PROXY`,
-    `${envPrefix}_PROXY`,
+    `${input.envPrefix}_HTTPS_PROXY`,
+    `${input.envPrefix}_HTTP_PROXY`,
+    `${input.envPrefix}_PROXY`,
     "HTTPS_PROXY",
     "HTTP_PROXY",
     "https_proxy",
@@ -757,6 +765,7 @@ export async function executeStreamlineCloakBrowserQuote(input: {
   adapterKey: string;
   envPrefix: string;
   request: QuoteExecutionRequest;
+  useProxy?: boolean;
 }): Promise<QuoteExecutionResult> {
   const startedAt = performance.now();
   const timeoutMs = normalizeTimeoutMs(input.request.options?.timeoutMs);
@@ -800,12 +809,19 @@ export async function executeStreamlineCloakBrowserQuote(input: {
     adapterKey: input.adapterKey,
     envPrefix: input.envPrefix,
   });
+  const useProxy =
+    typeof input.useProxy === "boolean"
+      ? input.useProxy
+      : shouldAdapterUseProxy(input.adapterKey);
   const userAgent = resolveUserAgent({
     envPrefix: input.envPrefix,
     adapterKey: input.adapterKey,
     request: input.request,
   });
-  const proxy = resolveBrowserProxy(input.envPrefix);
+  const proxy = resolveBrowserProxy({
+    envPrefix: input.envPrefix,
+    enableProxy: useProxy,
+  });
   const detailLoadTimeoutMs = resolveDetailLoadTimeoutMs(timeoutMs);
   const detailChallengeWaitMs = resolveChallengeWaitMs({
     timeoutMs,
@@ -860,6 +876,7 @@ export async function executeStreamlineCloakBrowserQuote(input: {
     stealthRequested: launchState.stealthRequested,
     stealthActive: launchState.stealthActive,
     realChromeRequested: launchState.realChromeRequested,
+    proxyEnabledByPolicy: useProxy,
     proxyConfigured: Boolean(proxy),
     proxyServer: proxy?.server ?? null,
     proxyAuthConfigured: Boolean(proxy?.username || proxy?.password),

@@ -5,8 +5,9 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { isAbsolute } from "node:path";
 import { fileURLToPath, URL } from "node:url";
+import type { PluginContext } from "rollup";
 import { visualizer } from "rollup-plugin-visualizer";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import viteTsConfigPaths from "vite-tsconfig-paths";
 
 const ignoredWarningPathParts = [
@@ -74,11 +75,12 @@ const isForbiddenAliasImport = (source: string): boolean => {
   return source.startsWith("@server") || source.startsWith("@cli");
 };
 
-function forbidNonWebImports() {
+function forbidNonWebImports(): Plugin {
   return {
     name: "forbid-non-web-imports",
     enforce: "pre" as const,
     async resolveId(
+      this: PluginContext,
       source: string,
       importer: string | undefined,
       options: { ssr?: boolean } | undefined,

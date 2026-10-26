@@ -4,22 +4,38 @@ set -uo pipefail
 
 output_dir=".tmp/terminal-capture"
 output_file=""
+tee_output=false
 
-if [[ "${1:-}" == "--out" ]]; then
-  if [[ -z "${2:-}" ]]; then
-    echo "Missing value for --out" >&2
-    exit 2
-  fi
-  output_file="$2"
-  shift 2
-fi
+while [[ $# -gt 0 ]]; do
+  case "${1:-}" in
+    --out)
+      if [[ -z "${2:-}" ]]; then
+        echo "Missing value for --out" >&2
+        exit 2
+      fi
+      output_file="$2"
+      shift 2
+      ;;
+    --tee)
+      tee_output=true
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 if [[ "${1:-}" == "--" ]]; then
   shift
 fi
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: bash src/core/tooling/terminal/capture-command.sh [--out <file>] -- <command> [args...]" >&2
+  echo "Usage: bash src/core/tooling/terminal/capture-command.sh [--out <file>] [--tee] -- <command> [args...]" >&2
   exit 2
 fi
 
@@ -35,8 +51,13 @@ fi
   printf '\n'
 } >"$output_file"
 
-TERM=dumb CLICOLOR=0 "$@" >>"$output_file" 2>&1
-exit_code=$?
+if [[ "$tee_output" == "true" ]]; then
+  TERM=dumb CLICOLOR=0 "$@" 2>&1 | tee -a "$output_file"
+  exit_code=${PIPESTATUS[0]}
+else
+  TERM=dumb CLICOLOR=0 "$@" >>"$output_file" 2>&1
+  exit_code=$?
+fi
 
 echo "__CAPTURE_EXIT__:$exit_code" >>"$output_file"
 echo "Capture file: $output_file"

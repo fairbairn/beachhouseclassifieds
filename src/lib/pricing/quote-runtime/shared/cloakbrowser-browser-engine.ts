@@ -287,7 +287,10 @@ export async function postJsonViaCloakBrowserEngine(input: {
 
       const response = await context.request.post(input.endpoint, {
         headers: input.headers,
-        data: JSON.stringify(input.body),
+        data:
+          typeof input.body === "string"
+            ? input.body
+            : JSON.stringify(input.body),
         timeout: input.timeoutMs,
       });
 

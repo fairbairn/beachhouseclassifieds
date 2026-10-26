@@ -4,6 +4,7 @@ import {
   getKnownQuoteRuntimeAdapterKeys,
   getQuoteRuntimeExecutor,
 } from "@/lib/pricing/quote-runtime/registry";
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import { selectCanonicalListings } from "@/lib/pricing/shared/canonical-index-listings";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -1153,17 +1154,20 @@ function describeAdapterExecutionContext(adapterKey: string): {
   proxyPolicy: string;
   proxyConfigured: string;
 } {
-  if (adapterKey === "localvr30a") {
-    const proxyConfigured =
-      typeof process.env.HTTPS_PROXY === "string" ||
-      typeof process.env.HTTP_PROXY === "string" ||
-      typeof process.env.https_proxy === "string" ||
-      typeof process.env.http_proxy === "string";
+  const proxyEnabledByPolicy = shouldAdapterUseProxy(adapterKey);
+  const proxyConfigured =
+    typeof process.env.HTTPS_PROXY === "string" ||
+    typeof process.env.HTTP_PROXY === "string" ||
+    typeof process.env.https_proxy === "string" ||
+    typeof process.env.http_proxy === "string";
 
+  if (adapterKey === "localvr30a") {
     return {
       runtimeEngine: "cloakbrowser",
       requestFlow: "GET seed + native page POST capture",
-      proxyPolicy: "hard-coded required",
+      proxyPolicy: proxyEnabledByPolicy
+        ? "enabled via adapter proxy policy"
+        : "disabled via adapter proxy policy",
       proxyConfigured: proxyConfigured ? "yes" : "no",
     };
   }
@@ -1171,8 +1175,10 @@ function describeAdapterExecutionContext(adapterKey: string): {
   return {
     runtimeEngine: "adapter-defined",
     requestFlow: "adapter-defined",
-    proxyPolicy: "adapter-defined",
-    proxyConfigured: "adapter-defined",
+    proxyPolicy: proxyEnabledByPolicy
+      ? "enabled via adapter proxy policy"
+      : "disabled via adapter proxy policy",
+    proxyConfigured: proxyConfigured ? "yes" : "no",
   };
 }
 
