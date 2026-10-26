@@ -259,22 +259,20 @@ export async function execute360BlueSingleQuote(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const quoteRequestUrl = `${quoteContext.reservationQuotesEndpoint}?${query.toString()}`;
 
   try {
-    const response = await fetch(
-      `${quoteContext.reservationQuotesEndpoint}?${query.toString()}`,
-      {
-        method: "GET",
-        headers: {
-          accept: "application/json, text/plain, */*",
-          "accept-language": "en-US,en;q=0.9",
-          origin: REQUEST_ORIGIN,
-          referer: REQUEST_REFERER,
-          "user-agent": REQUEST_USER_AGENT,
-        },
-        signal: controller.signal,
+    const response = await fetch(quoteRequestUrl, {
+      method: "GET",
+      headers: {
+        accept: "application/json, text/plain, */*",
+        "accept-language": "en-US,en;q=0.9",
+        origin: REQUEST_ORIGIN,
+        referer: REQUEST_REFERER,
+        "user-agent": REQUEST_USER_AGENT,
       },
-    );
+      signal: controller.signal,
+    });
 
     if (!response.ok) {
       return {
@@ -282,12 +280,14 @@ export async function execute360BlueSingleQuote(
         elapsedMs: performance.now() - startedAt,
         error: toError({
           code: "QUOTE_HTTP_ERROR",
-          message: `Quote request failed with status ${response.status}`,
+          message:
+            `Quote request failed with status ${response.status} ` +
+            `url=${quoteRequestUrl}`,
           retryable: response.status >= 500 || response.status === 429,
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
-          details: { status: response.status, handoffUrl },
+          details: { status: response.status, handoffUrl, quoteRequestUrl },
         }),
       };
     }

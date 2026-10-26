@@ -37,6 +37,7 @@ type CliOptions = {
   minOverlapNights: number;
   backfillOnly: boolean;
   backfillWindowHours: number;
+  continueOnInternalError: boolean;
   dryRun: boolean;
 };
 
@@ -422,6 +423,10 @@ function parseArgs(
         DEFAULT_BACKFILL_WINDOW_HOURS,
     ) || DEFAULT_BACKFILL_WINDOW_HOURS,
   );
+  let continueOnInternalError = readToggle(
+    process.env.QUOTE_CAPTURE_CONTINUE_ON_INTERNAL_ERROR,
+    false,
+  );
   let dryRun =
     process.env.QUOTE_CAPTURE_DRY_RUN === "1" ||
     process.env.QUOTE_CAPTURE_DRY_RUN === "true";
@@ -573,6 +578,16 @@ function parseArgs(
       dryRun = true;
       continue;
     }
+
+    if (arg === "--continue-on-internal-error") {
+      continueOnInternalError = true;
+      continue;
+    }
+
+    if (arg === "--no-continue-on-internal-error") {
+      continueOnInternalError = false;
+      continue;
+    }
   }
 
   return {
@@ -590,6 +605,7 @@ function parseArgs(
     minOverlapNights: Math.max(1, minOverlapNights),
     backfillOnly,
     backfillWindowHours: Math.max(1, backfillWindowHours),
+    continueOnInternalError,
     dryRun,
   };
 }
@@ -1919,13 +1935,23 @@ async function buildSidecarForListing(input: {
     observations,
   };
 
-  if (observations.length === 0 && failureSummary.internalErrorCount > 0) {
+  if (
+    observations.length === 0 &&
+    failureSummary.internalErrorCount > 0 &&
+    !options.continueOnInternalError
+  ) {
     const sample =
       failureSummary.sampleInternalErrors.length > 0
         ? failureSummary.sampleInternalErrors.join(" | ")
         : "internal_runtime_failure_detected";
     throw new Error(
       `internal quote runtime failure listing=${listing.externalListingId} windows=${runtimeResults.length} internal_error_windows=${failureSummary.internalErrorCount} sample=${sample}`,
+    );
+  }
+
+  if (observations.length === 0 && failureSummary.internalErrorCount > 0) {
+    input.progress?.warn(
+      `continuing after internal quote failures listing=${listing.externalListingId} windows=${runtimeResults.length} internal_error_windows=${failureSummary.internalErrorCount}`,
     );
   }
 
@@ -2070,6 +2096,7 @@ export async function runRuntimeAdapterQuoteCli(
         `fresh_hours=${options.freshHours}`,
         `skip_covered_windows=${options.skipCoveredWindows}`,
         `min_overlap_nights=${options.minOverlapNights}`,
+        `continue_on_internal_error=${options.continueOnInternalError}`,
         `selection=${options.listingId ? `listing:${options.listingId}` : `max-listings:${options.maxListings}`}`,
         `min_probe_nights=${defaultMinProbeNights}`,
         `max_probe_nights=${defaultMaxProbeNights}`,
