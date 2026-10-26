@@ -1166,7 +1166,10 @@ async function fetchDetail(
         if (!entityId && Number.isFinite(existing.quote_context?.entity_id)) {
           entityId = Number(existing.quote_context?.entity_id);
         }
-        if (!idsTuple && typeof existing.quote_context?.ids_tuple === "string") {
+        if (
+          !idsTuple &&
+          typeof existing.quote_context?.ids_tuple === "string"
+        ) {
           idsTuple = existing.quote_context.ids_tuple.trim();
         }
         if (!rcType && typeof existing.quote_context?.rc_type === "string") {

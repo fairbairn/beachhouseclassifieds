@@ -61,7 +61,9 @@ function parseNumericCell(cell: string): number {
   return Number(match[0]);
 }
 
-function parseExistingMatrixRows(lines: string[]): Map<string, ExistingMatrixRow> {
+function parseExistingMatrixRows(
+  lines: string[],
+): Map<string, ExistingMatrixRow> {
   const rows = new Map<string, ExistingMatrixRow>();
 
   for (const line of lines) {
@@ -480,9 +482,8 @@ async function main(): Promise<void> {
       previous.quoteRuntime !== quoteRuntime ||
       previous.ready !== ready;
 
-    const lastUpdated = valuesChanged || isTouched
-      ? today
-      : (previous?.lastUpdated?.trim() || "—");
+    const lastUpdated =
+      valuesChanged || isTouched ? today : previous?.lastUpdated?.trim() || "—";
 
     return [
       row.adapter,
