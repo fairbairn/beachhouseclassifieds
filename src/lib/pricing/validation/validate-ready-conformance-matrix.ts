@@ -15,6 +15,7 @@ export type MatrixRow = {
   imageUrls: number;
   avgImgList: number;
   quoteRuntime: string;
+  lastUpdated: string;
   ready: string;
 };
 
@@ -135,6 +136,11 @@ function parseMatrixRow(line: string): MatrixRow | null {
     return null;
   }
 
+  const hasLastUpdatedColumn = cells.length >= 15;
+  const quoteRuntime = hasLastUpdatedColumn ? cells[12] : cells[12];
+  const lastUpdated = hasLastUpdatedColumn ? cells[13] : "—";
+  const ready = hasLastUpdatedColumn ? cells[14] : cells[13];
+
   return {
     adapter: cells[0],
     files: parseNumericCell(cells[1]),
@@ -148,8 +154,9 @@ function parseMatrixRow(line: string): MatrixRow | null {
     pricingRecords: parseNumericCell(cells[9]),
     imageUrls: parseNumericCell(cells[10]),
     avgImgList: parseNumericCell(cells[11]),
-    quoteRuntime: cells[12],
-    ready: cells[13],
+    quoteRuntime,
+    lastUpdated,
+    ready,
   };
 }
 

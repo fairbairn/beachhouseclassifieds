@@ -20,6 +20,24 @@ type AdapterMetrics = {
   hasRuntime: boolean;
 };
 
+type ExistingMatrixRow = {
+  adapter: string;
+  files: number;
+  core: number;
+  profile: number;
+  availability: number;
+  descriptionPlus: number;
+  amenitiesPlus: number;
+  locationPlus: number;
+  mediaPlus: number;
+  pricingRecords: number;
+  imageUrls: number;
+  avgImgList: number;
+  quoteRuntime: string;
+  lastUpdated: string;
+  ready: string;
+};
+
 type SourceIndexTotals = {
   totalIndexEntries: number;
   adaptersWithIndex: number;
@@ -28,6 +46,71 @@ type SourceIndexTotals = {
 
 function hasText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function parseNumericCell(cell: string): number {
+  const plain = cell
+    .replace(/<[^>]*>/g, "")
+    .replace(/\*\*/g, "")
+    .replace(/,/g, "")
+    .trim();
+  const match = plain.match(/-?\d+(?:\.\d+)?/);
+  if (!match) {
+    return Number.NaN;
+  }
+  return Number(match[0]);
+}
+
+function parseExistingMatrixRows(lines: string[]): Map<string, ExistingMatrixRow> {
+  const rows = new Map<string, ExistingMatrixRow>();
+
+  for (const line of lines) {
+    if (!line.startsWith("|")) {
+      continue;
+    }
+
+    const cells = line
+      .split("|")
+      .map((cell) => cell.trim())
+      .filter((cell) => cell.length > 0);
+
+    if (cells.length < 14) {
+      continue;
+    }
+
+    if (
+      cells[0] === "Adapter" ||
+      cells[0] === "**TOTAL**" ||
+      /^-+$/.test(cells[0])
+    ) {
+      continue;
+    }
+
+    const hasLastUpdatedColumn = cells.length >= 15;
+    const quoteRuntime = hasLastUpdatedColumn ? cells[12] : cells[12];
+    const lastUpdated = hasLastUpdatedColumn ? cells[13] : "—";
+    const ready = hasLastUpdatedColumn ? cells[14] : cells[13];
+
+    rows.set(cells[0], {
+      adapter: cells[0],
+      files: parseNumericCell(cells[1]),
+      core: parseNumericCell(cells[2]),
+      profile: parseNumericCell(cells[3]),
+      availability: parseNumericCell(cells[4]),
+      descriptionPlus: parseNumericCell(cells[5]),
+      amenitiesPlus: parseNumericCell(cells[6]),
+      locationPlus: parseNumericCell(cells[7]),
+      mediaPlus: parseNumericCell(cells[8]),
+      pricingRecords: parseNumericCell(cells[9]),
+      imageUrls: parseNumericCell(cells[10]),
+      avgImgList: parseNumericCell(cells[11]),
+      quoteRuntime,
+      lastUpdated,
+      ready,
+    });
+  }
+
+  return rows;
 }
 
 function formatFlagged(value: string): string {
@@ -279,6 +362,15 @@ function parseQuotedApiSet(lines: string[]): Set<string> {
 
 async function main(): Promise<void> {
   const rootDir = process.cwd();
+  const touchAdaptersArg = process.argv.find((arg) =>
+    arg.startsWith("--touch-adapters="),
+  );
+  const touchedAdapters = new Set(
+    (touchAdaptersArg?.slice("--touch-adapters=".length) ?? "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
   const docPath = path.join(rootDir, "docs", "adapter-conformance-status.md");
 
   const doc = await fs.readFile(docPath, "utf8");
@@ -301,6 +393,10 @@ async function main(): Promise<void> {
   if (tableStart < 0 || tableEnd < 0) {
     throw new Error("Conformance table bounds not found");
   }
+
+  const existingRows = parseExistingMatrixRows(
+    lines.slice(tableStart + 2, tableEnd),
+  );
 
   const apiQuoteAdapters = parseQuotedApiSet(lines);
   const adapterKeys = getKnownAdapterKeys();
@@ -326,6 +422,7 @@ async function main(): Promise<void> {
 
   let readyCount = 0;
   let quoteApiCount = 0;
+  const today = new Date().toISOString().slice(0, 10);
 
   const updatedRows: string[][] = stats.map((row) => {
     totals.files += row.files;
@@ -365,6 +462,28 @@ async function main(): Promise<void> {
       readyCount += 1;
     }
 
+    const previous = existingRows.get(row.adapter);
+    const isTouched = touchedAdapters.has(row.adapter);
+    const valuesChanged =
+      !previous ||
+      previous.files !== row.files ||
+      previous.core !== row.core ||
+      previous.profile !== row.profile ||
+      previous.availability !== row.availability ||
+      previous.descriptionPlus !== row.descriptionPlus ||
+      previous.amenitiesPlus !== row.amenitiesPlus ||
+      previous.locationPlus !== row.locationPlus ||
+      previous.mediaPlus !== row.mediaPlus ||
+      previous.pricingRecords !== row.pricingRecords ||
+      previous.imageUrls !== row.imageUrls ||
+      previous.avgImgList !== row.avgImgList ||
+      previous.quoteRuntime !== quoteRuntime ||
+      previous.ready !== ready;
+
+    const lastUpdated = valuesChanged || isTouched
+      ? today
+      : (previous?.lastUpdated?.trim() || "—");
+
     return [
       row.adapter,
       String(row.files),
@@ -379,6 +498,7 @@ async function main(): Promise<void> {
       String(row.imageUrls),
       formatAvgCell(row.avgImgList),
       quoteRuntime,
+      lastUpdated,
       ready,
     ];
   });
@@ -399,6 +519,7 @@ async function main(): Promise<void> {
     String(totals.imageUrls),
     formatAvgCell(totalAvg),
     "—",
+    "—",
     `${readyCount}/${stats.length}`,
   ];
 
@@ -416,6 +537,7 @@ async function main(): Promise<void> {
     "Images",
     "Avg Img/List",
     "Quote Runtime",
+    '<span style="white-space: nowrap;">Last Updated</span>',
     "Ready",
   ];
 
@@ -434,6 +556,7 @@ async function main(): Promise<void> {
 
   const align: Array<"left" | "right"> = [
     "left",
+    "right",
     "right",
     "right",
     "right",

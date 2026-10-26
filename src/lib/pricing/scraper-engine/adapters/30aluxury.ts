@@ -1,7 +1,7 @@
 import { execute30ALuxurySingleQuote } from "@/lib/pricing/quote-runtime/adapters/30aluxury";
 import { runRuntimeAdapterQuoteCli } from "@/lib/pricing/quotes/shared/runtime-adapter-quote-runner";
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
@@ -798,6 +798,7 @@ async function fetchDetail(
   detailUrl: string,
   availabilityHorizonDays: number,
   maxCalendarAdvanceMonths: number,
+  existingDetailJsonPath: string | null,
 ): Promise<LuxuryDetailRecord | null> {
   const startedAt = Date.now();
   const page = await browser.newPage();
@@ -1143,9 +1144,39 @@ async function fetchDetail(
       image_urls: mediaUrls,
     };
 
-    const entityId = parseEntityIdFromHtml(html);
-    const idsTuple = parseIdsTupleFromHtml(html);
-    const rcType = parseRcTypeFromHtml(html);
+    const entityIdFromHtml = parseEntityIdFromHtml(html);
+    const idsTupleFromHtml = parseIdsTupleFromHtml(html);
+    const rcTypeFromHtml = parseRcTypeFromHtml(html);
+
+    let entityId = entityIdFromHtml;
+    let idsTuple = idsTupleFromHtml;
+    let rcType = rcTypeFromHtml;
+
+    if ((!entityId || !idsTuple) && existingDetailJsonPath) {
+      try {
+        const existingRaw = await readFile(existingDetailJsonPath, "utf8");
+        const existing = JSON.parse(existingRaw) as {
+          quote_context?: {
+            entity_id?: number;
+            ids_tuple?: string;
+            rc_type?: string;
+          };
+        };
+
+        if (!entityId && Number.isFinite(existing.quote_context?.entity_id)) {
+          entityId = Number(existing.quote_context?.entity_id);
+        }
+        if (!idsTuple && typeof existing.quote_context?.ids_tuple === "string") {
+          idsTuple = existing.quote_context.ids_tuple.trim();
+        }
+        if (!rcType && typeof existing.quote_context?.rc_type === "string") {
+          rcType = existing.quote_context.rc_type.trim();
+        }
+      } catch {
+        // Ignore fallback read/parse failures and keep strict required checks below.
+      }
+    }
+
     if (!entityId || !idsTuple) {
       throw new Error(
         "Missing required quote identifiers (entity_id or ids_tuple) in detail HTML",
@@ -1344,6 +1375,7 @@ export function create30ALuxuryAdapter(): ScraperAdapter<LuxuryDetailRecord> {
         context.detailUrl,
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
+        context.existingDetailJsonPath,
       );
     },
     async runQuoteCapture(argv, progress) {
