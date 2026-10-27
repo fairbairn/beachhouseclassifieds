@@ -1,5 +1,5 @@
-import { launch as launchCloakBrowser } from "cloakbrowser";
 import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
+import { launch as launchCloakBrowser } from "cloakbrowser";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type ExclusiveFeeLine = {
@@ -320,7 +320,10 @@ async function fetchQuote(input: {
   params.set("travelInsurance", "");
   params.set("compositePropertyID", "");
   params.set("nights", String(input.nights));
-  params.set("min_nights_stay_req", String(Math.max(1, input.minNightsStayReq)));
+  params.set(
+    "min_nights_stay_req",
+    String(Math.max(1, input.minNightsStayReq)),
+  );
   params.set("_", String(Date.now()));
   params.set("promoCode", input.promoCode);
 
@@ -363,48 +366,51 @@ async function fetchQuote(input: {
       });
 
       const response = await page.evaluate(
-      async (args: {
-        requestUrl: string;
-        referer: string;
-        timeoutMs: number;
-      }) => {
-        const controller = new AbortController();
-        const timeoutHandle = setTimeout(() => controller.abort(), args.timeoutMs);
+        async (args: {
+          requestUrl: string;
+          referer: string;
+          timeoutMs: number;
+        }) => {
+          const controller = new AbortController();
+          const timeoutHandle = setTimeout(
+            () => controller.abort(),
+            args.timeoutMs,
+          );
 
-        try {
-          const result = await fetch(args.requestUrl, {
-            method: "GET",
-            headers: {
-              accept: "application/json, text/javascript, */*; q=0.01",
-              "x-requested-with": "XMLHttpRequest",
-            },
-            credentials: "include",
-            referrer: args.referer,
-            signal: controller.signal,
-          });
+          try {
+            const result = await fetch(args.requestUrl, {
+              method: "GET",
+              headers: {
+                accept: "application/json, text/javascript, */*; q=0.01",
+                "x-requested-with": "XMLHttpRequest",
+              },
+              credentials: "include",
+              referrer: args.referer,
+              signal: controller.signal,
+            });
 
-          const text = await result.text();
-          return {
-            ok: result.ok,
-            status: result.status,
-            text,
-            error: null as string | null,
-          };
-        } catch (error: unknown) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Unknown browser quote request error";
-          return {
-            ok: false,
-            status: 0,
-            text: "",
-            error: message,
-          };
-        } finally {
-          clearTimeout(timeoutHandle);
-        }
-      },
+            const text = await result.text();
+            return {
+              ok: result.ok,
+              status: result.status,
+              text,
+              error: null as string | null,
+            };
+          } catch (error: unknown) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Unknown browser quote request error";
+            return {
+              ok: false,
+              status: 0,
+              text: "",
+              error: message,
+            };
+          } finally {
+            clearTimeout(timeoutHandle);
+          }
+        },
         {
           requestUrl,
           referer: input.detailUrl,
@@ -663,7 +669,8 @@ export async function executeExclusive30aSingleQuote(
     );
 
     const minNightsStayReq =
-      normalizePositiveInt(runtimeContext.quoteContext.min_nights_stay_req) ?? 1;
+      normalizePositiveInt(runtimeContext.quoteContext.min_nights_stay_req) ??
+      1;
 
     const raw = await fetchQuote({
       detailUrl: runtimeContext.detailUrl,
