@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-10-27T00:32:12.303Z
+Audit date: 2026-10-27T00:37:43.544Z
 
 Data source:
 
@@ -71,7 +71,7 @@ Preferred (non-blocking):
 | alysbeach30a            |    72 |   72 |      72 |           72 |           72 |         72 |        72 |     72 |                                                        72 |   3082 |                                                      42.81 |             ✅ |                                             2026-10-27 |     ✅ |
 | beachblue               |    15 |   15 |      15 |           15 |           15 |         15 |        15 |     15 |                                                        15 |    677 |                                                      45.13 |             ✅ |                                             2026-10-27 |     ✅ |
 | benchmark30a            |   124 |  124 |     124 |          124 |          124 |        124 |       124 |    124 |                                                       124 |   8304 |                                                      66.97 |             ✅ |                                             2026-10-27 |     ✅ |
-| coastproperties30a      |    30 |   30 |      30 |           30 |           30 |         30 |        30 |     30 |                                                        30 |   1436 |                                                      47.87 |             ✅ |                                                      — |     ✅ |
+| coastproperties30a      |    31 |   31 |      31 |           31 |           31 |         31 |        31 |     31 |                                                        31 |   1494 |                                                      48.19 |             ✅ |                                             2026-10-27 |     ✅ |
 | dunevr30a               |    92 |   92 |      92 |           92 |           92 |         92 |        92 |     92 |                                                        92 |   3841 |                                                      41.75 |             ✅ |                                                      — |     ✅ |
 | elp30a                  |   127 |  127 |     127 |          127 |          127 |        127 |       127 |    127 |                                                       127 |   9527 | <span style="color:#c62828;"><strong>75.02</strong></span> |             ✅ |                                                      — |     ✅ |
 | exclusive30a            |    97 |   97 |      97 |           97 |           97 |         97 |        97 |     97 |                                                        97 |   5262 |                                                      54.25 |             ✅ |                                                      — |     ✅ |
@@ -94,14 +94,14 @@ Preferred (non-blocking):
 | scenicstays30a          |     0 |    0 |       0 |            0 |            0 |          0 |         0 |      0 |                                                         0 |      0 |                                                       0.00 |             ✅ |                                                      — |     ❌ |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |                                                        37 |   2264 |                                                      61.19 |             ✅ |                                                      — |     ✅ |
 | stayon30a               |   123 |  123 |     123 |          123 |          123 |        123 |       123 |    123 |                                                       123 |   5612 |                                                      45.63 |             ✅ |                                                      — |     ✅ |
-| **TOTAL**               |  3385 | 3385 |    3385 |         3385 |         3385 |       3385 |      3385 |   3385 | <span style="color:#c62828;"><strong>3369</strong></span> | 169828 |                                                      50.17 |             — |                                                      — | 32/34 |
+| **TOTAL**               |  3386 | 3386 |    3386 |         3386 |         3386 |       3386 |      3386 |   3386 | <span style="color:#c62828;"><strong>3370</strong></span> | 169886 |                                                      50.17 |             — |                                                      — | 32/34 |
 ## Current Snapshot Summary
 
 - 34 adapters audited.
 - All 34 adapters are at full required-core parity for the current captured files.
 - Combined-ready adapters (Ready = ✅): 32 / 34.
 
-- Pricing-records coverage signal: 3369 / 3385 files currently have per-listing pricing JSON records.
+- Pricing-records coverage signal: 3370 / 3386 files currently have per-listing pricing JSON records.
 
 - Quote API capability signal: 34 / 34 adapters expose pre-reservation quote APIs.
 - Geo location minimum (required): 34 / 34 adapters currently have 100% numeric lat/lng coverage.
@@ -111,9 +111,9 @@ Preferred (non-blocking):
 
 Snapshot from adapter source artifacts under `src/lib/data/external-sources/*/details`.
 
-- Total listings from adapter detail indexes (`details/index.json`): 3368
-- Total detail JSON files (matrix total): 3385
-- Index vs detail delta: -17
+- Total listings from adapter detail indexes (`details/index.json`): 3370
+- Total detail JSON files (matrix total): 3386
+- Index vs detail delta: -16
 - Adapters with index.json: 33/34
 - Missing index.json adapters: scenicstays30a
 
@@ -152,7 +152,7 @@ This ledger lists every adapter in descending order by Files count. % shows each
 |    27 | grayt30a                |    35 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.0%</span> |             ✅ | complete |
 |    28 | 30afivestar             |    33 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.0%</span> |             ✅ | complete |
 |    29 | localvr30a              |    33 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">1.0%</span> |             ✅ | complete |
-|    30 | coastproperties30a      |    30 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.9%</span> |             ✅ | complete |
+|    30 | coastproperties30a      |    31 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.9%</span> |             ✅ | complete |
 |    31 | 30abeach                |    23 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.7%</span> |             ✅ | complete |
 |    32 | beachblue               |    15 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.4%</span> |             ✅ | complete |
 |    33 | luxe30a                 |    12 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">0.4%</span> |             ✅ | complete |
@@ -237,6 +237,7 @@ Expected impact:
 
 - As stricter checks roll out, more adapters will likely show warnings initially.
 - That is intended and should be treated as a quality-discovery phase, not validator noise.
+
 
 
 
