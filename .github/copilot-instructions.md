@@ -60,6 +60,7 @@
 ## Maintenance Notes for Future Agents
 
 - Read this file first, then `AGENTS.md`, then relevant files under `src/core`, `src/lib`, and `src/routes`.
+- For adapter refresh/remediation execution order and exact commands, use `docs/adapter-operations-top-down-flow.md` as canonical.
 - Keep reusable infrastructure in `src/core/*`; keep app workflows in app-facing folders.
 - After adapter validation passes, update `docs/adapter-conformance-status.md` first before downstream status docs.
 - Validate with `npm run build` after meaningful edits.

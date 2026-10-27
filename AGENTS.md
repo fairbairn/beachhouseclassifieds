@@ -31,6 +31,12 @@ Generated projects should include:
 - Docs Dev: `npm run docs:dev`
 - Docs Build: `npm run docs:build`
 
+## Adapter Run Order (Canonical)
+
+- For adapter refresh/remediation workflows, use the strict numbered flow in `docs/adapter-operations-top-down-flow.md`.
+- Treat that document as the canonical sequence and command syntax for scrape -> validators -> quotes -> cache -> suite -> conformance sync.
+- Do not reorder those steps unless the user explicitly requests an exception.
+
 ## CLI Standards
 
 - Return codes: `0` success, `1` handled failure, `130` cancellation.
