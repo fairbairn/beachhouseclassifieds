@@ -1,0 +1,53 @@
+{
+  "adapter_key": "elp30a",
+  "external_listing_id": "So_Good",
+  "detail_url": "https://eluxuryproperties.com/vrp/unit/So_Good",
+  "captured_at": "2026-10-27T01:02:30.591Z",
+  "currency": "USD",
+  "quote_window_cadence": "weekly_anchor_adaptive_span",
+  "quote_window_gap_policy": "probe_longest_available_span",
+  "quote_window_anchor_date": "2026-10-31",
+  "quote_window_days": 168,
+  "quote_sample_step_days": 1,
+  "quote_nights": 7,
+  "quote_max_queries": 1,
+  "endpoint_path": "/?vrpjax=1&act=checkavailability&par=1",
+  "quote_run_diagnostics": {
+    "queried_windows": 1,
+    "available_windows": 1,
+    "unavailable_windows": 0,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {},
+    "sample_internal_errors": []
+  },
+  "observations": [
+    {
+      "sampled_at": "2026-10-27T01:02:30.591Z",
+      "captured_at": "2026-10-27T01:02:30.591Z",
+      "source_listing_id": "So_Good",
+      "currency": "USD",
+      "start_date": "2027-03-20",
+      "end_date": "2027-04-03",
+      "check_in_date": "2027-03-20",
+      "check_out_date": "2027-04-03",
+      "nights": 14,
+      "base_nightly": 4189.42,
+      "all_in_nightly": 4677.25,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 58651.92,
+      "taxes_total": 6829.55,
+      "fees_total_excl_taxes": 0,
+      "fee_lines": [],
+      "grand_total": 65481.47,
+      "quoted_total": 65481.47,
+      "fee_pct_of_base": 0,
+      "tax_pct_of_base": 0.116442,
+      "non_base_pct_of_total": 0.104297,
+      "all_in_multiplier": 1.116442,
+      "handoff_url": "https://eluxuryproperties.com/vrp/unit/So_Good?arrival=03%2F20%2F2027&depart=04%2F03%2F2027",
+      "source": "quote_api",
+      "pricing_source": "runtime_parsed"
+    }
+  ]
+}
