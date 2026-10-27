@@ -52,6 +52,7 @@ type BeachBlueDetailRecord = DetailRecordBase & {
     image_count: number;
     image_urls: string[];
   };
+  rooms_guidance: string[] | false;
   normalized_matching_profile: {
     source: "pm_beachblue";
     external_listing_id: string;
@@ -737,6 +738,20 @@ async function fetchDetail(
       : "";
 
     const mediaImageUrls = Array.from(galleryUrls);
+    const beds = Number.isFinite(Number(propDetails.bed))
+      ? Number(propDetails.bed)
+      : null;
+    const baths = Number.isFinite(Number(propDetails.bath))
+      ? Number(propDetails.bath)
+      : null;
+    const sleeps = Number.isFinite(Number(propDetails.sleeps))
+      ? Number(propDetails.sleeps)
+      : null;
+    const roomsGuidance = [
+      beds !== null ? `Bedrooms: ${beds}` : "",
+      baths !== null ? `Bathrooms: ${baths}` : "",
+      sleeps !== null ? `Sleeps: ${sleeps}` : "",
+    ].filter((line) => line.length > 0);
     const resolvedUnitId =
       String(propDetails.unit_id ?? "").trim() ||
       String(externalListingId).trim();
@@ -769,6 +784,7 @@ async function fetchDetail(
         image_count: mediaImageUrls.length,
         image_urls: mediaImageUrls,
       },
+      rooms_guidance: roomsGuidance.length > 0 ? roomsGuidance : false,
       normalized_matching_profile: {
         source: "pm_beachblue",
         external_listing_id: externalListingId,
@@ -820,15 +836,9 @@ async function fetchDetail(
         unit_id: resolvedUnitId,
         area: String(propDetails.area ?? ""),
         location: String(propDetails.location ?? ""),
-        beds: Number.isFinite(Number(propDetails.bed))
-          ? Number(propDetails.bed)
-          : null,
-        baths: Number.isFinite(Number(propDetails.bath))
-          ? Number(propDetails.bath)
-          : null,
-        sleeps: Number.isFinite(Number(propDetails.sleeps))
-          ? Number(propDetails.sleeps)
-          : null,
+        beds,
+        baths,
+        sleeps,
         city: String(propDetails.city ?? ""),
         state: String(propDetails.state ?? ""),
       },

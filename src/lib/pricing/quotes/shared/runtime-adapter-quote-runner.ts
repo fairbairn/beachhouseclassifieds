@@ -2330,14 +2330,20 @@ export async function runRuntimeAdapterQuoteCli(
         });
 
         if (sidecar.quote_max_queries === 0) {
+          const mergedObservations = mergeRealQuoteObservations({
+            existing: existingObservations,
+            latest: sidecar.observations,
+            nowMs: Date.now(),
+            retentionDays: observationRetentionDays,
+          });
+
           const persistedSidecar: CanonicalQuotesSidecarRecord = {
             ...sidecar,
-            observations: mergeRealQuoteObservations({
-              existing: existingObservations,
-              latest: sidecar.observations,
-              nowMs: Date.now(),
-              retentionDays: observationRetentionDays,
-            }),
+            quote_max_queries:
+              mergedObservations.length > 0
+                ? mergedObservations.length
+                : sidecar.quote_max_queries,
+            observations: mergedObservations,
           };
           assertCanonicalQuotesSidecarRecord(persistedSidecar);
           await writeJsonFileDurable(outputPath, persistedSidecar);
