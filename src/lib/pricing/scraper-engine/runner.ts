@@ -1656,6 +1656,9 @@ export async function runScraperEngine<TDetail extends DetailRecordBase>(
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_");
   const useProxy = shouldAdapterUseProxy(adapter.managerKey);
+  progress.info(
+    `scraper_browser=cloakbrowser proxy_enabled=${useProxy ? "true" : "false"}`,
+  );
   const browser = await launchScraperBrowser({
     adapterKey: adapter.managerKey,
     envPrefix,

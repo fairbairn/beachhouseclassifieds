@@ -599,35 +599,138 @@ function formatDateIso(value: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function decodeTrackingCandidates(value: string): string[] {
+  const normalized = value.replace(/&amp;/gi, "&").trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const candidates = new Set<string>([normalized]);
+  let current = normalized;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const decoded = decodeURIComponent(current);
+      if (!decoded || decoded === current) {
+        break;
+      }
+      candidates.add(decoded);
+      current = decoded;
+    } catch {
+      break;
+    }
+  }
+
+  return Array.from(candidates);
+}
+
 async function collectLinksOnCurrentPage(
   page: Parameters<
     ScraperAdapter<ExclusiveDetailRecord>["discoverListings"]
   >[0]["page"],
 ): Promise<{ detailLinks: string[]; pageNumbers: number[] }> {
-  return page.evaluate(() => {
-    const detailLinks = new Set<string>();
-    const pageNumbers = new Set<number>();
+  const detailLinks = new Set<string>();
+  const pageNumbers = new Set<number>();
 
-    const anchors = Array.from(document.querySelectorAll("a[href]"));
-    for (const anchor of anchors) {
-      const href = anchor.getAttribute("href") || "";
-      if (!href.trim()) {
-        continue;
+  const panelSelector =
+    "#prop-search-results > div.col.mb-5.gmarker.tile-item > div.card.property-tile.h-100.p-3";
+
+  const toListingUrl = (candidate: string): string | null => {
+    try {
+      const parsed = new URL(candidate, DEFAULT_ANCHOR_URL);
+      if (!parsed.hostname.endsWith("exclusive30a.com")) {
+        return null;
       }
 
-      try {
-        const url = new URL(href, window.location.origin);
-        const path = url.pathname.replace(/\/$/, "");
-        const parts = path.split("/").filter(Boolean);
+      const cleanPath = parsed.pathname.replace(/\/$/, "");
+      const parts = cleanPath.split("/").filter(Boolean);
+      if (parts.length < 2 || parts[0] !== "vacation-rentals") {
+        return null;
+      }
 
-        if (
-          url.hostname.endsWith("exclusive30a.com") &&
-          parts[0] === "vacation-rentals" &&
-          parts.length >= 2
-        ) {
-          detailLinks.add(`${url.origin}/vacation-rentals/${parts[1]}`);
+      return `${parsed.origin}/vacation-rentals/${parts.slice(1).join("/")}`;
+    } catch {
+      return null;
+    }
+  };
+
+  const panels = page.locator(panelSelector);
+  const panelCount = await panels.count();
+  for (let index = 0; index < panelCount; index += 1) {
+    const panel = panels.nth(index);
+    if (!(await panel.isVisible())) {
+      continue;
+    }
+
+    const href = await panel.evaluate((element) => {
+      const selectors = [
+        "a.tiles-view-home-btn[target][href]",
+        "a.tiles-view-home-btn[href]",
+        "a[href*='destination_url=']",
+      ];
+
+      for (const selector of selectors) {
+        const anchor = element.querySelector(selector);
+        const value = anchor?.getAttribute("href") || "";
+        if (value.trim()) {
+          return value;
         }
+      }
 
+      return "";
+    });
+
+    if (!href?.trim()) {
+      continue;
+    }
+
+    const normalizedHref = href.replace(/&amp;/gi, "&");
+
+    const directListing = toListingUrl(normalizedHref);
+    if (directListing) {
+      detailLinks.add(directListing);
+      continue;
+    }
+
+    let destination = "";
+    try {
+      const clickUrl = new URL(normalizedHref, DEFAULT_ANCHOR_URL);
+      destination =
+        clickUrl.searchParams.get("destination_url") ||
+        clickUrl.searchParams.get("amp;destination_url") ||
+        "";
+    } catch {
+      destination = "";
+    }
+
+    if (!destination.trim()) {
+      const fallbackMatch = normalizedHref.match(
+        /(?:\?|&|&amp;)destination_url=([^&#]+)/i,
+      );
+      destination = fallbackMatch?.[1] ? fallbackMatch[1] : "";
+    }
+
+    if (!destination.trim()) {
+      continue;
+    }
+
+    for (const candidate of decodeTrackingCandidates(destination)) {
+      const listingUrl = toListingUrl(candidate);
+      if (listingUrl) {
+        detailLinks.add(listingUrl);
+      }
+    }
+  }
+
+  const paginationAnchors = page.locator("a[href*='page='], a[data-page]");
+  const paginationCount = await paginationAnchors.count();
+  for (let index = 0; index < paginationCount; index += 1) {
+    const anchor = paginationAnchors.nth(index);
+    const href = (await anchor.getAttribute("href")) || "";
+    const dataPage = (await anchor.getAttribute("data-page")) || "";
+
+    if (href.trim()) {
+      try {
+        const url = new URL(href, DEFAULT_ANCHOR_URL);
         const pageParam = url.searchParams.get("page");
         if (pageParam) {
           const pageNumber = Number(pageParam);
@@ -638,19 +741,49 @@ async function collectLinksOnCurrentPage(
       } catch {
         // Ignore invalid URLs.
       }
-
-      const dataPage = anchor.getAttribute("data-page") || "";
-      const dataPageNumber = Number(dataPage);
-      if (Number.isInteger(dataPageNumber) && dataPageNumber > 0) {
-        pageNumbers.add(dataPageNumber);
-      }
     }
 
-    return {
-      detailLinks: Array.from(detailLinks),
-      pageNumbers: Array.from(pageNumbers),
-    };
-  });
+    const dataPageNumber = Number(dataPage);
+    if (Number.isInteger(dataPageNumber) && dataPageNumber > 0) {
+      pageNumbers.add(dataPageNumber);
+    }
+  }
+
+  return {
+    detailLinks: Array.from(detailLinks),
+    pageNumbers: Array.from(pageNumbers),
+  };
+}
+
+async function collectStableLinksOnCurrentPage(
+  page: Parameters<
+    ScraperAdapter<ExclusiveDetailRecord>["discoverListings"]
+  >[0]["page"],
+  settleMs: number,
+): Promise<{ detailLinks: string[]; pageNumbers: number[] }> {
+  let previousFingerprint = "";
+  let latest: { detailLinks: string[]; pageNumbers: number[] } = {
+    detailLinks: [],
+    pageNumbers: [],
+  };
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await page.waitForTimeout(settleMs);
+    latest = await collectLinksOnCurrentPage(page);
+
+    const fingerprint = latest.detailLinks
+      .slice()
+      .sort((a, b) => a.localeCompare(b))
+      .join("|");
+
+    if (fingerprint && fingerprint === previousFingerprint) {
+      return latest;
+    }
+
+    previousFingerprint = fingerprint;
+  }
+
+  return latest;
 }
 
 async function discoverListings(
@@ -662,109 +795,206 @@ async function discoverListings(
   scrollPauseMs: number,
   reportProgress: (message: string) => void,
 ): Promise<ScrapedLink[]> {
-  const discovered = new Set<string>();
+  const collectedLinks: string[] = [];
   const sourceByLink = new Map<string, string>();
+  const seenLinks = new Set<string>();
 
-  await page.goto(anchorUrl, {
-    waitUntil: "domcontentloaded",
-    timeout: 120000,
-  });
+  const collectPage = async (
+    sourcePageUrl: string,
+  ): Promise<{
+    extracted: number;
+    newUnique: number;
+    pageNumbers: number[];
+  }> => {
+    const pass = await collectStableLinksOnCurrentPage(
+      page,
+      Math.max(700, scrollPauseMs),
+    );
 
-  await page.waitForTimeout(Math.max(900, scrollPauseMs));
+    let extracted = 0;
+    let newUnique = 0;
+    for (const link of pass.detailLinks) {
+      const normalized = normalizeDetailUrl(link);
+      if (!normalized) {
+        continue;
+      }
 
-  const firstPass = await collectLinksOnCurrentPage(page);
-  for (const link of firstPass.detailLinks) {
-    const normalized = normalizeDetailUrl(link);
-    if (!normalized) {
-      continue;
+      extracted += 1;
+      collectedLinks.push(normalized);
+      if (!sourceByLink.has(normalized)) {
+        sourceByLink.set(normalized, sourcePageUrl);
+      }
+
+      if (!seenLinks.has(normalized)) {
+        seenLinks.add(normalized);
+        newUnique += 1;
+      }
     }
-    discovered.add(normalized);
-    sourceByLink.set(normalized, anchorUrl);
-  }
+
+    return {
+      extracted,
+      newUnique,
+      pageNumbers: pass.pageNumbers,
+    };
+  };
+
+  const navigateToPage = async (pageNumber: number): Promise<string> => {
+    const pageUrl = new URL(anchorUrl);
+    if (pageNumber > 1) {
+      pageUrl.searchParams.set("page", String(pageNumber));
+    } else {
+      pageUrl.searchParams.delete("page");
+    }
+
+    if (pageNumber === 1) {
+      await page.goto(pageUrl.toString(), {
+        waitUntil: "domcontentloaded",
+        timeout: 120000,
+      });
+      return page.url();
+    }
+
+    const paginationLink = page
+      .locator(`a[data-page='${pageNumber}'], a[href*='page=${pageNumber}']`)
+      .first();
+    const linkExists = (await paginationLink.count()) > 0;
+
+    if (!linkExists) {
+      await page.goto(pageUrl.toString(), {
+        waitUntil: "domcontentloaded",
+        timeout: 120000,
+      });
+      return page.url();
+    }
+
+    try {
+      await Promise.all([
+        page
+          .waitForNavigation({
+            waitUntil: "domcontentloaded",
+            timeout: 120000,
+          })
+          .catch(() => null),
+        paginationLink.click({ timeout: 10000 }),
+      ]);
+    } catch {
+      await page.goto(pageUrl.toString(), {
+        waitUntil: "domcontentloaded",
+        timeout: 120000,
+      });
+    }
+
+    return page.url();
+  };
+
+  reportProgress("session_mode=single-context ordered-pagination=true");
+
+  const firstPageUrl = await navigateToPage(1);
+  const firstPass = await collectPage(firstPageUrl);
+  reportProgress(
+    `pagination page 1/?; extracted_links=${firstPass.extracted}; unique_added=${firstPass.newUnique}; cumulative_unique=${seenLinks.size}`,
+  );
 
   let maxPage = 1;
   for (const rawPageNumber of firstPass.pageNumbers) {
-    const pageNumber = parsePageNumber(String(rawPageNumber));
-    if (pageNumber && pageNumber > maxPage) {
-      maxPage = pageNumber;
+    const parsedPage = parsePageNumber(String(rawPageNumber));
+    if (parsedPage && parsedPage > maxPage) {
+      maxPage = parsedPage;
     }
   }
 
-  const pageTraversalLimit = Math.max(1, Math.min(maxPage, maxScrollSteps));
+  const configuredPageCount = Number(
+    process.env.EXCLUSIVE30A_PAGE_COUNT ?? "7",
+  );
+  const defaultPageCount =
+    Number.isInteger(configuredPageCount) && configuredPageCount > 0
+      ? configuredPageCount
+      : 7;
+  const discoveredPageCount = Math.max(maxPage, defaultPageCount);
+  const pageTraversalLimit = Math.max(
+    1,
+    Math.min(discoveredPageCount, maxScrollSteps),
+  );
+
   if (pageTraversalLimit > 1) {
     reportProgress(
       `pagination detected; traversing ${pageTraversalLimit} pages (reported max=${maxPage})`,
     );
   }
 
-  const start = new URL(anchorUrl);
   for (let pageNumber = 2; pageNumber <= pageTraversalLimit; pageNumber += 1) {
-    const pageUrl = new URL(start.toString());
-    pageUrl.searchParams.set("page", String(pageNumber));
+    const currentPageUrl = await navigateToPage(pageNumber);
+    const pagePass = await collectPage(currentPageUrl);
 
-    await page.goto(pageUrl.toString(), {
-      waitUntil: "domcontentloaded",
-      timeout: 120000,
-    });
-    await page.waitForTimeout(Math.max(700, scrollPauseMs));
-
-    const pass = await collectLinksOnCurrentPage(page);
-    for (const link of pass.detailLinks) {
-      const normalized = normalizeDetailUrl(link);
-      if (!normalized) {
-        continue;
-      }
-      discovered.add(normalized);
-      sourceByLink.set(normalized, pageUrl.toString());
-    }
-
-    if (pageNumber % 2 === 0 || pageNumber === pageTraversalLimit) {
-      reportProgress(
-        `pagination page ${pageNumber}/${pageTraversalLimit}; links=${discovered.size}`,
-      );
-    }
+    reportProgress(
+      `pagination page ${pageNumber}/${pageTraversalLimit}; extracted_links=${pagePass.extracted}; unique_added=${pagePass.newUnique}; cumulative_unique=${seenLinks.size}`,
+    );
   }
 
-  return Array.from(discovered)
-    .sort((a, b) => a.localeCompare(b))
-    .map((link) => ({
-      link,
-      source_url: sourceByLink.get(link) ?? anchorUrl,
-      anchor_text: "view-home",
-    }));
+  return collectedLinks.map((link) => ({
+    link,
+    source_url: sourceByLink.get(link) ?? anchorUrl,
+    anchor_text: "view-home",
+  }));
 }
 
 async function fetchDetail(
-  detailUrl: string,
-  availabilityHorizonDays: number,
+  context: Parameters<ScraperAdapter<ExclusiveDetailRecord>["fetchDetail"]>[0],
 ): Promise<ExclusiveDetailRecord | null> {
+  const { detailUrl, availabilityHorizonDays, browser, reportDetailProgress } =
+    context;
   const normalizedDetailUrl = normalizeDetailUrl(detailUrl);
   if (!normalizedDetailUrl) {
+    reportDetailProgress?.(`detail_invalid_url listing=${detailUrl}`);
     return null;
   }
 
-  const headers = {
-    "user-agent":
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    referer: DEFAULT_ANCHOR_URL,
-  };
+  reportDetailProgress?.(
+    `detail_transport=cloakbrowser listing=${normalizedDetailUrl}`,
+  );
 
   try {
-    const response = await fetch(normalizedDetailUrl, {
-      method: "GET",
-      redirect: "follow",
-      headers,
-    });
+    const detailPage = await browser.newPage();
+    let html = "";
+    try {
+      const response = await detailPage.goto(normalizedDetailUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 120000,
+      });
 
-    const contentType = (
-      response.headers.get("content-type") || ""
-    ).toLowerCase();
-    if (response.status !== 200 || !contentType.includes("text/html")) {
+      const status = response?.status() ?? null;
+      const finalUrl = detailPage.url();
+      if (status !== 200) {
+        reportDetailProgress?.(
+          `detail_http_status status=${status ?? "unknown"} listing=${normalizedDetailUrl} final_url=${finalUrl}`,
+        );
+        return null;
+      }
+
+      html = await detailPage.content();
+      const lowerHtml = html.toLowerCase();
+      if (
+        lowerHtml.includes("error 1015") ||
+        lowerHtml.includes("attention required") ||
+        lowerHtml.includes("cf-browser-verification") ||
+        lowerHtml.includes("cloudflare")
+      ) {
+        reportDetailProgress?.(
+          `detail_challenge_detected status=200 listing=${normalizedDetailUrl} final_url=${finalUrl}`,
+        );
+        return null;
+      }
+    } finally {
+      await detailPage.close().catch(() => undefined);
+    }
+
+    if (!html.trim()) {
+      reportDetailProgress?.(
+        `detail_empty_html listing=${normalizedDetailUrl}`,
+      );
       return null;
     }
 
-    const html = await response.text();
     const listingSlug = extractListingSlugFromDetailUrl(normalizedDetailUrl);
     const propertyId = extractPropertyIdFromHtml(html);
 
@@ -1156,7 +1386,12 @@ async function fetchDetail(
       },
       html_path: htmlPath,
     };
-  } catch {
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "unknown_detail_request_error";
+    reportDetailProgress?.(
+      `detail_request_error listing=${normalizedDetailUrl} reason=${message}`,
+    );
     return null;
   }
 }
@@ -1193,7 +1428,7 @@ export function createExclusive30AAdapter(): ScraperAdapter<ExclusiveDetailRecor
       );
     },
     async fetchDetail(context) {
-      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+      return fetchDetail(context);
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(

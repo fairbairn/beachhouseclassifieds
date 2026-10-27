@@ -40,9 +40,17 @@ function expectedAdapterSignatures(adapterKey: string): string[] {
   return ADAPTER_EXPECTED_HANDOFF_SIGNATURES[adapterKey] ?? [];
 }
 
+function normalizeHandoffPathname(pathname: string): string {
+  if (pathname === "/") {
+    return pathname;
+  }
+  return pathname.replace(/\/+$/g, "");
+}
+
 function toHandoffSignature(handoffUrl: string): string | null {
   try {
     const parsed = new URL(handoffUrl);
+    const normalizedPathname = normalizeHandoffPathname(parsed.pathname);
     const queryKeys = [...new Set(parsed.searchParams.keys())].sort();
     const hashPayload = parsed.hash.startsWith("#")
       ? parsed.hash.slice(1)
@@ -51,14 +59,14 @@ function toHandoffSignature(handoffUrl: string): string | null {
     const hashKeys = [...new Set(hashParams.keys())].sort();
 
     if (queryKeys.length > 0) {
-      return `${parsed.origin}${parsed.pathname}?keys=${queryKeys.join(",")}`;
+      return `${parsed.origin}${normalizedPathname}?keys=${queryKeys.join(",")}`;
     }
 
     if (hashKeys.length > 0) {
-      return `${parsed.origin}${parsed.pathname}#keys=${hashKeys.join(",")}`;
+      return `${parsed.origin}${normalizedPathname}#keys=${hashKeys.join(",")}`;
     }
 
-    return `${parsed.origin}${parsed.pathname}`;
+    return `${parsed.origin}${normalizedPathname}`;
   } catch {
     return null;
   }

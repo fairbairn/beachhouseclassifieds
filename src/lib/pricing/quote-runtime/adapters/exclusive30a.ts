@@ -1,3 +1,5 @@
+import { launch as launchCloakBrowser } from "cloakbrowser";
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type ExclusiveFeeLine = {
@@ -38,11 +40,103 @@ type RawObservation = {
   handoffUrl: string;
 };
 
+type BrowserProxyConfig = {
+  server: string;
+  username?: string;
+  password?: string;
+};
+
+type BrowserRequestResponseLike = {
+  ok(): boolean;
+  status(): number;
+  text(): Promise<string>;
+};
+
+type BrowserRequestClientLike = {
+  get(
+    endpoint: string,
+    options: {
+      headers: Record<string, string>;
+      timeout: number;
+    },
+  ): Promise<BrowserRequestResponseLike>;
+};
+
+type BrowserPageLike = {
+  goto(
+    url: string,
+    options: { waitUntil: "commit" | "domcontentloaded"; timeout: number },
+  ): Promise<unknown>;
+  evaluate<TArg, TResult>(
+    pageFunction: (arg: TArg) => TResult | Promise<TResult>,
+    arg: TArg,
+  ): Promise<TResult>;
+  close(): Promise<void>;
+};
+
+type BrowserContextLike = {
+  request: BrowserRequestClientLike;
+  newPage(): Promise<BrowserPageLike>;
+  close(): Promise<void>;
+};
+
+type BrowserLike = {
+  newContext(options: {
+    userAgent: string;
+    ignoreHTTPSErrors: boolean;
+  }): Promise<BrowserContextLike>;
+  close(): Promise<void>;
+};
+
 const ADAPTER_KEY = "exclusive30a" as const;
 const BASE_HOST = "https://www.exclusive30a.com";
 const QUOTE_ENDPOINT = `${BASE_HOST}/quote`;
+const DEFAULT_TIMEOUT_MS = 20000;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const USE_PROXY = shouldAdapterUseProxy(ADAPTER_KEY);
+
+function normalizeTimeoutMs(raw: number | undefined): number {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return Math.max(1000, Math.floor(raw));
+}
+
+function resolveProxy(useProxy: boolean): BrowserProxyConfig | null {
+  if (!useProxy) {
+    return null;
+  }
+
+  const proxy =
+    process.env.HTTPS_PROXY ??
+    process.env.HTTP_PROXY ??
+    process.env.https_proxy ??
+    process.env.http_proxy;
+  const normalized = proxy?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const server = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`;
+    const username = parsed.username
+      ? decodeURIComponent(parsed.username)
+      : undefined;
+    const password = parsed.password
+      ? decodeURIComponent(parsed.password)
+      : undefined;
+
+    return {
+      server,
+      ...(username ? { username } : {}),
+      ...(password ? { password } : {}),
+    };
+  } catch {
+    return { server: normalized };
+  }
+}
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -84,6 +178,21 @@ function normalizeNumericPropertyId(value: unknown): string | null {
   if (typeof value === "string") {
     const normalized = value.trim();
     return /^\d+$/.test(normalized) ? normalized : null;
+  }
+
+  return null;
+}
+
+function normalizePositiveInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.floor(parsed);
+    }
   }
 
   return null;
@@ -167,13 +276,25 @@ function buildFallbackHandoffUrl(input: {
 
 function normalizeHandoffUrl(value: string): string {
   const trimmed = value.trim();
-  if (trimmed.startsWith(`${BASE_HOST}/booking/review?`)) {
+  if (trimmed.startsWith(`${BASE_HOST}/booking/review/?`)) {
     return trimmed.replace(
-      `${BASE_HOST}/booking/review?`,
       `${BASE_HOST}/booking/review/?`,
+      `${BASE_HOST}/booking/review?`,
     );
   }
   return trimmed;
+}
+
+function buildSessionBoundHandoffDiagnostics(input: {
+  detailUrl: string;
+  handoffUrl: string;
+}): Record<string, unknown> {
+  return {
+    handoffRequiresDetailPreflight: true,
+    handoffFlow: ["detail_page", "book_now", "booking_review"],
+    detailUrl: input.detailUrl,
+    handoffUrl: input.handoffUrl,
+  };
 }
 
 async function fetchQuote(input: {
@@ -186,6 +307,8 @@ async function fetchQuote(input: {
   children: number;
   pets: number;
   promoCode: string;
+  minNightsStayReq: number;
+  timeoutMs: number;
 }): Promise<RawObservation> {
   const params = new URLSearchParams();
   params.set("arrival", input.startDate);
@@ -195,7 +318,10 @@ async function fetchQuote(input: {
   params.set("numberOfChild", String(Math.max(0, input.children)));
   params.set("numberOfPets", String(Math.max(0, input.pets)));
   params.set("travelInsurance", "");
+  params.set("compositePropertyID", "");
   params.set("nights", String(input.nights));
+  params.set("min_nights_stay_req", String(Math.max(1, input.minNightsStayReq)));
+  params.set("_", String(Date.now()));
   params.set("promoCode", input.promoCode);
 
   const fallbackHandoffUrl = buildFallbackHandoffUrl({
@@ -208,22 +334,126 @@ async function fetchQuote(input: {
     nights: input.nights,
   });
 
-  const response = await fetch(`${QUOTE_ENDPOINT}?${params.toString()}`, {
-    method: "GET",
-    headers: {
-      accept: "application/json, text/javascript, */*; q=0.01",
-      "x-requested-with": "XMLHttpRequest",
-      "user-agent": USER_AGENT,
-      referer: input.detailUrl,
-    },
-  });
+  const requestUrl = `${QUOTE_ENDPOINT}?${params.toString()}`;
 
-  if (!response.ok) {
+  let browser: BrowserLike | null = null;
+  let context: BrowserContextLike | null = null;
+  let responseOk = false;
+  let responseStatus = 0;
+  let responseText = "";
+  let requestError: string | null = null;
+
+  try {
+    const proxy = resolveProxy(USE_PROXY);
+    browser = (await launchCloakBrowser({
+      headless: true,
+      ...(proxy ? { proxy } : {}),
+    })) as BrowserLike;
+
+    context = await browser.newContext({
+      userAgent: USER_AGENT,
+      ignoreHTTPSErrors: false,
+    });
+
+    const page = await context.newPage();
+    try {
+      await page.goto(input.detailUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: Math.min(120000, Math.max(15000, input.timeoutMs * 2)),
+      });
+
+      const response = await page.evaluate(
+      async (args: {
+        requestUrl: string;
+        referer: string;
+        timeoutMs: number;
+      }) => {
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => controller.abort(), args.timeoutMs);
+
+        try {
+          const result = await fetch(args.requestUrl, {
+            method: "GET",
+            headers: {
+              accept: "application/json, text/javascript, */*; q=0.01",
+              "x-requested-with": "XMLHttpRequest",
+            },
+            credentials: "include",
+            referrer: args.referer,
+            signal: controller.signal,
+          });
+
+          const text = await result.text();
+          return {
+            ok: result.ok,
+            status: result.status,
+            text,
+            error: null as string | null,
+          };
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Unknown browser quote request error";
+          return {
+            ok: false,
+            status: 0,
+            text: "",
+            error: message,
+          };
+        } finally {
+          clearTimeout(timeoutHandle);
+        }
+      },
+        {
+          requestUrl,
+          referer: input.detailUrl,
+          timeoutMs: input.timeoutMs,
+        },
+      );
+
+      responseOk = response.ok;
+      responseStatus = response.status;
+      responseText = response.text;
+      requestError = response.error;
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  } catch (error: unknown) {
+    requestError =
+      error instanceof Error
+        ? error.message
+        : "Unknown browser quote request error";
+  } finally {
+    if (context) {
+      await context.close().catch(() => undefined);
+    }
+    if (browser) {
+      await browser.close().catch(() => undefined);
+    }
+  }
+
+  if (requestError) {
     return {
       startDate: input.startDate,
       endDate: input.endDate,
       quoteAvailable: false,
-      quoteUnavailableReason: `Quote request failed with status ${response.status}`,
+      quoteUnavailableReason: requestError,
+      baseTotal: null,
+      taxesTotal: null,
+      feesTotal: null,
+      grandTotal: null,
+      currency: "USD",
+      handoffUrl: fallbackHandoffUrl,
+    };
+  }
+
+  if (!responseOk) {
+    return {
+      startDate: input.startDate,
+      endDate: input.endDate,
+      quoteAvailable: false,
+      quoteUnavailableReason: `Quote request failed with status ${responseStatus}`,
       baseTotal: null,
       taxesTotal: null,
       feesTotal: null,
@@ -235,7 +465,7 @@ async function fetchQuote(input: {
 
   let parsed: ExclusiveQuoteResponse;
   try {
-    parsed = (await response.json()) as ExclusiveQuoteResponse;
+    parsed = JSON.parse(responseText) as ExclusiveQuoteResponse;
   } catch {
     return {
       startDate: input.startDate,
@@ -330,7 +560,12 @@ function resolveRuntimeQuoteContext(input: QuoteExecutionRequest): {
       : null;
 
   const detailUrl = asNonEmptyString(context?.detail_url);
-  const propertyId = normalizeNumericPropertyId(context?.property_id);
+  const propertyId =
+    normalizeNumericPropertyId(context?.property_id) ??
+    normalizeNumericPropertyId(context?.pid) ??
+    normalizeNumericPropertyId(context?.unitID) ??
+    normalizeNumericPropertyId(context?.unit_id) ??
+    normalizeNumericPropertyId(context?.listing_id);
 
   if (!detailUrl || !propertyId) {
     throw new Error(
@@ -343,6 +578,7 @@ function resolveRuntimeQuoteContext(input: QuoteExecutionRequest): {
     quoteContext: {
       ...context,
       detail_url: detailUrl,
+      pid: propertyId,
       property_id: propertyId,
     },
   };
@@ -426,6 +662,9 @@ export async function executeExclusive30aSingleQuote(
       ),
     );
 
+    const minNightsStayReq =
+      normalizePositiveInt(runtimeContext.quoteContext.min_nights_stay_req) ?? 1;
+
     const raw = await fetchQuote({
       detailUrl: runtimeContext.detailUrl,
       listingId: propertyId,
@@ -436,6 +675,8 @@ export async function executeExclusive30aSingleQuote(
       children: Math.max(0, Math.floor(input.children)),
       pets: 0,
       promoCode: "",
+      minNightsStayReq,
+      timeoutMs: normalizeTimeoutMs(input.options?.timeoutMs),
     });
 
     const elapsedMs = Date.now() - startedAt;
@@ -453,6 +694,10 @@ export async function executeExclusive30aSingleQuote(
             checkInIso: input.checkInIso,
             checkOutIso: input.checkOutIso,
             handoffUrl: raw.handoffUrl,
+            diagnostics: buildSessionBoundHandoffDiagnostics({
+              detailUrl: runtimeContext.detailUrl,
+              handoffUrl: raw.handoffUrl,
+            }),
           },
         },
       };
@@ -471,7 +716,12 @@ export async function executeExclusive30aSingleQuote(
         feesTotalExclTaxes: raw.feesTotal,
         grandTotal: raw.grandTotal,
         quotedTotal: raw.grandTotal,
+        detailUrl: runtimeContext.detailUrl,
         handoffUrl: raw.handoffUrl,
+        diagnostics: buildSessionBoundHandoffDiagnostics({
+          detailUrl: runtimeContext.detailUrl,
+          handoffUrl: raw.handoffUrl,
+        }),
       },
     };
   } catch (error: unknown) {
