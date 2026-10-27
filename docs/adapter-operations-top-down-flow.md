@@ -50,6 +50,43 @@ npm run pricing:validate:rooms -- --adapter-key <adapterKey>
 
 6. If step 2 reports orphan artifacts, remove orphans immediately and re-run step 2 before moving on.
 
+### Manual Orphan Cleanup Procedure (Required)
+
+When step 2 reports `orphan_artifact` warnings, perform cleanup manually with this exact order.
+
+1. Run scrape filename validator and collect orphan listing IDs from warning lines.
+
+```bash
+npm run pricing:validate:scrape-filenames -- --adapter-key <adapterKey>
+```
+
+2. Open `src/lib/data/external-sources/<adapterKey>/details/index.json` and ensure canonical index alignment.
+	- If an orphan listing ID still appears in `index.json`, remove that listing entry.
+	- Save `index.json` before artifact deletion.
+
+3. For each orphan listing ID, remove matching artifacts (if present):
+	- `src/lib/data/external-sources/<adapterKey>/details/json/<listingId>.json`
+	- `src/lib/data/external-sources/<adapterKey>/details/html/<listingId>.html`
+	- `src/lib/data/external-sources/<adapterKey>/details/quotes/<listingId>.json`
+	- `src/lib/data/external-sources/<adapterKey>/details/pricing/<listingId>.json`
+
+Example (single listing):
+
+```bash
+rm -f src/lib/data/external-sources/<adapterKey>/details/json/<listingId>.json
+rm -f src/lib/data/external-sources/<adapterKey>/details/html/<listingId>.html
+rm -f src/lib/data/external-sources/<adapterKey>/details/quotes/<listingId>.json
+rm -f src/lib/data/external-sources/<adapterKey>/details/pricing/<listingId>.json
+```
+
+4. Re-run scrape filename validator and confirm no orphan warnings remain.
+
+```bash
+npm run pricing:validate:scrape-filenames -- --adapter-key <adapterKey>
+```
+
+5. Continue to availability/media/rooms validators only after orphan warnings are cleared.
+
 7. Full quote pass
 
 ```bash
