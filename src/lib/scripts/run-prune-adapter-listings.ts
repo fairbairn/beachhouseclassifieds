@@ -105,32 +105,35 @@ function parseArgs(argv: string[]): Promise<CliOptions> {
     throw new Error("Missing required --adapter-key value.");
   }
 
-  return Promise.all(listingIdFiles.map((filePath) => loadListingIdsFromFile(filePath))).then(
-    (fileListingIdSets) => {
-      const merged = [
-        ...collectedListingIds,
-        ...fileListingIdSets.flatMap((ids) => ids),
-      ]
-        .map((id) => id.trim())
-        .filter(Boolean);
+  return Promise.all(
+    listingIdFiles.map((filePath) => loadListingIdsFromFile(filePath)),
+  ).then((fileListingIdSets) => {
+    const merged = [
+      ...collectedListingIds,
+      ...fileListingIdSets.flatMap((ids) => ids),
+    ]
+      .map((id) => id.trim())
+      .filter(Boolean);
 
-      const deduped = [...new Set(merged)];
-      if (deduped.length === 0) {
-        throw new Error(
-          "No listing IDs provided. Use --listing-id, --listing-ids, or --listing-ids-file.",
-        );
-      }
+    const deduped = [...new Set(merged)];
+    if (deduped.length === 0) {
+      throw new Error(
+        "No listing IDs provided. Use --listing-id, --listing-ids, or --listing-ids-file.",
+      );
+    }
 
-      return {
-        adapterKey,
-        listingIds: deduped,
-        dryRun,
-      };
-    },
-  );
+    return {
+      adapterKey,
+      listingIds: deduped,
+      dryRun,
+    };
+  });
 }
 
-async function removeIfExists(filePath: string, dryRun: boolean): Promise<boolean> {
+async function removeIfExists(
+  filePath: string,
+  dryRun: boolean,
+): Promise<boolean> {
   try {
     if (dryRun) {
       await readFile(filePath, "utf8");
@@ -176,7 +179,11 @@ async function main(): Promise<void> {
   const removedFromIndex = indexParsed.length - nextIndex.length;
 
   if (!options.dryRun) {
-    await writeFile(indexPath, `${JSON.stringify(nextIndex, null, 2)}\n`, "utf8");
+    await writeFile(
+      indexPath,
+      `${JSON.stringify(nextIndex, null, 2)}\n`,
+      "utf8",
+    );
   }
 
   const artifactDirs = ["json", "html", "quotes", "pricing"];

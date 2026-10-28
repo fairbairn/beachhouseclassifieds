@@ -227,6 +227,25 @@ const OUTPUT_ROOT = resolve(
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
 
+function isDetailDebugEnabled(): boolean {
+  return process.env.OVERSEE30A_DETAIL_DEBUG === "1";
+}
+
+function logDetailDebug(stage: string, input: Record<string, unknown>): void {
+  if (!isDetailDebugEnabled()) {
+    return;
+  }
+
+  const parts = Object.entries(input)
+    .filter(
+      ([, value]) => value !== undefined && value !== null && value !== "",
+    )
+    .map(([key, value]) => `${key}=${String(value)}`);
+  process.stderr.write(
+    `[oversee30a:detail-debug] ${stage} ${parts.join(" ")}\n`,
+  );
+}
+
 function normalizeLink(url: string): string {
   return url.split("#")[0]?.replace(/\/+$/, "") ?? url;
 }
@@ -945,35 +964,73 @@ async function discoverListings(
 }
 
 async function fetchDetail(
-  detailUrl: string,
-  availabilityHorizonDays: number,
+  context: Parameters<ScraperAdapter<OverseeDetailRecord>["fetchDetail"]>[0],
 ): Promise<OverseeDetailRecord | null> {
+  const { detailUrl, availabilityHorizonDays, browser, reportDetailProgress } =
+    context;
   const normalizedDetailUrl = normalizeDetailUrl(detailUrl);
   if (!normalizedDetailUrl) {
     return null;
   }
 
   try {
-    const response = await fetch(normalizedDetailUrl, {
-      method: "GET",
-      redirect: "follow",
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        referer: DEFAULT_ANCHOR_URL,
-      },
-    });
+    reportDetailProgress?.(
+      `detail_transport=cloakbrowser listing=${normalizedDetailUrl}`,
+    );
 
-    const contentType = (
-      response.headers.get("content-type") ?? ""
-    ).toLowerCase();
-    if (response.status !== 200 || !contentType.includes("text/html")) {
+    const detailPage = await browser.newPage();
+    let html = "";
+    try {
+      const response = await detailPage.goto(normalizedDetailUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 120000,
+      });
+
+      const status = response?.status() ?? null;
+      const responseUrl = detailPage.url();
+      logDetailDebug("detail_fetch", {
+        detail_url: normalizedDetailUrl,
+        status: status ?? "unknown",
+        ok: status === 200,
+        content_type: "text/html (browser content)",
+        response_url: responseUrl,
+      });
+
+      if (status !== 200) {
+        reportDetailProgress?.(
+          `detail_http_status status=${status ?? "unknown"} listing=${normalizedDetailUrl} final_url=${responseUrl}`,
+        );
+        logDetailDebug("detail_fetch_rejected", {
+          detail_url: normalizedDetailUrl,
+          reason: "non_200_status",
+        });
+        return null;
+      }
+
+      html = await detailPage.content();
+    } finally {
+      await detailPage.close().catch(() => undefined);
+    }
+
+    if (!html.trim()) {
+      logDetailDebug("detail_fetch_rejected", {
+        detail_url: normalizedDetailUrl,
+        reason: "empty_html",
+      });
       return null;
     }
 
-    const html = await response.text();
+    const lowerHtml = html.toLowerCase();
+    const challengeSignal =
+      lowerHtml.includes("cloudflare") ||
+      lowerHtml.includes("access denied") ||
+      lowerHtml.includes("forbidden") ||
+      lowerHtml.includes("captcha");
+    if (challengeSignal) {
+      logDetailDebug("detail_html_challenge_signal", {
+        detail_url: normalizedDetailUrl,
+      });
+    }
     const unitData = extractUnitDataAttributes(html);
 
     const unitSlug =
@@ -1070,6 +1127,17 @@ async function fetchDetail(
           },
         });
 
+        logDetailDebug("availability_fetch", {
+          detail_url: normalizedDetailUrl,
+          availability_url: availabilityUrl,
+          status: availabilityResponse.status,
+          ok: availabilityResponse.ok,
+          response_url: availabilityResponse.url,
+          content_type: (
+            availabilityResponse.headers.get("content-type") ?? ""
+          ).toLowerCase(),
+        });
+
         if (availabilityResponse.ok) {
           const availabilityJson =
             (await availabilityResponse.json()) as OverseeBookedDatesResponse;
@@ -1104,7 +1172,12 @@ async function fetchDetail(
             bookingWindowByDate = rawWindow;
           }
         }
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logDetailDebug("availability_fetch_error", {
+          detail_url: normalizedDetailUrl,
+          error: message,
+        });
         // Keep detail record with empty availability when endpoint parsing fails.
       }
     }
@@ -1302,7 +1375,12 @@ async function fetchDetail(
           : null,
       },
     };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logDetailDebug("detail_fetch_error", {
+      detail_url: normalizedDetailUrl,
+      error: message,
+    });
     return null;
   }
 }
@@ -1338,7 +1416,7 @@ export function createOversee30AAdapter(): ScraperAdapter<OverseeDetailRecord> {
       );
     },
     async fetchDetail(context) {
-      return fetchDetail(context.detailUrl, context.availabilityHorizonDays);
+      return fetchDetail(context);
     },
     async runQuoteCapture(argv, progress) {
       const normalizedArgs = await normalizeAdapterQuoteScopeArgs(

@@ -1,0 +1,55 @@
+{
+  "adapter_key": "oversee30a",
+  "external_listing_id": "Morgans_Pearl_30A-414-15",
+  "detail_url": "https://oversee.us/vrp/unit/Morgans_Pearl_30A-414-15",
+  "captured_at": "2026-10-28T01:55:27.247Z",
+  "currency": "USD",
+  "quote_window_cadence": "weekly_anchor_adaptive_span",
+  "quote_window_gap_policy": "probe_longest_available_span",
+  "quote_window_anchor_date": "2026-10-31",
+  "quote_window_days": 168,
+  "quote_sample_step_days": 1,
+  "quote_nights": 7,
+  "quote_max_queries": 2,
+  "endpoint_path": "/?vrpjax=1&act=checkavailability&par=1",
+  "quote_run_diagnostics": {
+    "queried_windows": 2,
+    "available_windows": 1,
+    "unavailable_windows": 1,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {
+      "QUOTE_UNAVAILABLE": 1
+    },
+    "sample_internal_errors": []
+  },
+  "observations": [
+    {
+      "sampled_at": "2026-10-28T01:55:27.247Z",
+      "captured_at": "2026-10-28T01:55:27.247Z",
+      "source_listing_id": "Morgans_Pearl_30A-414-15",
+      "currency": "USD",
+      "start_date": "2027-04-03",
+      "end_date": "2027-04-17",
+      "check_in_date": "2027-04-03",
+      "check_out_date": "2027-04-17",
+      "nights": 14,
+      "base_nightly": 788.31,
+      "all_in_nightly": 882.91,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 11036.32,
+      "taxes_total": 1324.37,
+      "fees_total_excl_taxes": 0,
+      "fee_lines": [],
+      "grand_total": 12360.69,
+      "quoted_total": 12360.69,
+      "fee_pct_of_base": 0,
+      "tax_pct_of_base": 0.120001,
+      "non_base_pct_of_total": 0.107144,
+      "all_in_multiplier": 1.120001,
+      "handoff_url": "https://oversee.us/vrp/book/step3/?obj%5BArrival%5D=April+3%2C+2027&obj%5BDeparture%5D=April+17%2C+2027&search%5BAdults%5D=1&search%5BChildren%5D=0&search%5BInfants%5D=0&obj%5BPets%5D=No+Pets&search%5Bpets_count%5D=No+Pets&obj%5BPropID%5D=370",
+      "source": "quote_api",
+      "pricing_source": "runtime_parsed"
+    }
+  ]
+}

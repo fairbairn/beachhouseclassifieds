@@ -1,9 +1,57 @@
+import { launch as launchCloakBrowser } from "cloakbrowser";
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 const ADAPTER_KEY = "oversee30a" as const;
 const BASE_HOST = "https://oversee.us";
+const DEFAULT_TIMEOUT_MS = 20000;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const USE_PROXY = shouldAdapterUseProxy(ADAPTER_KEY);
+
+type BrowserProxyConfig = {
+  server: string;
+  username?: string;
+  password?: string;
+};
+
+type BrowserRequestResponseLike = {
+  ok(): boolean;
+  status(): number;
+  text(): Promise<string>;
+};
+
+type BrowserRequestClientLike = {
+  get(
+    endpoint: string,
+    options: {
+      headers: Record<string, string>;
+      timeout: number;
+    },
+  ): Promise<BrowserRequestResponseLike>;
+};
+
+type BrowserPageLike = {
+  goto(
+    url: string,
+    options: { waitUntil: "commit" | "domcontentloaded"; timeout: number },
+  ): Promise<unknown>;
+  close(): Promise<void>;
+};
+
+type BrowserContextLike = {
+  request: BrowserRequestClientLike;
+  newPage(): Promise<BrowserPageLike>;
+  close(): Promise<void>;
+};
+
+type BrowserLike = {
+  newContext(options: {
+    userAgent: string;
+    ignoreHTTPSErrors: boolean;
+  }): Promise<BrowserContextLike>;
+  close(): Promise<void>;
+};
 
 type OverseeCharge = {
   Description?: unknown;
@@ -16,6 +64,119 @@ type OverseeQuoteResponse = {
   TotalCost?: unknown;
   Charges?: unknown;
 };
+
+type BrowserQuoteRequestResult = {
+  ok: boolean;
+  status: number;
+  bodyText: string;
+  requestError: string | null;
+};
+
+function normalizeTimeoutMs(raw: number | undefined): number {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return Math.max(1000, Math.floor(raw));
+}
+
+function resolveProxy(useProxy: boolean): BrowserProxyConfig | null {
+  if (!useProxy) {
+    return null;
+  }
+
+  const proxy =
+    process.env.HTTPS_PROXY ??
+    process.env.HTTP_PROXY ??
+    process.env.https_proxy ??
+    process.env.http_proxy;
+  const normalized = proxy?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const server = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`;
+    const username = parsed.username
+      ? decodeURIComponent(parsed.username)
+      : undefined;
+    const password = parsed.password
+      ? decodeURIComponent(parsed.password)
+      : undefined;
+
+    return {
+      server,
+      ...(username ? { username } : {}),
+      ...(password ? { password } : {}),
+    };
+  } catch {
+    return { server: normalized };
+  }
+}
+
+async function fetchQuoteViaBrowser(input: {
+  detailUrl: string;
+  endpoint: string;
+  timeoutMs: number;
+  referer: string;
+}): Promise<BrowserQuoteRequestResult> {
+  const proxy = resolveProxy(USE_PROXY);
+  let browser: BrowserLike | null = null;
+  let context: BrowserContextLike | null = null;
+
+  try {
+    browser = (await launchCloakBrowser({
+      headless: true,
+      ...(proxy ? { proxy } : {}),
+    })) as BrowserLike;
+
+    context = await browser.newContext({
+      userAgent: USER_AGENT,
+      ignoreHTTPSErrors: false,
+    });
+
+    const page = await context.newPage();
+    try {
+      await page.goto(input.detailUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: Math.min(120000, Math.max(15000, input.timeoutMs * 2)),
+      });
+    } finally {
+      await page.close();
+    }
+
+    const response = await context.request.get(input.endpoint, {
+      headers: {
+        "user-agent": USER_AGENT,
+        accept: "application/json,text/plain,*/*",
+        referer: input.referer,
+      },
+      timeout: input.timeoutMs,
+    });
+
+    return {
+      ok: response.ok(),
+      status: response.status(),
+      bodyText: await response.text(),
+      requestError: null,
+    };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      status: 0,
+      bodyText: "",
+      requestError:
+        error instanceof Error ? error.message : "Quote request failed",
+    };
+  } finally {
+    if (context) {
+      await context.close().catch(() => undefined);
+    }
+    if (browser) {
+      await browser.close().catch(() => undefined);
+    }
+  }
+}
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -205,6 +366,7 @@ export async function executeOversee30aSingleQuote(
   }
 
   const startedAt = Date.now();
+  const timeoutMs = normalizeTimeoutMs(input.options?.timeoutMs);
   const endpoint = buildCheckAvailabilityUrl({
     listingId: runtimeContext.listingId,
     startDate: input.checkInIso,
@@ -226,14 +388,31 @@ export async function executeOversee30aSingleQuote(
   });
 
   try {
-    const response = await fetch(endpoint, {
-      method: "GET",
-      headers: {
-        "user-agent": USER_AGENT,
-        accept: "application/json,text/plain,*/*",
-        referer: runtimeContext.detailUrl,
-      },
+    const response = await fetchQuoteViaBrowser({
+      detailUrl: runtimeContext.detailUrl,
+      endpoint,
+      timeoutMs,
+      referer: runtimeContext.detailUrl,
     });
+
+    if (response.requestError) {
+      return {
+        success: false,
+        elapsedMs: Date.now() - startedAt,
+        error: {
+          code: "QUOTE_EXECUTION_FAILED",
+          message: response.requestError,
+          retryable: true,
+          details: {
+            adapterKey: ADAPTER_KEY,
+            listingId: runtimeContext.listingId,
+            checkInIso: input.checkInIso,
+            checkOutIso: input.checkOutIso,
+            handoffUrl,
+          },
+        },
+      };
+    }
 
     if (!response.ok) {
       return {
@@ -254,7 +433,7 @@ export async function executeOversee30aSingleQuote(
       };
     }
 
-    const payload = (await response.json()) as OverseeQuoteResponse;
+    const payload = JSON.parse(response.bodyText) as OverseeQuoteResponse;
 
     const baseTotal = parseAmount(payload.TotalGoods);
     const taxesTotal = parseAmount(payload.TotalTax);
