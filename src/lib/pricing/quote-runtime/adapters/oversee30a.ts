@@ -1,5 +1,5 @@
-import { launch as launchCloakBrowser } from "cloakbrowser";
 import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
+import { launch as launchCloakBrowser } from "cloakbrowser";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 const ADAPTER_KEY = "oversee30a" as const;
