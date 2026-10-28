@@ -1799,6 +1799,14 @@ export function createPanhandle30AAdapter(): ScraperAdapter<LuxuryDetailRecord> 
         "panhandle30a",
         argv,
       );
+      const hasCoveredWindowOverride = normalizedArgs.some(
+        (arg) =>
+          arg === "--skip-covered-windows" ||
+          arg === "--no-skip-covered-windows",
+      );
+      const runArgs = hasCoveredWindowOverride
+        ? normalizedArgs
+        : [...normalizedArgs, "--no-skip-covered-windows"];
       await runRuntimeAdapterQuoteCli(
         {
           adapterKey: "panhandle30a",
@@ -1809,7 +1817,7 @@ export function createPanhandle30AAdapter(): ScraperAdapter<LuxuryDetailRecord> 
           defaultTaxPct: 0.12,
           defaultBaseNightly: 650,
         },
-        normalizedArgs,
+        runArgs,
         progress,
       );
     },

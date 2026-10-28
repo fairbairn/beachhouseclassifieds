@@ -223,6 +223,7 @@ function extractQuoteContext(
 }
 
 async function fetchPanhandleQuote(input: {
+  listingId: string;
   quoteContext: QuoteRequestContext;
   checkInIso: string;
   checkOutIso: string;
@@ -278,6 +279,11 @@ async function fetchPanhandleQuote(input: {
       }
 
       if (!response.ok) {
+        console.warn(
+          `[${ADAPTER_KEY}] non-200 quote response listing=${input.listingId} property_id=${input.quoteContext.propertyId} ` +
+            `window=${input.checkInIso}->${input.checkOutIso} status=${response.status} ` +
+            `attempt=${attempt + 1}/${retryDelaysMs.length}`,
+        );
         lastFailureReason = `Quote request failed with status ${response.status}`;
         if (attempt < retryDelaysMs.length - 1) {
           continue;
@@ -377,6 +383,7 @@ export async function executePanhandle30aSingleQuote(
   const timeoutMs = normalizeTimeoutMs(input.options?.timeoutMs);
   const startedAt = performance.now();
   const raw = await fetchPanhandleQuote({
+    listingId: input.listingId,
     quoteContext,
     checkInIso: input.checkInIso,
     checkOutIso: input.checkOutIso,
