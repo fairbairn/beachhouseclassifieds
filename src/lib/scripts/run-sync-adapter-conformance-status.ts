@@ -44,6 +44,11 @@ type SourceIndexTotals = {
   adaptersMissingIndex: string[];
 };
 
+const CONFORMANCE_MATRIX_EXCLUDED_ADAPTERS = new Set<string>([
+  "grayt30a",
+  "localvr30a",
+]);
+
 function hasText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -401,7 +406,10 @@ async function main(): Promise<void> {
   );
 
   const apiQuoteAdapters = parseQuotedApiSet(lines);
-  const adapterKeys = getKnownAdapterKeys();
+  const allAdapterKeys = getKnownAdapterKeys();
+  const adapterKeys = allAdapterKeys.filter(
+    (adapterKey) => !CONFORMANCE_MATRIX_EXCLUDED_ADAPTERS.has(adapterKey),
+  );
   const sourceIndexTotals = await loadSourceIndexTotals(rootDir, adapterKeys);
 
   const stats: AdapterMetrics[] = [];
@@ -740,7 +748,7 @@ async function main(): Promise<void> {
       {
         updated: path.relative(rootDir, docPath),
         adapterSource: "scraper-engine adapter registry",
-        adaptersInRegistry: adapterKeys.length,
+        adaptersInRegistry: allAdapterKeys.length,
         adaptersRendered: stats.length,
         readyCount,
         sourceTotals: {

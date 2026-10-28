@@ -70,10 +70,22 @@ function toUsDate(isoDate: string): string {
   return `${match[2]}/${match[3]}/${match[1]}`;
 }
 
+function extractBookNowUrl(html: string): string | null {
+  const match = html.match(
+    /<input[^>]*id="bookNowURL"[^>]*value="([^"]+)"[^>]*>/i,
+  );
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const value = match[1].trim();
+  return value.length > 0 ? value : null;
+}
+
 function parsePriceByLabel(html: string, label: string): number | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
-    `<li\\s+class="book-quote-item(?:\\s+[^"]*)?">[\\s\\S]*?<span\\s+class="book-quote-item-text">\\s*${escaped}\\s*<\\/span>[\\s\\S]*?<span\\s+class="book-quote-item-price"[^>]*data-price="([^"]+)"`,
+    `<li\\s+class="(?:book|pdp)-quote-item(?:\\s+[^"]*)?">[\\s\\S]*?<span\\s+class="(?:book|pdp)-quote-item-text">\\s*${escaped}\\s*<\\/span>[\\s\\S]*?<span\\s+class="(?:book|pdp)-quote-item-price"[^>]*data-price="([^"]+)"`,
     "i",
   );
   const match = html.match(pattern);
@@ -85,14 +97,14 @@ function parsePriceByLabel(html: string, label: string): number | null {
 
 function parseFeeLinesTotal(html: string): number | null {
   const feeSectionMatch = html.match(
-    /<ul\s+class="book-quote-item-toggle-list">([\s\S]*?)<\/ul>/i,
+    /<ul\s+class="(?:book|pdp)-quote-item-toggle-list">([\s\S]*?)<\/ul>/i,
   );
   if (!feeSectionMatch?.[1]) {
     return null;
   }
 
   const itemPattern =
-    /<span\s+class="book-quote-item-text">\s*([^<]+?)\s*<\/span>[\s\S]*?<span\s+class="book-quote-item-price"[^>]*data-price="([^"]+)"/gi;
+    /<span\s+class="(?:book|pdp)-quote-item-text">\s*([^<]+?)\s*<\/span>[\s\S]*?<span\s+class="(?:book|pdp)-quote-item-price"[^>]*data-price="([^"]+)"/gi;
 
   let total = 0;
   let count = 0;
@@ -263,12 +275,19 @@ async function fetchQuoteHtml(input: {
       const html = await response.text();
       const reason = parseUnavailableReason(html);
 
-      const baseTotal = parsePriceByLabel(html, "Rent");
+      const baseTotal =
+        parsePriceByLabel(html, "Rent") ?? parsePriceByLabel(html, "Subtotal");
       const taxesTotal = parsePriceByLabel(html, "Taxes");
       const feesTopline = parsePriceByLabel(html, "Fees");
       const grandTotal = parsePriceByLabel(html, "Total");
       const feeLinesTotal = parseFeeLinesTotal(html);
-      const feesTotal = feeLinesTotal ?? feesTopline;
+      const feesTotal =
+        feeLinesTotal ??
+        feesTopline ??
+        (grandTotal !== null && baseTotal !== null && taxesTotal !== null
+          ? roundCurrency(Math.max(0, grandTotal - baseTotal - taxesTotal))
+          : null);
+      const handoffUrl = extractBookNowUrl(html) ?? fallbackHandoffUrl;
 
       const quoteAvailable =
         reason === null &&
@@ -299,7 +318,7 @@ async function fetchQuoteHtml(input: {
         feesTotal,
         grandTotal,
         currency: "USD",
-        handoffUrl: fallbackHandoffUrl,
+        handoffUrl,
       };
     } catch (error: unknown) {
       lastFailureReason =

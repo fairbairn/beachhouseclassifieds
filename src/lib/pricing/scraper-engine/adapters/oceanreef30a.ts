@@ -1237,7 +1237,7 @@ export function createOceanReef30AAdapter(): ScraperAdapter<OceanReefDetailRecor
           executeSingleQuote: executeOceanreef30aSingleQuote,
           defaultQuoteTimeoutMs: 20000,
           defaultQuoteMaxAttempts: 2,
-          defaultEndpointPath: "/ajax/pricesummary/",
+          defaultEndpointPath: "/ajax/quote",
           defaultTaxPct: 0.12,
           defaultBaseNightly: 650,
         },
