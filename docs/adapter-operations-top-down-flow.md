@@ -61,14 +61,14 @@ npm run pricing:validate:scrape-filenames -- --adapter-key <adapterKey>
 ```
 
 2. Open `src/lib/data/external-sources/<adapterKey>/details/index.json` and ensure canonical index alignment.
-	- If an orphan listing ID still appears in `index.json`, remove that listing entry.
-	- Save `index.json` before artifact deletion.
+   - If an orphan listing ID still appears in `index.json`, remove that listing entry.
+   - Save `index.json` before artifact deletion.
 
 3. For each orphan listing ID, remove matching artifacts (if present):
-	- `src/lib/data/external-sources/<adapterKey>/details/json/<listingId>.json`
-	- `src/lib/data/external-sources/<adapterKey>/details/html/<listingId>.html`
-	- `src/lib/data/external-sources/<adapterKey>/details/quotes/<listingId>.json`
-	- `src/lib/data/external-sources/<adapterKey>/details/pricing/<listingId>.json`
+   - `src/lib/data/external-sources/<adapterKey>/details/json/<listingId>.json`
+   - `src/lib/data/external-sources/<adapterKey>/details/html/<listingId>.html`
+   - `src/lib/data/external-sources/<adapterKey>/details/quotes/<listingId>.json`
+   - `src/lib/data/external-sources/<adapterKey>/details/pricing/<listingId>.json`
 
 Example (single listing):
 
@@ -87,7 +87,7 @@ npm run pricing:validate:scrape-filenames -- --adapter-key <adapterKey>
 
 5. Continue to availability/media/rooms validators only after orphan warnings are cleared.
 
-7. Full quote pass
+6. Full quote pass
 
 ```bash
 npm run pricing:quote:adapter -- --adapter-key <adapterKey> --all-listings --weeks 24 --continue-on-internal-error
@@ -102,7 +102,13 @@ npm run pricing:validate:quotes -- --adapter-key <adapterKey>
 9. If quote validator fails on one/few listings:
 
 - Prefer targeted action, not full recapture.
-- If listing has no normalized availability days and is non-quotable, prune it from `details/index.json` and delete matching `json/html/quotes/pricing` artifacts for that listing.
+- If listing has no normalized availability days and is non-quotable, use the prune runner to remove it from canonical index and matching artifacts:
+
+```bash
+npm run pricing:prune:listings -- --adapter-key <adapterKey> --listing-ids <id1,id2,...>
+```
+
+- Equivalent granular flags are also supported: `--listing-id <id>` (repeatable) and `--listing-ids-file <path>`.
 - Also prune any additional listings that meet the same condition (no availability and unable to quote) before revalidation.
 - Re-run quote validator only.
 

@@ -2,15 +2,340 @@
   "adapter_key": "homeownerscollection30a",
   "external_listing_id": "reve-de-mer-3-lockoff",
   "detail_url": "https://www.homeownerscollection.com/seaside-vacation-rentals/reve-de-mer-3-lockoff",
-  "captured_at": "2026-05-26T13:48:54.453Z",
+  "captured_at": "2026-10-27T23:07:28.771Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_anchor_adaptive_span",
   "quote_window_gap_policy": "probe_longest_available_span",
-  "quote_window_anchor_date": "2026-05-30",
+  "quote_window_anchor_date": "2026-10-31",
   "quote_window_days": 168,
   "quote_sample_step_days": 1,
   "quote_nights": 7,
-  "quote_max_queries": 2,
+  "quote_max_queries": 1,
   "endpoint_path": "/rcapi/item/avail/search",
-  "observations": []
+  "quote_run_diagnostics": {
+    "queried_windows": 1,
+    "available_windows": 1,
+    "unavailable_windows": 0,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {},
+    "sample_internal_errors": []
+  },
+  "observations": [
+    {
+      "sampled_at": "2026-10-27T13:10:34.616Z",
+      "captured_at": "2026-10-27T13:10:34.616Z",
+      "source_listing_id": "reve-de-mer-3-lockoff",
+      "currency": "USD",
+      "start_date": "2026-11-14",
+      "end_date": "2026-11-21",
+      "check_in_date": "2026-11-14",
+      "check_out_date": "2026-11-21",
+      "nights": 7,
+      "base_nightly": 625.31,
+      "all_in_nightly": 715.88,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 4377.2,
+      "taxes_total": 530.25,
+      "fees_total_excl_taxes": 426.69,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $103.73",
+          "amount": 103.73
+        },
+        {
+          "name": "Travel Insurance (optional) $322.96",
+          "amount": 322.96
+        }
+      ],
+      "grand_total": 5011.18,
+      "quoted_total": 4377.2,
+      "fee_pct_of_base": 0.1,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.22,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/44/buy?rcav%5Bbegin%5D=11%2F14%2F2026&rcav%5Bend%5D=11%2F21%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=44&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-126299&eid=44",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T23:07:28.771Z",
+      "captured_at": "2026-10-27T23:07:28.771Z",
+      "source_listing_id": "reve-de-mer-3-lockoff",
+      "currency": "USD",
+      "start_date": "2026-11-29",
+      "end_date": "2026-12-13",
+      "check_in_date": "2026-11-29",
+      "check_out_date": "2026-12-13",
+      "nights": 14,
+      "base_nightly": 517.33,
+      "all_in_nightly": 592.25,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 7242.58,
+      "taxes_total": 877.34,
+      "fees_total_excl_taxes": 706,
+      "fee_lines": [],
+      "grand_total": 8291.55,
+      "quoted_total": 7242.58,
+      "fee_pct_of_base": 0.097479,
+      "tax_pct_of_base": 0.121136,
+      "non_base_pct_of_total": 0.126511,
+      "all_in_multiplier": 1.144834,
+      "handoff_url": "https://homeownerscollection.com/rescms/item/44/buy?rcav%5Bbegin%5D=11%2F29%2F2026&rcav%5Bend%5D=12%2F13%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=44&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-126299&eid=44",
+      "source": "quote_api",
+      "pricing_source": "runtime_parsed"
+    },
+    {
+      "sampled_at": "2026-10-27T13:10:34.616Z",
+      "captured_at": "2026-10-27T13:10:34.616Z",
+      "source_listing_id": "reve-de-mer-3-lockoff",
+      "currency": "USD",
+      "start_date": "2026-12-05",
+      "end_date": "2026-12-12",
+      "check_in_date": "2026-12-05",
+      "check_out_date": "2026-12-12",
+      "nights": 7,
+      "base_nightly": 588.39,
+      "all_in_nightly": 673.61,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 4118.72,
+      "taxes_total": 498.93,
+      "fees_total_excl_taxes": 401.49,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $97.60",
+          "amount": 97.6
+        },
+        {
+          "name": "Travel Insurance (optional) $303.89",
+          "amount": 303.89
+        }
+      ],
+      "grand_total": 4715.25,
+      "quoted_total": 4118.72,
+      "fee_pct_of_base": 0.1,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.22,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/44/buy?rcav%5Bbegin%5D=12%2F05%2F2026&rcav%5Bend%5D=12%2F12%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=44&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-126299&eid=44",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T13:10:34.616Z",
+      "captured_at": "2026-10-27T13:10:34.616Z",
+      "source_listing_id": "reve-de-mer-3-lockoff",
+      "currency": "USD",
+      "start_date": "2026-12-12",
+      "end_date": "2026-12-19",
+      "check_in_date": "2026-12-12",
+      "check_out_date": "2026-12-19",
+      "nights": 7,
+      "base_nightly": 588.39,
+      "all_in_nightly": 673.61,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 4118.72,
+      "taxes_total": 498.93,
+      "fees_total_excl_taxes": 401.49,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $97.60",
+          "amount": 97.6
+        },
+        {
+          "name": "Travel Insurance (optional) $303.89",
+          "amount": 303.89
+        }
+      ],
+      "grand_total": 4715.25,
+      "quoted_total": 4118.72,
+      "fee_pct_of_base": 0.1,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.22,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/44/buy?rcav%5Bbegin%5D=12%2F12%2F2026&rcav%5Bend%5D=12%2F19%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=44&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-126299&eid=44",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T13:10:34.616Z",
+      "captured_at": "2026-10-27T13:10:34.616Z",
+      "source_listing_id": "reve-de-mer-3-lockoff",
+      "currency": "USD",
+      "start_date": "2027-01-09",
+      "end_date": "2027-01-16",
+      "check_in_date": "2027-01-09",
+      "check_out_date": "2027-01-16",
+      "nights": 7,
+      "base_nightly": 626.37,
+      "all_in_nightly": 717.09,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 4384.58,
+      "taxes_total": 531.14,
+      "fees_total_excl_taxes": 427.4,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $103.90",
+          "amount": 103.9
+        },
+        {
+          "name": "Travel Insurance (optional) $323.50",
+          "amount": 323.5
+        }
+      ],
+      "grand_total": 5019.62,
+      "quoted_total": 4384.58,
+      "fee_pct_of_base": 0.1,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.22,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/44/buy?rcav%5Bbegin%5D=01%2F09%2F2027&rcav%5Bend%5D=01%2F16%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=44&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-126299&eid=44",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T13:10:34.616Z",
+      "captured_at": "2026-10-27T13:10:34.616Z",
+      "source_listing_id": "reve-de-mer-3-lockoff",
+      "currency": "USD",
+      "start_date": "2027-01-16",
+      "end_date": "2027-01-23",
+      "check_in_date": "2027-01-16",
+      "check_out_date": "2027-01-23",
+      "nights": 7,
+      "base_nightly": 626.37,
+      "all_in_nightly": 717.09,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 4384.58,
+      "taxes_total": 531.14,
+      "fees_total_excl_taxes": 427.4,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $103.90",
+          "amount": 103.9
+        },
+        {
+          "name": "Travel Insurance (optional) $323.50",
+          "amount": 323.5
+        }
+      ],
+      "grand_total": 5019.62,
+      "quoted_total": 4384.58,
+      "fee_pct_of_base": 0.1,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.22,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/44/buy?rcav%5Bbegin%5D=01%2F16%2F2027&rcav%5Bend%5D=01%2F23%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=44&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-126299&eid=44",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T13:10:34.616Z",
+      "captured_at": "2026-10-27T13:10:34.616Z",
+      "source_listing_id": "reve-de-mer-3-lockoff",
+      "currency": "USD",
+      "start_date": "2027-01-23",
+      "end_date": "2027-01-30",
+      "check_in_date": "2027-01-23",
+      "check_out_date": "2027-01-30",
+      "nights": 7,
+      "base_nightly": 626.37,
+      "all_in_nightly": 717.09,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 4384.58,
+      "taxes_total": 531.14,
+      "fees_total_excl_taxes": 427.4,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $103.90",
+          "amount": 103.9
+        },
+        {
+          "name": "Travel Insurance (optional) $323.50",
+          "amount": 323.5
+        }
+      ],
+      "grand_total": 5019.62,
+      "quoted_total": 4384.58,
+      "fee_pct_of_base": 0.1,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.22,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/44/buy?rcav%5Bbegin%5D=01%2F23%2F2027&rcav%5Bend%5D=01%2F30%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=44&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-126299&eid=44",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T13:10:34.616Z",
+      "captured_at": "2026-10-27T13:10:34.616Z",
+      "source_listing_id": "reve-de-mer-3-lockoff",
+      "currency": "USD",
+      "start_date": "2027-01-30",
+      "end_date": "2027-02-06",
+      "check_in_date": "2027-01-30",
+      "check_out_date": "2027-02-06",
+      "nights": 7,
+      "base_nightly": 626.37,
+      "all_in_nightly": 717.09,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 4384.58,
+      "taxes_total": 531.14,
+      "fees_total_excl_taxes": 427.4,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $103.90",
+          "amount": 103.9
+        },
+        {
+          "name": "Travel Insurance (optional) $323.50",
+          "amount": 323.5
+        }
+      ],
+      "grand_total": 5019.62,
+      "quoted_total": 4384.58,
+      "fee_pct_of_base": 0.1,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.22,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/44/buy?rcav%5Bbegin%5D=01%2F30%2F2027&rcav%5Bend%5D=02%2F06%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=44&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-126299&eid=44",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T13:10:34.616Z",
+      "captured_at": "2026-10-27T13:10:34.616Z",
+      "source_listing_id": "reve-de-mer-3-lockoff",
+      "currency": "USD",
+      "start_date": "2027-02-27",
+      "end_date": "2027-03-06",
+      "check_in_date": "2027-02-27",
+      "check_out_date": "2027-03-06",
+      "nights": 7,
+      "base_nightly": 631.19,
+      "all_in_nightly": 722.61,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 4418.34,
+      "taxes_total": 535.24,
+      "fees_total_excl_taxes": 430.69,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $104.70",
+          "amount": 104.7
+        },
+        {
+          "name": "Travel Insurance (optional) $325.99",
+          "amount": 325.99
+        }
+      ],
+      "grand_total": 5058.28,
+      "quoted_total": 4418.34,
+      "fee_pct_of_base": 0.1,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.22,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/44/buy?rcav%5Bbegin%5D=02%2F27%2F2027&rcav%5Bend%5D=03%2F06%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=44&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-126299&eid=44",
+      "source": "quote_api"
+    }
+  ]
 }

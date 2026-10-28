@@ -2,15 +2,826 @@
   "adapter_key": "homeownerscollection30a",
   "external_listing_id": "lemonade-stand",
   "detail_url": "https://www.homeownerscollection.com/seaside-vacation-rentals/lemonade-stand",
-  "captured_at": "2026-05-26T13:46:29.934Z",
+  "captured_at": "2026-10-27T23:06:52.149Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_anchor_adaptive_span",
   "quote_window_gap_policy": "probe_longest_available_span",
-  "quote_window_anchor_date": "2026-05-30",
+  "quote_window_anchor_date": "2026-10-31",
   "quote_window_days": 168,
   "quote_sample_step_days": 1,
   "quote_nights": 7,
-  "quote_max_queries": 24,
+  "quote_max_queries": 1,
   "endpoint_path": "/rcapi/item/avail/search",
-  "observations": []
+  "quote_run_diagnostics": {
+    "queried_windows": 1,
+    "available_windows": 0,
+    "unavailable_windows": 1,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {
+      "QUOTE_UNAVAILABLE": 1
+    },
+    "sample_internal_errors": []
+  },
+  "observations": [
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2026-10-31",
+      "end_date": "2026-11-07",
+      "check_in_date": "2026-10-31",
+      "check_out_date": "2026-11-07",
+      "nights": 7,
+      "base_nightly": 1807.22,
+      "all_in_nightly": 2205.53,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 12650.54,
+      "taxes_total": 1633.62,
+      "fees_total_excl_taxes": 2149.55,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $319.56",
+          "amount": 319.56
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $994.99",
+          "amount": 994.99
+        }
+      ],
+      "grand_total": 15438.72,
+      "quoted_total": 12650.54,
+      "fee_pct_of_base": 0.17,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.3,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=10%2F31%2F2026&rcav%5Bend%5D=11%2F07%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2026-11-07",
+      "end_date": "2026-11-14",
+      "check_in_date": "2026-11-07",
+      "check_out_date": "2026-11-14",
+      "nights": 7,
+      "base_nightly": 1807.22,
+      "all_in_nightly": 2205.53,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 12650.54,
+      "taxes_total": 1633.62,
+      "fees_total_excl_taxes": 2149.55,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $319.56",
+          "amount": 319.56
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $994.99",
+          "amount": 994.99
+        }
+      ],
+      "grand_total": 15438.72,
+      "quoted_total": 12650.54,
+      "fee_pct_of_base": 0.17,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.3,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=11%2F07%2F2026&rcav%5Bend%5D=11%2F14%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2026-11-14",
+      "end_date": "2026-11-21",
+      "check_in_date": "2026-11-14",
+      "check_out_date": "2026-11-21",
+      "nights": 7,
+      "base_nightly": 1807.22,
+      "all_in_nightly": 2205.53,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 12650.54,
+      "taxes_total": 1633.62,
+      "fees_total_excl_taxes": 2149.55,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $319.56",
+          "amount": 319.56
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $994.99",
+          "amount": 994.99
+        }
+      ],
+      "grand_total": 15438.72,
+      "quoted_total": 12650.54,
+      "fee_pct_of_base": 0.17,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.3,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=11%2F14%2F2026&rcav%5Bend%5D=11%2F21%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2026-11-21",
+      "end_date": "2026-11-28",
+      "check_in_date": "2026-11-21",
+      "check_out_date": "2026-11-28",
+      "nights": 7,
+      "base_nightly": 1959.29,
+      "all_in_nightly": 2379.63,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 13715.03,
+      "taxes_total": 1762.57,
+      "fees_total_excl_taxes": 2253.32,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $344.79",
+          "amount": 344.79
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $1,073.53",
+          "amount": 1073.53
+        }
+      ],
+      "grand_total": 16657.39,
+      "quoted_total": 13715.03,
+      "fee_pct_of_base": 0.16,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.29,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=11%2F21%2F2026&rcav%5Bend%5D=11%2F28%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2026-11-28",
+      "end_date": "2026-12-05",
+      "check_in_date": "2026-11-28",
+      "check_out_date": "2026-12-05",
+      "nights": 7,
+      "base_nightly": 1488.31,
+      "all_in_nightly": 1840.43,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10418.16,
+      "taxes_total": 1363.19,
+      "fees_total_excl_taxes": 1931.94,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $266.66",
+          "amount": 266.66
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $830.28",
+          "amount": 830.28
+        }
+      ],
+      "grand_total": 12883.01,
+      "quoted_total": 10418.16,
+      "fee_pct_of_base": 0.19,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.32,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=11%2F28%2F2026&rcav%5Bend%5D=12%2F05%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2026-12-05",
+      "end_date": "2026-12-12",
+      "check_in_date": "2026-12-05",
+      "check_out_date": "2026-12-12",
+      "nights": 7,
+      "base_nightly": 1413.7,
+      "all_in_nightly": 1755.02,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 9895.93,
+      "taxes_total": 1299.92,
+      "fees_total_excl_taxes": 1881.04,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $254.29",
+          "amount": 254.29
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $791.75",
+          "amount": 791.75
+        }
+      ],
+      "grand_total": 12285.14,
+      "quoted_total": 9895.93,
+      "fee_pct_of_base": 0.19,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.32,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=12%2F05%2F2026&rcav%5Bend%5D=12%2F12%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2026-12-12",
+      "end_date": "2026-12-19",
+      "check_in_date": "2026-12-12",
+      "check_out_date": "2026-12-19",
+      "nights": 7,
+      "base_nightly": 1413.7,
+      "all_in_nightly": 1755.02,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 9895.93,
+      "taxes_total": 1299.92,
+      "fees_total_excl_taxes": 1881.04,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $254.29",
+          "amount": 254.29
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $791.75",
+          "amount": 791.75
+        }
+      ],
+      "grand_total": 12285.14,
+      "quoted_total": 9895.93,
+      "fee_pct_of_base": 0.19,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.32,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=12%2F12%2F2026&rcav%5Bend%5D=12%2F19%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2026-12-19",
+      "end_date": "2026-12-26",
+      "check_in_date": "2026-12-19",
+      "check_out_date": "2026-12-26",
+      "nights": 7,
+      "base_nightly": 1413.7,
+      "all_in_nightly": 1755.02,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 9895.93,
+      "taxes_total": 1299.92,
+      "fees_total_excl_taxes": 1881.04,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $254.29",
+          "amount": 254.29
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $791.75",
+          "amount": 791.75
+        }
+      ],
+      "grand_total": 12285.14,
+      "quoted_total": 9895.93,
+      "fee_pct_of_base": 0.19,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.32,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=12%2F19%2F2026&rcav%5Bend%5D=12%2F26%2F2026&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-01-02",
+      "end_date": "2027-01-09",
+      "check_in_date": "2027-01-02",
+      "check_out_date": "2027-01-09",
+      "nights": 7,
+      "base_nightly": 1541.36,
+      "all_in_nightly": 1901.16,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10789.52,
+      "taxes_total": 1408.17,
+      "fees_total_excl_taxes": 1968.14,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $275.46",
+          "amount": 275.46
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $857.68",
+          "amount": 857.68
+        }
+      ],
+      "grand_total": 13308.15,
+      "quoted_total": 10789.52,
+      "fee_pct_of_base": 0.18,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.31,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=01%2F02%2F2027&rcav%5Bend%5D=01%2F09%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-01-09",
+      "end_date": "2027-01-16",
+      "check_in_date": "2027-01-09",
+      "check_out_date": "2027-01-16",
+      "nights": 7,
+      "base_nightly": 1541.36,
+      "all_in_nightly": 1901.16,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10789.52,
+      "taxes_total": 1408.17,
+      "fees_total_excl_taxes": 1968.14,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $275.46",
+          "amount": 275.46
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $857.68",
+          "amount": 857.68
+        }
+      ],
+      "grand_total": 13308.15,
+      "quoted_total": 10789.52,
+      "fee_pct_of_base": 0.18,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.31,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=01%2F09%2F2027&rcav%5Bend%5D=01%2F16%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-01-16",
+      "end_date": "2027-01-23",
+      "check_in_date": "2027-01-16",
+      "check_out_date": "2027-01-23",
+      "nights": 7,
+      "base_nightly": 1541.36,
+      "all_in_nightly": 1901.16,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10789.52,
+      "taxes_total": 1408.17,
+      "fees_total_excl_taxes": 1968.14,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $275.46",
+          "amount": 275.46
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $857.68",
+          "amount": 857.68
+        }
+      ],
+      "grand_total": 13308.15,
+      "quoted_total": 10789.52,
+      "fee_pct_of_base": 0.18,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.31,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=01%2F16%2F2027&rcav%5Bend%5D=01%2F23%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-01-23",
+      "end_date": "2027-01-30",
+      "check_in_date": "2027-01-23",
+      "check_out_date": "2027-01-30",
+      "nights": 7,
+      "base_nightly": 1541.36,
+      "all_in_nightly": 1901.16,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10789.52,
+      "taxes_total": 1408.17,
+      "fees_total_excl_taxes": 1968.14,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $275.46",
+          "amount": 275.46
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $857.68",
+          "amount": 857.68
+        }
+      ],
+      "grand_total": 13308.15,
+      "quoted_total": 10789.52,
+      "fee_pct_of_base": 0.18,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.31,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=01%2F23%2F2027&rcav%5Bend%5D=01%2F30%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-01-30",
+      "end_date": "2027-02-06",
+      "check_in_date": "2027-01-30",
+      "check_out_date": "2027-02-06",
+      "nights": 7,
+      "base_nightly": 1541.36,
+      "all_in_nightly": 1901.16,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10789.52,
+      "taxes_total": 1408.17,
+      "fees_total_excl_taxes": 1968.14,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $275.46",
+          "amount": 275.46
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $857.68",
+          "amount": 857.68
+        }
+      ],
+      "grand_total": 13308.15,
+      "quoted_total": 10789.52,
+      "fee_pct_of_base": 0.18,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.31,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=01%2F30%2F2027&rcav%5Bend%5D=02%2F06%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-02-06",
+      "end_date": "2027-02-13",
+      "check_in_date": "2027-02-06",
+      "check_out_date": "2027-02-13",
+      "nights": 7,
+      "base_nightly": 1541.36,
+      "all_in_nightly": 1901.16,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10789.52,
+      "taxes_total": 1408.17,
+      "fees_total_excl_taxes": 1968.14,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $275.46",
+          "amount": 275.46
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $857.68",
+          "amount": 857.68
+        }
+      ],
+      "grand_total": 13308.15,
+      "quoted_total": 10789.52,
+      "fee_pct_of_base": 0.18,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.31,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=02%2F06%2F2027&rcav%5Bend%5D=02%2F13%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-02-13",
+      "end_date": "2027-02-20",
+      "check_in_date": "2027-02-13",
+      "check_out_date": "2027-02-20",
+      "nights": 7,
+      "base_nightly": 1541.36,
+      "all_in_nightly": 1901.16,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10789.52,
+      "taxes_total": 1408.17,
+      "fees_total_excl_taxes": 1968.14,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $275.46",
+          "amount": 275.46
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $857.68",
+          "amount": 857.68
+        }
+      ],
+      "grand_total": 13308.15,
+      "quoted_total": 10789.52,
+      "fee_pct_of_base": 0.18,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.31,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=02%2F13%2F2027&rcav%5Bend%5D=02%2F20%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-02-20",
+      "end_date": "2027-02-27",
+      "check_in_date": "2027-02-20",
+      "check_out_date": "2027-02-27",
+      "nights": 7,
+      "base_nightly": 1541.36,
+      "all_in_nightly": 1901.16,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10789.52,
+      "taxes_total": 1408.17,
+      "fees_total_excl_taxes": 1968.14,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $275.46",
+          "amount": 275.46
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $857.68",
+          "amount": 857.68
+        }
+      ],
+      "grand_total": 13308.15,
+      "quoted_total": 10789.52,
+      "fee_pct_of_base": 0.18,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.31,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=02%2F20%2F2027&rcav%5Bend%5D=02%2F27%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-02-27",
+      "end_date": "2027-03-06",
+      "check_in_date": "2027-02-27",
+      "check_out_date": "2027-03-06",
+      "nights": 7,
+      "base_nightly": 1541.36,
+      "all_in_nightly": 1901.16,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 10789.52,
+      "taxes_total": 1408.17,
+      "fees_total_excl_taxes": 1968.14,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $275.46",
+          "amount": 275.46
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $857.68",
+          "amount": 857.68
+        }
+      ],
+      "grand_total": 13308.15,
+      "quoted_total": 10789.52,
+      "fee_pct_of_base": 0.18,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.31,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=02%2F27%2F2027&rcav%5Bend%5D=03%2F06%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-03-06",
+      "end_date": "2027-03-13",
+      "check_in_date": "2027-03-06",
+      "check_out_date": "2027-03-13",
+      "nights": 7,
+      "base_nightly": 2230.27,
+      "all_in_nightly": 2689.86,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 15611.92,
+      "taxes_total": 1992.35,
+      "fees_total_excl_taxes": 2438.23,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $389.74",
+          "amount": 389.74
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $1,213.49",
+          "amount": 1213.49
+        }
+      ],
+      "grand_total": 18829.01,
+      "quoted_total": 15611.92,
+      "fee_pct_of_base": 0.16,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.28,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=03%2F06%2F2027&rcav%5Bend%5D=03%2F13%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-03-13",
+      "end_date": "2027-03-20",
+      "check_in_date": "2027-03-13",
+      "check_out_date": "2027-03-20",
+      "nights": 7,
+      "base_nightly": 2230.27,
+      "all_in_nightly": 2689.86,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 15611.92,
+      "taxes_total": 1992.35,
+      "fees_total_excl_taxes": 2438.23,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $389.74",
+          "amount": 389.74
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $1,213.49",
+          "amount": 1213.49
+        }
+      ],
+      "grand_total": 18829.01,
+      "quoted_total": 15611.92,
+      "fee_pct_of_base": 0.16,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.28,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=03%2F13%2F2027&rcav%5Bend%5D=03%2F20%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    },
+    {
+      "sampled_at": "2026-10-27T12:55:35.838Z",
+      "captured_at": "2026-10-27T12:55:35.838Z",
+      "source_listing_id": "lemonade-stand",
+      "currency": "USD",
+      "start_date": "2027-03-20",
+      "end_date": "2027-03-27",
+      "check_in_date": "2027-03-20",
+      "check_out_date": "2027-03-27",
+      "nights": 7,
+      "base_nightly": 2230.27,
+      "all_in_nightly": 2689.86,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 15611.92,
+      "taxes_total": 1992.35,
+      "fees_total_excl_taxes": 2438.23,
+      "fee_lines": [
+        {
+          "name": "Seaside A&E Fee (Optional) Call to remove fee. $389.74",
+          "amount": 389.74
+        },
+        {
+          "name": "Departure Clean $835.00",
+          "amount": 835
+        },
+        {
+          "name": "Travel Insurance (optional) $1,213.49",
+          "amount": 1213.49
+        }
+      ],
+      "grand_total": 18829.01,
+      "quoted_total": 15611.92,
+      "fee_pct_of_base": 0.16,
+      "tax_pct_of_base": 0.13,
+      "non_base_pct_of_total": 0.28,
+      "all_in_multiplier": 1,
+      "handoff_url": "https://www.homeownerscollection.com/rescms/item/202/buy?rcav%5Bbegin%5D=03%2F20%2F2027&rcav%5Bend%5D=03%2F27%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=202&rcav%5Bcoupon%5D=&rcav%5BIDs%5D%5B8%5D%5B%5D=2236-270164&eid=202",
+      "source": "quote_api"
+    }
+  ]
 }

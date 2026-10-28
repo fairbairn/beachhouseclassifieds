@@ -4,10 +4,10 @@
   "fetched_at": "2026-05-27T17:39:52.851Z",
   "html_path": "src/lib/data/external-sources/royaldestinations/details/html/forever-grateful.html",
   "listing_flags": {
-    "non_bookable_online": false,
-    "availability_validation_exempt": false,
-    "availability_validation_exempt_reason_code": null,
-    "availability_validation_exempt_reason": null
+    "non_bookable_online": true,
+    "availability_validation_exempt": true,
+    "availability_validation_exempt_reason_code": "non_bookable_online",
+    "availability_validation_exempt_reason": "Operator-reviewed listing remains all-unavailable across capture window"
   },
   "title": "Forever Grateful | 8BR Rental on 30A | Royal Destinations",
   "h1": "Forever Grateful",
@@ -218,10 +218,12 @@
     "source": "pm_royaldestinations",
     "external_listing_id": "forever-grateful",
     "captured_at": "2026-05-27T17:39:52.851Z",
-    "validation_exempt": false,
-    "validation_exempt_reason_code": null,
-    "validation_exempt_reason": null,
-    "validation_exempt_evidence": [],
+    "validation_exempt": true,
+    "validation_exempt_reason_code": "non_bookable_online",
+    "validation_exempt_reason": "Operator-reviewed listing remains all-unavailable across capture window",
+    "validation_exempt_evidence": [
+      "normalized_availability.day_codes remains all 'U' after targeted refresh"
+    ],
     "has_calendar_widget": true,
     "booking_restrictions": [],
     "min_night_rules": [],

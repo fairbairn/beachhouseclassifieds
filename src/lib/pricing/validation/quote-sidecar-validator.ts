@@ -37,7 +37,10 @@ const ADAPTER_EXPECTED_HANDOFF_SIGNATURES: Record<string, string[]> = {
 };
 
 function expectedAdapterSignatures(adapterKey: string): string[] {
-  return ADAPTER_EXPECTED_HANDOFF_SIGNATURES[adapterKey] ?? [];
+  const configured = ADAPTER_EXPECTED_HANDOFF_SIGNATURES[adapterKey] ?? [];
+  return configured
+    .map((signature) => toHandoffSignature(signature) ?? signature)
+    .filter((signature) => signature.length > 0);
 }
 
 function normalizeHandoffPathname(pathname: string): string {
@@ -47,9 +50,20 @@ function normalizeHandoffPathname(pathname: string): string {
   return pathname.replace(/\/+$/g, "");
 }
 
+function normalizeHandoffOrigin(parsed: URL): string {
+  const protocol = parsed.protocol.toLowerCase();
+  let hostname = parsed.hostname.toLowerCase();
+  if (hostname.startsWith("www.")) {
+    hostname = hostname.slice(4);
+  }
+  const port = parsed.port ? `:${parsed.port}` : "";
+  return `${protocol}//${hostname}${port}`;
+}
+
 function toHandoffSignature(handoffUrl: string): string | null {
   try {
     const parsed = new URL(handoffUrl);
+    const normalizedOrigin = normalizeHandoffOrigin(parsed);
     const normalizedPathname = normalizeHandoffPathname(parsed.pathname);
     const queryKeys = [...new Set(parsed.searchParams.keys())].sort();
     const hashPayload = parsed.hash.startsWith("#")
@@ -59,14 +73,14 @@ function toHandoffSignature(handoffUrl: string): string | null {
     const hashKeys = [...new Set(hashParams.keys())].sort();
 
     if (queryKeys.length > 0) {
-      return `${parsed.origin}${normalizedPathname}?keys=${queryKeys.join(",")}`;
+      return `${normalizedOrigin}${normalizedPathname}?keys=${queryKeys.join(",")}`;
     }
 
     if (hashKeys.length > 0) {
-      return `${parsed.origin}${normalizedPathname}#keys=${hashKeys.join(",")}`;
+      return `${normalizedOrigin}${normalizedPathname}#keys=${hashKeys.join(",")}`;
     }
 
-    return `${parsed.origin}${normalizedPathname}`;
+    return `${normalizedOrigin}${normalizedPathname}`;
   } catch {
     return null;
   }

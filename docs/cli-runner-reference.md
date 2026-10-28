@@ -152,6 +152,37 @@ Example (analyze-ish run without forcing all listings):
 npm run pricing:quote:adapter -- --adapter-key funvacay30a --max-listings 20 --skip-fresh-quotes --fresh-hours 24
 ```
 
+## 3b) Adapter Listing Prune Runner
+
+- Package command: `npm run pricing:prune:listings -- --adapter-key <key> [flags]`
+- Wrapper: `src/lib/scripts/run-prune-adapter-listings.ts`
+- Use when: remove non-quotable or orphaned listings from canonical index and matching artifacts in one repeatable operation.
+
+Flags:
+
+- `--adapter-key <key>` (required)
+- Listing selection:
+  - `--listing-id <id>` (repeatable)
+  - `--listing-ids <id1,id2,...>`
+  - `--listing-ids-file <path>` (one listing id per line, `#` comments allowed)
+- Behavior:
+  - `--dry-run`
+
+Behavior details:
+
+- Removes selected listing IDs from `details/index.json`.
+- Removes matching artifacts (when present) from:
+  - `details/json/<id>.json`
+  - `details/html/<id>.html`
+  - `details/quotes/<id>.json`
+  - `details/pricing/<id>.json`
+
+Example:
+
+```bash
+npm run pricing:prune:listings -- --adapter-key homeownerscollection30a --listing-ids alta-vista,blessings-sea,cherry-top
+```
+
 ## 4) Quote Sidecar Validator
 
 - Package command: `npm run pricing:validate:quotes -- --adapter-key <key> [flags]`

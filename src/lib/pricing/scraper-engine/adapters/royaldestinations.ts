@@ -171,7 +171,11 @@ const NON_LISTING_SLUGS = new Set([
   "south-30a",
 ]);
 const AVAILABILITY_VALIDATION_EXEMPT_LISTING_IDS = new Set([
+  "281-salt-box-lane",
+  "afternoon-nap",
+  "forever-grateful",
   "sandpipers-retreat",
+  "sugar-magnolia",
 ]);
 const OUTPUT_ROOT = resolve(
   process.cwd(),

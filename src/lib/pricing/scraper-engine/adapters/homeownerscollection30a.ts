@@ -203,7 +203,7 @@ type LuxuryDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://homeownerscollection.com/seaside-vacation-rentals#q=*%3A*";
+  "https://www.homeownerscollection.com/seaside-vacation-rentals#q=*%3A*";
 const EXPECTED_LISTING_COUNT = 208;
 const OUTPUT_ROOT = resolve(
   process.cwd(),
@@ -1393,11 +1393,26 @@ async function discoverListings(
       const toNormalized = (hrefValue: string): string => {
         try {
           const absolute = new URL(hrefValue, window.location.origin);
-          if (!absolute.hostname.endsWith("homeownerscollection.com")) {
+
+          // Rezfusion result cards are frequently wrapped by tracking links
+          // where the true listing URL lives in destination_url.
+          const resolved = (() => {
+            const destination = absolute.searchParams.get("destination_url");
+            if (!destination) {
+              return absolute;
+            }
+            try {
+              return new URL(destination, window.location.origin);
+            } catch {
+              return absolute;
+            }
+          })();
+
+          if (!resolved.hostname.endsWith("homeownerscollection.com")) {
             return "";
           }
 
-          const normalizedPath = absolute.pathname
+          const normalizedPath = resolved.pathname
             .toLowerCase()
             .replace(/\/+$/, "");
           if (!normalizedPath.startsWith("/seaside-vacation-rentals/")) {
@@ -1418,30 +1433,115 @@ async function discoverListings(
             return "";
           }
 
-          return `${absolute.origin}${absolute.pathname}`.replace(/\/$/, "");
+          return `${resolved.origin}${resolved.pathname}`.replace(/\/$/, "");
         } catch {
           return "";
         }
       };
 
-      for (const anchor of Array.from(
-        document.querySelectorAll(
-          "#riot-solr-search > riot-solr-result-list a[href]",
-        ),
-      )) {
-        const isRecommended = (() => {
-          const container =
+      const NON_LISTING_SLUGS = new Set([
+        "house",
+        "condo",
+        "pets-allowed",
+        "beachfront",
+        "beach-side",
+        "gulf-view",
+        "partial-gulf-view",
+        "large-vacation-homes",
+        "outdoor-living",
+        "rooftop-deck",
+        "tower",
+        "1-bedroom",
+        "2-bedrooms",
+        "3-bedrooms",
+        "4-bedrooms",
+        "5-bedrooms",
+      ]);
+
+      const isLikelyListingCardAnchor = (
+        anchor: HTMLAnchorElement,
+      ): boolean => {
+        const hrefRaw = anchor.getAttribute("href") ?? "";
+        if (!hrefRaw) {
+          return false;
+        }
+
+        const classText = (anchor.className ?? "").toString().toLowerCase();
+        const parentClassText = (
+          (
             anchor.closest(
-              "section, article, aside, .block, .view, .item-list, .panel, .region",
-            ) ?? anchor.parentElement;
-          const contextText = (
-            container?.textContent ??
-            anchor.textContent ??
-            ""
+              ".rsSlide, .tag-content, .image-wrapper",
+            ) as HTMLElement | null
+          )?.className ?? ""
+        )
+          .toString()
+          .toLowerCase();
+
+        const hasCardClass =
+          classText.includes("itemlink") ||
+          classText.includes("new-listing") ||
+          parentClassText.includes("rsslide") ||
+          parentClassText.includes("tag-content") ||
+          parentClassText.includes("image-wrapper");
+
+        let hasListingTrackingSignal = false;
+        try {
+          const parsed = new URL(hrefRaw, window.location.origin);
+          const entityId = (
+            parsed.searchParams.get("entity_id") ?? ""
           ).toLowerCase();
-          return contextText.includes("recommended for you");
-        })();
-        if (isRecommended) {
+          hasListingTrackingSignal = entityId.includes("hospitality_listings");
+        } catch {
+          hasListingTrackingSignal = false;
+        }
+
+        return hasCardClass || hasListingTrackingSignal;
+      };
+
+      const isInRecommendedSection = (anchor: HTMLAnchorElement): boolean => {
+        const recommendedAncestor = anchor.closest(
+          [
+            '[id*="recommended"]',
+            '[class*="recommended"]',
+            "[data-recommended]",
+            '[data-section*="recommended"]',
+            '[aria-label*="recommended" i]',
+          ].join(","),
+        );
+        if (recommendedAncestor) {
+          return true;
+        }
+
+        // Fallback heuristic: some templates render the heading nearby rather
+        // than as a direct ancestor container.
+        const nearbyContainer =
+          anchor.closest(
+            "section, article, aside, .block, .view, .item-list, .panel, .region",
+          ) ?? anchor.parentElement;
+        const nearbyText = (
+          nearbyContainer?.textContent ??
+          anchor.textContent ??
+          ""
+        ).toLowerCase();
+        return nearbyText.includes("recommended for you");
+      };
+
+      const candidateAnchors = Array.from(
+        document.querySelectorAll(
+          "riot-solr-result-list a[href], #riot-solr-search > riot-solr-result-list a[href]",
+        ),
+      );
+
+      for (const anchor of candidateAnchors) {
+        if (!(anchor instanceof HTMLAnchorElement)) {
+          continue;
+        }
+
+        if (!isLikelyListingCardAnchor(anchor)) {
+          continue;
+        }
+
+        if (isInRecommendedSection(anchor)) {
           continue;
         }
 
@@ -1453,6 +1553,12 @@ async function discoverListings(
 
         const normalized = toNormalized(hrefRaw);
         if (!normalized || seen.has(normalized)) {
+          continue;
+        }
+
+        const normalizedSlug =
+          normalized.split("/").filter(Boolean).at(-1)?.toLowerCase() ?? "";
+        if (NON_LISTING_SLUGS.has(normalizedSlug)) {
           continue;
         }
 
@@ -1486,8 +1592,19 @@ async function discoverListings(
   let discovery = await readDiscoverySnapshot();
   let previousCount = discovery.rows.length;
   let stagnantSteps = 0;
-  const effectiveScrollSteps = Math.max(8, maxScrollSteps);
+  // This adapter lazy-renders cards in batches; allow a longer discovery runway.
+  const effectiveScrollSteps = Math.max(32, maxScrollSteps * 2);
   const effectivePauseMs = Math.max(350, Math.min(scrollPauseMs, 1200));
+
+  // Warm up result hydration for pages that render cards after initial app boot.
+  for (
+    let attempt = 0;
+    attempt < 4 && discovery.rows.length === 0;
+    attempt += 1
+  ) {
+    await page.waitForTimeout(effectivePauseMs);
+    discovery = await readDiscoverySnapshot();
+  }
 
   if (discovery.expectedCount !== null) {
     reportProgress(
@@ -1511,7 +1628,38 @@ async function discoverListings(
     }
 
     await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight);
+      const stepPx = Math.max(420, Math.floor(window.innerHeight * 0.8));
+      window.scrollBy(0, stepPx);
+
+      const scrollCandidates = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "#riot-solr-search, #riot-solr-search *",
+        ),
+      )
+        .filter((node) => {
+          if (node.offsetParent === null) {
+            return false;
+          }
+          const overflowY = window.getComputedStyle(node).overflowY;
+          if (!["auto", "scroll"].includes(overflowY)) {
+            return false;
+          }
+          return node.scrollHeight - node.clientHeight > 120;
+        })
+        .sort(
+          (left, right) =>
+            right.scrollHeight -
+            right.clientHeight -
+            (left.scrollHeight - left.clientHeight),
+        )
+        .slice(0, 4);
+
+      for (const container of scrollCandidates) {
+        container.scrollTop = Math.min(
+          container.scrollTop + stepPx,
+          container.scrollHeight,
+        );
+      }
     });
     await page.waitForTimeout(effectivePauseMs);
 
@@ -1528,7 +1676,37 @@ async function discoverListings(
     }
 
     stagnantSteps += 1;
-    if (stagnantSteps >= 3) {
+    if (stagnantSteps >= 4) {
+      await page.evaluate(() => {
+        // Force a viewport traversal to re-trigger lazy-loaded result panels.
+        window.scrollTo(0, 0);
+      });
+      await page.waitForTimeout(effectivePauseMs);
+      await page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+      await page.waitForTimeout(effectivePauseMs);
+      await clickTab(page, "load more");
+
+      discovery = await readDiscoverySnapshot();
+      if (discovery.rows.length > previousCount) {
+        reportProgress(
+          `discovery resumed to ${discovery.rows.length}${
+            discovery.expectedCount ? `/${discovery.expectedCount}` : ""
+          } after lazy-load retrigger`,
+        );
+        previousCount = discovery.rows.length;
+        stagnantSteps = 0;
+        continue;
+      }
+    }
+
+    if (stagnantSteps >= 20 && discovery.rows.length > 0) {
+      reportProgress(
+        `discovery plateaued at ${discovery.rows.length}${
+          discovery.expectedCount ? `/${discovery.expectedCount}` : ""
+        } after extended lazy-load attempts`,
+      );
       break;
     }
   }

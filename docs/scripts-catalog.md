@@ -18,8 +18,8 @@ Use this page for inventory and ownership coverage.
 
 ## Coverage Summary
 
-1. Top-level TypeScript scripts in src/lib/scripts: 35
-2. Package-surfaced scripts: 32
+1. Top-level TypeScript scripts in src/lib/scripts: 36
+2. Package-surfaced scripts: 33
 3. Internal-only scripts: 3
 
 ## Inventory
@@ -46,6 +46,7 @@ Use this page for inventory and ownership coverage.
 | src/lib/scripts/run-listing-duplicate-analysis.ts             | listings           | listings:duplicates:analyze:raw                                                                                                                                                                | active        | duplicate analysis and exclusion sync   |
 | src/lib/scripts/run-occupancy-health-check.ts                 | pricing-and-scrape | occupancy:health:raw                                                                                                                                                                           | active        | occupancy health diagnostics            |
 | src/lib/scripts/run-pricing-cache.ts                          | pricing-and-scrape | pricing:cache:30aescapes:raw, pricing:cache:360blue:raw, pricing:cache:adapter:raw, pricing:cache:homeownerscollection30a:raw, pricing:cache:keyco30a:raw, pricing:cache:royaldestinations:raw | active        | pricing cache builder                   |
+| src/lib/scripts/run-prune-adapter-listings.ts                | pricing-and-scrape | pricing:prune:listings:raw                                                                                                                                                                    | active        | canonical listing prune utility         |
 | src/lib/scripts/run-pricing-validation.ts                     | pricing-and-scrape | pricing:validate:cache:raw                                                                                                                                                                     | active        | pricing cache validation                |
 | src/lib/scripts/run-pull-source-images-to-b2.ts               | media              | images:pull:source:raw                                                                                                                                                                         | active        | source image pull to B2                 |
 | src/lib/scripts/run-quote-handoff-alignment-all.ts            | pricing-and-scrape | pricing:validate:handoff:all:raw                                                                                                                                                               | active        | handoff alignment all-adapter run       |

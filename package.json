@@ -190,6 +190,8 @@
     "pricing:summary:refresh:postgres:local": "tsx src/scripts/target.ts --target postgres:local --mode db:check -- npm run pricing:summary:refresh:raw --",
     "pricing:quote:adapter:raw": "tsx src/lib/scripts/run-adapter-quote.ts",
     "pricing:quote:adapter": "npm run pricing:quote:adapter:raw --",
+    "pricing:prune:listings:raw": "tsx src/lib/scripts/run-prune-adapter-listings.ts",
+    "pricing:prune:listings": "npm run pricing:prune:listings:raw --",
     "pricing:audit:quote-isolation:raw": "tsx src/lib/scripts/run-quote-module-isolation-audit.ts",
     "pricing:audit:quote-isolation": "npm run pricing:audit:quote-isolation:raw",
     "pricing:latency:quotes:raw": "tsx src/lib/scripts/run-quote-latency-benchmark.ts",
