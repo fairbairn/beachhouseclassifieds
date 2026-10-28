@@ -1386,6 +1386,14 @@ export function createParadise30AAdapter(): ScraperAdapter<Paradise30ADetailReco
         "paradise30a",
         argv,
       );
+      const hasCoveredWindowOverride = normalizedArgs.some(
+        (arg) =>
+          arg === "--skip-covered-windows" ||
+          arg === "--no-skip-covered-windows",
+      );
+      const runArgs = hasCoveredWindowOverride
+        ? normalizedArgs
+        : [...normalizedArgs, "--no-skip-covered-windows"];
       await runRuntimeAdapterQuoteCli(
         {
           adapterKey: "paradise30a",
@@ -1396,7 +1404,7 @@ export function createParadise30AAdapter(): ScraperAdapter<Paradise30ADetailReco
           defaultTaxPct: 0.12,
           defaultBaseNightly: 700,
         },
-        normalizedArgs,
+        runArgs,
         progress,
       );
     },

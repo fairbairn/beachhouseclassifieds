@@ -1,3 +1,5 @@
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
+import { postJsonViaCloakBrowserEngine } from "../shared/cloakbrowser-browser-engine";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type RouterFeeLine = {
@@ -32,6 +34,7 @@ const ROUTER_ENDPOINT = `${BASE_HOST}/vacation-rentals/router/`;
 const DEFAULT_TIMEOUT_MS = 20000;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const USE_PROXY = shouldAdapterUseProxy(ADAPTER_KEY);
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -112,6 +115,14 @@ function isRateLimitedMessage(value: string | null): boolean {
     normalized.includes("rate limit") ||
     normalized.includes("throttle")
   );
+}
+
+function buildResponseSnippet(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.length > 240 ? `${trimmed.slice(0, 240)}...` : trimmed;
 }
 
 function normalizeTimeoutMs(raw: number | undefined): number {
@@ -245,9 +256,6 @@ export async function executeParadise30aSingleQuote(
     children: Math.max(0, input.children),
   });
 
-  const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
     const payload = {
       call: "getPrice",
@@ -266,8 +274,13 @@ export async function executeParadise30aSingleQuote(
       sdpBool: false,
     };
 
-    const response = await fetch(ROUTER_ENDPOINT, {
-      method: "POST",
+    const response = await postJsonViaCloakBrowserEngine({
+      adapterKey: ADAPTER_KEY,
+      listingId: input.listingId,
+      detailUrl: quoteContext.detailUrl,
+      endpoint: ROUTER_ENDPOINT,
+      timeoutMs,
+      userAgent: USER_AGENT,
       headers: {
         accept: "application/json, text/plain, */*",
         "content-type": "application/json;charset=UTF-8",
@@ -275,9 +288,35 @@ export async function executeParadise30aSingleQuote(
         referer: quoteContext.detailUrl,
         origin: BASE_HOST,
       },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
+      body: payload,
+      useProxy: USE_PROXY,
+      enablePersistentProfile: false,
     });
+
+    if (response.requestError) {
+      return {
+        success: false,
+        elapsedMs: performance.now() - startedAt,
+        error: toError({
+          code: "QUOTE_REQUEST_FAILED",
+          message: `Router request failed (HTTP ${response.httpStatus}): ${response.requestError}`,
+          retryable: true,
+          listingId: input.listingId,
+          checkInIso: input.checkInIso,
+          checkOutIso: input.checkOutIso,
+          details: {
+            handoffUrl,
+            proxyEnabledByPolicy: USE_PROXY,
+            proxyConfigured: Boolean(
+              process.env.HTTPS_PROXY ??
+              process.env.HTTP_PROXY ??
+              process.env.https_proxy ??
+              process.env.http_proxy,
+            ),
+          },
+        }),
+      };
+    }
 
     if (!response.ok) {
       return {
@@ -285,22 +324,57 @@ export async function executeParadise30aSingleQuote(
         elapsedMs: performance.now() - startedAt,
         error: toError({
           code:
-            response.status === 429
+            response.httpStatus === 429
               ? "QUOTE_RATE_LIMITED"
               : "QUOTE_UNAVAILABLE",
-          message: `Router HTTP ${response.status}`,
-          retryable: response.status >= 500 || response.status === 429,
+          message: `Router HTTP ${response.httpStatus}`,
+          retryable: response.httpStatus >= 500 || response.httpStatus === 429,
           listingId: input.listingId,
           checkInIso: input.checkInIso,
           checkOutIso: input.checkOutIso,
           details: {
             handoffUrl,
+            proxyEnabledByPolicy: USE_PROXY,
+            proxyConfigured: Boolean(
+              process.env.HTTPS_PROXY ??
+              process.env.HTTP_PROXY ??
+              process.env.https_proxy ??
+              process.env.http_proxy,
+            ),
+            responseBodySnippet: buildResponseSnippet(response.bodyText),
           },
         }),
       };
     }
 
-    const rawPayload = (await response.json()) as RouterQuoteResponse;
+    let rawPayload: RouterQuoteResponse;
+    try {
+      rawPayload = JSON.parse(response.bodyText) as RouterQuoteResponse;
+    } catch {
+      return {
+        success: false,
+        elapsedMs: performance.now() - startedAt,
+        error: toError({
+          code: "QUOTE_REQUEST_FAILED",
+          message: `Router returned invalid JSON (HTTP ${response.httpStatus})`,
+          retryable: true,
+          listingId: input.listingId,
+          checkInIso: input.checkInIso,
+          checkOutIso: input.checkOutIso,
+          details: {
+            handoffUrl,
+            proxyEnabledByPolicy: USE_PROXY,
+            proxyConfigured: Boolean(
+              process.env.HTTPS_PROXY ??
+              process.env.HTTP_PROXY ??
+              process.env.https_proxy ??
+              process.env.http_proxy,
+            ),
+            responseBodySnippet: buildResponseSnippet(response.bodyText),
+          },
+        }),
+      };
+    }
 
     const apiError = asOptionalString(rawPayload.apiError);
     const errorMsg = asOptionalString(rawPayload.errorMsg);
@@ -405,10 +479,15 @@ export async function executeParadise30aSingleQuote(
         checkOutIso: input.checkOutIso,
         details: {
           handoffUrl,
+          proxyEnabledByPolicy: USE_PROXY,
+          proxyConfigured: Boolean(
+            process.env.HTTPS_PROXY ??
+            process.env.HTTP_PROXY ??
+            process.env.https_proxy ??
+            process.env.http_proxy,
+          ),
         },
       }),
     };
-  } finally {
-    clearTimeout(timeoutHandle);
   }
 }
