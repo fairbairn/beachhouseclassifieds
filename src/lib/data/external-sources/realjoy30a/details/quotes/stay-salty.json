@@ -2,15 +2,54 @@
   "adapter_key": "realjoy30a",
   "external_listing_id": "stay-salty",
   "detail_url": "https://www.realjoy.com/beach-rentals/stay-salty",
-  "captured_at": "2026-05-27T17:29:15.921Z",
+  "captured_at": "2026-10-28T23:29:27.829Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_anchor_adaptive_span",
   "quote_window_gap_policy": "probe_longest_available_span",
-  "quote_window_anchor_date": "2026-05-30",
+  "quote_window_anchor_date": "2026-10-31",
   "quote_window_days": 168,
   "quote_sample_step_days": 1,
   "quote_nights": 7,
-  "quote_max_queries": 0,
+  "quote_max_queries": 6,
   "endpoint_path": "/ajax/quote",
-  "observations": []
+  "quote_run_diagnostics": {
+    "queried_windows": 6,
+    "available_windows": 1,
+    "unavailable_windows": 5,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {
+      "QUOTE_UNAVAILABLE": 5
+    },
+    "sample_internal_errors": []
+  },
+  "observations": [
+    {
+      "sampled_at": "2026-10-28T23:29:27.829Z",
+      "captured_at": "2026-10-28T23:29:27.829Z",
+      "source_listing_id": "stay-salty",
+      "currency": "USD",
+      "start_date": "2026-11-28",
+      "end_date": "2026-12-05",
+      "check_in_date": "2026-11-28",
+      "check_out_date": "2026-12-05",
+      "nights": 7,
+      "base_nightly": 155.75,
+      "all_in_nightly": 287.24,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 1090.23,
+      "taxes_total": 215.42,
+      "fees_total_excl_taxes": 705,
+      "fee_lines": [],
+      "grand_total": 2010.65,
+      "quoted_total": 2010.65,
+      "fee_pct_of_base": 0.646653,
+      "tax_pct_of_base": 0.197591,
+      "non_base_pct_of_total": 0.457772,
+      "all_in_multiplier": 1.844244,
+      "handoff_url": "https://www.realjoy.com/beach-rentals/book-now?propertyID=1097&checkin=11%2F28%2F2026&checkout=12%2F05%2F2026&promocode=",
+      "source": "quote_api",
+      "pricing_source": "runtime_parsed"
+    }
+  ]
 }

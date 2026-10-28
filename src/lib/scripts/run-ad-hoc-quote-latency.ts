@@ -1,10 +1,11 @@
 import "@/core/tooling/env/load-env-profile";
 
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import {
   getKnownQuoteRuntimeAdapterKeys,
   getQuoteRuntimeExecutor,
 } from "@/lib/pricing/quote-runtime/registry";
-import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
+import { scanAdapterBookableWindowCandidates } from "@/lib/pricing/shared/bookable-window-candidates";
 import { selectCanonicalListings } from "@/lib/pricing/shared/canonical-index-listings";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -42,17 +43,6 @@ type QuotesSidecar = {
   detail_url?: string;
   endpoint_path?: string;
   observations?: QuoteObservation[];
-};
-
-type DetailAvailabilityDay = {
-  date?: string;
-  is_available?: boolean;
-};
-
-type DetailSidecar = {
-  normalized_availability?: {
-    days?: DetailAvailabilityDay[];
-  };
 };
 
 type ListingSample = {
@@ -163,6 +153,10 @@ const ANSI_ESCAPE_REGEX = new RegExp(
 
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+function todayIsoUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function paint(text: string, color: string): string {
   return `${color}${text}${COLOR.reset}`;
 }
@@ -189,7 +183,7 @@ function fmtCurrency(value: number | null): string {
 }
 
 function shellEscapeSingleQuotes(value: string): string {
-  return value.replace(/'/g, `'"'"'`);
+  return value.replace(/'/g, `"'"'`);
 }
 
 function parsePostStyleHandoffUrl(input: string): {
@@ -443,6 +437,15 @@ function pickRandom<T>(items: T[]): T {
   return items[index]!;
 }
 
+function shuffleArray<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex]!, copy[index]!];
+  }
+  return copy;
+}
+
 function readDetailUrlFromQuoteContext(
   quoteContext: Record<string, unknown> | null,
 ): string | null {
@@ -605,16 +608,54 @@ async function listAdaptersWithQuotes(): Promise<string[]> {
   return withQuotes;
 }
 
+function resolveBookableWindowsForListing(
+  listing: Awaited<ReturnType<typeof selectCanonicalListings>>[number],
+  windowsByListingId: Map<
+    string,
+    Array<{
+      startDate: string;
+      endDate: string;
+    }>
+  >,
+): Array<{ startDate: string; endDate: string; handoffUrl: string }> {
+  const candidateKeys = [
+    listing.externalListingId,
+    listing.fileId,
+    listing.detailFileBaseName,
+  ].filter(Boolean);
+
+  for (const key of candidateKeys) {
+    const windows = windowsByListingId.get(key);
+    if (!windows || windows.length === 0) {
+      continue;
+    }
+    return windows.map((window) => ({
+      startDate: window.startDate,
+      endDate: window.endDate,
+      handoffUrl: "",
+    }));
+  }
+
+  return [];
+}
+
 async function collectListingSamplesForAdapter(
   adapterKey: string,
   options: CliOptions,
   maxSamplesOverride?: number | null,
 ): Promise<ListingSample[]> {
   const quotesDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "quotes");
-  const detailsJsonDir = resolve(BASE_DATA_ROOT, adapterKey, "details", "json");
+  const minStartDate = todayIsoUtc();
   const activeListings = await selectCanonicalListings({
     adapterKey,
     maxListings: null,
+  });
+  const bookableWindowsByListingId = await scanAdapterBookableWindowCandidates({
+    adapterKey,
+    fromDate: minStartDate,
+    nightsChoices: DETAIL_WINDOW_NIGHTS_CANDIDATES,
+    maxWindowsPerListing: MAX_FALLBACK_WINDOWS_PER_LISTING,
+    baseDataRoot: BASE_DATA_ROOT,
   });
 
   const candidates: ListingSample[] = [];
@@ -651,7 +692,7 @@ async function collectListingSamplesForAdapter(
         typeof observation.handoff_url === "string",
     );
 
-    const fallbackWindows = [...validAvailableObservations]
+    const observationWindows = [...validAvailableObservations]
       .sort((left, right) => {
         const leftKey = `${left.start_date ?? ""}|${left.end_date ?? ""}|${left.handoff_url ?? ""}`;
         const rightKey = `${right.start_date ?? ""}|${right.end_date ?? ""}|${right.handoff_url ?? ""}`;
@@ -663,6 +704,24 @@ async function collectListingSamplesForAdapter(
         endDate: observation.end_date!,
         handoffUrl: observation.handoff_url!,
       }));
+
+    const detailFallbackWindows = resolveBookableWindowsForListing(
+      listing,
+      bookableWindowsByListingId,
+    );
+    const contiguousFutureWindows = detailFallbackWindows.filter(
+      (window) => window.startDate >= minStartDate,
+    );
+    const contiguousWindowKeys = new Set(
+      contiguousFutureWindows.map(
+        (window) => `${window.startDate}|${window.endDate}`,
+      ),
+    );
+    const fallbackWindows = observationWindows.filter(
+      (window) =>
+        window.startDate >= minStartDate &&
+        contiguousWindowKeys.has(`${window.startDate}|${window.endDate}`),
+    );
 
     const selectedObservation = fallbackWindows[0];
     if (
@@ -688,11 +747,7 @@ async function collectListingSamplesForAdapter(
       continue;
     }
 
-    const detailFallbackWindows = await loadAvailabilityWindowsFromDetail({
-      detailsJsonDir,
-      listing,
-    });
-    const selectedDetailWindow = detailFallbackWindows[0];
+    const selectedDetailWindow = contiguousFutureWindows[0];
     if (!selectedDetailWindow) {
       continue;
     }
@@ -706,7 +761,7 @@ async function collectListingSamplesForAdapter(
       endDate: selectedDetailWindow.endDate,
       handoffUrl: "",
       availableObservations: availableObservations.length,
-      fallbackWindows: detailFallbackWindows,
+      fallbackWindows: contiguousFutureWindows,
     });
   }
 
@@ -743,39 +798,106 @@ function addDays(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function buildWindowsFromAvailabilityDays(
-  days: DetailAvailabilityDay[],
-): Array<{ startDate: string; endDate: string; handoffUrl: string }> {
-  const availableDates = days
-    .map((day) => ({
-      date: toIsoDate(day.date),
-      available: day.is_available === true,
-    }))
-    .filter(
-      (day): day is { date: string; available: boolean } =>
-        day.date !== null && day.available,
-    )
-    .map((day) => day.date)
-    .sort((left, right) => left.localeCompare(right));
-
-  if (availableDates.length === 0) {
+function normalizeDetailAvailabilityDays(
+  normalizedAvailability: DetailSidecar["normalized_availability"] | undefined,
+): DetailAvailabilityDay[] {
+  if (!normalizedAvailability || typeof normalizedAvailability !== "object") {
     return [];
   }
 
-  const uniqueDates = Array.from(new Set(availableDates));
-  const runs: string[][] = [];
-  let currentRun: string[] = [];
+  if (Array.isArray(normalizedAvailability.days)) {
+    return normalizedAvailability.days;
+  }
 
-  for (const date of uniqueDates) {
+  const fallbackDays: DetailAvailabilityDay[] = [];
+  for (const [key, value] of Object.entries(normalizedAvailability)) {
+    if (!ISO_DATE_REGEX.test(key)) {
+      continue;
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      continue;
+    }
+    fallbackDays.push({
+      date: key,
+      ...(value as Omit<DetailAvailabilityDay, "date">),
+    });
+  }
+
+  return fallbackDays;
+}
+
+function buildWindowsFromAvailabilityDays(
+  days: DetailAvailabilityDay[],
+): Array<{ startDate: string; endDate: string; handoffUrl: string }> {
+  const availableDays = days
+    .map((day) => {
+      const date = toIsoDate(day.date);
+      if (!date) {
+        return null;
+      }
+
+      const bookingState =
+        typeof day.booking_day_state === "string"
+          ? day.booking_day_state.trim().toLowerCase()
+          : "";
+      const statusCode =
+        typeof day.status_code === "string"
+          ? day.status_code.trim().toUpperCase()
+          : "";
+      const availableByState = bookingState === "bookable";
+      const availableByStatus = statusCode === "A" || statusCode === "O";
+      const available =
+        availableByState || day.is_available === true || availableByStatus;
+      if (!available) {
+        return null;
+      }
+
+      const parsedMinNights = Number(day.min_nights);
+      const parsedMinNightsRequired = Number(day.min_nights_required);
+      const minNights =
+        Number.isFinite(parsedMinNightsRequired) && parsedMinNightsRequired > 0
+          ? Math.floor(parsedMinNightsRequired)
+          : Number.isFinite(parsedMinNights) && parsedMinNights > 0
+            ? Math.floor(parsedMinNights)
+            : 1;
+
+      return {
+        date,
+        minNights,
+      };
+    })
+    .filter((day): day is { date: string; minNights: number } => day !== null)
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  if (availableDays.length === 0) {
+    return [];
+  }
+
+  const uniqueByDate = new Map<string, { date: string; minNights: number }>();
+  for (const day of availableDays) {
+    const existing = uniqueByDate.get(day.date);
+    if (!existing || day.minNights > existing.minNights) {
+      uniqueByDate.set(day.date, day);
+    }
+  }
+
+  const uniqueDates = [...uniqueByDate.values()].sort((left, right) =>
+    left.date.localeCompare(right.date),
+  );
+
+  const runs: Array<Array<{ date: string; minNights: number }>> = [];
+  let currentRun: Array<{ date: string; minNights: number }> = [];
+
+  for (const day of uniqueDates) {
     if (currentRun.length === 0) {
-      currentRun.push(date);
+      currentRun.push(day);
       continue;
     }
 
     const previous = currentRun[currentRun.length - 1]!;
-    const nextExpected = addDays(previous, 1);
-    if (date === nextExpected) {
-      currentRun.push(date);
+    const nextExpected = addDays(previous.date, 1);
+    if (day.date === nextExpected) {
+      currentRun.push(day);
       continue;
     }
 
@@ -791,23 +913,54 @@ function buildWindowsFromAvailabilityDays(
     endDate: string;
     handoffUrl: string;
   }> = [];
+
   for (const run of runs) {
-    const runLength = run.length;
-    for (const nights of DETAIL_WINDOW_NIGHTS_CANDIDATES) {
-      if (runLength < nights) {
-        continue;
+    for (let startIndex = 0; startIndex < run.length; startIndex += 1) {
+      const minNightsAtStart = run[startIndex]?.minNights ?? 1;
+      const candidateNights = Array.from(
+        new Set([...DETAIL_WINDOW_NIGHTS_CANDIDATES, minNightsAtStart]),
+      ).sort((left, right) => left - right);
+
+      for (const nights of candidateNights) {
+        const endIndexExclusive = startIndex + nights;
+        if (endIndexExclusive > run.length) {
+          continue;
+        }
+
+        const segment = run.slice(startIndex, endIndexExclusive);
+        const requiredNights = segment.reduce(
+          (max, day) => Math.max(max, day.minNights),
+          minNightsAtStart,
+        );
+        if (nights < requiredNights) {
+          continue;
+        }
+
+        const startDate = segment[0]?.date;
+        if (!startDate) {
+          continue;
+        }
+
+        const endDate = addDays(startDate, nights);
+        windows.push({
+          startDate,
+          endDate,
+          handoffUrl: "",
+        });
       }
-      const startDate = run[0]!;
-      const endDate = addDays(startDate, nights);
-      windows.push({
-        startDate,
-        endDate,
-        handoffUrl: "",
-      });
     }
   }
 
-  return windows.slice(0, MAX_FALLBACK_WINDOWS_PER_LISTING);
+  const deduped = Array.from(
+    new Map(
+      windows.map((window) => [
+        `${window.startDate}|${window.endDate}`,
+        window,
+      ]),
+    ).values(),
+  );
+
+  return deduped.slice(0, MAX_FALLBACK_WINDOWS_PER_LISTING);
 }
 
 async function loadAvailabilityWindowsFromDetail(input: {
@@ -827,8 +980,10 @@ async function loadAvailabilityWindowsFromDetail(input: {
     try {
       const raw = await readFile(detailPath, "utf8");
       const parsed = JSON.parse(raw) as DetailSidecar;
-      const days = parsed.normalized_availability?.days;
-      if (!Array.isArray(days)) {
+      const days = normalizeDetailAvailabilityDays(
+        parsed.normalized_availability,
+      );
+      if (days.length === 0) {
         continue;
       }
       const windows = buildWindowsFromAvailabilityDays(days);
@@ -2123,6 +2278,7 @@ async function main(): Promise<void> {
 
     const adapterKey = adapters[0]!;
     let sample: ListingSample;
+    let precomputedResult: RequestResult | null = null;
 
     if (options.randomSingle) {
       const candidates = await collectListingSamplesForAdapter(
@@ -2136,26 +2292,57 @@ async function main(): Promise<void> {
         );
       }
 
-      const chosenListing = pickRandom(candidates);
-      const windows =
-        chosenListing.fallbackWindows.length > 0
-          ? chosenListing.fallbackWindows
-          : [
-              {
-                startDate: chosenListing.startDate,
-                endDate: chosenListing.endDate,
-                handoffUrl: chosenListing.handoffUrl,
-              },
-            ];
-      const chosenWindow = pickRandom(windows);
+      const listingPool = shuffleArray(candidates);
+      let selectedSample: ListingSample | null = null;
+      let selectedResult: RequestResult | null = null;
+      let attemptedListings = 0;
 
-      sample = {
-        ...chosenListing,
-        startDate: chosenWindow.startDate,
-        endDate: chosenWindow.endDate,
-        handoffUrl: chosenWindow.handoffUrl,
-        fallbackWindows: [],
-      };
+      for (const chosenListing of listingPool) {
+        attemptedListings += 1;
+        const randomizedWindows =
+          chosenListing.fallbackWindows.length > 0
+            ? shuffleArray(chosenListing.fallbackWindows)
+            : [
+                {
+                  startDate: chosenListing.startDate,
+                  endDate: chosenListing.endDate,
+                  handoffUrl: chosenListing.handoffUrl,
+                },
+              ];
+
+        const windowPool = randomizedWindows.filter(
+          (window) =>
+            isIsoDate(window.startDate) &&
+            isIsoDate(window.endDate) &&
+            window.startDate < window.endDate,
+        );
+        if (windowPool.length === 0) {
+          continue;
+        }
+
+        const listingSample: ListingSample = {
+          ...chosenListing,
+          startDate: windowPool[0]!.startDate,
+          endDate: windowPool[0]!.endDate,
+          handoffUrl: windowPool[0]!.handoffUrl,
+          fallbackWindows: windowPool,
+        };
+        const result = await runSingleQuoteRequest(listingSample, options);
+        if (result.success) {
+          selectedSample = listingSample;
+          selectedResult = result;
+          break;
+        }
+      }
+
+      if (!selectedSample || !selectedResult) {
+        throw new Error(
+          `Could not find a suitable random single-quote candidate across ${attemptedListings} scanned listings.`,
+        );
+      }
+
+      sample = selectedSample;
+      precomputedResult = selectedResult;
     } else {
       sample = await buildExplicitSingleSample({
         adapterKey,
@@ -2176,7 +2363,9 @@ async function main(): Promise<void> {
       printExecutionContext(adapterKey);
     }
 
-    const result = await runSingleQuoteRequestOnceWithTimeout(sample, options);
+    const result =
+      precomputedResult ??
+      (await runSingleQuoteRequestOnceWithTimeout(sample, options));
     if (options.jsonOutput) {
       const baseTotal = result.observationSample.baseTotal;
       const feesTotal = result.observationSample.feesTotalExclTaxes;
