@@ -1,3 +1,4 @@
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type SandersQuoteContext = {
@@ -28,6 +29,9 @@ const DEFAULT_TAX_RATE = 0.12;
 const DEFAULT_TIMEOUT_MS = 20000;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const USE_PROXY = shouldAdapterUseProxy(ADAPTER_KEY);
+
+let cachedProxyDispatcherPromise: Promise<unknown | null> | null = null;
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -72,6 +76,47 @@ function normalizeTimeoutMs(raw: number | undefined): number {
     return DEFAULT_TIMEOUT_MS;
   }
   return Math.max(1000, Math.floor(raw));
+}
+
+function resolveProxyUrl(useProxy: boolean): string | null {
+  if (!useProxy) {
+    return null;
+  }
+
+  const proxy =
+    process.env.HTTPS_PROXY ??
+    process.env.HTTP_PROXY ??
+    process.env.https_proxy ??
+    process.env.http_proxy;
+  const normalized = proxy?.trim();
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+async function resolveProxyDispatcher(): Promise<unknown | null> {
+  const proxyUrl = resolveProxyUrl(USE_PROXY);
+  if (!proxyUrl) {
+    return null;
+  }
+
+  try {
+    const undiciModule = (await import("undici")) as {
+      ProxyAgent?: new (input: { uri: string }) => unknown;
+    };
+    const ProxyAgent = undiciModule.ProxyAgent;
+    if (!ProxyAgent) {
+      return null;
+    }
+    return new ProxyAgent({ uri: proxyUrl });
+  } catch {
+    return null;
+  }
+}
+
+async function getProxyDispatcher(): Promise<unknown | null> {
+  if (!cachedProxyDispatcherPromise) {
+    cachedProxyDispatcherPromise = resolveProxyDispatcher();
+  }
+  return cachedProxyDispatcherPromise;
 }
 
 function buildSearchUrl(input: {
@@ -174,7 +219,8 @@ async function fetchRcapiRows(input: {
   const timeoutHandle = setTimeout(() => controller.abort(), input.timeoutMs);
 
   try {
-    const response = await fetch(input.url, {
+    const dispatcher = await getProxyDispatcher();
+    const requestInit: RequestInit & { dispatcher?: unknown } = {
       method: "GET",
       headers: {
         accept: "application/json, text/plain, */*",
@@ -184,7 +230,13 @@ async function fetchRcapiRows(input: {
         origin: BASE_HOST,
       },
       signal: controller.signal,
-    });
+    };
+
+    if (dispatcher) {
+      requestInit.dispatcher = dispatcher;
+    }
+
+    const response = await fetch(input.url, requestInit);
 
     if (!response.ok) {
       return [];
