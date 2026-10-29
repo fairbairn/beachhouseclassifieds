@@ -222,8 +222,7 @@ type StayAt30ADetailRecord = DetailRecordBase & {
   };
 };
 
-const DEFAULT_ANCHOR_URL =
-  "https://www.stayat30avacationrentals.com/30a-vacation-rentals/";
+const DEFAULT_ANCHOR_URL = "https://stayat30a.com/book-now/";
 const EXPECTED_LISTING_COUNT = 37;
 const DETAIL_PATH_PREFIXES = ["/vacation-rentals/"];
 const OUTPUT_ROOT = resolve(
@@ -1759,13 +1758,11 @@ async function discoverListings(
 
   let discovery = await readDiscoverySnapshot();
   let previousCount = discovery.rows.length;
-  let stagnantSteps = 0;
-  // This stack relies on incremental lazy load; allow deeper passes.
-  const effectiveScrollSteps = Math.max(120, maxScrollSteps);
+  const perPageScrollSteps = Math.max(8, Math.min(maxScrollSteps, 20));
   const effectivePauseMs = Math.max(320, Math.min(scrollPauseMs, 1200));
   const wheelDelta = Math.max(
-    560,
-    Math.floor((page.viewportSize()?.height ?? 900) * 0.85),
+    480,
+    Math.floor((page.viewportSize()?.height ?? 900) * 0.75),
   );
 
   if (discovery.expectedCount !== null) {
@@ -1778,39 +1775,96 @@ async function discoverListings(
     );
   }
 
-  for (let step = 0; step < effectiveScrollSteps; step += 1) {
-    if (
-      discovery.expectedCount !== null &&
-      discovery.rows.length >= discovery.expectedCount
-    ) {
-      reportProgress(
-        `discovery reached expected count after scroll step ${step}: ${discovery.rows.length}/${discovery.expectedCount}`,
-      );
-      break;
-    }
+  const clickNextResultsPage = async (): Promise<boolean> =>
+    page.evaluate(() => {
+      const selectors = [
+        "a[rel='next']",
+        ".pagination a.next",
+        ".pagination .next a",
+        "a.page-numbers.next",
+        "li.next a",
+        "a[aria-label*='next' i]",
+        "button[aria-label*='next' i]",
+      ];
 
-    await page.mouse.wheel(0, wheelDelta);
-    await page.evaluate(() => {
-      window.scrollBy(0, Math.floor(window.innerHeight * 0.5));
+      for (const selector of selectors) {
+        const candidate = document.querySelector(selector);
+        if (!candidate) {
+          continue;
+        }
+
+        const disabled =
+          candidate.getAttribute("aria-disabled") === "true" ||
+          candidate.classList.contains("disabled") ||
+          candidate.getAttribute("disabled") !== null;
+
+        if (disabled) {
+          continue;
+        }
+
+        if (candidate instanceof HTMLElement) {
+          candidate.click();
+          return true;
+        }
+      }
+
+      return false;
     });
-    await page.waitForTimeout(effectivePauseMs);
+
+  const visitedUrls = new Set<string>([page.url()]);
+  const maxPages = Math.max(
+    4,
+    discovery.expectedCount !== null
+      ? Math.ceil(discovery.expectedCount / 12) + 2
+      : 8,
+  );
+
+  for (let pageIndex = 1; pageIndex <= maxPages; pageIndex += 1) {
+    for (let scrollStep = 0; scrollStep < perPageScrollSteps; scrollStep += 1) {
+      await page.mouse.wheel(0, wheelDelta);
+      await page.evaluate(() => {
+        window.scrollBy(0, Math.floor(window.innerHeight * 0.45));
+      });
+      await page.waitForTimeout(effectivePauseMs);
+    }
 
     discovery = await readDiscoverySnapshot();
     if (discovery.rows.length > previousCount) {
       reportProgress(
         `discovery grew to ${discovery.rows.length}${
           discovery.expectedCount ? `/${discovery.expectedCount}` : ""
-        } at scroll step ${step + 1}`,
+        } at page ${pageIndex}`,
       );
       previousCount = discovery.rows.length;
-      stagnantSteps = 0;
-      continue;
     }
 
-    stagnantSteps += 1;
-    if (stagnantSteps >= 24 && step >= 100) {
+    if (
+      discovery.expectedCount !== null &&
+      discovery.rows.length >= discovery.expectedCount
+    ) {
+      reportProgress(
+        `discovery reached expected count at page ${pageIndex}: ${discovery.rows.length}/${discovery.expectedCount}`,
+      );
       break;
     }
+
+    const clickedNext = await clickNextResultsPage();
+    if (!clickedNext) {
+      break;
+    }
+
+    await page.waitForTimeout(Math.max(900, effectivePauseMs));
+    try {
+      await page.waitForLoadState("domcontentloaded", { timeout: 8000 });
+    } catch {
+      // Some navigation is AJAX-only and never triggers full load.
+    }
+
+    const currentUrl = page.url();
+    if (visitedUrls.has(currentUrl)) {
+      break;
+    }
+    visitedUrls.add(currentUrl);
   }
 
   if (discovery.expectedCount !== null) {

@@ -1,7 +1,7 @@
 # Adapter Operations Top-Down Flow
 
 Status: active
-Last updated: 2026-10-26
+Last updated: 2026-10-29
 
 ## Purpose
 
@@ -50,7 +50,34 @@ npm run pricing:validate:rooms -- --adapter-key <adapterKey>
 
 6. If step 2 reports orphan artifacts, remove orphans immediately and re-run step 2 before moving on.
 
-### Manual Orphan Cleanup Procedure (Required)
+### Preferred Orphan Cleanup Procedure (Required)
+
+When step 2 reports `orphan_artifact` warnings, use the prune runner first. This keeps canonical index + artifact cleanup in one command.
+
+1. Run scrape filename validator and collect orphan listing IDs from warning lines.
+
+```bash
+npm run pricing:validate:scrape-filenames -- --adapter-key <adapterKey>
+```
+
+2. Remove all orphan listing IDs with the prune runner.
+
+```bash
+npm run pricing:prune:listings -- --adapter-key <adapterKey> --listing-ids <id1,id2,...>
+```
+
+- Equivalent granular flags are also supported: `--listing-id <id>` (repeatable) and `--listing-ids-file <path>`.
+- This command updates `details/index.json` and removes matching artifacts in `details/json`, `details/html`, `details/quotes`, and `details/pricing`.
+
+3. Re-run scrape filename validator and confirm no orphan warnings remain.
+
+```bash
+npm run pricing:validate:scrape-filenames -- --adapter-key <adapterKey>
+```
+
+4. Continue to availability/media/rooms validators only after orphan warnings are cleared.
+
+### Manual Orphan Cleanup Procedure (Fallback)
 
 When step 2 reports `orphan_artifact` warnings, perform cleanup manually with this exact order.
 

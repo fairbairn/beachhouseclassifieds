@@ -43,6 +43,13 @@ Generated projects should include:
 - Catch errors and print concise operator-facing messages.
 - Handle `Ctrl-C` gracefully in interactive routines.
 
+## Terminal Command Policy
+
+- Run existing npm scripts directly as written (for example: `npm run <script> -- <flags>`).
+- Do not wrap npm script execution in helper functions, temporary shell wrappers, custom harness commands, or scripted batching aliases.
+- Do not introduce heredoc-style command blocks for routine operations.
+- If a non-direct command pattern is truly required, ask operator permission first before running it.
+
 ## Adapter Identity and Runtime Quote Context
 
 - Prefer slug-based `external_listing_id` whenever an adapter has stable listing slugs.

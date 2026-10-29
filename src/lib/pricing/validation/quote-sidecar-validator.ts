@@ -31,6 +31,9 @@ const ADAPTER_EXPECTED_HANDOFF_SIGNATURES: Record<string, string[]> = {
   scenicstays30a: [
     "https://myscenicstays.com/rentals/book-now?propertyID=1&checkin=01/01/2026&checkout=01/08/2026",
   ],
+  stayon30a: [
+    "https://stayon30a.com/checkout?listing=abc123&property=demo-home&checkIn=2026-01-01&checkOut=2026-01-08&guests=2",
+  ],
   stayat30a: [
     "https://www.stayat30avacationrentals.com/vacation-rentals/checkout/?keys=arr,depart,id,nights,persons,quote",
   ],

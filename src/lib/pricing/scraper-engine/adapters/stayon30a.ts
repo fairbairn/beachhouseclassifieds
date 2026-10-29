@@ -423,6 +423,685 @@ async function activateDetailPopups(
   return "";
 }
 
+type PopupAmenitiesCapture = {
+  categories: Record<string, string[]>;
+  all: string[];
+};
+
+function dedupeAmenityCategories(
+  categories: Record<string, string[]>,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [category, values] of Object.entries(categories)) {
+    const cleanedCategory = category.trim();
+    if (!cleanedCategory) {
+      continue;
+    }
+    const deduped = dedupePreserveOrder(
+      values.map((value) => value.trim()).filter((value) => value.length > 0),
+    );
+    if (deduped.length > 0) {
+      out[cleanedCategory] = deduped;
+    }
+  }
+  return out;
+}
+
+function extractAmenitiesFromPopupHtml(html: string): PopupAmenitiesCapture {
+  const headingMatch =
+    /<h[1-6][^>]*>\s*What\s*this\s*place\s*offers\s*<\/h[1-6]>/i.exec(html);
+  if (!headingMatch || typeof headingMatch.index !== "number") {
+    return { categories: {}, all: [] };
+  }
+
+  const afterHeading = html.slice(headingMatch.index + headingMatch[0].length);
+  const dialogEnd = afterHeading.search(/<\/dialog>/i);
+  const region =
+    dialogEnd >= 0
+      ? afterHeading.slice(0, dialogEnd)
+      : afterHeading.slice(0, 300000);
+
+  const headings = Array.from(region.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi));
+  if (headings.length === 0) {
+    return { categories: {}, all: [] };
+  }
+
+  const categories: Record<string, string[]> = {};
+  const all: string[] = [];
+
+  for (let index = 0; index < headings.length; index += 1) {
+    const current = headings[index];
+    if (!current || typeof current.index !== "number") {
+      continue;
+    }
+
+    const category = stripHtml(current[1] ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!category) {
+      continue;
+    }
+
+    const segmentStart = current.index + current[0].length;
+    const next = headings[index + 1];
+    const segmentEnd =
+      next && typeof next.index === "number" ? next.index : region.length;
+    const segment = region.slice(segmentStart, segmentEnd);
+
+    const values = Array.from(segment.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi))
+      .map((match) =>
+        stripHtml(match[1] ?? "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      )
+      .filter((value) => value.length > 0);
+
+    if (values.length === 0) {
+      continue;
+    }
+
+    categories[category] = dedupePreserveOrder(values);
+    all.push(...values);
+  }
+
+  return {
+    categories: dedupeAmenityCategories(categories),
+    all: dedupePreserveOrder(all),
+  };
+}
+
+async function extractAmenitiesFromPopupDialog(
+  page: Awaited<
+    ReturnType<{ newPage: () => Promise<DiscoverContext["page"]> }["newPage"]>
+  >,
+): Promise<PopupAmenitiesCapture> {
+  return page.evaluate(() => {
+    const heading = Array.from(
+      document.querySelectorAll<HTMLElement>("h1, h2, h3"),
+    ).find((node) => {
+      const text = (node.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+      if (text !== "what this place offers") {
+        return false;
+      }
+      const style = window.getComputedStyle(node);
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        Number(style.opacity || "1") <= 0
+      ) {
+        return false;
+      }
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+
+    if (!heading) {
+      return { categories: {}, all: [] };
+    }
+
+    const dialog =
+      heading.closest<HTMLElement>(
+        "[role='dialog'], .dialog-widget-content, .elementor-popup-modal, .elementor-location-popup",
+      ) ?? heading.parentElement;
+    if (!dialog) {
+      return { categories: {}, all: [] };
+    }
+    const dialogStyle = window.getComputedStyle(dialog);
+    if (
+      dialogStyle.display === "none" ||
+      dialogStyle.visibility === "hidden" ||
+      Number(dialogStyle.opacity || "1") <= 0
+    ) {
+      return { categories: {}, all: [] };
+    }
+    const dialogRect = dialog.getBoundingClientRect();
+    if (!(dialogRect.width > 0 && dialogRect.height > 0)) {
+      return { categories: {}, all: [] };
+    }
+
+    const categories: Record<string, string[]> = {};
+    const all: string[] = [];
+
+    for (const section of Array.from(
+      dialog.querySelectorAll<HTMLElement>("section, div"),
+    )) {
+      const categoryHeading = section.querySelector<HTMLElement>("h3");
+      if (!categoryHeading) {
+        continue;
+      }
+      const category = (categoryHeading.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!category) {
+        continue;
+      }
+
+      const values = Array.from(section.querySelectorAll<HTMLElement>("li"))
+        .map((item) => (item.textContent ?? "").replace(/\s+/g, " ").trim())
+        .filter((value) => value.length > 0);
+      if (values.length === 0) {
+        continue;
+      }
+
+      categories[category] = values;
+      all.push(...values);
+    }
+
+    if (Object.keys(categories).length === 0) {
+      const fallback = Array.from(dialog.querySelectorAll<HTMLElement>("li"))
+        .map((item) => (item.textContent ?? "").replace(/\s+/g, " ").trim())
+        .filter((value) => value.length > 0);
+      if (fallback.length > 0) {
+        categories["Popup Amenities"] = fallback;
+        all.push(...fallback);
+      }
+    }
+
+    return { categories, all };
+  });
+}
+
+async function captureModalPopupContent(
+  page: Awaited<
+    ReturnType<{ newPage: () => Promise<DiscoverContext["page"]> }["newPage"]>
+  >,
+): Promise<{
+  aboutDescription: string;
+  popupAmenities: PopupAmenitiesCapture;
+  popupAmenitiesHtml: string;
+  galleryPopupHtml: string;
+  galleryCarouselImageUrls: string[];
+}> {
+  try {
+    await page.setViewportSize({ width: 1440, height: 2200 });
+    await page.waitForTimeout(150);
+  } catch {
+    // Keep default viewport if resize is unsupported.
+  }
+
+  const clickVisibleButtonByExactText = async (
+    textPattern: RegExp,
+  ): Promise<boolean> =>
+    page.evaluate(
+      String.raw`(() => {
+        const pattern = new RegExp(` +
+        JSON.stringify(textPattern.source) +
+        String.raw`, 'i');
+        const isVisible = (node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          const style = window.getComputedStyle(node);
+          if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') <= 0) {
+            return false;
+          }
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        };
+
+        const nodes = Array.from(document.querySelectorAll("button, a, [role='button']"));
+        const target = nodes.find((node) => {
+          if (!isVisible(node)) return false;
+          const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+          return pattern.test(text);
+        });
+        if (target) {
+          target.click();
+          return true;
+        }
+
+        const fallbackNode = Array.from(document.querySelectorAll('*')).find((node) => {
+          if (!isVisible(node)) return false;
+          const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!pattern.test(text)) return false;
+          const interactive = node.closest("button, a, [role='button']");
+          return Boolean(interactive && isVisible(interactive));
+        });
+
+        const interactive = fallbackNode ? fallbackNode.closest("button, a, [role='button']") : null;
+        if (!interactive || !isVisible(interactive)) {
+          return false;
+        }
+        interactive.click();
+        return true;
+      })()`,
+    );
+
+  const closeActiveDialog = async (): Promise<void> => {
+    await page.evaluate(() => {
+      const closeButton = Array.from(
+        document.querySelectorAll<HTMLElement>("button, [role='button']"),
+      ).find((node) => {
+        const ariaLabel = (node.getAttribute("aria-label") ?? "").toLowerCase();
+        if (!ariaLabel.includes("close")) {
+          return false;
+        }
+        const style = window.getComputedStyle(node);
+        return (
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          Number(style.opacity || "1") > 0
+        );
+      });
+      closeButton?.click();
+    });
+    await page.waitForTimeout(250);
+  };
+
+  let aboutDescription = await activateDetailPopups(page);
+  let popupAmenities: PopupAmenitiesCapture = { categories: {}, all: [] };
+  let popupAmenitiesHtml = "";
+  let galleryPopupHtml = "";
+  let galleryCarouselImageUrls: string[] = [];
+
+  const collectGalleryPopupImageUrls = async (): Promise<string[]> =>
+    page.evaluate(String.raw`(() => {
+      const isVisible = (el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') <= 0) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+
+      const normalizeTo1920 = (value) => {
+        if (!value) return '';
+        try {
+          const parsed = new URL(value, window.location.href);
+          if (!parsed.hostname.toLowerCase().endsWith('assets.guesty.com')) return '';
+          parsed.pathname = parsed.pathname
+            .replace(/\/{2,}/g, '/')
+            .replace(/(\/image\/upload\/)([^/]+)\//i, '$1w_1920,q_auto,f_auto/');
+          parsed.search = '';
+          parsed.hash = '';
+          return parsed.toString();
+        } catch {
+          return '';
+        }
+      };
+
+      const extractGuestyUrls = (value) => {
+        if (!value) return [];
+        const decoded = String(value)
+          .replace(/\\u002F/gi, '/')
+          .replace(/\\\//g, '/')
+          .trim();
+        return decoded.match(/https?:\/\/assets\.guesty\.com\/[^\s"'<>]+/gi) || [];
+      };
+
+      const dialogs = Array.from(document.querySelectorAll("[role='dialog'], dialog"))
+        .filter((dialog) => isVisible(dialog));
+
+      const dialogByImageDensity = dialogs
+        .map((dialog) => {
+          const imgs = Array.from(dialog.querySelectorAll('img'));
+          let score = 0;
+          for (const img of imgs) {
+            const candidates = [
+              img.currentSrc || '',
+              img.getAttribute('src') || '',
+              img.getAttribute('data-src') || '',
+              img.getAttribute('srcset') || '',
+              img.getAttribute('data-srcset') || '',
+            ];
+            for (const candidate of candidates) {
+              if (candidate && candidate.includes('assets.guesty.com')) {
+                score += 1;
+              }
+            }
+          }
+          return { dialog, score };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      const targetDialog = dialogByImageDensity[0]?.dialog || null;
+      if (!targetDialog) return [];
+
+      const byAsset = new Map();
+      for (const img of Array.from(targetDialog.querySelectorAll('img'))) {
+        const candidates = [
+          img.currentSrc || '',
+          img.getAttribute('src') || '',
+          img.getAttribute('data-src') || '',
+          img.getAttribute('srcset') || '',
+          img.getAttribute('data-srcset') || '',
+        ];
+
+        for (const candidate of candidates) {
+          for (const rawUrl of extractGuestyUrls(candidate)) {
+            const normalized = normalizeTo1920(rawUrl);
+            if (!normalized) continue;
+
+            let key = normalized;
+            let width = Number(normalized.match(/\/w_(\d{2,5})\b/i)?.[1] || 0);
+            if (!Number.isFinite(width)) width = 0;
+
+            try {
+              const parsed = new URL(normalized);
+              const last = parsed.pathname.split('/').filter(Boolean).at(-1) || '';
+              if (last) key = last.toLowerCase();
+            } catch {
+              // Keep URL key fallback.
+            }
+
+            const existing = byAsset.get(key);
+            if (!existing || width > existing.width) {
+              byAsset.set(key, { url: normalized, width });
+            }
+          }
+        }
+      }
+
+      return Array.from(byAsset.values()).map((entry) => entry.url);
+    })()`);
+
+  const collectCarouselPrimaryImageUrls = async (): Promise<string[]> => {
+    const openFirstThumb = await page.evaluate(String.raw`(() => {
+      const isVisible = (el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') <= 0) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+
+      const dialogs = Array.from(document.querySelectorAll("[role='dialog'], dialog"))
+        .filter((dialog) => isVisible(dialog))
+        .sort((a, b) => {
+          const aRect = a.getBoundingClientRect();
+          const bRect = b.getBoundingClientRect();
+          return bRect.width * bRect.height - aRect.width * aRect.height;
+        });
+
+      const isLikelyThumb = (node) => {
+        if (!(node instanceof HTMLElement) || !isVisible(node)) return false;
+        const label = ((node.getAttribute('aria-label') || '') + ' ' + (node.textContent || ''))
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toLowerCase();
+        if (!label) return false;
+        if (label.includes('close') || label.includes('back') || label.includes('next') || label.includes('previous')) {
+          return false;
+        }
+        if (label.includes('photo') && /\b\d+\b/.test(label)) return true;
+        return false;
+      };
+
+      for (const dialog of dialogs) {
+        const nodes = Array.from(dialog.querySelectorAll("button, [role='button'], a"));
+        const thumbByLabel = nodes.find((node) => isLikelyThumb(node));
+        if (thumbByLabel) {
+          thumbByLabel.click();
+          return true;
+        }
+
+        const thumbWithImage = nodes.find((node) => {
+          if (!(node instanceof HTMLElement) || !isVisible(node)) return false;
+          const label = ((node.getAttribute('aria-label') || '') + ' ' + (node.textContent || ''))
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+          if (label.includes('close') || label.includes('back') || label.includes('next') || label.includes('previous')) {
+            return false;
+          }
+          const img = node.querySelector('img');
+          return img !== null;
+        });
+        if (thumbWithImage) {
+          thumbWithImage.click();
+          return true;
+        }
+      }
+
+      return false;
+    })()`);
+
+    if (!openFirstThumb) {
+      return [];
+    }
+
+    await page.waitForTimeout(250);
+
+    const byAsset = new Map<string, { url: string; width: number }>();
+    const seenMarkers = new Set<string>();
+    let lastMarker = "";
+    let stagnantMarkerCount = 0;
+    const maxSteps = 220;
+
+    for (let step = 0; step < maxSteps; step += 1) {
+      const state = await page.evaluate(String.raw`(() => {
+        const isVisible = (el) => {
+          if (!(el instanceof HTMLElement)) return false;
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') <= 0) return false;
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        };
+        const toGuesty = (value) => {
+          if (!value) return '';
+          const decoded = String(value)
+            .replace(/\\u002F/gi, '/')
+            .replace(/\\\//g, '/')
+            .replace(/&quot;.*$/i, '')
+            .replace(/&#34;.*$/i, '')
+            .replace(/&#39;.*$/i, '')
+            .trim();
+          const m = decoded.match(/https?:\/\/assets\.guesty\.com\/[^\s"'<>]+/i);
+          if (!m || !m[0]) return '';
+          try {
+            const parsed = new URL(m[0], window.location.href);
+            if (!parsed.hostname.toLowerCase().endsWith('assets.guesty.com')) return '';
+            parsed.pathname = parsed.pathname.replace(/\/{2,}/g, '/');
+            parsed.search = '';
+            parsed.hash = '';
+            return parsed.toString();
+          } catch {
+            return '';
+          }
+        };
+
+        const dialogs = Array.from(document.querySelectorAll("[role='dialog'], dialog"))
+          .filter((candidate) => isVisible(candidate));
+        const withScores = dialogs.map((dialog) => {
+          const aria = (dialog.getAttribute('aria-label') || '');
+          const text = (dialog.textContent || '');
+          const scope = (aria + ' ' + text).replace(/\s+/g, ' ').trim();
+          const ofMatch = scope.match(/photo\s*(\d+)\s*of\s*(\d+)/i);
+          const slashMatch = scope.match(/\b(\d+)\s*\/\s*(\d+)\b/);
+          const total = ofMatch ? Number(ofMatch[2]) : slashMatch ? Number(slashMatch[2]) : 0;
+          const score = (ofMatch ? 5000 : 0) + (total > 0 ? total : 0);
+          return { dialog, scope, ofMatch, slashMatch, score };
+        });
+        withScores.sort((a, b) => b.score - a.score);
+        const best = withScores.find((item) => item.score > 0) || null;
+        const dialog = best?.dialog || null;
+        if (!dialog) {
+          return { found: false, marker: '', total: 0, activeUrl: '', width: 0, canNext: false };
+        }
+
+        const scopeText = (best?.scope || ((dialog.getAttribute('aria-label') || '') + ' ' + (dialog.textContent || ''))).replace(/\s+/g, ' ').trim();
+        const ofMatch = best?.ofMatch || scopeText.match(/photo\s*(\d+)\s*of\s*(\d+)/i);
+        const slashMatch = best?.slashMatch || scopeText.match(/\b(\d+)\s*\/\s*(\d+)\b/);
+        const index = ofMatch ? Number(ofMatch[1]) : slashMatch ? Number(slashMatch[1]) : 0;
+        const total = ofMatch ? Number(ofMatch[2]) : slashMatch ? Number(slashMatch[2]) : 0;
+        const marker = (index > 0 ? String(index) : '?') + '/' + (total > 0 ? String(total) : '?');
+
+        let activeUrl = '';
+        let bestArea = 0;
+        let bestWidth = 0;
+        for (const img of Array.from(dialog.querySelectorAll('img'))) {
+          if (!isVisible(img)) continue;
+          const rect = img.getBoundingClientRect();
+          const area = rect.width * rect.height;
+          if (area <= bestArea) continue;
+          const url =
+            toGuesty(img.currentSrc || '') ||
+            toGuesty(img.getAttribute('src') || '') ||
+            toGuesty(img.getAttribute('data-src') || '') ||
+            toGuesty(img.getAttribute('srcset') || '') ||
+            toGuesty(img.getAttribute('data-srcset') || '');
+          if (!url) continue;
+          activeUrl = url;
+          bestArea = area;
+          bestWidth = Number(url.match(/\/w_(\d{2,5})\b/i)?.[1] || 0);
+        }
+
+        const nextButton = Array.from(dialog.querySelectorAll("button, [role='button']")).find((node) => {
+          if (!isVisible(node)) return false;
+          const label = ((node.getAttribute('aria-label') || '') + ' ' + (node.textContent || '')).replace(/\s+/g, ' ').trim().toLowerCase();
+          return label.includes('next photo') || label === 'next';
+        });
+
+        return {
+          found: true,
+          marker,
+          total,
+          activeUrl,
+          width: bestWidth,
+          canNext: Boolean(nextButton),
+        };
+      })()`);
+
+      if (!state.found) {
+        break;
+      }
+
+      if (state.marker === lastMarker) {
+        stagnantMarkerCount += 1;
+      } else {
+        stagnantMarkerCount = 0;
+      }
+      lastMarker = state.marker;
+
+      if (stagnantMarkerCount >= 4) {
+        break;
+      }
+
+      const key = (() => {
+        try {
+          const parsed = new URL(state.activeUrl);
+          return (
+            parsed.pathname.split("/").filter(Boolean).at(-1)?.toLowerCase() ??
+            ""
+          );
+        } catch {
+          return "";
+        }
+      })();
+      const dedupeKey = key || state.activeUrl;
+      if (dedupeKey && state.activeUrl) {
+        const existing = byAsset.get(dedupeKey);
+        if (!existing || (state.width ?? 0) > existing.width) {
+          byAsset.set(dedupeKey, {
+            url: state.activeUrl,
+            width: Number(state.width ?? 0),
+          });
+        }
+      }
+
+      if (seenMarkers.has(state.marker)) {
+        break;
+      }
+      seenMarkers.add(state.marker);
+
+      if (state.total > 0 && byAsset.size >= state.total) {
+        break;
+      }
+      if (!state.canNext) {
+        break;
+      }
+
+      await page.evaluate(String.raw`(() => {
+        const isVisible = (el) => {
+          if (!(el instanceof HTMLElement)) return false;
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') <= 0) return false;
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        };
+        const dialogs = Array.from(document.querySelectorAll("[role='dialog'], dialog")).filter((candidate) => isVisible(candidate));
+        const dialog = dialogs.find((candidate) => {
+          const text = ((candidate.getAttribute('aria-label') || '') + ' ' + (candidate.textContent || '')).toLowerCase();
+          return /photo\s*\d+\s*of\s*\d+/i.test(text) || /\b\d+\s*\/\s*\d+\b/.test(text);
+        });
+        if (!dialog) return;
+        const nextButton = Array.from(dialog.querySelectorAll("button, [role='button']")).find((node) => {
+          if (!isVisible(node)) return false;
+          const label = ((node.getAttribute('aria-label') || '') + ' ' + (node.textContent || '')).replace(/\s+/g, ' ').trim().toLowerCase();
+          return label.includes('next photo') || label === 'next';
+        });
+        nextButton?.click();
+      })()`);
+
+      await page.waitForTimeout(280);
+    }
+
+    return Array.from(byAsset.values()).map((entry) => entry.url);
+  };
+
+  const clickedAbout = await clickVisibleButtonByExactText(/^show\s+more$/i);
+  if (clickedAbout) {
+    await page.waitForTimeout(600);
+    const openedAbout = await activateDetailPopups(page);
+    if (openedAbout.length > aboutDescription.length) {
+      aboutDescription = openedAbout;
+    }
+    await closeActiveDialog();
+  }
+
+  const clickedAmenities = await clickVisibleButtonByExactText(
+    /^show\s+all\s+amenities$/i,
+  );
+  if (clickedAmenities) {
+    await page.waitForTimeout(600);
+    popupAmenitiesHtml = await page.content();
+    popupAmenities = await extractAmenitiesFromPopupDialog(page);
+    await closeActiveDialog();
+  }
+
+  const clickedPhotos =
+    await clickVisibleButtonByExactText(/^show\s+all\s+photos/i);
+  if (clickedPhotos) {
+    await page.waitForTimeout(700);
+    galleryPopupHtml = await page.content();
+    const popupImageUrls = await collectGalleryPopupImageUrls();
+    const expectedPopupCount = parseInt(
+      extractFirst(/show\s+all\s+photos\s*\((\d+)\)/i, galleryPopupHtml) ||
+        extractFirst(/photo\s+\d+\s+of\s+(\d+)/i, galleryPopupHtml) ||
+        "",
+      10,
+    );
+
+    if (
+      popupImageUrls.length > 0 &&
+      (!Number.isFinite(expectedPopupCount) || expectedPopupCount <= 0)
+    ) {
+      galleryCarouselImageUrls = popupImageUrls;
+    } else if (popupImageUrls.length >= expectedPopupCount) {
+      galleryCarouselImageUrls = popupImageUrls;
+    } else {
+      const carouselImageUrls = await collectCarouselPrimaryImageUrls();
+      galleryCarouselImageUrls = dedupePreserveOrder([
+        ...popupImageUrls,
+        ...carouselImageUrls,
+      ]);
+    }
+    await closeActiveDialog();
+  }
+
+  return {
+    aboutDescription,
+    popupAmenities: {
+      categories: dedupeAmenityCategories(popupAmenities.categories),
+      all: dedupePreserveOrder(popupAmenities.all),
+    },
+    popupAmenitiesHtml,
+    galleryPopupHtml,
+    galleryCarouselImageUrls,
+  };
+}
+
 async function advanceAvailabilityCalendarAndCaptureHtml(
   page: Awaited<
     ReturnType<{ newPage: () => Promise<DiscoverContext["page"]> }["newPage"]>
@@ -430,6 +1109,7 @@ async function advanceAvailabilityCalendarAndCaptureHtml(
   maxAdvanceMonths: number,
 ): Promise<string> {
   const normalizedMaxAdvanceMonths = Math.max(0, maxAdvanceMonths || 0);
+  const capturedSnapshots: string[] = [];
 
   const signature = async (): Promise<{
     key: string;
@@ -440,38 +1120,74 @@ async function advanceAvailabilityCalendarAndCaptureHtml(
       const container = document.querySelector<HTMLElement>(
         ".homelocal-availability-calendar-container",
       );
-      if (!container) {
+      if (container) {
+        const active = container.querySelector<HTMLElement>(
+          ".calendar.tns-slide-active",
+        );
+        const activeYear = active?.getAttribute("data-y") ?? "";
+        const activeMonth = active?.getAttribute("data-m") ?? "";
+
+        let maxDate = "";
+        for (const node of container.querySelectorAll<HTMLElement>(
+          ".day.day-of-month[data-date]",
+        )) {
+          const value = node.getAttribute("data-date") ?? "";
+          if (value && value > maxDate) {
+            maxDate = value;
+          }
+        }
+
+        const nextButton = container.querySelector<HTMLButtonElement>(
+          "button[data-controls='next']",
+        );
+        const nextDisabled =
+          !nextButton ||
+          nextButton.disabled ||
+          nextButton.getAttribute("aria-disabled") === "true";
+
+        return {
+          key: `${activeYear}-${activeMonth}`,
+          maxDate,
+          nextDisabled,
+        };
+      }
+
+      const redesignedSection = document.querySelector<HTMLElement>(
+        "section[aria-labelledby='availability']",
+      );
+      if (!redesignedSection) {
         return null;
       }
 
-      const active = container.querySelector<HTMLElement>(
-        ".calendar.tns-slide-active",
-      );
-      const activeYear = active?.getAttribute("data-y") ?? "";
-      const activeMonth = active?.getAttribute("data-m") ?? "";
+      const monthLabels = Array.from(
+        redesignedSection.querySelectorAll<HTMLElement>("h3[id*='month']"),
+      )
+        .map((node) => (node.textContent ?? "").replace(/\s+/g, " ").trim())
+        .filter(Boolean);
 
-      let maxDate = "";
-      for (const node of container.querySelectorAll<HTMLElement>(
-        ".day.day-of-month[data-date]",
-      )) {
-        const value = node.getAttribute("data-date") ?? "";
-        if (value && value > maxDate) {
-          maxDate = value;
-        }
-      }
+      const statusText = (
+        redesignedSection.querySelector<HTMLElement>("p.sr-only[role='status']")
+          ?.textContent ?? ""
+      )
+        .replace(/\s+/g, " ")
+        .trim();
 
-      const nextButton = container.querySelector<HTMLButtonElement>(
-        "button[data-controls='next']",
+      const nextButton = Array.from(
+        redesignedSection.querySelectorAll<HTMLButtonElement>(
+          "button[aria-label]",
+        ),
+      ).find((button) =>
+        /next month/i.test(button.getAttribute("aria-label") ?? ""),
       );
+
       const nextDisabled =
         !nextButton ||
         nextButton.disabled ||
-        nextButton.getAttribute("aria-disabled") === "true" ||
-        /disabled/i.test(nextButton.className);
+        nextButton.getAttribute("aria-disabled") === "true";
 
       return {
-        key: `${activeYear}-${activeMonth}`,
-        maxDate,
+        key: `${statusText}::${monthLabels.join("|")}`,
+        maxDate: "",
         nextDisabled,
       };
     });
@@ -480,9 +1196,18 @@ async function advanceAvailabilityCalendarAndCaptureHtml(
     const container = document.querySelector<HTMLElement>(
       ".homelocal-availability-calendar-container",
     );
-    container?.scrollIntoView({ block: "center", behavior: "instant" });
+    if (container) {
+      container.scrollIntoView({ block: "center", behavior: "instant" });
+      return;
+    }
+
+    const redesignedSection = document.querySelector<HTMLElement>(
+      "section[aria-labelledby='availability']",
+    );
+    redesignedSection?.scrollIntoView({ block: "center", behavior: "instant" });
   });
   await page.waitForTimeout(300);
+  capturedSnapshots.push(await page.content());
 
   let stagnantClicks = 0;
   for (
@@ -499,17 +1224,40 @@ async function advanceAvailabilityCalendarAndCaptureHtml(
       const container = document.querySelector<HTMLElement>(
         ".homelocal-availability-calendar-container",
       );
-      const nextButton = container?.querySelector<HTMLButtonElement>(
-        "button[data-controls='next']",
+      if (container) {
+        const nextButton = container.querySelector<HTMLButtonElement>(
+          "button[data-controls='next']",
+        );
+        if (
+          !nextButton ||
+          nextButton.disabled ||
+          nextButton.getAttribute("aria-disabled") === "true"
+        ) {
+          return false;
+        }
+        nextButton.click();
+        return true;
+      }
+
+      const redesignedSection = document.querySelector<HTMLElement>(
+        "section[aria-labelledby='availability']",
       );
+      const nextButton = Array.from(
+        redesignedSection?.querySelectorAll<HTMLButtonElement>(
+          "button[aria-label]",
+        ) ?? [],
+      ).find((button) =>
+        /next month/i.test(button.getAttribute("aria-label") ?? ""),
+      );
+
       if (
         !nextButton ||
         nextButton.disabled ||
-        nextButton.getAttribute("aria-disabled") === "true" ||
-        /disabled/i.test(nextButton.className)
+        nextButton.getAttribute("aria-disabled") === "true"
       ) {
         return false;
       }
+
       nextButton.click();
       return true;
     });
@@ -525,7 +1273,7 @@ async function advanceAvailabilityCalendarAndCaptureHtml(
       if (!after) {
         break;
       }
-      if (after.maxDate > before.maxDate || after.key !== before.key) {
+      if (after.key !== before.key || after.maxDate > before.maxDate) {
         changed = true;
         break;
       }
@@ -540,9 +1288,13 @@ async function advanceAvailabilityCalendarAndCaptureHtml(
     }
 
     stagnantClicks = 0;
+    capturedSnapshots.push(await page.content());
   }
 
-  return page.content();
+  if (capturedSnapshots.length === 0) {
+    return page.content();
+  }
+  return capturedSnapshots.join("\n<!-- stayon30a-calendar-snapshot -->\n");
 }
 
 function normalizeForMatch(value: string): string {
@@ -798,7 +1550,13 @@ function collectMediaUrls(
   baseUrl: string,
   lodgingJsonLd: Record<string, unknown> | null,
 ): string[] {
-  const canonicalToOriginal = new Map<string, string>();
+  const mediaByKey = new Map<string, { url: string; width: number }>();
+  const expectedPhotoCount = parseInt(
+    extractFirst(/show\s+all\s+photos\s*\((\d+)\)/i, html) ||
+      extractFirst(/photo\s+\d+\s+of\s+(\d+)/i, html) ||
+      "",
+    10,
+  );
 
   const canonicalizeMediaUrl = (value: string): string | null => {
     let parsed: URL;
@@ -809,38 +1567,97 @@ function collectMediaUrls(
     }
 
     const host = parsed.hostname.toLowerCase();
-    if (host !== "assets.guesty.com") {
+    if (!host.endsWith("assets.guesty.com")) {
       return null;
     }
-
-    parsed.pathname = parsed.pathname.replace(
-      /\/image\/upload\/[a-z]_[^/]+(?:,[a-z]_[^/]+)*\//i,
-      "/image/upload/",
-    );
-
-    if (
-      !parsed.pathname
-        .toLowerCase()
-        .includes("/listing_images_s3/production/property-photos/")
-    ) {
-      return null;
-    }
+    parsed.pathname = parsed.pathname
+      .replace(/\/{2,}/g, "/")
+      .replace(/(\/image\/upload\/)([^/]+)\//i, "$1w_1920,q_auto,f_auto/");
 
     parsed.search = "";
     parsed.hash = "";
     return parsed.toString();
   };
 
+  const mediaKeyAndWidth = (
+    urlText: string,
+  ): { key: string; width: number } => {
+    let width = Number(urlText.match(/\/w_(\d{2,5})\b/i)?.[1] ?? "0");
+    if (!Number.isFinite(width)) {
+      width = 0;
+    }
+
+    try {
+      const parsed = new URL(urlText);
+      const last = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "";
+      if (last) {
+        const normalizedLast = last.trim().toLowerCase();
+        if (normalizedLast) {
+          return { key: normalizedLast, width };
+        }
+      }
+    } catch {
+      // Fall through to URL key.
+    }
+
+    return { key: urlText, width };
+  };
+
+  const trimToExpectedPhotoCount = (urls: string[]): string[] => {
+    if (urls.length === 0) {
+      return urls;
+    }
+
+    const expectedCount = expectedPhotoCount;
+
+    if (!Number.isFinite(expectedCount) || expectedCount <= 0) {
+      return urls;
+    }
+
+    const extensionUrls = urls.filter((url) =>
+      /\.(jpg|jpeg|png|webp|avif)(?:$|[?#/])/i.test(url),
+    );
+    const candidateUrls =
+      extensionUrls.length >= expectedCount ? extensionUrls : urls;
+
+    if (candidateUrls.length <= expectedCount) {
+      return candidateUrls;
+    }
+
+    return candidateUrls.slice(0, expectedCount);
+  };
+
   const addIfUseful = (value: unknown): void => {
     if (typeof value !== "string" || value.trim().length === 0) {
       return;
     }
-    const canonical = canonicalizeMediaUrl(value.trim());
-    if (!canonical) {
-      return;
-    }
-    if (!canonicalToOriginal.has(canonical)) {
-      canonicalToOriginal.set(canonical, canonical);
+    const decoded = decodeHtmlEntities(value)
+      .replace(/\\u002F/gi, "/")
+      .replace(/\\\//g, "/")
+      .trim();
+    const matches = decoded.match(
+      /https?:\/\/assets\.guesty\.com\/[^\s"'<>]+/gi,
+    );
+    for (const rawMatch of matches ?? []) {
+      const cleaned = rawMatch
+        .replace(/&quot;.*$/i, "")
+        .replace(/&#34;.*$/i, "")
+        .replace(/&#39;.*$/i, "")
+        .replace(/[),;]+$/g, "")
+        .trim();
+      if (!cleaned) {
+        continue;
+      }
+
+      const canonical = canonicalizeMediaUrl(cleaned);
+      if (!canonical) {
+        continue;
+      }
+      const { key, width } = mediaKeyAndWidth(canonical);
+      const existing = mediaByKey.get(key);
+      if (!existing || width > existing.width) {
+        mediaByKey.set(key, { url: canonical, width });
+      }
     }
   };
 
@@ -870,51 +1687,31 @@ function collectMediaUrls(
     addIfUseful(href);
   }
 
-  const orderedGalleryUrls = Array.from(canonicalToOriginal.values());
+  const orderedGalleryUrls = Array.from(mediaByKey.values()).map(
+    (entry) => entry.url,
+  );
   if (orderedGalleryUrls.length > 0) {
-    return orderedGalleryUrls;
+    if (
+      !Number.isFinite(expectedPhotoCount) ||
+      expectedPhotoCount <= 0 ||
+      orderedGalleryUrls.length >= expectedPhotoCount
+    ) {
+      return trimToExpectedPhotoCount(orderedGalleryUrls);
+    }
   }
 
   const guestyUrlMatches = html.match(
-    /https?:\/\/assets\.guesty\.com\/image\/upload\/[^"'\s<>]+/gi,
+    /https?:\/\/assets\.guesty\.com\/(?:image\/upload\/[^"'\s<>]+|production\/[^"'\s<>]+)/gi,
   );
   for (const rawUrl of guestyUrlMatches ?? []) {
     addIfUseful(rawUrl);
   }
 
-  const canonicalUrls = Array.from(canonicalToOriginal.values());
+  const canonicalUrls = Array.from(mediaByKey.values()).map(
+    (entry) => entry.url,
+  );
   if (canonicalUrls.length > 0) {
-    const folderPattern =
-      /\/listing_images_s3\/production\/property-photos\/[a-z0-9]+\/([a-z0-9]+)\//i;
-    const folderCounts = new Map<string, number>();
-
-    for (const url of canonicalUrls) {
-      const folderId = url.match(folderPattern)?.[1]?.toLowerCase() ?? "";
-      if (!folderId) {
-        continue;
-      }
-      folderCounts.set(folderId, (folderCounts.get(folderId) ?? 0) + 1);
-    }
-
-    let dominantFolder = "";
-    let dominantCount = 0;
-    for (const [folderId, count] of folderCounts) {
-      if (count > dominantCount) {
-        dominantFolder = folderId;
-        dominantCount = count;
-      }
-    }
-
-    if (dominantFolder) {
-      const filtered = canonicalUrls.filter((url) =>
-        url.toLowerCase().includes(`/${dominantFolder}/`),
-      );
-      if (filtered.length > 0) {
-        return filtered;
-      }
-    }
-
-    return canonicalUrls;
+    return trimToExpectedPhotoCount(canonicalUrls);
   }
 
   // Fallback to listing JSON-LD image set when gallery signals are absent.
@@ -928,7 +1725,9 @@ function collectMediaUrls(
     }
   }
 
-  return Array.from(canonicalToOriginal.values());
+  return trimToExpectedPhotoCount(
+    Array.from(mediaByKey.values()).map((entry) => entry.url),
+  );
 }
 
 function prettifyAmenityToken(value: string): string {
@@ -1001,6 +1800,29 @@ function extractBedGuidanceFromJsonLd(
     lines.push(count ? `${type}: ${count}` : type);
   }
   return dedupePreserveOrder(lines);
+}
+
+function buildCapacityFallbackGuidance(input: {
+  beds: number | null;
+  baths: number | null;
+  sleeps: number | null;
+}): string[] {
+  const parts: string[] = [];
+  if (input.beds && input.beds > 0) {
+    parts.push(`Bedrooms: ${input.beds}`);
+  }
+  if (input.baths && input.baths > 0) {
+    parts.push(`Bathrooms: ${input.baths}`);
+  }
+  if (input.sleeps && input.sleeps > 0) {
+    parts.push(`Sleeps: ${input.sleeps}`);
+  }
+
+  if (parts.length === 0) {
+    return [];
+  }
+
+  return [parts.join(" | ")];
 }
 
 function extractSectionByLabel(plainText: string, label: string): string {
@@ -1079,6 +1901,10 @@ function extractHomeLocalPropertyId(html: string): string | null {
     /"property_id"\s*:\s*(\d+)/i,
     /property_id\s*=\s*["']?(\d+)["']?/i,
     /"propertyId"\s*:\s*(\d+)/i,
+    /"item_id"\s*:\s*"([a-f0-9]{24})"/i,
+    /\\"item_id\\"\s*:\s*\\"([a-f0-9]{24})\\"/i,
+    /"listingId"\s*:\s*"([a-f0-9]{24})"/i,
+    /\\"listingId\\"\s*:\s*\\"([a-f0-9]{24})\\"/i,
   ];
 
   for (const matcher of matchers) {
@@ -1098,6 +1924,39 @@ function formatDateIso(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+const MONTH_TO_INDEX: Record<string, number> = {
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
+};
+
+function parseIsoDateFromLongForm(value: string): string | null {
+  const match = value.match(
+    /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s*(\d{4})/i,
+  );
+  if (!match?.[1] || !match[2] || !match[3]) {
+    return null;
+  }
+
+  const month = MONTH_TO_INDEX[match[1].toLowerCase()];
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  if (!month || !Number.isFinite(day) || !Number.isFinite(year)) {
+    return null;
+  }
+
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 function mapDayStateToStatusCode(input: {
   checkinAvailable: boolean;
   checkoutAvailable: boolean;
@@ -1112,6 +1971,59 @@ function mapDayStateToStatusCode(input: {
     return "O";
   }
   return "U";
+}
+
+function applyStatusCodeToDay(
+  day: StayDetailRecord["normalized_availability"]["days"][number],
+  statusCode: StayOnStatusCode,
+): StayDetailRecord["normalized_availability"]["days"][number] {
+  return {
+    ...day,
+    day_code: toDayCodeFromStatus(statusCode),
+    changeover_code: toChangeoverCodeFromStatus(statusCode),
+    is_available: statusCode === "A" || statusCode === "O",
+    status_code: statusCode,
+    is_available_for_checkin: statusCode === "A" || statusCode === "I",
+    is_available_for_checkout: statusCode === "A" || statusCode === "O",
+    booking_day_state:
+      statusCode === "A" || statusCode === "O" ? "bookable" : "blocked",
+  };
+}
+
+function inferTurnBoundaryStatuses(
+  days: StayDetailRecord["normalized_availability"]["days"],
+): StayDetailRecord["normalized_availability"]["days"] {
+  if (days.length < 2) {
+    return days;
+  }
+
+  const nextDays = days.map((day) => ({ ...day }));
+  for (let index = 1; index < nextDays.length; index += 1) {
+    const prev = nextDays[index - 1];
+    const curr = nextDays[index];
+    if (!prev || !curr) {
+      continue;
+    }
+
+    // Preserve source-provided boundary signals when already present.
+    if (prev.status_code !== "A" && prev.status_code !== "U") {
+      continue;
+    }
+    if (curr.status_code !== "A" && curr.status_code !== "U") {
+      continue;
+    }
+
+    if (prev.status_code === "U" && curr.status_code === "A") {
+      nextDays[index] = applyStatusCodeToDay(curr, "I");
+      continue;
+    }
+
+    if (prev.status_code === "A" && curr.status_code === "U") {
+      nextDays[index - 1] = applyStatusCodeToDay(prev, "O");
+    }
+  }
+
+  return nextDays;
 }
 
 function extractNormalizedAvailabilityDaysFromCalendar(
@@ -1172,14 +2084,72 @@ function extractNormalizedAvailabilityDaysFromCalendar(
     left.date.localeCompare(right.date),
   );
   if (days.length === 0) {
+    // Fallback for redesigned calendar markup where day states are rendered
+    // as button text inside table-based availability sections.
+    for (const match of html.matchAll(
+      /<button\b[^>]*>([\s\S]*?)<\/button>/gi,
+    )) {
+      const buttonHtml = match[0] ?? "";
+      const buttonText = stripHtml(buttonHtml).replace(/\s+/g, " ").trim();
+      if (!buttonText) {
+        continue;
+      }
+
+      const dateIso = parseIsoDateFromLongForm(buttonText);
+      if (!dateIso) {
+        continue;
+      }
+
+      const normalizedText = buttonText.toLowerCase();
+      if (normalizedText.includes("past")) {
+        continue;
+      }
+
+      let statusCode: StayOnStatusCode | null = null;
+      if (normalizedText.includes("available")) {
+        statusCode = normalizedText.includes("not available") ? "U" : "A";
+      } else if (normalizedText.includes("booked")) {
+        statusCode = "U";
+      }
+
+      if (!statusCode) {
+        continue;
+      }
+
+      const nextValue = {
+        date: dateIso,
+        day_code: toDayCodeFromStatus(statusCode),
+        changeover_code: toChangeoverCodeFromStatus(statusCode),
+        is_available: statusCode === "A" || statusCode === "O",
+        status_code: statusCode,
+        is_available_for_checkin: statusCode === "A" || statusCode === "I",
+        is_available_for_checkout: statusCode === "A" || statusCode === "O",
+        booking_day_state:
+          statusCode === "A" || statusCode === "O" ? "bookable" : "blocked",
+      } satisfies StayDetailRecord["normalized_availability"]["days"][number];
+
+      const existing = dayByDate.get(dateIso);
+      if (!existing) {
+        dayByDate.set(dateIso, nextValue);
+      } else if (!existing.is_available && nextValue.is_available) {
+        dayByDate.set(dateIso, nextValue);
+      }
+    }
+  }
+
+  const fallbackDays = Array.from(dayByDate.values()).sort((left, right) =>
+    left.date.localeCompare(right.date),
+  );
+  if (fallbackDays.length === 0) {
     return [];
   }
 
   const todayIso = formatDateIso(new Date());
-  const filteredFromToday = days.filter((day) => day.date >= todayIso);
-  const baseline = filteredFromToday.length > 0 ? filteredFromToday : days;
+  const filteredFromToday = fallbackDays.filter((day) => day.date >= todayIso);
+  const baseline =
+    filteredFromToday.length > 0 ? filteredFromToday : fallbackDays;
   const maxDays = Math.max(1, horizonDays || baseline.length);
-  return baseline.slice(0, maxDays);
+  return inferTurnBoundaryStatuses(baseline.slice(0, maxDays));
 }
 
 function dedupePreserveOrder(values: string[]): string[] {
@@ -1238,6 +2208,29 @@ function extractRoomDetailsGuidanceFromDescription(
 
     seen.add(cleaned);
     out.push(cleaned);
+  }
+
+  const inlineMatches = description.matchAll(
+    /(?:bedroom\s*#?\s*\d+\s*:\s*[^\.\n]{8,220}|bunk\s*room[^\.\n]{8,220})/gi,
+  );
+  for (const match of inlineMatches) {
+    const raw = (match[0] ?? "").replace(/\s+/g, " ").trim();
+    if (!raw) {
+      continue;
+    }
+    const normalized = raw.toLowerCase();
+    if (
+      !/king|queen|full|double|twin|single|bunk|trundle|murphy|sofa\s*bed|daybed|futon|sleeps?/i.test(
+        normalized,
+      )
+    ) {
+      continue;
+    }
+    if (seen.has(raw)) {
+      continue;
+    }
+    seen.add(raw);
+    out.push(raw);
   }
 
   return out.slice(0, 80);
@@ -1356,6 +2349,13 @@ async function fetchDetail(
     let prePopupHtml = "";
     let availabilityHtml = "";
     let popupDescriptionFromDialog = "";
+    let popupAmenitiesFromDialog: PopupAmenitiesCapture = {
+      categories: {},
+      all: [],
+    };
+    let popupAmenitiesHtml = "";
+    let galleryPopupHtml = "";
+    let galleryCarouselImageUrls: string[] = [];
     let detailStatus: number | null = null;
     try {
       const detailResponse = await page.goto(detailUrl, {
@@ -1366,7 +2366,12 @@ async function fetchDetail(
       finalUrl = page.url();
       if (detailStatus === 200) {
         prePopupHtml = await page.content();
-        popupDescriptionFromDialog = await activateDetailPopups(page);
+        const popupCapture = await captureModalPopupContent(page);
+        popupDescriptionFromDialog = popupCapture.aboutDescription;
+        popupAmenitiesFromDialog = popupCapture.popupAmenities;
+        popupAmenitiesHtml = popupCapture.popupAmenitiesHtml;
+        galleryPopupHtml = popupCapture.galleryPopupHtml;
+        galleryCarouselImageUrls = popupCapture.galleryCarouselImageUrls;
         html = await page.content();
         availabilityHtml = await advanceAvailabilityCalendarAndCaptureHtml(
           page,
@@ -1495,8 +2500,23 @@ async function fetchDetail(
     }
 
     const amenitiesFromJsonLd = extractAmenitiesFromJsonLd(lodgingJsonLd);
+
+    for (const [category, values] of Object.entries(
+      popupAmenitiesFromDialog.categories,
+    )) {
+      if (!categoryMap[category]) {
+        categoryMap[category] = [];
+      }
+      for (const value of values) {
+        if (!categoryMap[category].includes(value)) {
+          categoryMap[category].push(value);
+        }
+      }
+    }
+
     const amenitiesAll = dedupePreserveOrder([
       ...Object.values(categoryMap).flat().filter(Boolean),
+      ...popupAmenitiesFromDialog.all,
       ...amenitiesFromJsonLd,
     ]);
     if (amenitiesFromJsonLd.length > 0 && !categoryMap["HomeLocal JSON-LD"]) {
@@ -1615,11 +2635,15 @@ async function fetchDetail(
           extractFirst(/\bsleeps?\s*[:-]?\s*(\d+)\b/i, capacitySourceText),
       );
 
-    const mediaUrls = collectMediaUrls(
-      prePopupHtml || html,
+    const fallbackMediaUrls = collectMediaUrls(
+      [prePopupHtml, galleryPopupHtml, html].filter(Boolean).join("\n"),
       finalUrl,
       lodgingJsonLd,
     );
+    const mediaUrls =
+      galleryCarouselImageUrls.length > 0
+        ? dedupePreserveOrder(galleryCarouselImageUrls)
+        : fallbackMediaUrls;
     const propertyId =
       extractHomeLocalPropertyId(html) ?? leafletConfig.propertyId;
 
@@ -1642,10 +2666,14 @@ async function fetchDetail(
 
     const description =
       descriptionExpanded || stripHtml(metaDescription).slice(0, 20000);
-    const roomDetailsGuidance = dedupePreserveOrder([
+    const extractedRoomDetailsGuidance = dedupePreserveOrder([
       ...extractBedGuidanceFromJsonLd(lodgingJsonLd),
       ...extractRoomDetailsGuidanceFromDescription(description),
     ]).slice(0, 80);
+    const roomDetailsGuidance =
+      extractedRoomDetailsGuidance.length > 0
+        ? extractedRoomDetailsGuidance
+        : buildCapacityFallbackGuidance({ beds, baths, sleeps });
     const name = stripHtml(h1 || title).slice(0, 240);
     const descriptionNormalized = normalizeForMatch(description);
     const titleNormalized = normalizeForMatch(name);
