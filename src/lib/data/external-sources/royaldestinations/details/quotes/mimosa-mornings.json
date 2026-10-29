@@ -1,0 +1,55 @@
+{
+  "adapter_key": "royaldestinations",
+  "external_listing_id": "mimosa-mornings",
+  "detail_url": "https://www.royaldestinations.com/30a-vacation-rentals/mimosa-mornings?rcav%5Bbegin%5D=03%2F27%2F2027&rcav%5Bend%5D=04%2F03%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=145&rcav%5BIDs%5D%5B8%5D%5B0%5D=1376-285626&eid=145",
+  "captured_at": "2026-10-29T00:34:45.762Z",
+  "currency": "USD",
+  "quote_window_cadence": "weekly_anchor_adaptive_span",
+  "quote_window_gap_policy": "probe_longest_available_span",
+  "quote_window_anchor_date": "2026-10-31",
+  "quote_window_days": 168,
+  "quote_sample_step_days": 1,
+  "quote_nights": 7,
+  "quote_max_queries": 9,
+  "endpoint_path": "/rcapi/item/avail/search",
+  "quote_run_diagnostics": {
+    "queried_windows": 9,
+    "available_windows": 1,
+    "unavailable_windows": 8,
+    "internal_error_windows": 0,
+    "unavailable_reason_counts": {
+      "QUOTE_UNAVAILABLE": 8
+    },
+    "sample_internal_errors": []
+  },
+  "observations": [
+    {
+      "sampled_at": "2026-10-29T00:34:45.762Z",
+      "captured_at": "2026-10-29T00:34:45.762Z",
+      "source_listing_id": "mimosa-mornings",
+      "currency": "USD",
+      "start_date": "2027-04-11",
+      "end_date": "2027-04-25",
+      "check_in_date": "2027-04-11",
+      "check_out_date": "2027-04-25",
+      "nights": 14,
+      "base_nightly": 1741.36,
+      "all_in_nightly": 1950.32,
+      "quote_available": true,
+      "quote_unavailable_reason": null,
+      "base_total": 24379,
+      "taxes_total": 2925.48,
+      "fees_total_excl_taxes": 0,
+      "fee_lines": [],
+      "grand_total": 27304.48,
+      "quoted_total": 24379,
+      "fee_pct_of_base": 0,
+      "tax_pct_of_base": 0.12,
+      "non_base_pct_of_total": 0.107143,
+      "all_in_multiplier": 1.12,
+      "handoff_url": "https://www.royaldestinations.com/rescms/item/351/buy?rcav%5Bbegin%5D=04%2F11%2F2027&rcav%5Bend%5D=04%2F25%2F2027&rcav%5Badult%5D=1&rcav%5Bchild%5D=0&rcav%5Beid%5D=351&rcav%5BIDs%5D%5B8%5D%5B%5D=1376-285626&eid=351",
+      "source": "quote_api",
+      "pricing_source": "runtime_parsed"
+    }
+  ]
+}

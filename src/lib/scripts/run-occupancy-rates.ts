@@ -8,11 +8,16 @@ import path from "node:path";
 import { createScrapeProgress } from "@/core/tooling/terminal/scrape-progress";
 import { getKnownAdapterKeys } from "@/lib/pricing/scraper-engine/adapter-registry";
 
-type Mode = "single-adapter" | "single-listing" | "all-adapters";
+type Mode =
+  | "single-adapter"
+  | "single-listing"
+  | "all-adapters"
+  | "multi-adapter";
 
 type Options = {
   mode: Mode;
   adapterKey: string | null;
+  adapterKeys: string[] | null;
   listingId: string | null;
   monthsForward: number;
   asOfDate: Date;
@@ -51,13 +56,14 @@ function printUsage(): void {
   console.log("Occupancy Rates From External Sources Availability");
   console.log("Usage:");
   console.log(
-    "  tsx src/lib/scripts/run-occupancy-rates.ts [--adapter-key <key>] [--listing-id <id>] [--all-adapters] [--months-forward 6] [--as-of YYYY-MM-DD]",
+    "  tsx src/lib/scripts/run-occupancy-rates.ts [--adapter-key <key>] [--adapter-keys <k1,k2,...>] [--listing-id <id>] [--all-adapters] [--months-forward 6] [--as-of YYYY-MM-DD]",
   );
   console.log("");
   console.log("Modes:");
   console.log("  1) --all-adapters");
   console.log("  2) --adapter-key <key>");
-  console.log("  3) --adapter-key <key> --listing-id <id>");
+  console.log("  3) --adapter-keys <k1,k2,...>");
+  console.log("  4) --adapter-key <key> --listing-id <id>");
   console.log("");
   console.log("Defaults:");
   console.log("  --adapter-key 360blue");
@@ -75,6 +81,7 @@ function parseIsoDate(value: string): Date | null {
 
 function parseArgs(argv: string[]): Options {
   let adapterKey: string | null = null;
+  let adapterKeys: string[] | null = null;
   let listingId: string | null = null;
   let allAdapters = false;
   let monthsForward = 6;
@@ -96,6 +103,16 @@ function parseArgs(argv: string[]): Options {
 
     if (arg === "--adapter-key" && next) {
       adapterKey = next.trim().toLowerCase() || null;
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--adapter-keys" && next) {
+      const parsed = next
+        .split(",")
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean);
+      adapterKeys = parsed.length > 0 ? Array.from(new Set(parsed)) : null;
       i += 1;
       continue;
     }
@@ -129,27 +146,36 @@ function parseArgs(argv: string[]): Options {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  if (allAdapters && adapterKey) {
-    throw new Error("Use either --all-adapters or --adapter-key, not both");
+  if (allAdapters && (adapterKey || adapterKeys)) {
+    throw new Error(
+      "Use either --all-adapters or --adapter-key/--adapter-keys, not both",
+    );
   }
 
-  if (listingId && !adapterKey) {
+  if (adapterKey && adapterKeys) {
+    throw new Error("Use either --adapter-key or --adapter-keys, not both");
+  }
+
+  if (listingId && (!adapterKey || adapterKeys)) {
     throw new Error("--listing-id requires --adapter-key");
   }
 
-  if (!allAdapters && !adapterKey) {
+  if (!allAdapters && !adapterKey && !adapterKeys) {
     adapterKey = "360blue";
   }
 
   const mode: Mode = allAdapters
     ? "all-adapters"
-    : listingId
-      ? "single-listing"
-      : "single-adapter";
+    : adapterKeys
+      ? "multi-adapter"
+      : listingId
+        ? "single-listing"
+        : "single-adapter";
 
   return {
     mode,
     adapterKey,
+    adapterKeys,
     listingId,
     monthsForward,
     asOfDate,
@@ -468,9 +494,11 @@ function printReport(
   const title =
     options.mode === "all-adapters"
       ? "Occupancy Rates - All Adapters"
-      : options.mode === "single-listing"
-        ? "Occupancy Rates - Single Listing"
-        : "Occupancy Rates - Single Adapter";
+      : options.mode === "multi-adapter"
+        ? "Occupancy Rates - Selected Adapters"
+        : options.mode === "single-listing"
+          ? "Occupancy Rates - Single Listing"
+          : "Occupancy Rates - Single Adapter";
 
   console.log(chalk.bold.cyan(title));
   console.log(
@@ -513,7 +541,17 @@ async function run(argv: string[] = process.argv.slice(2)): Promise<number> {
   const adapters =
     options.mode === "all-adapters"
       ? getKnownAdapterKeys()
-      : [options.adapterKey ?? "360blue"];
+      : options.mode === "multi-adapter"
+        ? (options.adapterKeys ?? [])
+        : [options.adapterKey ?? "360blue"];
+
+  const knownAdapters = new Set(getKnownAdapterKeys());
+  const unknownAdapters = adapters.filter(
+    (adapter) => !knownAdapters.has(adapter),
+  );
+  if (unknownAdapters.length > 0) {
+    throw new Error(`Unknown adapter key(s): ${unknownAdapters.join(", ")}`);
+  }
 
   progress.phase(
     `starting occupancy rollup mode=${options.mode} adapters=${adapters.length} months_forward=${options.monthsForward} from=${anchorMonth.toISOString().slice(0, 10)}`,
@@ -541,7 +579,7 @@ async function run(argv: string[] = process.argv.slice(2)): Promise<number> {
   }
 
   const ordered =
-    options.mode === "all-adapters"
+    options.mode === "all-adapters" || options.mode === "multi-adapter"
       ? [...rollups].sort((a, b) => a.adapter.localeCompare(b.adapter))
       : rollups;
 
