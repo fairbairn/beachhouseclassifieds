@@ -29,7 +29,7 @@ const ADAPTER_ALLOW_FEES_GE_BASE = new Set<string>([
 
 const ADAPTER_EXPECTED_HANDOFF_SIGNATURES: Record<string, string[]> = {
   scenicstays30a: [
-    "https://myscenicstays.com/rentals/book-now?keys=checkin,checkout,propertyID",
+    "https://myscenicstays.com/rentals/book-now?propertyID=1&checkin=01/01/2026&checkout=01/08/2026",
   ],
   stayat30a: [
     "https://www.stayat30avacationrentals.com/vacation-rentals/checkout/?keys=arr,depart,id,nights,persons,quote",

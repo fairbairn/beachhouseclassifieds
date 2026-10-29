@@ -30,10 +30,7 @@ type ScenicBrowserPage = ScraperBrowserPageLike & {
   waitForTimeout(timeoutMs: number): Promise<void>;
   on(
     event: "response",
-    listener: (response: {
-      url(): string;
-      text(): Promise<string>;
-    }) => void,
+    listener: (response: { url(): string; text(): Promise<string> }) => void,
   ): void;
 };
 
@@ -246,7 +243,7 @@ type ScenicStaysDetailRecord = DetailRecordBase & {
 };
 
 const DEFAULT_ANCHOR_URL =
-  "https://myscenicstays.com/rentals?type=2&mapsearch=1";
+  "https://myscenicstays.com/rentals?location=5&location=13&location=14&type=2";
 const OUTPUT_ROOT = resolve(
   process.cwd(),
   "src",
@@ -256,6 +253,7 @@ const OUTPUT_ROOT = resolve(
   "scenicstays30a",
 );
 const OUTPUT_DETAILS_HTML_DIR = resolve(OUTPUT_ROOT, "details", "html");
+const SCRAPE_DETAIL_PAGE_ONLY = true;
 
 const MAX_CLICK_CYCLES = 80;
 const CLICK_WAIT_MS = 1200;
@@ -1050,7 +1048,8 @@ function extractStoredDatesAvailability(
     rows.push({ date, code: "Y" });
   }
   for (const date of checkoutDates) {
-    rows.push({ date, code: "Y" });
+    // Checkout-only dates are departure boundaries, not overnight stay nights.
+    rows.push({ date, code: "N" });
   }
 
   return rows;
@@ -1074,9 +1073,17 @@ function mergeAvailabilityDays(
       }
 
       const existing = merged.get(day.date);
-      if (!existing || normalizedCode === "Y") {
+      if (!existing) {
         merged.set(day.date, normalizedCode);
+        continue;
       }
+
+      if (existing === "N" || normalizedCode === "N") {
+        merged.set(day.date, "N");
+        continue;
+      }
+
+      merged.set(day.date, "Y");
     }
   }
 
@@ -1179,11 +1186,7 @@ function extractBrowserResponseBody(pageHtml: string): string {
     return "";
   }
 
-  if (
-    raw.startsWith("{") ||
-    raw.startsWith("[") ||
-    raw.startsWith('"')
-  ) {
+  if (raw.startsWith("{") || raw.startsWith("[") || raw.startsWith('"')) {
     return raw;
   }
 
@@ -1251,17 +1254,84 @@ function detectBlockingSignalFromHtml(html: string): string | null {
     "request blocked",
   ];
 
-  const matchedSignal = blockedSignals.find((signal) => lowered.includes(signal));
+  const matchedSignal = blockedSignals.find((signal) =>
+    lowered.includes(signal),
+  );
   return matchedSignal ?? null;
 }
 
 async function readTextResponseViaBrowser(
   browser: ScenicBrowser,
   url: string,
+  options?: {
+    method?: "GET" | "POST";
+    headers?: Record<string, string>;
+    body?: string;
+    refererUrl?: string;
+  },
 ): Promise<{ status: number | null; body: string }> {
-  const page = await browser.newPage();
+  const page = (await browser.newPage()) as ScenicBrowserPage;
 
   try {
+    const method = options?.method ?? "GET";
+    if (method === "POST") {
+      if (options?.refererUrl) {
+        await page.goto(options.refererUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 120000,
+        });
+      }
+
+      const result = await page.evaluate(
+        async (rawInput: unknown) => {
+          const input =
+            rawInput && typeof rawInput === "object"
+              ? (rawInput as {
+                  url?: unknown;
+                  headers?: unknown;
+                  body?: unknown;
+                })
+              : null;
+          if (!input || typeof input.url !== "string") {
+            throw new Error("Invalid POST input URL for scenic fetch.");
+          }
+
+          const normalizedHeaders: Record<string, string> = {};
+          if (input.headers && typeof input.headers === "object") {
+            for (const [key, value] of Object.entries(input.headers)) {
+              if (typeof value === "string") {
+                normalizedHeaders[key] = value;
+              }
+            }
+          }
+
+          const response = await fetch(input.url, {
+            method: "POST",
+            headers: normalizedHeaders,
+            body: typeof input.body === "string" ? input.body : "",
+            credentials: "include",
+          });
+          return {
+            status: response.status,
+            body: await response.text(),
+          };
+        },
+        {
+          url,
+          headers: options?.headers ?? {},
+          body: options?.body ?? "",
+        },
+      );
+
+      return {
+        status:
+          typeof result?.status === "number" && Number.isFinite(result.status)
+            ? result.status
+            : null,
+        body: typeof result?.body === "string" ? result.body : "",
+      };
+    }
+
     const response = await page.goto(url, {
       waitUntil: "domcontentloaded",
       timeout: 120000,
@@ -1291,7 +1361,7 @@ async function collectInteractiveDetailSnapshot(
     season_name: string;
   }>;
 }> {
-  const page = await browser.newPage();
+  const page = (await browser.newPage()) as ScenicBrowserPage;
 
   try {
     const response = await page.goto(detailUrl, {
@@ -1317,7 +1387,10 @@ async function collectInteractiveDetailSnapshot(
     await page.waitForTimeout(1200);
 
     const clickByText = async (needle: string): Promise<void> => {
-      await page.evaluate((targetText) => {
+      await page.evaluate((targetText: unknown) => {
+        if (typeof targetText !== "string") {
+          return;
+        }
         const target = targetText.toLowerCase();
         const nodes = Array.from(
           document.querySelectorAll(
@@ -1389,24 +1462,25 @@ async function collectInteractiveDetailSnapshot(
             continue;
           }
 
-          const classes = (element.className ?? "").toLowerCase();
+          const classes = (element.getAttribute("class") ?? "").toLowerCase();
+
           let code = "";
-          if (
+          if (classes.includes("booked")) {
+            code = "N";
+          } else if (classes.includes("check-out")) {
+            code = "N";
+          } else if (
             classes.includes("available") ||
-            classes.includes("check-in") ||
-            classes.includes("check-out")
+            classes.includes("check-in")
           ) {
             code = "Y";
-          } else if (
-            classes.includes("booked") ||
-            classes.includes("unavailable")
-          ) {
-            code = "N";
           }
 
-          if (code) {
-            availability.push({ date: rawDate, code });
+          if (!code) {
+            continue;
           }
+
+          availability.push({ date: rawDate, code });
         }
 
         const rates: Array<{ date: string; nightlyRateRaw: string }> = [];
@@ -1524,11 +1598,12 @@ async function discoverListings(
   _networkIdleWaitMs: number,
   reportProgress: (message: string) => void,
 ): Promise<ScrapedLink[]> {
+  const scenicPage = page as ScenicBrowserPage;
   const idSet = new Set<string>();
   const detailUrlSet = new Set<string>();
 
   const collectDetailUrls = async (): Promise<void> => {
-    const links = await page.evaluate(() => {
+    const links = await scenicPage.evaluate(() => {
       const urls = new Set<string>();
       for (const node of Array.from(document.querySelectorAll("a[href]"))) {
         const href = (node as HTMLAnchorElement).href;
@@ -1556,29 +1631,32 @@ async function discoverListings(
     }
   };
 
-  page.on("response", (response) => {
-    void (async () => {
-      try {
-        const url = response.url();
-        if (!url.includes("/wp-admin/admin-ajax.php")) {
-          return;
-        }
-        if (!url.includes("GetPropertyListWordPress")) {
-          return;
-        }
+  scenicPage.on(
+    "response",
+    (response: { url(): string; text(): Promise<string> }) => {
+      void (async () => {
+        try {
+          const url = response.url();
+          if (!url.includes("/wp-admin/admin-ajax.php")) {
+            return;
+          }
+          if (!url.includes("GetPropertyListWordPress")) {
+            return;
+          }
 
-        const body = await response.text();
-        const ids = extractIdsFromPropertyListPayload(body);
-        for (const id of ids) {
-          idSet.add(id);
+          const body = await response.text();
+          const ids = extractIdsFromPropertyListPayload(body);
+          for (const id of ids) {
+            idSet.add(id);
+          }
+        } catch {
+          // Ignore per-response parsing failures.
         }
-      } catch {
-        // Ignore per-response parsing failures.
-      }
-    })();
-  });
+      })();
+    },
+  );
 
-  const collectionResponse = await page.goto(anchorUrl, {
+  const collectionResponse = await scenicPage.goto(anchorUrl, {
     waitUntil: "domcontentloaded",
     timeout: 120000,
   });
@@ -1590,7 +1668,7 @@ async function discoverListings(
     reportDetailProgress: reportProgress,
   });
 
-  const collectionHtml = await page.content();
+  const collectionHtml = await scenicPage.content();
   const collectionBlockedSignal = detectBlockingSignalFromHtml(collectionHtml);
   if (collectionBlockedSignal) {
     const reason = `critical_http_status status=403 stage=collection_discovery_blocked url=${anchorUrl} signal=${collectionBlockedSignal}`;
@@ -1598,7 +1676,7 @@ async function discoverListings(
     throw new Error(reason);
   }
 
-  await page.waitForTimeout(Math.max(1800, scrollPauseMs * 2));
+  await scenicPage.waitForTimeout(Math.max(1800, scrollPauseMs * 2));
   await collectDetailUrls();
 
   const maxCycles = Math.min(maxScrollSteps, MAX_CLICK_CYCLES);
@@ -1607,11 +1685,11 @@ async function discoverListings(
   for (let cycle = 0; cycle < maxCycles; cycle += 1) {
     const beforeIdCount = idSet.size;
     const beforeDetailCount = detailUrlSet.size;
-    const beforeScrollHeight = await page.evaluate(
+    const beforeScrollHeight = await scenicPage.evaluate(
       () => document.body.scrollHeight,
     );
 
-    const loadMoreVisible = await page.evaluate(() => {
+    const loadMoreVisible = await scenicPage.evaluate(() => {
       const nodes = Array.from(
         document.querySelectorAll(
           "button, a, [role='button'], input[type='button'], input[type='submit']",
@@ -1648,7 +1726,7 @@ async function discoverListings(
     });
 
     if (loadMoreVisible) {
-      await page.evaluate(() => {
+      await scenicPage.evaluate(() => {
         const nodes = Array.from(
           document.querySelectorAll(
             "button, a, [role='button'], input[type='button'], input[type='submit']",
@@ -1685,16 +1763,16 @@ async function discoverListings(
       });
     }
 
-    await page.evaluate(() => {
+    await scenicPage.evaluate(() => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: "instant" });
     });
 
-    await page.waitForTimeout(CLICK_WAIT_MS);
-    await page.evaluate(() => {
+    await scenicPage.waitForTimeout(CLICK_WAIT_MS);
+    await scenicPage.evaluate(() => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: "instant" });
     });
 
-    await page.waitForTimeout(Math.max(700, scrollPauseMs));
+    await scenicPage.waitForTimeout(Math.max(700, scrollPauseMs));
     await collectDetailUrls();
 
     let observedGrowth =
@@ -1707,11 +1785,11 @@ async function discoverListings(
         observedGrowth = true;
         break;
       }
-      await page.waitForTimeout(350);
+      await scenicPage.waitForTimeout(350);
       await collectDetailUrls();
     }
 
-    const afterScrollHeight = await page.evaluate(
+    const afterScrollHeight = await scenicPage.evaluate(
       () => document.body.scrollHeight,
     );
     if (afterScrollHeight > beforeScrollHeight) {
@@ -1985,31 +2063,54 @@ async function fetchDetail(
         : null;
 
     let roomDetailsApiPayload: StreamlineRoomDetailsPayload | null = null;
-    if (numericUnitId !== null) {
-      const roomDetailsApiUrl = `${detailOrigin}/wp-admin/admin-ajax.php?${new URLSearchParams(
-        {
-          action: "streamlinecore-api-request",
-          params: JSON.stringify({
-            methodName: "GetPropertyRoomDetails",
-            params: {
-              unit_id: numericUnitId,
-              use_room_type_logic: "no",
-              standard_pricing: 1,
-            },
-          }),
-        },
-      ).toString()}`;
+    if (numericUnitId !== null && !SCRAPE_DETAIL_PAGE_ONLY) {
+      const roomDetailsApiUrl = `${detailOrigin}/wp-admin/admin-ajax.php`;
+      const roomDetailsBody = new URLSearchParams({
+        action: "streamlinecore-api-request",
+        params: JSON.stringify({
+          methodName: "GetPropertyRoomDetails",
+          params: {
+            unit_id: numericUnitId,
+            use_room_type_logic: "no",
+            standard_pricing: 1,
+          },
+        }),
+      }).toString();
 
       const roomDetailsResponse = await readTextResponseViaBrowser(
         browser,
         roomDetailsApiUrl,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json, text/plain, */*",
+            "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "x-requested-with": "XMLHttpRequest",
+          },
+          body: roomDetailsBody,
+          refererUrl: detailUrl,
+        },
       );
-      assertCriticalHttpStatus({
-        status: roomDetailsResponse.status,
-        stage: "room_details",
-        url: roomDetailsApiUrl,
-        reportDetailProgress,
-      });
+
+      if (
+        roomDetailsResponse.status === 403 ||
+        roomDetailsResponse.status === 429 ||
+        (roomDetailsResponse.status !== null &&
+          roomDetailsResponse.status >= 500)
+      ) {
+        assertCriticalHttpStatus({
+          status: roomDetailsResponse.status,
+          stage: "room_details",
+          url: roomDetailsApiUrl,
+          reportDetailProgress,
+        });
+      }
+
+      if (roomDetailsResponse.status === 404) {
+        reportDetailProgress?.(
+          `room_details unavailable status=404 listing=${detailUrl} fallback=html_extract`,
+        );
+      }
 
       if (roomDetailsResponse.status === 200) {
         try {
@@ -2032,31 +2133,54 @@ async function fetchDetail(
     let rawEndDate = "";
     let rawAvailabilityCodes = "";
 
-    if (numericUnitId !== null) {
-      const availabilityApiUrl = `https://myscenicstays.com/wp-admin/admin-ajax.php?${new URLSearchParams(
-        {
-          action: "streamlinecore-api-request",
-          params: JSON.stringify({
-            methodName: "GetPropertyAvailabilityRawData",
-            params: {
-              unit_id: numericUnitId,
-              use_room_type_logic: "no",
-              standard_pricing: 1,
-            },
-          }),
-        },
-      ).toString()}`;
+    if (numericUnitId !== null && !SCRAPE_DETAIL_PAGE_ONLY) {
+      const availabilityApiUrl = `${detailOrigin}/wp-admin/admin-ajax.php`;
+      const availabilityBody = new URLSearchParams({
+        action: "streamlinecore-api-request",
+        params: JSON.stringify({
+          methodName: "GetPropertyAvailabilityRawData",
+          params: {
+            unit_id: numericUnitId,
+            use_room_type_logic: "no",
+            standard_pricing: 1,
+          },
+        }),
+      }).toString();
 
       const availabilityResponse = await readTextResponseViaBrowser(
         browser,
         availabilityApiUrl,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json, text/plain, */*",
+            "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "x-requested-with": "XMLHttpRequest",
+          },
+          body: availabilityBody,
+          refererUrl: detailUrl,
+        },
       );
-      assertCriticalHttpStatus({
-        status: availabilityResponse.status,
-        stage: "availability",
-        url: availabilityApiUrl,
-        reportDetailProgress,
-      });
+
+      if (
+        availabilityResponse.status === 403 ||
+        availabilityResponse.status === 429 ||
+        (availabilityResponse.status !== null &&
+          availabilityResponse.status >= 500)
+      ) {
+        assertCriticalHttpStatus({
+          status: availabilityResponse.status,
+          stage: "availability",
+          url: availabilityApiUrl,
+          reportDetailProgress,
+        });
+      }
+
+      if (availabilityResponse.status === 404) {
+        reportDetailProgress?.(
+          `availability unavailable status=404 listing=${detailUrl} fallback=page_extract`,
+        );
+      }
 
       if (availabilityResponse.status === 200) {
         try {
@@ -2137,31 +2261,58 @@ async function fetchDetail(
     const ratesEndDateUs = formatDateUsFromIso(ratesEndIso);
 
     let ratesRowsRaw: Array<Record<string, unknown>> = [];
-    if (numericUnitId !== null && ratesStartDateUs && ratesEndDateUs) {
-      const ratesApiUrl = `https://myscenicstays.com/wp-admin/admin-ajax.php?${new URLSearchParams(
-        {
-          action: "streamlinecore-api-request",
-          params: JSON.stringify({
-            methodName: "GetPropertyRates",
-            params: {
-              unit_id: numericUnitId,
-              startdate: ratesStartDateUs,
-              enddate: ratesEndDateUs,
-            },
-          }),
-        },
-      ).toString()}`;
+    if (
+      numericUnitId !== null &&
+      ratesStartDateUs &&
+      ratesEndDateUs &&
+      !SCRAPE_DETAIL_PAGE_ONLY
+    ) {
+      const ratesApiUrl = `${detailOrigin}/wp-admin/admin-ajax.php`;
+      const ratesBody = new URLSearchParams({
+        action: "streamlinecore-api-request",
+        params: JSON.stringify({
+          methodName: "GetPropertyRates",
+          params: {
+            unit_id: numericUnitId,
+            startdate: ratesStartDateUs,
+            enddate: ratesEndDateUs,
+          },
+        }),
+      }).toString();
 
       const ratesResponse = await readTextResponseViaBrowser(
         browser,
         ratesApiUrl,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json, text/plain, */*",
+            "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "x-requested-with": "XMLHttpRequest",
+          },
+          body: ratesBody,
+          refererUrl: detailUrl,
+        },
       );
-      assertCriticalHttpStatus({
-        status: ratesResponse.status,
-        stage: "rates",
-        url: ratesApiUrl,
-        reportDetailProgress,
-      });
+
+      if (
+        ratesResponse.status === 403 ||
+        ratesResponse.status === 429 ||
+        (ratesResponse.status !== null && ratesResponse.status >= 500)
+      ) {
+        assertCriticalHttpStatus({
+          status: ratesResponse.status,
+          stage: "rates",
+          url: ratesApiUrl,
+          reportDetailProgress,
+        });
+      }
+
+      if (ratesResponse.status === 404) {
+        reportDetailProgress?.(
+          `rates unavailable status=404 listing=${detailUrl} fallback=page_extract`,
+        );
+      }
 
       if (ratesResponse.status === 200) {
         try {
@@ -2457,8 +2608,9 @@ async function fetchDetail(
           room_details: "GetPropertyRoomDetails",
           rates: "GetPropertyRates",
         },
-        notes:
-          "GetPropertyRoomDetails is used as the primary rooms guidance source; description parsing remains as fallback when room details are empty.",
+        notes: SCRAPE_DETAIL_PAGE_ONLY
+          ? "Detail scrape runs in page-only mode; API hints retained for reference and future diagnostics."
+          : "GetPropertyRoomDetails is used as the primary rooms guidance source; description parsing remains as fallback when room details are empty.",
       },
       html_path: htmlPath,
     };
@@ -2527,7 +2679,7 @@ export function createScenicStays30AAdapter(): ScraperAdapter<ScenicStaysDetailR
     },
     async fetchDetail(context) {
       return fetchDetail(
-        context.browser,
+        context.browser as ScenicBrowser,
         context.detailUrl,
         context.availabilityHorizonDays,
         context.maxCalendarAdvanceMonths,
