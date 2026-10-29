@@ -4,7 +4,7 @@ This document tracks where each base adapter currently stands against the univer
 
 Important: `Ready` in this document means combined conformance: required quality thresholds, pricing-record parity, and confirmed quote API capability.
 
-Audit date: 2026-10-29T11:35:30.997Z
+Audit date: 2026-10-29T12:13:56.855Z
 
 Data source:
 
@@ -88,18 +88,18 @@ Preferred (non-blocking):
 | rosemary30a             |   224 |  224 |     224 |          224 |          224 |        224 |       224 |    224 |                                                       224 |   9491 |                                                      42.37 |             ✅ |                                             2026-10-29 |     ✅ |
 | royaldestinations       |   155 |  155 |     155 |          155 |          155 |        155 |       155 |    155 |                                                       155 |   7468 |                                                      48.18 |             ✅ |                                             2026-10-29 |     ✅ |
 | sandersbeach30a         |    71 |   71 |      71 |           71 |           71 |         71 |        71 |     71 |                                                        71 |   3576 |                                                      50.37 |             ✅ |                                             2026-10-29 |     ✅ |
-| sandpiper30a            |   104 |  104 |     104 |          104 |          104 |        104 |       104 |    104 |                                                       104 |   5028 |                                                      48.35 |             ✅ |                                                      — |     ✅ |
+| sandpiper30a            |   101 |  101 |     101 |          101 |          101 |        101 |       101 |    101 |                                                       101 |   5000 |                                                      49.50 |             ✅ |                                             2026-10-29 |     ✅ |
 | scenicstays30a          |     0 |    0 |       0 |            0 |            0 |          0 |         0 |      0 |                                                         0 |      0 |                                                       0.00 |             ✅ |                                                      — |     ❌ |
 | stayat30a               |    37 |   37 |      37 |           37 |           37 |         37 |        37 |     37 |                                                        37 |   2264 |                                                      61.19 |             ✅ |                                                      — |     ✅ |
 | stayon30a               |   123 |  123 |     123 |          123 |          123 |        123 |       123 |    123 |                                                       123 |   5612 |                                                      45.63 |             ✅ |                                                      — |     ✅ |
-| **TOTAL**               |  3316 | 3316 |    3316 |         3316 |         3316 |       3316 |      3316 |   3316 | <span style="color:#c62828;"><strong>3300</strong></span> | 167296 |                                                      50.45 |             — |                                                      — | 30/32 |
+| **TOTAL**               |  3313 | 3313 |    3313 |         3313 |         3313 |       3313 |      3313 |   3313 | <span style="color:#c62828;"><strong>3297</strong></span> | 167268 |                                                      50.49 |             — |                                                      — | 30/32 |
 ## Current Snapshot Summary
 
 - 32 adapters audited.
 - All 32 adapters are at full required-core parity for the current captured files.
 - Combined-ready adapters (Ready = ✅): 30 / 32.
 
-- Pricing-records coverage signal: 3300 / 3316 files currently have per-listing pricing JSON records.
+- Pricing-records coverage signal: 3297 / 3313 files currently have per-listing pricing JSON records.
 
 - Quote API capability signal: 32 / 32 adapters expose pre-reservation quote APIs.
 - Geo location minimum (required): 32 / 32 adapters currently have 100% numeric lat/lng coverage.
@@ -109,8 +109,8 @@ Preferred (non-blocking):
 
 Snapshot from adapter source artifacts under `src/lib/data/external-sources/*/details`.
 
-- Total listings from adapter detail indexes (`details/index.json`): 3300
-- Total detail JSON files (matrix total): 3316
+- Total listings from adapter detail indexes (`details/index.json`): 3297
+- Total detail JSON files (matrix total): 3313
 - Index vs detail delta: -16
 - Adapters with index.json: 31/32
 - Missing index.json adapters: scenicstays30a
@@ -132,10 +132,10 @@ This ledger lists every adapter in descending order by Files count. % shows each
 |     9 | 30abeachgirls           |   123 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.7%</span> |             ✅ | complete |
 |    10 | stayon30a               |   123 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.7%</span> |             ✅ | complete |
 |    11 | 30avacay                |   116 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.5%</span> |             ✅ | complete |
-|    12 | exclusive30a            |   111 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.3%</span> |             ✅ | complete |
+|    12 | exclusive30a            |   111 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.4%</span> |             ✅ | complete |
 |    13 | oceanreef30a            |   107 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.2%</span> |             ✅ | complete |
-|    14 | sandpiper30a            |   104 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.1%</span> |             ✅ | complete |
-|    15 | 30aluxury               |   103 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.1%</span> |             ✅ | complete |
+|    14 | 30aluxury               |   103 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.1%</span> |             ✅ | complete |
+|    15 | sandpiper30a            |   101 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.0%</span> |             ✅ | complete |
 |    16 | oversee30a              |   100 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">3.0%</span> |             ✅ | complete |
 |    17 | dunevr30a               |    89 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.7%</span> |             ✅ | complete |
 |    18 | alysbeach30a            |    72 | <span style="font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap;">2.2%</span> |             ✅ | complete |
@@ -233,6 +233,7 @@ Expected impact:
 
 - As stricter checks roll out, more adapters will likely show warnings initially.
 - That is intended and should be treated as a quality-discovery phase, not validator noise.
+
 
 
 

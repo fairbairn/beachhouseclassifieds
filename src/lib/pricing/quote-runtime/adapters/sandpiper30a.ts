@@ -1,3 +1,4 @@
+import { shouldAdapterUseProxy } from "@/lib/pricing/proxy/adapter-proxy-policy";
 import type { QuoteExecutionRequest, QuoteExecutionResult } from "../types";
 
 type LmpmMoney = {
@@ -27,6 +28,7 @@ type RawObservation = {
   endDate: string;
   quoteAvailable: boolean;
   quoteUnavailableReason: string | null;
+  httpStatus: number | null;
   baseTotal: number | null;
   taxesTotal: number | null;
   feesTotal: number | null;
@@ -42,6 +44,50 @@ const LMPM_PROPERTIES_ENDPOINT = `${BASE_HOST}/wp-json/lmpm/v1/properties`;
 const MIN_VALID_BASE_TOTAL = 100;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const USE_PROXY = shouldAdapterUseProxy(ADAPTER_KEY);
+
+let cachedProxyDispatcherPromise: Promise<unknown | null> | null = null;
+
+function resolveProxyUrl(useProxy: boolean): string | null {
+  if (!useProxy) {
+    return null;
+  }
+
+  const proxy =
+    process.env.HTTPS_PROXY ??
+    process.env.HTTP_PROXY ??
+    process.env.https_proxy ??
+    process.env.http_proxy;
+  const normalized = proxy?.trim();
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+async function resolveProxyDispatcher(): Promise<unknown | null> {
+  const proxyUrl = resolveProxyUrl(USE_PROXY);
+  if (!proxyUrl) {
+    return null;
+  }
+
+  try {
+    const undiciModule = (await import("undici")) as {
+      ProxyAgent?: new (input: { uri: string }) => unknown;
+    };
+    const ProxyAgent = undiciModule.ProxyAgent;
+    if (!ProxyAgent) {
+      return null;
+    }
+    return new ProxyAgent({ uri: proxyUrl });
+  } catch {
+    return null;
+  }
+}
+
+async function getProxyDispatcher(): Promise<unknown | null> {
+  if (!cachedProxyDispatcherPromise) {
+    cachedProxyDispatcherPromise = resolveProxyDispatcher();
+  }
+  return cachedProxyDispatcherPromise;
+}
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -179,6 +225,22 @@ function asOptionalString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function isRateLimitedFailure(input: {
+  httpStatus: number | null;
+  message: string | null;
+}): boolean {
+  if (input.httpStatus === 429) {
+    return true;
+  }
+
+  const message = input.message?.toLowerCase() ?? "";
+  return (
+    message.includes("429") ||
+    message.includes("rate limit") ||
+    message.includes("throttle")
+  );
+}
+
 async function fetchQuoteObservation(input: {
   detailUrl: string;
   unitCode: string;
@@ -205,21 +267,32 @@ async function fetchQuoteObservation(input: {
       endDate: input.endDate,
     });
 
-    const response = await fetch(quoteUrl, {
+    const dispatcher = await getProxyDispatcher();
+    const requestInit: RequestInit & { dispatcher?: unknown } = {
       method: "GET",
       headers: {
         accept: "application/json, text/plain, */*",
         "user-agent": USER_AGENT,
         referer: input.detailUrl,
       },
-    });
+    };
+
+    if (dispatcher) {
+      requestInit.dispatcher = dispatcher;
+    }
+
+    const response = await fetch(quoteUrl, requestInit);
 
     if (!response.ok) {
       return {
         startDate: input.startDate,
         endDate: input.endDate,
         quoteAvailable: false,
-        quoteUnavailableReason: `Quote request failed with status ${response.status}`,
+        quoteUnavailableReason:
+          response.status === 429
+            ? "Quote provider throttled request (HTTP 429)"
+            : `Quote request failed with status ${response.status}`,
+        httpStatus: response.status,
         baseTotal: null,
         taxesTotal: null,
         feesTotal: null,
@@ -262,6 +335,7 @@ async function fetchQuoteObservation(input: {
         : (availabilityError ??
           apiErrorMessage ??
           "Quote unavailable for selected stay window"),
+      httpStatus: response.status,
       baseTotal,
       taxesTotal,
       feesTotal,
@@ -278,6 +352,7 @@ async function fetchQuoteObservation(input: {
       endDate: input.endDate,
       quoteAvailable: false,
       quoteUnavailableReason: message,
+      httpStatus: null,
       baseTotal: null,
       taxesTotal: null,
       feesTotal: null,
@@ -413,11 +488,16 @@ export async function executeSandpiper30aSingleQuote(
 
     const elapsedMs = Date.now() - startedAt;
     if (!raw.quoteAvailable) {
+      const rateLimited = isRateLimitedFailure({
+        httpStatus: raw.httpStatus,
+        message: raw.quoteUnavailableReason,
+      });
+
       return {
         success: false,
         elapsedMs,
         error: {
-          code: "QUOTE_UNAVAILABLE",
+          code: rateLimited ? "QUOTE_RATE_LIMITED" : "QUOTE_UNAVAILABLE",
           message: raw.quoteUnavailableReason ?? "Quote unavailable",
           retryable: true,
           details: {
@@ -425,6 +505,7 @@ export async function executeSandpiper30aSingleQuote(
             listingId: input.listingId,
             checkInIso: input.checkInIso,
             checkOutIso: input.checkOutIso,
+            httpStatus: raw.httpStatus,
             handoffUrl: raw.handoffUrl,
           },
         },

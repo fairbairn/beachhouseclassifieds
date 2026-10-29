@@ -2,22 +2,24 @@
   "adapter_key": "sandpiper30a",
   "external_listing_id": "forsythe-house",
   "detail_url": "https://sandpipervacationrentals.com/all-properties/forsythe-house?adults=1&hub_property_id=SXRlbToyMzI2Ng%3D%3D",
-  "captured_at": "2026-06-02T12:53:36.200Z",
+  "captured_at": "2026-10-29T11:55:02.415Z",
   "currency": "USD",
   "quote_window_cadence": "weekly_anchor_adaptive_span",
   "quote_window_gap_policy": "probe_longest_available_span",
-  "quote_window_anchor_date": "2026-06-06",
+  "quote_window_anchor_date": "2026-10-31",
   "quote_window_days": 168,
   "quote_sample_step_days": 1,
   "quote_nights": 7,
-  "quote_max_queries": 1,
+  "quote_max_queries": 3,
   "endpoint_path": "/wp-admin/admin-ajax.php?action=q4vr_stay",
   "quote_run_diagnostics": {
-    "queried_windows": 1,
-    "available_windows": 1,
-    "unavailable_windows": 0,
+    "queried_windows": 3,
+    "available_windows": 0,
+    "unavailable_windows": 3,
     "internal_error_windows": 0,
-    "unavailable_reason_counts": {},
+    "unavailable_reason_counts": {
+      "QUOTE_UNAVAILABLE": 3
+    },
     "sample_internal_errors": []
   },
   "observations": [
