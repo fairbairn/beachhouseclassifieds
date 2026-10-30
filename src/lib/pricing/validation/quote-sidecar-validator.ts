@@ -35,7 +35,7 @@ const ADAPTER_EXPECTED_HANDOFF_SIGNATURES: Record<string, string[]> = {
     "https://stayon30a.com/checkout?listing=abc123&property=demo-home&checkIn=2026-01-01&checkOut=2026-01-08&guests=2",
   ],
   stayat30a: [
-    "https://www.stayat30avacationrentals.com/vacation-rentals/checkout/?keys=arr,depart,id,nights,persons,quote",
+    "https://www.stayat30avacationrentals.com/vacation-rentals/checkout/?arr=1&depart=1&id=1&nights=1&persons=1&quote=1",
   ],
 };
 

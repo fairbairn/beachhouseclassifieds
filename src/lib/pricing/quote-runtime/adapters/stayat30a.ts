@@ -243,6 +243,7 @@ export async function executeStayat30aSingleQuote(
       optIn: false,
       promoCode: "",
       sdpBool: false,
+      needRoamCache: false,
     };
 
     const response = await fetch(ROUTER_ENDPOINT, {

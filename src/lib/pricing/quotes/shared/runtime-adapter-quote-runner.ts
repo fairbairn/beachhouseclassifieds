@@ -335,6 +335,10 @@ export type RuntimeAdapterQuoteRunnerConfig = {
   defaultEndpointPath?: string;
   defaultTaxPct?: number;
   defaultBaseNightly?: number;
+  defaultMinProbeNights?: number;
+  defaultMaxProbeNights?: number;
+  preferredStartWeekday?: number;
+  preferredWindowNights?: number[];
 };
 
 const DEFAULT_MAX_LISTINGS = 10;
@@ -1076,6 +1080,8 @@ function buildAdaptiveQuoteWindows(input: {
   availabilityDays: AvailabilityDay[];
   defaultMinProbeNights: number;
   defaultMaxProbeNights: number;
+  preferredStartWeekday: number | null;
+  preferredWindowNights: number[];
 }): QuoteWindow[] {
   const todayIso = new Date().toISOString().slice(0, 10);
   const horizonDays = Math.max(1, input.weeks * 7);
@@ -1102,74 +1108,99 @@ function buildAdaptiveQuoteWindows(input: {
     .filter((day) => day.date >= todayIso && day.date <= horizonEndIso)
     .sort((left, right) => left.date.localeCompare(right.date));
 
-  const windows: QuoteWindow[] = [];
-  let dayIndex = 0;
-  while (dayIndex < sortedDays.length) {
-    const day = sortedDays[dayIndex];
-    if (!day) {
-      break;
-    }
+  const pickWindows = (days: AvailabilityDay[]): QuoteWindow[] => {
+    const windows: QuoteWindow[] = [];
+    let dayIndex = 0;
 
-    if (!canStartStay(day)) {
-      dayIndex += 1;
-      continue;
-    }
-
-    const startMinNights =
-      typeof day.min_nights_required === "number" && day.min_nights_required > 0
-        ? Math.min(28, Math.floor(day.min_nights_required))
-        : configuredMinProbeNights;
-    const minProbeNightsForStart = Math.max(
-      configuredMinProbeNights,
-      startMinNights,
-    );
-    const maxProbeNightsForStart =
-      startMinNights > preferredProbeNights
-        ? configuredMaxProbeNights
-        : Math.max(minProbeNightsForStart, preferredProbeNights);
-
-    const candidateNights: number[] = [];
-    for (
-      let nights = minProbeNightsForStart;
-      nights <= maxProbeNightsForStart;
-      nights += 1
-    ) {
-      if (canQuoteWindow({ byDate, startDate: day.date, nights })) {
-        candidateNights.push(nights);
-      }
-    }
-
-    let selectedNights: number | null = null;
-    if (candidateNights.length > 0) {
-      selectedNights = Math.max(...candidateNights);
-    }
-
-    if (selectedNights === null) {
-      dayIndex += 1;
-      continue;
-    }
-
-    const nextStartDate = addDays(day.date, selectedNights);
-    windows.push({
-      startDate: day.date,
-      endDate: nextStartDate,
-      nights: selectedNights,
-    });
-
-    while (dayIndex < sortedDays.length) {
-      const probeDay = sortedDays[dayIndex];
-      if (!probeDay || probeDay.date >= nextStartDate) {
+    while (dayIndex < days.length) {
+      const day = days[dayIndex];
+      if (!day) {
         break;
       }
-      dayIndex += 1;
-    }
-  }
 
-  if (windows.length === 0) {
+      if (!canStartStay(day)) {
+        dayIndex += 1;
+        continue;
+      }
+
+      const startMinNights =
+        typeof day.min_nights_required === "number" && day.min_nights_required > 0
+          ? Math.min(28, Math.floor(day.min_nights_required))
+          : configuredMinProbeNights;
+      const minProbeNightsForStart = Math.max(
+        configuredMinProbeNights,
+        startMinNights,
+      );
+      const maxProbeNightsForStart =
+        startMinNights > preferredProbeNights
+          ? configuredMaxProbeNights
+          : Math.max(minProbeNightsForStart, preferredProbeNights);
+
+      const candidateNights: number[] = [];
+      for (
+        let nights = minProbeNightsForStart;
+        nights <= maxProbeNightsForStart;
+        nights += 1
+      ) {
+        if (canQuoteWindow({ byDate, startDate: day.date, nights })) {
+          candidateNights.push(nights);
+        }
+      }
+
+      let selectedNights: number | null = null;
+      if (candidateNights.length > 0) {
+        for (const preferredNights of input.preferredWindowNights) {
+          if (candidateNights.includes(preferredNights)) {
+            selectedNights = preferredNights;
+            break;
+          }
+        }
+        if (selectedNights === null) {
+          selectedNights = Math.max(...candidateNights);
+        }
+      }
+
+      if (selectedNights === null) {
+        dayIndex += 1;
+        continue;
+      }
+
+      const nextStartDate = addDays(day.date, selectedNights);
+      windows.push({
+        startDate: day.date,
+        endDate: nextStartDate,
+        nights: selectedNights,
+      });
+
+      while (dayIndex < days.length) {
+        const probeDay = days[dayIndex];
+        if (!probeDay || probeDay.date >= nextStartDate) {
+          break;
+        }
+        dayIndex += 1;
+      }
+    }
+
+    return windows;
+  };
+
+  const preferredStartDays =
+    typeof input.preferredStartWeekday === "number"
+      ? sortedDays.filter((day) => {
+          const weekday = new Date(`${day.date}T00:00:00Z`).getUTCDay();
+          return weekday === input.preferredStartWeekday;
+        })
+      : [];
+
+  const windows =
+    preferredStartDays.length > 0 ? pickWindows(preferredStartDays) : [];
+  const finalWindows = windows.length > 0 ? windows : pickWindows(sortedDays);
+
+  if (finalWindows.length === 0) {
     return [];
   }
 
-  return windows.sort((left, right) => {
+  return finalWindows.sort((left, right) => {
     const startCompare = left.startDate.localeCompare(right.startDate);
     if (startCompare !== 0) {
       return startCompare;
@@ -1683,6 +1714,8 @@ async function buildSidecarForListing(input: {
   availabilityDays: AvailabilityDay[];
   defaultMinProbeNights: number;
   defaultMaxProbeNights: number;
+  preferredStartWeekday: number | null;
+  preferredWindowNights: number[];
   existingRealQuoteObservations: CanonicalQuoteObservation[];
   progress?: QuoteProgress;
   onWindowsPlanned?: (windows: number) => void;
@@ -1712,6 +1745,8 @@ async function buildSidecarForListing(input: {
     availabilityDays: input.availabilityDays,
     defaultMinProbeNights: input.defaultMinProbeNights,
     defaultMaxProbeNights: input.defaultMaxProbeNights,
+    preferredStartWeekday: input.preferredStartWeekday,
+    preferredWindowNights: input.preferredWindowNights,
   });
 
   let windowsToQuery = options.skipCoveredWindows
@@ -2074,14 +2109,49 @@ export async function runRuntimeAdapterQuoteCli(
       process.env.QUOTE_CAPTURE_MAX_PROBE_NIGHTS ??
         String(DEFAULT_MAX_PROBE_NIGHTS),
     );
-    const defaultMinProbeNights =
+    const envMinProbeNights =
       Number.isFinite(minProbeNightsFromEnv) && minProbeNightsFromEnv > 0
         ? Math.floor(minProbeNightsFromEnv)
         : DEFAULT_MIN_PROBE_NIGHTS;
-    const defaultMaxProbeNights =
+    const envMaxProbeNights =
       Number.isFinite(maxProbeNightsFromEnv) && maxProbeNightsFromEnv > 0
         ? Math.floor(maxProbeNightsFromEnv)
         : DEFAULT_MAX_PROBE_NIGHTS;
+
+    const adapterMinProbeNights =
+      typeof config.defaultMinProbeNights === "number" &&
+      Number.isFinite(config.defaultMinProbeNights) &&
+      config.defaultMinProbeNights > 0
+        ? Math.floor(config.defaultMinProbeNights)
+        : null;
+    const adapterMaxProbeNights =
+      typeof config.defaultMaxProbeNights === "number" &&
+      Number.isFinite(config.defaultMaxProbeNights) &&
+      config.defaultMaxProbeNights > 0
+        ? Math.floor(config.defaultMaxProbeNights)
+        : null;
+    const adapterPreferredStartWeekday =
+      typeof config.preferredStartWeekday === "number" &&
+      Number.isFinite(config.preferredStartWeekday)
+        ? Math.min(6, Math.max(0, Math.floor(config.preferredStartWeekday)))
+        : null;
+    const adapterPreferredWindowNights = Array.isArray(
+      config.preferredWindowNights,
+    )
+      ? Array.from(
+          new Set(
+            config.preferredWindowNights
+              .map((value) => Math.floor(Number(value)))
+              .filter((value) => Number.isFinite(value) && value > 0),
+          ),
+        )
+      : [];
+
+    const defaultMinProbeNights = adapterMinProbeNights ?? envMinProbeNights;
+    const defaultMaxProbeNights = Math.max(
+      defaultMinProbeNights,
+      adapterMaxProbeNights ?? envMaxProbeNights,
+    );
 
     progress?.info(
       [
@@ -2100,6 +2170,8 @@ export async function runRuntimeAdapterQuoteCli(
         `selection=${options.listingId ? `listing:${options.listingId}` : `max-listings:${options.maxListings}`}`,
         `min_probe_nights=${defaultMinProbeNights}`,
         `max_probe_nights=${defaultMaxProbeNights}`,
+        `preferred_start_weekday=${adapterPreferredStartWeekday ?? "none"}`,
+        `preferred_window_nights=${adapterPreferredWindowNights.length > 0 ? adapterPreferredWindowNights.join(",") : "none"}`,
       ].join(" "),
     );
 
@@ -2274,6 +2346,8 @@ export async function runRuntimeAdapterQuoteCli(
           availabilityDays,
           defaultMinProbeNights,
           defaultMaxProbeNights,
+          preferredStartWeekday: adapterPreferredStartWeekday,
+          preferredWindowNights: adapterPreferredWindowNights,
           existingRealQuoteObservations: existingObservations,
           progress,
           onWindowsPlanned: (windows) => {

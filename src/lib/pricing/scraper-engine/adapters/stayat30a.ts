@@ -222,7 +222,8 @@ type StayAt30ADetailRecord = DetailRecordBase & {
   };
 };
 
-const DEFAULT_ANCHOR_URL = "https://stayat30a.com/book-now/";
+const DEFAULT_ANCHOR_URL =
+  "https://www.stayat30avacationrentals.com/30a-vacation-rentals/";
 const EXPECTED_LISTING_COUNT = 37;
 const DETAIL_PATH_PREFIXES = ["/vacation-rentals/"];
 const OUTPUT_ROOT = resolve(
@@ -246,6 +247,14 @@ function normalizeDetailUrl(url: string): string {
   } catch {
     return normalizeLink(url);
   }
+}
+
+function isStayatHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized.endsWith("stayat30a.com") ||
+    normalized.endsWith("stayat30avacationrentals.com")
+  );
 }
 
 function isLikelyDetailPath(pathname: string): boolean {
@@ -476,11 +485,12 @@ function toCanonicalUnitImageUrl(rawUrl: string): string | null {
   if (!/\.(?:jpe?g|png|webp|gif)$/i.test(fileName)) {
     return null;
   }
-  // Keep only native gallery images; drop sized variants like sm-image_*.
-  if (!/^image_/i.test(fileName)) {
+  // Keep native gallery images (legacy image_* and current GUID names),
+  // but drop known thumbnail/sized variants.
+  if (/^thumbnail_/i.test(fileName)) {
     return null;
   }
-  if (/^thumbnail_/i.test(fileName)) {
+  if (/^sm-image_/i.test(fileName)) {
     return null;
   }
 
@@ -1013,6 +1023,18 @@ function extractExternalListingId(detailUrl: string): string {
     return parts[parts.length - 1] ?? parsed.pathname;
   } catch {
     return detailUrl;
+  }
+}
+
+function extractQuoteUnitIdFromDetailUrl(detailUrl: string): string | null {
+  try {
+    const parsed = new URL(detailUrl);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const tail = parts[parts.length - 1] ?? "";
+    const normalized = tail.trim();
+    return /^\d+$/.test(normalized) ? normalized : null;
+  } catch {
+    return null;
   }
 }
 
@@ -1599,7 +1621,11 @@ async function discoverListings(
       const toNormalized = (hrefValue: string): string => {
         try {
           const absolute = new URL(hrefValue, window.location.origin);
-          if (!absolute.hostname.endsWith("stayat30avacationrentals.com")) {
+          const normalizedHost = absolute.hostname.toLowerCase();
+          if (
+            !normalizedHost.endsWith("stayat30a.com") &&
+            !normalizedHost.endsWith("stayat30avacationrentals.com")
+          ) {
             return "";
           }
 
@@ -2157,6 +2183,7 @@ async function fetchDetail(
       waitUntil: "domcontentloaded",
       timeout: 120000,
     });
+    const resolvedDetailUrl = normalizeDetailUrl(page.url());
     await page
       .waitForSelector(
         "h1, .be-property-widget, #availability, .pdp-availability-calendar, .pdp-property-widget-info-list",
@@ -2809,6 +2836,9 @@ async function fetchDetail(
     const locationPayload = extractFieldLocationFromHtml(html);
     const extractedUnitId =
       stripHtml(extracted.unitId).trim() || extractUnitIdFromHtml(html);
+    const quoteUnitId =
+      extractQuoteUnitIdFromDetailUrl(resolvedDetailUrl) ||
+      stripHtml(extractedUnitId || externalListingId).slice(0, 140);
     const unitCardSignals = extractUnitCardSignals(html, extractedUnitId);
     const primaryUnitType = extractPrimaryUnitTypeFromHtml(html);
 
@@ -2962,16 +2992,16 @@ async function fetchDetail(
 
     return {
       external_listing_id: externalListingId,
-      detail_url: detailUrl,
+      detail_url: resolvedDetailUrl,
       quote_context: {
-        unit_id: propertyProfile.unit_id,
-        listing_id: propertyProfile.unit_id,
-        detail_url: detailUrl,
+        unit_id: quoteUnitId,
+        listing_id: quoteUnitId,
+        detail_url: resolvedDetailUrl,
       },
       fetched_at: new Date().toISOString(),
       title: normalizeListingName(extracted.title || extracted.h1 || ""),
       h1: listingName,
-      canonical_url: extracted.canonical || detailUrl,
+      canonical_url: extracted.canonical || resolvedDetailUrl,
       meta_description: stripHtml(extracted.metaDescription).slice(0, 2000),
       description_expanded: descriptionExpanded,
       rooms_guidance: roomsGuidance,
@@ -3085,7 +3115,7 @@ export function createStayAt30AAdapter(): ScraperAdapter<StayAt30ADetailRecord> 
       try {
         const parsed = new URL(value.trim());
         if (
-          !parsed.hostname.endsWith("stayat30avacationrentals.com") ||
+          !isStayatHost(parsed.hostname) ||
           !isLikelyDetailPath(parsed.pathname)
         ) {
           return null;
@@ -3125,6 +3155,8 @@ export function createStayAt30AAdapter(): ScraperAdapter<StayAt30ADetailRecord> 
           executeSingleQuote: executeStayat30aSingleQuote,
           defaultQuoteTimeoutMs: 20000,
           defaultQuoteMaxAttempts: 3,
+          preferredStartWeekday: 6,
+          preferredWindowNights: [7, 14],
           defaultEndpointPath: "/vacation-rentals/router/",
           defaultTaxPct: 0.12,
           defaultBaseNightly: 700,
