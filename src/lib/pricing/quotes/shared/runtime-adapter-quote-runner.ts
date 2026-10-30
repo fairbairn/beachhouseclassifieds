@@ -1124,7 +1124,8 @@ function buildAdaptiveQuoteWindows(input: {
       }
 
       const startMinNights =
-        typeof day.min_nights_required === "number" && day.min_nights_required > 0
+        typeof day.min_nights_required === "number" &&
+        day.min_nights_required > 0
           ? Math.min(28, Math.floor(day.min_nights_required))
           : configuredMinProbeNights;
       const minProbeNightsForStart = Math.max(
