@@ -131,15 +131,6 @@ function normalizeNonNegativeCurrency(value: number | null): number | null {
   return value;
 }
 
-function toPositiveIntString(value: unknown): string | null {
-  const parsed =
-    typeof value === "string" ? Number(value.trim()) : Number(value ?? NaN);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-  return String(Math.floor(parsed));
-}
-
 function toOpaqueIdString(value: unknown): string | null {
   if (typeof value === "string") {
     const trimmed = value.trim();

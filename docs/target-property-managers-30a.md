@@ -35,7 +35,6 @@ This is a best-effort deduction based on manager names and domains visible in ex
 | 2   | Benchmark Management    | benchmark30a.com         | Covered                          | Dedicated adapter/script exists | `benchmark30a` adapter present      |
 | 3   | RealJoy Vacations       | realjoy.com              | Covered                          | Dedicated adapter/script exists | `realjoy30a` adapter present        |
 | 4   | Oversee                 | oversee.us               | Covered                          | Dedicated adapter/script exists | `oversee30a` adapter present        |
-| 5   | LocalVR                 | golocalvr.com            | Covered                          | Dedicated adapter/script exists | `localvr30a` adapter present        |
 | 6   | Royal Destinations      | royaldestinations.com    | Covered                          | Dedicated adapter/script exists | `royaldestinations` adapter present |
 | 7   | Homeowner's Collection  | homeownerscollection.com | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
 | 8   | Sanders Beach Rentals   | sandersbeachrentals.com  | Not covered yet                  | No direct adapter/script found  | Candidate to add                    |
@@ -81,7 +80,6 @@ This is a best-effort deduction based on manager names and domains visible in ex
 | 27  | Emerald Coast By Owner                | 50-150                  | emeraldcoastbyowner.com       |
 | 28  | Beach Blue Properties                 | 50-100                  | beachblueproperties.com       |
 | 29  | Coast Property Management             | 50-100                  | coast-properties.com          |
-| 30  | Grayt 30A Vacations                   | 30-80                   | grayt30avacations.com         |
 | 31  | 30A Beach Properties                  | 30-80                   | 30abeachproperties.com        |
 | 32  | Beachwalk Vacations                   | 25-75                   | beachwalkvacations.com        |
 | 33  | Sunburst Beach Vacations              | 25-75                   | sunburstbeachvacations.com    |

@@ -15,10 +15,8 @@ import { executeElp30aSingleQuote } from "./adapters/elp30a";
 import { executeExclusive30aSingleQuote } from "./adapters/exclusive30a";
 import { executeFivestar30aSingleQuote } from "./adapters/fivestar30a";
 import { executeFunvacay30aSingleQuote } from "./adapters/funvacay30a";
-import { executeGrayt30aSingleQuote } from "./adapters/grayt30a";
 import { executeHomeownerscollection30aSingleQuote } from "./adapters/homeownerscollection30a";
 import { executeKeyco30aSingleQuote } from "./adapters/keyco30a";
-import { executeLocalvr30aSingleQuote } from "./adapters/localvr30a";
 import { executeLuxe30aSingleQuote } from "./adapters/luxe30a";
 import { executeOceanreef30aSingleQuote } from "./adapters/oceanreef30a";
 import { executeOversee30aSingleQuote } from "./adapters/oversee30a";
@@ -57,11 +55,9 @@ const RUNTIME_EXECUTORS: Record<string, QuoteRuntimeExecutor> = {
   exclusive30a: executeExclusive30aSingleQuote,
   fivestar30a: executeFivestar30aSingleQuote,
   funvacay30a: executeFunvacay30aSingleQuote,
-  grayt30a: executeGrayt30aSingleQuote,
   homeownerscollection30a: executeHomeownerscollection30aSingleQuote,
   keyco30a: executeKeyco30aSingleQuote,
   luxe30a: executeLuxe30aSingleQuote,
-  localvr30a: executeLocalvr30aSingleQuote,
   oceanreef30a: executeOceanreef30aSingleQuote,
   oversee30a: executeOversee30aSingleQuote,
   panhandle30a: executePanhandle30aSingleQuote,

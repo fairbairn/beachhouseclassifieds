@@ -86,30 +86,29 @@ Use this table to pick the nearest adapter template before starting a new manage
 
 | Platform Family                   | Confirmed Adapter Examples                                                                                                      | Strong Clues In Source                                                                                                 | Recommended Template Starting Points                    |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Track PMS + Bluetent / Rezfusion  | `30avacay`, `grayt30a`, `stayat30a`, `panhandle30a`, `sandpiper30a`, `royaldestinations`, `funvacay30a`                         | `img.trackhs.com`, `track-pm.s3.amazonaws.com`, Rezfusion image URL handling, `/vacation-rentals/router/` hints        | `funvacay30a`, `stayon30a` (for stronger logging style) |
+| Track PMS + Bluetent / Rezfusion  | `30avacay`, `stayat30a`, `panhandle30a`, `sandpiper30a`, `royaldestinations`, `funvacay30a`                                     | `img.trackhs.com`, `track-pm.s3.amazonaws.com`, Rezfusion image URL handling, `/vacation-rentals/router/` hints        | `funvacay30a`, `stayon30a` (for stronger logging style) |
 | Streamline (WordPress bridge)     | `stayon30a`, `scenicstays30a`, `coastproperties30a`, `30abeach`, `dunevr30a`                                                    | `/wp-admin/admin-ajax.php` + `action=streamlinecore-api-request`, `GetPropertyAvailabilityRawData`                     | `stayon30a`, `scenicstays30a`, `30abeach`               |
 | Streamline (RESCMS / RCAPI)       | `sandersbeach30a`, `homeownerscollection30a`, `benchmark30a`                                                                    | `/rcapi/item/avail/search`, `/rescms/item/{eid}/buy`, Riot payload containing `entity.eid`, `entity.id`, `entity.type` | `homeownerscollection30a`, `benchmark30a`               |
-| Guesty-hosted booking experiences | `luxe30a`, `localvr30a`                                                                                                         | `guestybookings.com`, `/api/properties`, `GuestyProperty` payloads                                                     | `luxe30a`, `localvr30a`                                 |
+| Guesty-hosted booking experiences | `luxe30a`                                                                                                                       | `guestybookings.com`, `/api/properties`, `GuestyProperty` payloads                                                     | `luxe30a`                                               |
 | Custom/Hybrid booking stack       | `360blue`, `oversee30a`, `realjoy30a`, `30aescapes`, `oceanreef30a`, `exclusive30a`, `fivestar30a`, `benchmark30a`, `30aluxury` | Provider-specific route and payload patterns vary per manager                                                          | Choose nearest row in matrix and verify via probe first |
 
 ## Pattern Matrix By Existing Adapter
 
-| Adapter              | Listing Strategy                              | Detail Strategy                              | Availability Strategy                    | Primary Clues                                          |
-| -------------------- | --------------------------------------------- | -------------------------------------------- | ---------------------------------------- | ------------------------------------------------------ |
-| `360blue`            | Infinite scroll + height stabilization        | HTML + JSON-LD extraction                    | DOM calendar + next-button pagination    | `.cmp-availability-calendar`, `/properties/`           |
-| `30aescapes`         | Scroll/discovery with de-duplication          | HTML extraction with expansion-friendly flow | Calendar-table parsing + month traversal | `table.calendar-table`, `/rentals/`                    |
-| `30aluxury`          | Scroll-driven listing capture                 | HTML extraction                              | Calendar-table parsing + traversal       | `/vacation-rentals/`                                   |
-| `beachblue`          | Scroll with growth checks                     | HTML extraction + profile signals            | DOM calendar class mapping               | `/vacation-rentals/rental/`                            |
-| `benchmark30a`       | Listing extraction with pagination cues       | HTML + embedded structured blocks            | Embedded range data converted to days    | `benchmark30a.com`, embedded payload clues             |
-| `coastproperties30a` | Load-more loop + AJAX ID capture              | Numeric-ID detail fetch                      | Availability API payload decoding        | `/wp-admin/admin-ajax.php`, `GetPropertyListWordPress` |
-| `exclusive30a`       | Numbered pagination traversal                 | HTML + inline script extraction              | Inline booked-day arrays                 | `/vacation-rentals/`, `?page=` cues                    |
-| `fivestar30a`        | Multi-anchor pagination/list traversal        | HTML extraction + profile signals            | Calendar/widget + rule extraction        | East/West result-set split                             |
-| `localvr30a`         | Scroll + API interception (`/api/properties`) | HTML extraction with Read More expansion     | Embedded day/state payload parsing       | Guesty-style `/property/<slug>-<id>`                   |
-| `oceanreef30a`       | Scroll + load-more and expected-count hints   | HTML extraction with ID fallback chain       | Day-cell class + `data-date` parsing     | property ID inputs and class-coded cells               |
-| `oversee30a`         | Server-side page traversal via `/vrpjax`      | HTML + data-attribute extraction             | Availability endpoint payloads           | `/vrp/`, `/vrpjax`                                     |
-| `realjoy30a`         | Scroll + stagnation termination               | HTML + URL/unitcode heuristics               | Parsed day/state data from detail source | `/beach-rentals/`                                      |
-| `stayon30a`          | Load-more + AJAX ID capture                   | Numeric-ID detail fetch                      | Availability API payload decoding        | `/wp-admin/admin-ajax.php`, WordPress pattern          |
-| `funvacay30a`        | Scroll/discovery with expected-count target   | HTML extraction + expandable About section   | Calendar widget month traversal parsing  | Track/Bluetent clues (`trackhs`, Rezfusion, Bluetent)  |
+| Adapter              | Listing Strategy                            | Detail Strategy                              | Availability Strategy                    | Primary Clues                                          |
+| -------------------- | ------------------------------------------- | -------------------------------------------- | ---------------------------------------- | ------------------------------------------------------ |
+| `360blue`            | Infinite scroll + height stabilization      | HTML + JSON-LD extraction                    | DOM calendar + next-button pagination    | `.cmp-availability-calendar`, `/properties/`           |
+| `30aescapes`         | Scroll/discovery with de-duplication        | HTML extraction with expansion-friendly flow | Calendar-table parsing + month traversal | `table.calendar-table`, `/rentals/`                    |
+| `30aluxury`          | Scroll-driven listing capture               | HTML extraction                              | Calendar-table parsing + traversal       | `/vacation-rentals/`                                   |
+| `beachblue`          | Scroll with growth checks                   | HTML extraction + profile signals            | DOM calendar class mapping               | `/vacation-rentals/rental/`                            |
+| `benchmark30a`       | Listing extraction with pagination cues     | HTML + embedded structured blocks            | Embedded range data converted to days    | `benchmark30a.com`, embedded payload clues             |
+| `coastproperties30a` | Load-more loop + AJAX ID capture            | Numeric-ID detail fetch                      | Availability API payload decoding        | `/wp-admin/admin-ajax.php`, `GetPropertyListWordPress` |
+| `exclusive30a`       | Numbered pagination traversal               | HTML + inline script extraction              | Inline booked-day arrays                 | `/vacation-rentals/`, `?page=` cues                    |
+| `fivestar30a`        | Multi-anchor pagination/list traversal      | HTML extraction + profile signals            | Calendar/widget + rule extraction        | East/West result-set split                             |
+| `oceanreef30a`       | Scroll + load-more and expected-count hints | HTML extraction with ID fallback chain       | Day-cell class + `data-date` parsing     | property ID inputs and class-coded cells               |
+| `oversee30a`         | Server-side page traversal via `/vrpjax`    | HTML + data-attribute extraction             | Availability endpoint payloads           | `/vrp/`, `/vrpjax`                                     |
+| `realjoy30a`         | Scroll + stagnation termination             | HTML + URL/unitcode heuristics               | Parsed day/state data from detail source | `/beach-rentals/`                                      |
+| `stayon30a`          | Load-more + AJAX ID capture                 | Numeric-ID detail fetch                      | Availability API payload decoding        | `/wp-admin/admin-ajax.php`, WordPress pattern          |
+| `funvacay30a`        | Scroll/discovery with expected-count target | HTML extraction + expandable About section   | Calendar widget month traversal parsing  | Track/Bluetent clues (`trackhs`, Rezfusion, Bluetent)  |
 
 ## Reusable Decision Tree
 
@@ -154,7 +153,6 @@ Use this table to pick the nearest adapter template before starting a new manage
 - Parse and map `availabilityInfo` fields directly: `date`, `status`, `minNights`, `cta`, `ctd`.
 - Keep fallback order explicit for resilience: `availabilityInfo` payload -> legacy inline pattern parsing -> DOM calendar traversal.
 - DOM traversal should remain a last resort for cases where the payload is missing or malformed, since UI structure is more brittle than embedded data payloads.
-- Operational signal from localvr30a validation (2026-04-16/17): payload presence detected on all 37/37 live listing pages; residual empty-availability cases were tied to `Oops` detail shells, not payload absence.
 
 ## Guardrails and Reliability Rules
 

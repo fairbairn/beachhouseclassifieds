@@ -48,25 +48,6 @@ Last updated: 2026-05-26T23:55:00Z
   - one listing with `invalid_fees_total`: `eventide`
 - Pricing cache validator result after rerun/build remained clean for OceanReef (`validated=108`, `failed=0`).
 
-## LocalVR30A (Runtime Migration Learnings)
-
-- Runtime quote flow is mixed transport:
-  - browser/session bootstrap for provider state,
-  - API quote submission/retrieval for pricing observations.
-- LocalVR challenge posture is request-sensitive and can present intermittent anti-bot/challenge friction.
-- CloakBrowser-backed runtime path improved quote execution stability versus default browser-only behavior in this adapter context.
-- Operational sequence that worked reliably:
-  - `npm run pricing:quote:adapter -- --adapter-key localvr30a --all-listings`
-  - `npm run pricing:cache:adapter -- --adapter-key localvr30a`
-  - `npm run pricing:validate:adapter-suite -- --adapter-key localvr30a`
-- Resume pattern for interrupted long quote runs:
-  - `npm run pricing:quote:adapter -- --adapter-key localvr30a --all-listings --skip-fresh-quotes --fresh-hours 24`
-- Current known quote-sidecar validator edge case:
-  - two listings repeatedly return quote `HTTP 400` across sampled windows and flush sidecars with `observations=[]`, which fails strict quote validator requirements (`invalid_observation_count` / `missing_observations`).
-  - listing IDs:
-    - `blue-bird-beach-gulf-view-pool-6779f90068c10f0010a4aba2`
-    - `shore-me-the-way-close-to-beach-bikes-6779f9e8a238c10011093d23`
-
 ## FunVacay Remediation Learnings (2026-04-12)
 
 - Capacity profile extraction can fail when adapters rely only on a single widget label path.

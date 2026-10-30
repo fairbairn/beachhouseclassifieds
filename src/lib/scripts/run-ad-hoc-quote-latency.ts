@@ -432,11 +432,6 @@ function isIsoDate(value: string): boolean {
   );
 }
 
-function pickRandom<T>(items: T[]): T {
-  const index = Math.floor(Math.random() * items.length);
-  return items[index]!;
-}
-
 function shuffleArray<T>(items: T[]): T[] {
   const copy = [...items];
   for (let index = copy.length - 1; index > 0; index -= 1) {
@@ -784,220 +779,6 @@ async function collectListingSamplesForAdapter(
   return candidates.slice(0, maxSamples);
 }
 
-function toIsoDate(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return isIsoDate(trimmed) ? trimmed : null;
-}
-
-function addDays(isoDate: string, days: number): string {
-  const date = new Date(`${isoDate}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function normalizeDetailAvailabilityDays(
-  normalizedAvailability: DetailSidecar["normalized_availability"] | undefined,
-): DetailAvailabilityDay[] {
-  if (!normalizedAvailability || typeof normalizedAvailability !== "object") {
-    return [];
-  }
-
-  if (Array.isArray(normalizedAvailability.days)) {
-    return normalizedAvailability.days;
-  }
-
-  const fallbackDays: DetailAvailabilityDay[] = [];
-  for (const [key, value] of Object.entries(normalizedAvailability)) {
-    if (!ISO_DATE_REGEX.test(key)) {
-      continue;
-    }
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      continue;
-    }
-    fallbackDays.push({
-      date: key,
-      ...(value as Omit<DetailAvailabilityDay, "date">),
-    });
-  }
-
-  return fallbackDays;
-}
-
-function buildWindowsFromAvailabilityDays(
-  days: DetailAvailabilityDay[],
-): Array<{ startDate: string; endDate: string; handoffUrl: string }> {
-  const availableDays = days
-    .map((day) => {
-      const date = toIsoDate(day.date);
-      if (!date) {
-        return null;
-      }
-
-      const bookingState =
-        typeof day.booking_day_state === "string"
-          ? day.booking_day_state.trim().toLowerCase()
-          : "";
-      const statusCode =
-        typeof day.status_code === "string"
-          ? day.status_code.trim().toUpperCase()
-          : "";
-      const availableByState = bookingState === "bookable";
-      const availableByStatus = statusCode === "A" || statusCode === "O";
-      const available =
-        availableByState || day.is_available === true || availableByStatus;
-      if (!available) {
-        return null;
-      }
-
-      const parsedMinNights = Number(day.min_nights);
-      const parsedMinNightsRequired = Number(day.min_nights_required);
-      const minNights =
-        Number.isFinite(parsedMinNightsRequired) && parsedMinNightsRequired > 0
-          ? Math.floor(parsedMinNightsRequired)
-          : Number.isFinite(parsedMinNights) && parsedMinNights > 0
-            ? Math.floor(parsedMinNights)
-            : 1;
-
-      return {
-        date,
-        minNights,
-      };
-    })
-    .filter((day): day is { date: string; minNights: number } => day !== null)
-    .sort((left, right) => left.date.localeCompare(right.date));
-
-  if (availableDays.length === 0) {
-    return [];
-  }
-
-  const uniqueByDate = new Map<string, { date: string; minNights: number }>();
-  for (const day of availableDays) {
-    const existing = uniqueByDate.get(day.date);
-    if (!existing || day.minNights > existing.minNights) {
-      uniqueByDate.set(day.date, day);
-    }
-  }
-
-  const uniqueDates = [...uniqueByDate.values()].sort((left, right) =>
-    left.date.localeCompare(right.date),
-  );
-
-  const runs: Array<Array<{ date: string; minNights: number }>> = [];
-  let currentRun: Array<{ date: string; minNights: number }> = [];
-
-  for (const day of uniqueDates) {
-    if (currentRun.length === 0) {
-      currentRun.push(day);
-      continue;
-    }
-
-    const previous = currentRun[currentRun.length - 1]!;
-    const nextExpected = addDays(previous.date, 1);
-    if (day.date === nextExpected) {
-      currentRun.push(day);
-      continue;
-    }
-
-    runs.push(currentRun);
-    currentRun = [date];
-  }
-  if (currentRun.length > 0) {
-    runs.push(currentRun);
-  }
-
-  const windows: Array<{
-    startDate: string;
-    endDate: string;
-    handoffUrl: string;
-  }> = [];
-
-  for (const run of runs) {
-    for (let startIndex = 0; startIndex < run.length; startIndex += 1) {
-      const minNightsAtStart = run[startIndex]?.minNights ?? 1;
-      const candidateNights = Array.from(
-        new Set([...DETAIL_WINDOW_NIGHTS_CANDIDATES, minNightsAtStart]),
-      ).sort((left, right) => left - right);
-
-      for (const nights of candidateNights) {
-        const endIndexExclusive = startIndex + nights;
-        if (endIndexExclusive > run.length) {
-          continue;
-        }
-
-        const segment = run.slice(startIndex, endIndexExclusive);
-        const requiredNights = segment.reduce(
-          (max, day) => Math.max(max, day.minNights),
-          minNightsAtStart,
-        );
-        if (nights < requiredNights) {
-          continue;
-        }
-
-        const startDate = segment[0]?.date;
-        if (!startDate) {
-          continue;
-        }
-
-        const endDate = addDays(startDate, nights);
-        windows.push({
-          startDate,
-          endDate,
-          handoffUrl: "",
-        });
-      }
-    }
-  }
-
-  const deduped = Array.from(
-    new Map(
-      windows.map((window) => [
-        `${window.startDate}|${window.endDate}`,
-        window,
-      ]),
-    ).values(),
-  );
-
-  return deduped.slice(0, MAX_FALLBACK_WINDOWS_PER_LISTING);
-}
-
-async function loadAvailabilityWindowsFromDetail(input: {
-  detailsJsonDir: string;
-  listing: Awaited<ReturnType<typeof selectCanonicalListings>>[number];
-}): Promise<Array<{ startDate: string; endDate: string; handoffUrl: string }>> {
-  const candidates = Array.from(
-    new Set([
-      `${input.listing.fileId}.json`,
-      `${input.listing.externalListingId}.json`,
-      `${input.listing.detailFileBaseName}.json`,
-    ]),
-  );
-
-  for (const fileName of candidates) {
-    const detailPath = resolve(input.detailsJsonDir, fileName);
-    try {
-      const raw = await readFile(detailPath, "utf8");
-      const parsed = JSON.parse(raw) as DetailSidecar;
-      const days = normalizeDetailAvailabilityDays(
-        parsed.normalized_availability,
-      );
-      if (days.length === 0) {
-        continue;
-      }
-      const windows = buildWindowsFromAvailabilityDays(days);
-      if (windows.length > 0) {
-        return windows;
-      }
-    } catch {
-      // Ignore missing/malformed detail sidecars.
-    }
-  }
-
-  return [];
-}
-
 async function loadDetailQuoteContext(
   adapterKey: string,
   listingId: string,
@@ -1315,17 +1096,6 @@ function describeAdapterExecutionContext(adapterKey: string): {
     typeof process.env.HTTP_PROXY === "string" ||
     typeof process.env.https_proxy === "string" ||
     typeof process.env.http_proxy === "string";
-
-  if (adapterKey === "localvr30a") {
-    return {
-      runtimeEngine: "cloakbrowser",
-      requestFlow: "GET seed + native page POST capture",
-      proxyPolicy: proxyEnabledByPolicy
-        ? "enabled via adapter proxy policy"
-        : "disabled via adapter proxy policy",
-      proxyConfigured: proxyConfigured ? "yes" : "no",
-    };
-  }
 
   return {
     runtimeEngine: "adapter-defined",
@@ -2119,13 +1889,26 @@ async function runForAdapter(
 }
 
 async function resolveAdapters(options: CliOptions): Promise<string[]> {
+  const quoteRuntimeAdapters = getKnownQuoteRuntimeAdapterKeys();
+
   if (options.adapters.length === 1 && options.adapters[0] === "all") {
-    const quoteRuntimeAdapters = getKnownQuoteRuntimeAdapterKeys();
     const adaptersWithQuotes = new Set(await listAdaptersWithQuotes());
     return quoteRuntimeAdapters.filter((adapterKey) =>
       adaptersWithQuotes.has(adapterKey),
     );
   }
+
+  const knownAdapters = new Set(quoteRuntimeAdapters);
+  const unknownAdapters = options.adapters.filter(
+    (adapterKey) => !knownAdapters.has(adapterKey),
+  );
+
+  if (unknownAdapters.length > 0) {
+    throw new Error(
+      `Unknown adapter key(s): ${unknownAdapters.join(", ")}. Known adapters: ${quoteRuntimeAdapters.join(", ")}`,
+    );
+  }
+
   return options.adapters;
 }
 

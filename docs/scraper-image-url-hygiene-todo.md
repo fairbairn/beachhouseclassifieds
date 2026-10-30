@@ -28,7 +28,7 @@ This causes inflated image counts and lower data quality in detail JSON.
 
 ## Reference Example
 
-- `grayt30a` (`50-sea-turtle`) demonstrated:
-  - duplicate size variants in Rezfusion URLs
-  - noisy `picturehandler.ashx` captures mixed into gallery lists
-  - improvements after gallery-scoped extraction and largest-variant dedupe
+- Gallery extraction regressions often include:
+  - duplicate size variants in provider image URLs
+  - noisy fallback handler captures mixed into gallery lists
+  - improved results after gallery-scoped extraction and largest-variant dedupe

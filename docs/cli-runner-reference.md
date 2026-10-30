@@ -345,12 +345,12 @@ npm run pricing:cache:adapter -- --adapter-key <adapterKey>
 npm run pricing:validate:adapter-suite -- --adapter-key <adapterKey>
 ```
 
-Concrete example (`localvr30a`):
+Concrete example (`stayon30a`):
 
 ```bash
-npm run pricing:quote:adapter -- --adapter-key localvr30a --all-listings
-npm run pricing:cache:adapter -- --adapter-key localvr30a
-npm run pricing:validate:adapter-suite -- --adapter-key localvr30a
+npm run pricing:quote:adapter -- --adapter-key stayon30a --all-listings
+npm run pricing:cache:adapter -- --adapter-key stayon30a
+npm run pricing:validate:adapter-suite -- --adapter-key stayon30a
 ```
 
 Why `--all-listings` is explicit:

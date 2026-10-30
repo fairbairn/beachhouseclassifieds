@@ -20,9 +20,7 @@ import { createElp30AAdapter } from "./adapters/elp30a";
 import { createExclusive30AAdapter } from "./adapters/exclusive30a";
 import { createFiveStar30AAdapter } from "./adapters/fivestar30a";
 import { createFunVacay30AAdapter } from "./adapters/funvacay30a";
-import { createGrayt30AAdapter } from "./adapters/grayt30a";
 import { createHomeownersCollection30AAdapter } from "./adapters/homeownerscollection30a";
-import { createLocalVR30AAdapter } from "./adapters/localvr30a";
 import { createLuxe30AAdapter } from "./adapters/luxe30a";
 import { createOceanReef30AAdapter } from "./adapters/oceanreef30a";
 import { createOversee30AAdapter } from "./adapters/oversee30a";
@@ -66,9 +64,7 @@ const ADAPTER_FACTORIES: Record<string, AdapterFactory> = {
   exclusive30a: createExclusive30AAdapter,
   fivestar30a: createFiveStar30AAdapter,
   funvacay30a: createFunVacay30AAdapter,
-  grayt30a: createGrayt30AAdapter,
   homeownerscollection30a: createHomeownersCollection30AAdapter,
-  localvr30a: createLocalVR30AAdapter,
   luxe30a: createLuxe30AAdapter,
   oceanreef30a: createOceanReef30AAdapter,
   oversee30a: createOversee30AAdapter,

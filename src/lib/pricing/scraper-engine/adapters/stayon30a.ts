@@ -447,69 +447,6 @@ function dedupeAmenityCategories(
   return out;
 }
 
-function extractAmenitiesFromPopupHtml(html: string): PopupAmenitiesCapture {
-  const headingMatch =
-    /<h[1-6][^>]*>\s*What\s*this\s*place\s*offers\s*<\/h[1-6]>/i.exec(html);
-  if (!headingMatch || typeof headingMatch.index !== "number") {
-    return { categories: {}, all: [] };
-  }
-
-  const afterHeading = html.slice(headingMatch.index + headingMatch[0].length);
-  const dialogEnd = afterHeading.search(/<\/dialog>/i);
-  const region =
-    dialogEnd >= 0
-      ? afterHeading.slice(0, dialogEnd)
-      : afterHeading.slice(0, 300000);
-
-  const headings = Array.from(region.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi));
-  if (headings.length === 0) {
-    return { categories: {}, all: [] };
-  }
-
-  const categories: Record<string, string[]> = {};
-  const all: string[] = [];
-
-  for (let index = 0; index < headings.length; index += 1) {
-    const current = headings[index];
-    if (!current || typeof current.index !== "number") {
-      continue;
-    }
-
-    const category = stripHtml(current[1] ?? "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!category) {
-      continue;
-    }
-
-    const segmentStart = current.index + current[0].length;
-    const next = headings[index + 1];
-    const segmentEnd =
-      next && typeof next.index === "number" ? next.index : region.length;
-    const segment = region.slice(segmentStart, segmentEnd);
-
-    const values = Array.from(segment.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi))
-      .map((match) =>
-        stripHtml(match[1] ?? "")
-          .replace(/\s+/g, " ")
-          .trim(),
-      )
-      .filter((value) => value.length > 0);
-
-    if (values.length === 0) {
-      continue;
-    }
-
-    categories[category] = dedupePreserveOrder(values);
-    all.push(...values);
-  }
-
-  return {
-    categories: dedupeAmenityCategories(categories),
-    all: dedupePreserveOrder(all),
-  };
-}
-
 async function extractAmenitiesFromPopupDialog(
   page: Awaited<
     ReturnType<{ newPage: () => Promise<DiscoverContext["page"]> }["newPage"]>
@@ -611,7 +548,6 @@ async function captureModalPopupContent(
 ): Promise<{
   aboutDescription: string;
   popupAmenities: PopupAmenitiesCapture;
-  popupAmenitiesHtml: string;
   galleryPopupHtml: string;
   galleryCarouselImageUrls: string[];
 }> {
@@ -691,7 +627,6 @@ async function captureModalPopupContent(
 
   let aboutDescription = await activateDetailPopups(page);
   let popupAmenities: PopupAmenitiesCapture = { categories: {}, all: [] };
-  let popupAmenitiesHtml = "";
   let galleryPopupHtml = "";
   let galleryCarouselImageUrls: string[] = [];
 
@@ -1055,7 +990,6 @@ async function captureModalPopupContent(
   );
   if (clickedAmenities) {
     await page.waitForTimeout(600);
-    popupAmenitiesHtml = await page.content();
     popupAmenities = await extractAmenitiesFromPopupDialog(page);
     await closeActiveDialog();
   }
@@ -1096,7 +1030,6 @@ async function captureModalPopupContent(
       categories: dedupeAmenityCategories(popupAmenities.categories),
       all: dedupePreserveOrder(popupAmenities.all),
     },
-    popupAmenitiesHtml,
     galleryPopupHtml,
     galleryCarouselImageUrls,
   };
@@ -2211,7 +2144,7 @@ function extractRoomDetailsGuidanceFromDescription(
   }
 
   const inlineMatches = description.matchAll(
-    /(?:bedroom\s*#?\s*\d+\s*:\s*[^\.\n]{8,220}|bunk\s*room[^\.\n]{8,220})/gi,
+    /(?:bedroom\s*#?\s*\d+\s*:\s*[^.\n]{8,220}|bunk\s*room[^.\n]{8,220})/gi,
   );
   for (const match of inlineMatches) {
     const raw = (match[0] ?? "").replace(/\s+/g, " ").trim();
@@ -2353,7 +2286,6 @@ async function fetchDetail(
       categories: {},
       all: [],
     };
-    let popupAmenitiesHtml = "";
     let galleryPopupHtml = "";
     let galleryCarouselImageUrls: string[] = [];
     let detailStatus: number | null = null;
@@ -2369,7 +2301,6 @@ async function fetchDetail(
         const popupCapture = await captureModalPopupContent(page);
         popupDescriptionFromDialog = popupCapture.aboutDescription;
         popupAmenitiesFromDialog = popupCapture.popupAmenities;
-        popupAmenitiesHtml = popupCapture.popupAmenitiesHtml;
         galleryPopupHtml = popupCapture.galleryPopupHtml;
         galleryCarouselImageUrls = popupCapture.galleryCarouselImageUrls;
         html = await page.content();

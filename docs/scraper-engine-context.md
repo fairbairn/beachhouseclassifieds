@@ -309,9 +309,8 @@ Diagnostic symptom:
 
 - Repeated `405` or home-page redirects in handoff validation usually indicate marker/session flow was bypassed.
 
-### LocalVR and 360blue Completion Notes
+### 360blue Completion Notes
 
-- `localvr30a`: quote pricing validation passing (`42/42`) with pricing parity.
 - `360blue`: quote pricing validation passing (`592/592`) and handoff validation aligned to visible booking total path.
 
 ## New Adapter Checklist

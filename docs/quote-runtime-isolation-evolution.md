@@ -204,8 +204,6 @@ Use this list as the working migration board.
 - `exclusive30a`: extract runtime executor
 - `fivestar30a`: extract runtime executor
 - `funvacay30a`: extract runtime executor
-- `grayt30a`: extract runtime executor
-- `localvr30a`: extract runtime executor
 - `oceanreef30a`: extract runtime executor
 - `oversee30a`: extract runtime executor
 - `realjoy30a`: extract runtime executor
