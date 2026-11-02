@@ -1,5 +1,10 @@
 import { Worker } from "bullmq";
 import chalk from "chalk";
+import figlet from "figlet";
+import {
+  loadEnvironmentBundleIntoProcessEnv,
+  parseEnvironmentToken,
+} from "../core/tooling/env/environment-bundle.js";
 import {
   envOverrideKeys,
   resolveProfileEnvironment,
@@ -22,7 +27,70 @@ function loadEnvProfile(): void {
   }
 }
 
-loadEnvProfile();
+function initializeEnvironment(): { loaded: boolean; appliedKeys: string[] } {
+  const bundleResult = loadEnvironmentBundleIntoProcessEnv();
+  if (!bundleResult.loaded) {
+    loadEnvProfile();
+    return { loaded: false, appliedKeys: [] };
+  }
+
+  return bundleResult;
+}
+
+function reportEnvironmentReadiness(
+  progress: ReturnType<typeof createProgress>,
+  bundleResult: { loaded: boolean; appliedKeys: string[] },
+): { hasBunnySecret: boolean } {
+  const tokenRaw = process.env.ENVIRONMENT?.trim() || "";
+  const token = tokenRaw ? parseEnvironmentToken(tokenRaw) : null;
+  const hasBunnySecret = Boolean(
+    process.env.BUNNY_STORAGE_SECRET_ACCESS_KEY?.trim(),
+  );
+  const hasRedisUrl = Boolean(process.env.REDIS_URL?.trim());
+  const fullReady = hasBunnySecret;
+  const check = chalk.green("✓");
+  const cross = chalk.red("x");
+  const statusMark = (ok: boolean) => (ok ? check : cross);
+  const tokenDetected = Boolean(tokenRaw);
+
+  progress.info(
+    `env_bootstrap source=${bundleResult.loaded ? "bundle" : "profile"} token=${token ? "hash16.share2.base58" : "none"}`,
+  );
+  if (token) {
+    progress.info(
+      `env_token hash16=${token.hash16} share2_len=${token.shareTwo.length} payload_len=${token.payloadBase58.length}`,
+    );
+  }
+  if (bundleResult.loaded) {
+    progress.info(
+      `env_bundle_applied count=${bundleResult.appliedKeys.length}`,
+    );
+  }
+  progress.info("readiness_checklist");
+  progress.info(
+    `  ${statusMark(tokenDetected)} secure_bundle_input ${tokenDetected ? "detected" : "not_detected"}`,
+  );
+  progress.info(
+    `  ${statusMark(bundleResult.loaded)} secure_bundle_loaded ${bundleResult.loaded ? `applied=${bundleResult.appliedKeys.length}` : "inactive"}`,
+  );
+  progress.info(
+    `  ${statusMark(hasRedisUrl)} queue_endpoint ${hasRedisUrl ? "custom" : "default_local"}`,
+  );
+  progress.info(
+    `  ${statusMark(hasBunnySecret)} storage_credentials ${hasBunnySecret ? "present" : "missing"}`,
+  );
+  progress.info(
+    `  ${statusMark(fullReady)} full_operational_ready ${fullReady ? "yes" : "no"}`,
+  );
+
+  if (!hasBunnySecret) {
+    progress.warn(
+      "storage credentials missing: full cloud upload path is unavailable",
+    );
+  }
+
+  return { hasBunnySecret };
+}
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(String(raw || "").trim(), 10);
@@ -85,13 +153,119 @@ function createProgress(script: string) {
   };
 }
 
+function printStartupHeader(params: {
+  concurrency: number;
+  bundleLoaded: boolean;
+  bundleAppliedCount: number;
+}): void {
+  const tokenDetected = Boolean(process.env.ENVIRONMENT?.trim());
+  const hasRedisUrl = Boolean(process.env.REDIS_URL?.trim());
+  const hasStorageCredentials = Boolean(
+    process.env.BUNNY_STORAGE_SECRET_ACCESS_KEY?.trim(),
+  );
+  const check = chalk.green("✓");
+  const cross = chalk.red("x");
+  const statusMark = (ok: boolean) => (ok ? check : cross);
+  const bar = chalk.cyan("=".repeat(78));
+  let banner = "Image Worker";
+  try {
+    banner = figlet.textSync("Image Worker", {
+      font: "Standard",
+      horizontalLayout: "default",
+      verticalLayout: "default",
+    });
+  } catch {
+    banner = "Image Worker";
+  }
+
+  process.stdout.write(`\n${bar}\n`);
+  for (const line of banner.split("\n")) {
+    if (line.trim()) {
+      process.stdout.write(`${chalk.cyanBright(line)}\n`);
+    }
+  }
+  process.stdout.write(
+    `${chalk.bgCyan.black.bold(" BOOT ")} ${chalk.cyan("image-processing runtime startup")}\n`,
+  );
+  process.stdout.write(
+    `${chalk.gray("started_at")}  ${new Date().toISOString()}\n`,
+  );
+  process.stdout.write(`${chalk.gray("queue")}       ${IMAGE_QUEUE_NAME}\n`);
+  process.stdout.write(
+    `${chalk.gray("mode")}        ${params.bundleLoaded ? "secure_bundle" : "profile_env"}\n`,
+  );
+  process.stdout.write(
+    `${chalk.gray("concurrency")} ${params.concurrency}\n\n`,
+  );
+
+  const tableHeader = `${"CHECK".padEnd(7)} ${"ITEM".padEnd(24)} ${"STATUS".padEnd(16)} DETAILS`;
+  process.stdout.write(`${chalk.whiteBright(tableHeader)}\n`);
+  process.stdout.write(`${chalk.gray("-".repeat(78))}\n`);
+
+  const printRow = (
+    ok: boolean,
+    item: string,
+    status: string,
+    details: string,
+  ): void => {
+    const mark = statusMark(ok);
+    const itemCol = item.padEnd(24);
+    const statusCol = status.padEnd(16);
+    process.stdout.write(
+      `${mark} ${itemCol} ${statusCol} ${chalk.gray(details)}\n`,
+    );
+  };
+
+  printRow(
+    tokenDetected,
+    "bundle_input",
+    tokenDetected ? "detected" : "not_detected",
+    "secure token present at boot",
+  );
+  printRow(
+    params.bundleLoaded,
+    "bundle_loaded",
+    params.bundleLoaded ? "active" : "inactive",
+    params.bundleLoaded
+      ? `applied_count=${params.bundleAppliedCount}`
+      : "fallback profile mode",
+  );
+  printRow(
+    hasRedisUrl,
+    "queue_endpoint",
+    hasRedisUrl ? "custom" : "default_local",
+    "custom if injected; local default otherwise",
+  );
+  printRow(
+    hasStorageCredentials,
+    "storage_credentials",
+    hasStorageCredentials ? "present" : "missing",
+    hasStorageCredentials
+      ? "upload path available"
+      : "dryRun-only for upload jobs",
+  );
+  printRow(
+    hasStorageCredentials,
+    "full_operational_ready",
+    hasStorageCredentials ? "yes" : "no",
+    "runtime capability gate",
+  );
+
+  process.stdout.write(`${bar}\n\n`);
+}
+
 async function run(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const progress = createProgress("image-worker");
+  const bundleResult = initializeEnvironment();
+  printStartupHeader({
+    concurrency: args.concurrency,
+    bundleLoaded: bundleResult.loaded,
+    bundleAppliedCount: bundleResult.appliedKeys.length,
+  });
+  const readiness = reportEnvironmentReadiness(progress, bundleResult);
   const connection = createRedisConnection();
-  const hasBunnySecret = Boolean(
-    process.env.BUNNY_STORAGE_SECRET_ACCESS_KEY?.trim(),
-  );
+  const hasBunnySecret = readiness.hasBunnySecret;
   const startedAtMs = Date.now();
   const activeJobs = new Map<string, number>();
   let completedJobs = 0;
@@ -113,7 +287,7 @@ async function run(): Promise<void> {
 
   if (!hasBunnySecret) {
     progress.warn(
-      "BUNNY_STORAGE_SECRET_ACCESS_KEY is missing; worker can only process jobs with dryRun=true",
+      "worker can only process jobs with dryRun=true while storage credentials are missing",
     );
   }
 
@@ -122,7 +296,7 @@ async function run(): Promise<void> {
     async (job) => {
       if (job.data.dryRun === false && !hasBunnySecret) {
         throw new Error(
-          "worker_misconfigured_missing_bunny_secret dryRun=false requires BUNNY_STORAGE_SECRET_ACCESS_KEY",
+          "worker_misconfigured_missing_storage_credentials dryRun=false requires storage credentials",
         );
       }
 
@@ -172,7 +346,7 @@ async function run(): Promise<void> {
 
   worker.on("ready", () => {
     progress.phase(
-      `ready queue=${IMAGE_QUEUE_NAME} redis=${process.env.REDIS_URL?.trim() || "redis://127.0.0.1:6379"} concurrency=${args.concurrency}`,
+      `ready queue=${IMAGE_QUEUE_NAME} redis=${process.env.REDIS_URL?.trim() ? "custom" : "default_local"} concurrency=${args.concurrency}`,
     );
   });
 

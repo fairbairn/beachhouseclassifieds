@@ -1,8 +1,9 @@
 import { Worker } from "bullmq";
 import chalk from "chalk";
-import { envOverrideKeys, resolveProfileEnvironment, } from "../core/tooling/env/profile-env";
-import { processImageProcessingBatch } from "./image-processing-task";
-import { IMAGE_QUEUE_NAME, createRedisConnection, } from "./image-queue";
+import { loadEnvironmentBundleIntoProcessEnv, parseEnvironmentToken, } from "../core/tooling/env/environment-bundle.js";
+import { envOverrideKeys, resolveProfileEnvironment, } from "../core/tooling/env/profile-env.js";
+import { processImageProcessingBatch } from "./image-processing-task.js";
+import { IMAGE_QUEUE_NAME, createRedisConnection, } from "./image-queue.js";
 function loadEnvProfile() {
     const { resolvedEnv } = resolveProfileEnvironment();
     for (const key of envOverrideKeys) {
@@ -12,7 +13,33 @@ function loadEnvProfile() {
         }
     }
 }
-loadEnvProfile();
+function initializeEnvironment() {
+    const bundleResult = loadEnvironmentBundleIntoProcessEnv();
+    if (!bundleResult.loaded) {
+        loadEnvProfile();
+        return { loaded: false, appliedKeys: [] };
+    }
+    return bundleResult;
+}
+function reportEnvironmentReadiness(progress, bundleResult) {
+    const tokenRaw = process.env.ENVIRONMENT?.trim() || "";
+    const token = tokenRaw ? parseEnvironmentToken(tokenRaw) : null;
+    const hasBunnySecret = Boolean(process.env.BUNNY_STORAGE_SECRET_ACCESS_KEY?.trim());
+    const redisUrl = process.env.REDIS_URL?.trim() || "redis://127.0.0.1:6379";
+    const fullReady = hasBunnySecret ? "yes" : "no";
+    progress.info(`env_bootstrap source=${bundleResult.loaded ? "bundle" : "profile"} token=${token ? "hash16.share2.base58" : "none"}`);
+    if (token) {
+        progress.info(`env_token hash16=${token.hash16} share2_len=${token.shareTwo.length} payload_len=${token.payloadBase58.length}`);
+    }
+    if (bundleResult.loaded) {
+        progress.info(`env_bundle_applied keys=${bundleResult.appliedKeys.length} [${bundleResult.appliedKeys.join(",")}]`);
+    }
+    progress.info(`env_required redis_url=${redisUrl} bunny_secret=${hasBunnySecret ? "set" : "missing"} full_operational_ready=${fullReady}`);
+    if (!hasBunnySecret) {
+        progress.warn("BUNNY_STORAGE_SECRET_ACCESS_KEY missing: full cloud upload path is unavailable");
+    }
+    return { hasBunnySecret };
+}
 function parsePositiveInt(raw, fallback) {
     const parsed = Number.parseInt(String(raw || "").trim(), 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -66,8 +93,10 @@ function createProgress(script) {
 async function run() {
     const args = parseArgs(process.argv.slice(2));
     const progress = createProgress("image-worker");
+    const bundleResult = initializeEnvironment();
+    const readiness = reportEnvironmentReadiness(progress, bundleResult);
     const connection = createRedisConnection();
-    const hasBunnySecret = Boolean(process.env.BUNNY_STORAGE_SECRET_ACCESS_KEY?.trim());
+    const hasBunnySecret = readiness.hasBunnySecret;
     const startedAtMs = Date.now();
     const activeJobs = new Map();
     let completedJobs = 0;
@@ -81,7 +110,7 @@ async function run() {
         return `active=${activeCount} completed=${completedJobs} failed=${failedJobs} finalized=${finalized} throughput_ok_per_min=${throughputPerMinute}`;
     }
     if (!hasBunnySecret) {
-        progress.warn("BUNNY_STORAGE_SECRET_ACCESS_KEY is missing; worker can only process jobs with dryRun=true");
+        progress.warn("worker can only process jobs with dryRun=true while BUNNY_STORAGE_SECRET_ACCESS_KEY is missing");
     }
     const worker = new Worker(IMAGE_QUEUE_NAME, async (job) => {
         if (job.data.dryRun === false && !hasBunnySecret) {

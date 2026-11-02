@@ -167,13 +167,13 @@ function formatModeProgressLine(input: {
 function usage(): string {
   return [
     "Usage:",
-    "  npm run workers:image:desktop -- --target-count 20 [--dry-run-cloud true]",
+    "  npm run workers:image:desktop -- [--target-count 1] [--dry-run-cloud true]",
     "",
     "Options:",
-    "  --target-count <n>            Number of rows to claim from postgres",
+    "  --target-count <n>            Number of rows to claim from postgres (default 1)",
     "  --fetch-timeout-ms <n>        Source fetch timeout (default 8000)",
     "  --fetch-retry-count <n>       Source fetch retries (default 2)",
-    "  --dry-run-cloud true|false    Skip upload and DB final image writes when true",
+    "  --dry-run-cloud true|false    Skip upload and DB final image writes when true (default false)",
     "  --upload-prefix <prefix>      Output path prefix (default v1)",
     "  --heartbeat-seconds <n>       Progress heartbeat cadence (default 10)",
     "  --wait-timeout-seconds <n>    Max wait for queue completion (default 1800)",
@@ -219,7 +219,7 @@ function parseArgs(argv: string[]): RunnerOptions {
   }
 
   return {
-    targetCount: parsePositiveInt(values.get("target-count"), 20),
+    targetCount: parsePositiveInt(values.get("target-count"), 1),
     fetchTimeoutMs: parsePositiveInt(
       values.get("fetch-timeout-ms"),
       parsePositiveInt(
@@ -240,7 +240,7 @@ function parseArgs(argv: string[]): RunnerOptions {
         ),
       ),
     ),
-    dryRunCloud: parseBoolean(values.get("dry-run-cloud"), true),
+    dryRunCloud: parseBoolean(values.get("dry-run-cloud"), false),
     uploadPrefix: values.get("upload-prefix")?.trim() || "v1",
     heartbeatSeconds: parsePositiveInt(values.get("heartbeat-seconds"), 10),
     waitTimeoutSeconds: parsePositiveInt(
@@ -362,8 +362,14 @@ async function claimPendingRows(
 async function updateSuccessRows(
   pool: Pool,
   items: ImageProcessingItemResult[],
-): Promise<void> {
+): Promise<{ uploadedCount: number; notUploadedCount: number }> {
+  let uploadedCount = 0;
+  let notUploadedCount = 0;
+
   for (const item of items) {
+    const storedStatus = String(item.stored_status_on_s3 || "unknown");
+    const isUploaded = storedStatus === "uploaded";
+
     const info = {
       source_mode: "url",
       source_content_hash: item.calculated_hash ?? null,
@@ -387,25 +393,52 @@ async function updateSuccessRows(
       pipeline: "bullmq",
     };
 
+    if (isUploaded) {
+      await pool.query(
+        `
+        update listing_source_image
+        set
+          status = 'processed_site',
+          source_content_hash = $2,
+          site_image = $3,
+          error_payload = coalesce(error_payload, '{}'::jsonb) || $4::jsonb,
+          updated_at = now()
+        where id = $1
+        `,
+        [
+          String(item.work_id),
+          String(item.calculated_hash || ""),
+          String(item.final_name || ""),
+          JSON.stringify(info),
+        ],
+      );
+      uploadedCount += 1;
+      continue;
+    }
+
+    const notUploadedPayload = {
+      ...info,
+      error_stage: "storage_finalize",
+      error_code: "storage_not_uploaded",
+      error_message:
+        "worker item did not reach definitive uploaded S3 status; completion withheld",
+    };
+
     await pool.query(
       `
       update listing_source_image
       set
-        status = 'processed_site',
-        source_content_hash = $2,
-        site_image = $3,
-        error_payload = coalesce(error_payload, '{}'::jsonb) || $4::jsonb,
+        status = 'failed_trigger',
+        error_payload = coalesce(error_payload, '{}'::jsonb) || $2::jsonb,
         updated_at = now()
       where id = $1
       `,
-      [
-        String(item.work_id),
-        String(item.calculated_hash || ""),
-        String(item.final_name || ""),
-        JSON.stringify(info),
-      ],
+      [String(item.work_id), JSON.stringify(notUploadedPayload)],
     );
+    notUploadedCount += 1;
   }
+
+  return { uploadedCount, notUploadedCount };
 }
 
 async function updateFailureRows(
@@ -532,6 +565,67 @@ function countItemsByStoredStatus(
     counts[status] = (counts[status] || 0) + 1;
   }
   return counts;
+}
+
+function sumNumberField<T>(rows: T[], pick: (row: T) => unknown): number {
+  let total = 0;
+  for (const row of rows) {
+    const value = Number(pick(row));
+    if (Number.isFinite(value) && value > 0) {
+      total += value;
+    }
+  }
+  return total;
+}
+
+function countWhere<T>(rows: T[], predicate: (row: T) => boolean): number {
+  let count = 0;
+  for (const row of rows) {
+    if (predicate(row)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function toLatencySummary(values: number[]): {
+  count: number;
+  avg_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+  max_ms: number;
+} {
+  const filtered = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .sort((a, b) => a - b);
+
+  if (filtered.length === 0) {
+    return {
+      count: 0,
+      avg_ms: 0,
+      p50_ms: 0,
+      p95_ms: 0,
+      max_ms: 0,
+    };
+  }
+
+  const sum = filtered.reduce((acc, value) => acc + value, 0);
+  const quantile = (q: number): number => {
+    const index = Math.max(
+      0,
+      Math.min(filtered.length - 1, Math.ceil(filtered.length * q) - 1),
+    );
+    return filtered[index];
+  };
+
+  return {
+    count: filtered.length,
+    avg_ms: roundToOne(sum / filtered.length),
+    p50_ms: roundToOne(quantile(0.5)),
+    p95_ms: roundToOne(quantile(0.95)),
+    max_ms: roundToOne(filtered[filtered.length - 1]),
+  };
 }
 
 async function closeWithTimeout(
@@ -747,12 +841,13 @@ async function main(): Promise<void> {
       const items = Array.isArray(result.items) ? result.items : [];
       const errors = Array.isArray(result.errors) ? result.errors : [];
 
-      await updateSuccessRows(pool, items);
+      const writeStats = await updateSuccessRows(pool, items);
       await updateFailureRows(pool, errors, "bullmq_dispatch");
 
       allSuccessItems.push(...items);
-      report.processed_items += items.length;
+      report.processed_items += writeStats.uploadedCount;
       report.failed_items += errors.length;
+      report.failed_items += writeStats.notUploadedCount;
       allErrors.push(...errors);
 
       const modes = [...new Set(items.map((row) => row.source_network_mode))]
@@ -772,7 +867,7 @@ async function main(): Promise<void> {
       });
 
       progress.info(
-        `job_result job_id=${jobId} work_id=${job.data.workId} processed=${items.length} failed=${errors.length} modes=${modes.join(",") || "none"}`,
+        `job_result job_id=${jobId} work_id=${job.data.workId} processed=${writeStats.uploadedCount} failed=${errors.length + writeStats.notUploadedCount} modes=${modes.join(",") || "none"}`,
       );
     }
 
@@ -781,6 +876,39 @@ async function main(): Promise<void> {
     }
 
     report.finished_at = new Date().toISOString();
+    const imagesRead = allSuccessItems.length;
+    const imagesProcessed = report.processed_items;
+    const imagesStored = countWhere(
+      allSuccessItems,
+      (row) => row.stored_status_on_s3 === "uploaded",
+    );
+    const bytesRead = sumNumberField(
+      allSuccessItems,
+      (row) => row.source_bytes,
+    );
+    const bytesProcessed = sumNumberField(
+      allSuccessItems,
+      (row) => row.transformed_bytes,
+    );
+    const bytesSent = sumNumberField(allSuccessItems, (row) =>
+      row.stored_status_on_s3 === "uploaded" ? row.transformed_bytes : 0,
+    );
+
+    const fetchLatencies = allSuccessItems.map((row) => row.fetch_elapsed_ms);
+    const transformLatencies = allSuccessItems.map(
+      (row) => row.transform_elapsed_ms,
+    );
+    const uploadLatencies = allSuccessItems.map((row) => row.upload_elapsed_ms);
+    const itemEndToEndLatencies = allSuccessItems.map(
+      (row) =>
+        Number(row.fetch_elapsed_ms || 0) +
+        Number(row.transform_elapsed_ms || 0) +
+        Number(row.upload_elapsed_ms || 0),
+    );
+    const jobLatencies = report.jobs
+      .map((row) => row.elapsed_ms)
+      .filter((value): value is number => Number.isFinite(value as number));
+
     report.summary = {
       elapsed_ms: Date.now() - startedAtMs,
       claimed_count: report.claimed_count,
@@ -803,6 +931,21 @@ async function main(): Promise<void> {
           : 0,
       source_network_mode_counts: countItemsByNetworkMode(allSuccessItems),
       stored_status_counts: countItemsByStoredStatus(allSuccessItems),
+      io_stats: {
+        images_read: imagesRead,
+        bytes_read: bytesRead,
+        images_processed: imagesProcessed,
+        images_stored: imagesStored,
+        bytes_processed: bytesProcessed,
+        bytes_sent: bytesSent,
+      },
+      latency_ms: {
+        fetch: toLatencySummary(fetchLatencies),
+        transform: toLatencySummary(transformLatencies),
+        upload: toLatencySummary(uploadLatencies),
+        item_end_to_end: toLatencySummary(itemEndToEndLatencies),
+        job_elapsed: toLatencySummary(jobLatencies),
+      },
       error_code_counts: countErrorsByCode(allErrors),
     };
 

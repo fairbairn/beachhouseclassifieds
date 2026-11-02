@@ -9,6 +9,13 @@ kill_timeout = 30
 [env]
   NODE_ENV = "production"
 
+[env_bundle]
+  capture_env_keys = [
+    "BUNNY_STORAGE_SECRET_ACCESS_KEY",
+    "HTTPS_PROXY",
+    "HTTP_PROXY"
+  ]
+
 [processes]
   worker = "node dist-worker/workers/run-image-worker.js"
 
