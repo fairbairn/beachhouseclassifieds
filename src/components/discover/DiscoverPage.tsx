@@ -1,5 +1,6 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
+  ArrowRight,
   BedDouble,
   CalendarDays,
   ChevronDown,
