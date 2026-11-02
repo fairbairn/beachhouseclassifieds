@@ -1,0 +1,17 @@
+app = "beachhouseclassifieds-image-worker"
+primary_region = "mia"
+kill_signal = "SIGTERM"
+kill_timeout = 30
+
+[build]
+  dockerfile = "src/workers/fly/Dockerfile.worker"
+
+[env]
+  NODE_ENV = "production"
+
+[processes]
+  worker = "node dist-worker/workers/run-image-worker.js"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

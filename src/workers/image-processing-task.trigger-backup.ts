@@ -4,7 +4,6 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { metadata, task } from "@trigger.dev/sdk";
 import { createConsola } from "consola";
 import { createHash } from "node:crypto";
 import sharp from "sharp";
@@ -90,6 +89,29 @@ type ProcessingContext = {
 };
 
 type ProgressEvent = "started" | "completed";
+
+type ImageProcessingProgress = {
+  operation_id: string;
+  batch_id: string;
+  batch_index: number;
+  batch_count: number;
+  current: number;
+  total: number;
+  percentage: number;
+  queued: number;
+  active: number;
+  succeeded: number;
+  failed: number;
+  event: ProgressEvent;
+  last_work_id: string | null;
+  last_source_host: string | null;
+  last_error_code: string | null;
+  updated_at: string;
+};
+
+type ImageProcessingHooks = {
+  onProgress?: (progress: ImageProcessingProgress) => void;
+};
 
 type SourceDescriptor = {
   mode: "url" | "s3";
@@ -634,557 +656,553 @@ function createInfoLogger(
   };
 }
 
-export const imageProcessingTask = task({
-  id: "image-processing-task",
-  concurrency: { total: 20 },
-  run: async (
-    payload: ImageProcessingTaskPayload,
-  ): Promise<ImageProcessingTaskResult> => {
-    const startedAtDate = new Date();
-    const startedAt = startedAtDate.toISOString();
-    const operationId =
-      typeof payload.operationId === "string" && payload.operationId.trim()
-        ? payload.operationId.trim()
-        : "op-unknown";
-    const batchId =
-      typeof payload.batchId === "string" && payload.batchId.trim()
-        ? payload.batchId.trim()
-        : "batch-unknown";
-    const batchIndex = Number.isFinite(payload.batchIndex)
-      ? Math.max(0, Math.floor(payload.batchIndex as number))
-      : 0;
-    const batchCount = Number.isFinite(payload.batchCount)
-      ? Math.max(1, Math.floor(payload.batchCount as number))
-      : 1;
+export async function processImageProcessingBatch(
+  payload: ImageProcessingTaskPayload,
+  hooks: ImageProcessingHooks = {},
+): Promise<ImageProcessingTaskResult> {
+  const startedAtDate = new Date();
+  const startedAt = startedAtDate.toISOString();
+  const operationId =
+    typeof payload.operationId === "string" && payload.operationId.trim()
+      ? payload.operationId.trim()
+      : "op-unknown";
+  const batchId =
+    typeof payload.batchId === "string" && payload.batchId.trim()
+      ? payload.batchId.trim()
+      : "batch-unknown";
+  const batchIndex = Number.isFinite(payload.batchIndex)
+    ? Math.max(0, Math.floor(payload.batchIndex as number))
+    : 0;
+  const batchCount = Number.isFinite(payload.batchCount)
+    ? Math.max(1, Math.floor(payload.batchCount as number))
+    : 1;
 
-    const items = Array.isArray(payload.items) ? payload.items : [];
-    if (items.length === 0) {
-      throw new Error("payload.items must contain at least one item");
-    }
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  if (items.length === 0) {
+    throw new Error("payload.items must contain at least one item");
+  }
 
-    const requestedConcurrency = Number.isFinite(payload.workerConcurrency)
-      ? Math.floor(payload.workerConcurrency as number)
-      : 5;
-    const workerConcurrency = Math.max(1, Math.min(20, requestedConcurrency));
+  const requestedConcurrency = Number.isFinite(payload.workerConcurrency)
+    ? Math.floor(payload.workerConcurrency as number)
+    : 5;
+  const workerConcurrency = Math.max(1, Math.min(20, requestedConcurrency));
 
-    const requestedSleep = Number.isFinite(payload.sleepSecondsPerItem)
-      ? Math.floor(payload.sleepSecondsPerItem as number)
-      : 0;
-    const sleepSecondsPerItem = Math.max(0, Math.min(30, requestedSleep));
+  const requestedSleep = Number.isFinite(payload.sleepSecondsPerItem)
+    ? Math.floor(payload.sleepSecondsPerItem as number)
+    : 0;
+  const sleepSecondsPerItem = Math.max(0, Math.min(30, requestedSleep));
 
-    const scheduled = orderItemsForWorkerHostSpread(items, workerConcurrency);
-    const scheduledItems = scheduled.orderedItems;
-    const totalItemCount = scheduledItems.length;
+  const scheduled = orderItemsForWorkerHostSpread(items, workerConcurrency);
+  const scheduledItems = scheduled.orderedItems;
+  const totalItemCount = scheduledItems.length;
 
-    const dryRun = payload.dryRun !== false;
-    const uploadPrefix = normalizeUploadPrefix(payload.uploadPrefix);
-    const verboseLogs = payload.verboseLogs === true;
-    const infoLog = createInfoLogger(verboseLogs);
-    const payloadFetchTimeout = Number.isFinite(payload.fetchTimeoutMs)
-      ? Math.floor(payload.fetchTimeoutMs as number)
-      : 0;
-    const fetchTimeoutMs =
-      payloadFetchTimeout > 0
-        ? payloadFetchTimeout
-        : parsePositiveIntEnv(
-            "IMAGE_FETCH_TIMEOUT_MS",
-            DEFAULT_FETCH_TIMEOUT_MS,
-          );
-    const payloadFetchRetryCount = Number.isFinite(payload.fetchRetryCount)
-      ? Math.floor(payload.fetchRetryCount as number)
-      : Number.NaN;
-    const fetchRetryCount = Number.isFinite(payloadFetchRetryCount)
-      ? Math.max(0, Math.min(5, payloadFetchRetryCount))
-      : Math.max(
-          0,
-          Math.min(
-            5,
-            parsePositiveIntEnv(
-              "IMAGE_FETCH_RETRY_COUNT",
-              DEFAULT_FETCH_RETRY_COUNT,
-            ),
+  const dryRun = payload.dryRun !== false;
+  const uploadPrefix = normalizeUploadPrefix(payload.uploadPrefix);
+  const verboseLogs = payload.verboseLogs === true;
+  const infoLog = createInfoLogger(verboseLogs);
+  const payloadFetchTimeout = Number.isFinite(payload.fetchTimeoutMs)
+    ? Math.floor(payload.fetchTimeoutMs as number)
+    : 0;
+  const fetchTimeoutMs =
+    payloadFetchTimeout > 0
+      ? payloadFetchTimeout
+      : parsePositiveIntEnv("IMAGE_FETCH_TIMEOUT_MS", DEFAULT_FETCH_TIMEOUT_MS);
+  const payloadFetchRetryCount = Number.isFinite(payload.fetchRetryCount)
+    ? Math.floor(payload.fetchRetryCount as number)
+    : Number.NaN;
+  const fetchRetryCount = Number.isFinite(payloadFetchRetryCount)
+    ? Math.max(0, Math.min(5, payloadFetchRetryCount))
+    : Math.max(
+        0,
+        Math.min(
+          5,
+          parsePositiveIntEnv(
+            "IMAGE_FETCH_RETRY_COUNT",
+            DEFAULT_FETCH_RETRY_COUNT,
           ),
-        );
-    const proxyUrl = resolveProxyUrlFromEnv();
-
-    const hasUrlSourceItems = scheduledItems.some(
-      (item) => (item.sourceType || "url") === "url",
-    );
-    if (hasUrlSourceItems && !proxyUrl) {
-      throw new Error(
-        "Missing HTTPS_PROXY/HTTP_PROXY: proxy is required for URL source image fetches",
+        ),
       );
-    }
+  const proxyUrl = resolveProxyUrlFromEnv();
 
-    const bunnyConfig = dryRun ? null : resolveBunnyConfig();
-    const bunnyClient = bunnyConfig ? createBunnyClient(bunnyConfig) : null;
+  const hasUrlSourceItems = scheduledItems.some(
+    (item) => (item.sourceType || "url") === "url",
+  );
+  if (hasUrlSourceItems && !proxyUrl) {
+    throw new Error(
+      "Missing HTTPS_PROXY/HTTP_PROXY: proxy is required for URL source image fetches",
+    );
+  }
 
-    infoLog("image-processing-task started", {
+  const bunnyConfig = dryRun ? null : resolveBunnyConfig();
+  const bunnyClient = bunnyConfig ? createBunnyClient(bunnyConfig) : null;
+
+  infoLog("image-processing-task started", {
+    operation_id: operationId,
+    batch_id: batchId,
+    batch_index: batchIndex,
+    batch_count: batchCount,
+    item_count: totalItemCount,
+    worker_concurrency: workerConcurrency,
+    scheduling_distinct_hosts: scheduled.distinctHosts,
+    sleep_seconds_per_item: sleepSecondsPerItem,
+    dry_run: dryRun,
+    upload_prefix: uploadPrefix,
+  });
+
+  infoLog("image-processing-task runtime config", {
+    dry_run: dryRun,
+    bunny_endpoint: BUNNY_CONFIG_NON_SECRET.endpoint,
+    bunny_bucket: BUNNY_CONFIG_NON_SECRET.bucket,
+    bunny_region: BUNNY_CONFIG_NON_SECRET.region,
+    force_path_style: BUNNY_CONFIG_NON_SECRET.forcePathStyle,
+    fetch_timeout_ms: fetchTimeoutMs,
+    fetch_timeout_source: payloadFetchTimeout > 0 ? "payload" : "env",
+    fetch_retry_count: fetchRetryCount,
+    fetch_retry_source: Number.isFinite(payloadFetchRetryCount)
+      ? "payload"
+      : "env",
+    fetch_proxy_configured: Boolean(proxyUrl),
+    fetch_proxy_mode: "required",
+  });
+
+  const results: ImageProcessingItemResult[] = [];
+  const errors: ImageProcessingTaskError[] = [];
+
+  let cursor = 0;
+  let startedCount = 0;
+  let completedCount = 0;
+  let successCount = 0;
+  let failedCount = 0;
+  const progressEvery = Math.max(
+    1,
+    Math.min(10, Math.floor(totalItemCount / 10) || 1),
+  );
+
+  function publishProgress(
+    event: ProgressEvent,
+    extras?: {
+      workId?: string | null;
+      sourceHost?: string | null;
+      errorCode?: string | null;
+    },
+  ): void {
+    const queuedCount = Math.max(0, totalItemCount - startedCount);
+    const activeCount = Math.max(0, startedCount - completedCount);
+    const percentage =
+      totalItemCount > 0
+        ? Math.round((completedCount / totalItemCount) * 100)
+        : 0;
+
+    const progress: ImageProcessingProgress = {
       operation_id: operationId,
       batch_id: batchId,
       batch_index: batchIndex,
       batch_count: batchCount,
-      item_count: totalItemCount,
-      worker_concurrency: workerConcurrency,
-      scheduling_distinct_hosts: scheduled.distinctHosts,
-      sleep_seconds_per_item: sleepSecondsPerItem,
-      dry_run: dryRun,
-      upload_prefix: uploadPrefix,
-    });
+      current: completedCount,
+      total: totalItemCount,
+      percentage,
+      queued: queuedCount,
+      active: activeCount,
+      succeeded: successCount,
+      failed: failedCount,
+      event,
+      last_work_id: extras?.workId ?? null,
+      last_source_host: extras?.sourceHost ?? null,
+      last_error_code: extras?.errorCode ?? null,
+      updated_at: new Date().toISOString(),
+    };
 
-    infoLog("image-processing-task runtime config", {
-      dry_run: dryRun,
-      bunny_endpoint: BUNNY_CONFIG_NON_SECRET.endpoint,
-      bunny_bucket: BUNNY_CONFIG_NON_SECRET.bucket,
-      bunny_region: BUNNY_CONFIG_NON_SECRET.region,
-      force_path_style: BUNNY_CONFIG_NON_SECRET.forcePathStyle,
-      fetch_timeout_ms: fetchTimeoutMs,
-      fetch_timeout_source: payloadFetchTimeout > 0 ? "payload" : "env",
-      fetch_retry_count: fetchRetryCount,
-      fetch_retry_source: Number.isFinite(payloadFetchRetryCount)
-        ? "payload"
-        : "env",
-      fetch_proxy_configured: Boolean(proxyUrl),
-      fetch_proxy_mode: "required",
-    });
+    hooks.onProgress?.(progress);
+  }
 
-    const results: ImageProcessingItemResult[] = [];
-    const errors: ImageProcessingTaskError[] = [];
+  publishProgress("started");
 
-    let cursor = 0;
-    let startedCount = 0;
-    let completedCount = 0;
-    let successCount = 0;
-    let failedCount = 0;
-    const progressEvery = Math.max(
-      1,
-      Math.min(10, Math.floor(totalItemCount / 10) || 1),
-    );
+  async function processOne(
+    item: ImageProcessingItem,
+    context: ProcessingContext,
+  ): Promise<void> {
+    const workId = item.workId?.trim();
+    const sourceImageUrl = item.sourceImageUrl?.trim();
+    const itemStartedAtMs = Date.now();
 
-    function publishProgress(
-      event: ProgressEvent,
-      extras?: {
-        workId?: string | null;
-        sourceHost?: string | null;
-        errorCode?: string | null;
-      },
-    ): void {
-      const queuedCount = Math.max(0, totalItemCount - startedCount);
-      const activeCount = Math.max(0, startedCount - completedCount);
-      const percentage =
-        totalItemCount > 0
-          ? Math.round((completedCount / totalItemCount) * 100)
-          : 0;
-
-      metadata.set("progress", {
-        operation_id: operationId,
-        batch_id: batchId,
-        batch_index: batchIndex,
-        batch_count: batchCount,
-        current: completedCount,
-        total: totalItemCount,
-        percentage,
-        queued: queuedCount,
-        active: activeCount,
-        succeeded: successCount,
-        failed: failedCount,
-        event,
-        last_work_id: extras?.workId ?? null,
-        last_source_host: extras?.sourceHost ?? null,
-        last_error_code: extras?.errorCode ?? null,
-        updated_at: new Date().toISOString(),
+    let sourceDescriptor: SourceDescriptor;
+    try {
+      sourceDescriptor = resolveSourceDescriptor(item);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push({
+        work_id: workId || "missing_work_id",
+        source_image_url: sourceImageUrl || null,
+        code: "invalid_payload",
+        message,
       });
-    }
-
-    publishProgress("started");
-
-    async function processOne(
-      item: ImageProcessingItem,
-      context: ProcessingContext,
-    ): Promise<void> {
-      const workId = item.workId?.trim();
-      const sourceImageUrl = item.sourceImageUrl?.trim();
-      const itemStartedAtMs = Date.now();
-
-      let sourceDescriptor: SourceDescriptor;
-      try {
-        sourceDescriptor = resolveSourceDescriptor(item);
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        errors.push({
-          work_id: workId || "missing_work_id",
-          source_image_url: sourceImageUrl || null,
-          code: "invalid_payload",
-          message,
-        });
-        failedCount += 1;
-        completedCount += 1;
-        publishProgress("completed", {
-          workId: workId || null,
-          sourceHost: null,
-          errorCode: "invalid_payload",
-        });
-        infoLog("item rejected invalid source descriptor", {
-          worker_id: context.workerId,
-          item_index: context.itemIndex + 1,
-          total_count: context.totalCount,
-          work_id: workId || null,
-          source_image_url: sourceImageUrl || null,
-          error: message,
-        });
-        return;
-      }
-
-      if (!workId) {
-        errors.push({
-          work_id: workId || "missing_work_id",
-          source_image_url: sourceDescriptor.sourceImageUrl,
-          code: "invalid_payload",
-          message: "workId is required",
-        });
-        failedCount += 1;
-        completedCount += 1;
-        publishProgress("completed", {
-          workId: workId || null,
-          sourceHost: sourceDescriptor.sourceHost,
-          errorCode: "invalid_payload",
-        });
-        infoLog("item rejected invalid payload", {
-          worker_id: context.workerId,
-          item_index: context.itemIndex + 1,
-          total_count: context.totalCount,
-          work_id: workId || null,
-          source_image_url: sourceDescriptor.sourceImageUrl,
-        });
-        return;
-      }
-
-      infoLog("item processing started", {
+      failedCount += 1;
+      completedCount += 1;
+      publishProgress("completed", {
+        workId: workId || null,
+        sourceHost: null,
+        errorCode: "invalid_payload",
+      });
+      infoLog("item rejected invalid source descriptor", {
         worker_id: context.workerId,
         item_index: context.itemIndex + 1,
         total_count: context.totalCount,
+        work_id: workId || null,
+        source_image_url: sourceImageUrl || null,
+        error: message,
+      });
+      return;
+    }
+
+    if (!workId) {
+      errors.push({
+        work_id: workId || "missing_work_id",
+        source_image_url: sourceDescriptor.sourceImageUrl,
+        code: "invalid_payload",
+        message: "workId is required",
+      });
+      failedCount += 1;
+      completedCount += 1;
+      publishProgress("completed", {
+        workId: workId || null,
+        sourceHost: sourceDescriptor.sourceHost,
+        errorCode: "invalid_payload",
+      });
+      infoLog("item rejected invalid payload", {
+        worker_id: context.workerId,
+        item_index: context.itemIndex + 1,
+        total_count: context.totalCount,
+        work_id: workId || null,
+        source_image_url: sourceDescriptor.sourceImageUrl,
+      });
+      return;
+    }
+
+    infoLog("item processing started", {
+      worker_id: context.workerId,
+      item_index: context.itemIndex + 1,
+      total_count: context.totalCount,
+      work_id: workId,
+      source_image_url: sourceDescriptor.sourceImageUrl,
+      source_fetch_mode: sourceDescriptor.mode,
+    });
+
+    startedCount += 1;
+    publishProgress("started", {
+      workId,
+      sourceHost: sourceDescriptor.sourceHost,
+      errorCode: null,
+    });
+
+    try {
+      if (sleepSecondsPerItem > 0) {
+        await sleepMs(sleepSecondsPerItem * 1000);
+      }
+
+      const sourceHost = sourceDescriptor.sourceHost;
+      infoLog("item fetch starting", {
+        worker_id: context.workerId,
+        item_index: context.itemIndex + 1,
         work_id: workId,
         source_image_url: sourceDescriptor.sourceImageUrl,
         source_fetch_mode: sourceDescriptor.mode,
       });
+      const fetchStartedAtMs = Date.now();
+      let sourceStatus = 200;
+      let sourceBytes: Buffer;
+      let sourceFetchPath: "s3" | "proxy" =
+        sourceDescriptor.mode === "s3" ? "s3" : "proxy";
+      if (sourceDescriptor.mode === "s3") {
+        if (!bunnyClient) {
+          throw new Error(
+            "S3 source fetch requires Bunny S3 client configuration",
+          );
+        }
+        const bucket =
+          sourceDescriptor.sourceS3Bucket || BUNNY_CONFIG_NON_SECRET.bucket;
+        const key = sourceDescriptor.sourceS3Key || "";
+        const object = await bunnyClient.send(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: key,
+          }),
+        );
+        if (!object.Body) {
+          throw new Error("source fetch failed status=500 empty s3 body");
+        }
+        sourceBytes = await streamToBuffer(
+          object.Body as NodeJS.ReadableStream,
+        );
+        sourceStatus = 200;
+      } else {
+        const fetched = await fetchImageBytesViaProxyOnly({
+          sourceUrl: sourceDescriptor.sourceImageUrl,
+          timeoutMs: fetchTimeoutMs,
+          proxyUrl: proxyUrl || "",
+          retryCount: fetchRetryCount,
+        });
+        sourceStatus = fetched.status;
+        sourceBytes = fetched.bytes;
+        sourceFetchPath = fetched.fetchMode;
+      }
+      const fetchElapsedMs = Date.now() - fetchStartedAtMs;
 
-      startedCount += 1;
-      publishProgress("started", {
-        workId,
-        sourceHost: sourceDescriptor.sourceHost,
-        errorCode: null,
+      infoLog("item fetch completed", {
+        worker_id: context.workerId,
+        item_index: context.itemIndex + 1,
+        work_id: workId,
+        source_http_status: sourceStatus,
+        source_fetch_path: sourceFetchPath,
+        fetch_elapsed_ms: fetchElapsedMs,
       });
 
-      try {
-        if (sleepSecondsPerItem > 0) {
-          await sleepMs(sleepSecondsPerItem * 1000);
-        }
+      const sourceReadElapsedMs = 0;
 
-        const sourceHost = sourceDescriptor.sourceHost;
-        infoLog("item fetch starting", {
+      infoLog("item source bytes loaded", {
+        worker_id: context.workerId,
+        item_index: context.itemIndex + 1,
+        work_id: workId,
+        source_bytes: sourceBytes.byteLength,
+        source_read_elapsed_ms: sourceReadElapsedMs,
+      });
+
+      const transformStartedAtMs = Date.now();
+      const transformed = await postProcessForFinalImage(sourceBytes);
+      const transformedBytes = transformed.bytes;
+      const transformElapsedMs = Date.now() - transformStartedAtMs;
+
+      const sourceContentHash = createHash("sha256")
+        .update(sourceBytes)
+        .digest("hex");
+      const transformedContentHash = createHash("sha256")
+        .update(transformedBytes)
+        .digest("hex");
+
+      infoLog("item transform completed", {
+        worker_id: context.workerId,
+        item_index: context.itemIndex + 1,
+        work_id: workId,
+        transformed_bytes: transformedBytes.byteLength,
+        transform_profile: FINAL_TRANSFORM_PROFILE.name,
+        transform_max_width: FINAL_TRANSFORM_PROFILE.maxWidth,
+        transform_max_height: FINAL_TRANSFORM_PROFILE.maxHeight,
+        transform_output_width: transformed.targetWidth,
+        transform_output_height: transformed.targetHeight,
+        transform_elapsed_ms: transformElapsedMs,
+      });
+
+      const calculatedHash = sourceContentHash;
+      const finalName = buildFinalName(uploadPrefix, calculatedHash);
+
+      let storedStatus: "dry_run" | "uploaded" = "dry_run";
+      let uploadSkippedExisting = false;
+      let uploadElapsedMs = 0;
+      if (!dryRun && bunnyClient && bunnyConfig) {
+        const uploadStartedAtMs = Date.now();
+        infoLog("item upload starting", {
           worker_id: context.workerId,
           item_index: context.itemIndex + 1,
           work_id: workId,
-          source_image_url: sourceDescriptor.sourceImageUrl,
-          source_fetch_mode: sourceDescriptor.mode,
+          final_name: finalName,
         });
-        const fetchStartedAtMs = Date.now();
-        let sourceStatus = 200;
-        let sourceBytes: Buffer;
-        let sourceFetchPath: "s3" | "proxy" =
-          sourceDescriptor.mode === "s3" ? "s3" : "proxy";
-        if (sourceDescriptor.mode === "s3") {
-          if (!bunnyClient) {
-            throw new Error(
-              "S3 source fetch requires Bunny S3 client configuration",
-            );
-          }
-          const bucket =
-            sourceDescriptor.sourceS3Bucket || BUNNY_CONFIG_NON_SECRET.bucket;
-          const key = sourceDescriptor.sourceS3Key || "";
-          const object = await bunnyClient.send(
-            new GetObjectCommand({
-              Bucket: bucket,
-              Key: key,
+        try {
+          await bunnyClient.send(
+            new HeadObjectCommand({
+              Bucket: bunnyConfig.bucket,
+              Key: finalName,
             }),
           );
-          if (!object.Body) {
-            throw new Error("source fetch failed status=500 empty s3 body");
-          }
-          sourceBytes = await streamToBuffer(
-            object.Body as NodeJS.ReadableStream,
-          );
-          sourceStatus = 200;
-        } else {
-          const fetched = await fetchImageBytesViaProxyOnly({
-            sourceUrl: sourceDescriptor.sourceImageUrl,
-            timeoutMs: fetchTimeoutMs,
-            proxyUrl: proxyUrl || "",
-            retryCount: fetchRetryCount,
-          });
-          sourceStatus = fetched.status;
-          sourceBytes = fetched.bytes;
-          sourceFetchPath = fetched.fetchMode;
-        }
-        const fetchElapsedMs = Date.now() - fetchStartedAtMs;
-
-        infoLog("item fetch completed", {
-          worker_id: context.workerId,
-          item_index: context.itemIndex + 1,
-          work_id: workId,
-          source_http_status: sourceStatus,
-          source_fetch_path: sourceFetchPath,
-          fetch_elapsed_ms: fetchElapsedMs,
-        });
-
-        const sourceReadElapsedMs = 0;
-
-        infoLog("item source bytes loaded", {
-          worker_id: context.workerId,
-          item_index: context.itemIndex + 1,
-          work_id: workId,
-          source_bytes: sourceBytes.byteLength,
-          source_read_elapsed_ms: sourceReadElapsedMs,
-        });
-
-        const transformStartedAtMs = Date.now();
-        const transformed = await postProcessForFinalImage(sourceBytes);
-        const transformedBytes = transformed.bytes;
-        const transformElapsedMs = Date.now() - transformStartedAtMs;
-
-        const sourceContentHash = createHash("sha256")
-          .update(sourceBytes)
-          .digest("hex");
-        const transformedContentHash = createHash("sha256")
-          .update(transformedBytes)
-          .digest("hex");
-
-        infoLog("item transform completed", {
-          worker_id: context.workerId,
-          item_index: context.itemIndex + 1,
-          work_id: workId,
-          transformed_bytes: transformedBytes.byteLength,
-          transform_profile: FINAL_TRANSFORM_PROFILE.name,
-          transform_max_width: FINAL_TRANSFORM_PROFILE.maxWidth,
-          transform_max_height: FINAL_TRANSFORM_PROFILE.maxHeight,
-          transform_output_width: transformed.targetWidth,
-          transform_output_height: transformed.targetHeight,
-          transform_elapsed_ms: transformElapsedMs,
-        });
-
-        const calculatedHash = sourceContentHash;
-        const finalName = buildFinalName(uploadPrefix, calculatedHash);
-
-        let storedStatus: "dry_run" | "uploaded" = "dry_run";
-        let uploadSkippedExisting = false;
-        let uploadElapsedMs = 0;
-        if (!dryRun && bunnyClient && bunnyConfig) {
-          const uploadStartedAtMs = Date.now();
-          infoLog("item upload starting", {
+          uploadSkippedExisting = true;
+          storedStatus = "uploaded";
+          uploadElapsedMs = Date.now() - uploadStartedAtMs;
+          infoLog("item upload skipped existing object", {
             worker_id: context.workerId,
             item_index: context.itemIndex + 1,
             work_id: workId,
             final_name: finalName,
+            upload_elapsed_ms: uploadElapsedMs,
           });
+        } catch (error: unknown) {
+          if (!isNotFoundS3Error(error)) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            throw new Error(`upload failed: ${message}`);
+          }
+
           try {
             await bunnyClient.send(
-              new HeadObjectCommand({
+              new PutObjectCommand({
                 Bucket: bunnyConfig.bucket,
                 Key: finalName,
+                Body: transformedBytes,
+                ContentType: "image/jpeg",
               }),
             );
-            uploadSkippedExisting = true;
             storedStatus = "uploaded";
             uploadElapsedMs = Date.now() - uploadStartedAtMs;
-            infoLog("item upload skipped existing object", {
+            infoLog("item upload completed", {
               worker_id: context.workerId,
               item_index: context.itemIndex + 1,
               work_id: workId,
               final_name: finalName,
               upload_elapsed_ms: uploadElapsedMs,
             });
-          } catch (error: unknown) {
-            if (!isNotFoundS3Error(error)) {
-              const message =
-                error instanceof Error ? error.message : String(error);
-              throw new Error(`upload failed: ${message}`);
-            }
-
-            try {
-              await bunnyClient.send(
-                new PutObjectCommand({
-                  Bucket: bunnyConfig.bucket,
-                  Key: finalName,
-                  Body: transformedBytes,
-                  ContentType: "image/jpeg",
-                }),
-              );
-              storedStatus = "uploaded";
-              uploadElapsedMs = Date.now() - uploadStartedAtMs;
-              infoLog("item upload completed", {
-                worker_id: context.workerId,
-                item_index: context.itemIndex + 1,
-                work_id: workId,
-                final_name: finalName,
-                upload_elapsed_ms: uploadElapsedMs,
-              });
-            } catch (putError: unknown) {
-              const message =
-                putError instanceof Error ? putError.message : String(putError);
-              throw new Error(`upload failed: ${message}`);
-            }
+          } catch (putError: unknown) {
+            const message =
+              putError instanceof Error ? putError.message : String(putError);
+            throw new Error(`upload failed: ${message}`);
           }
         }
+      }
 
-        results.push({
-          work_id: workId,
-          source_image_url: sourceDescriptor.sourceImageUrl,
-          source_fetch_mode: sourceDescriptor.mode,
-          source_host: sourceHost,
-          source_http_status: sourceStatus,
-          source_bytes: sourceBytes.byteLength,
-          source_width: transformed.sourceWidth,
-          source_height: transformed.sourceHeight,
-          transformed_bytes: transformedBytes.byteLength,
-          transformed_width: transformed.targetWidth,
-          transformed_height: transformed.targetHeight,
-          target_width: FINAL_TRANSFORM_PROFILE.maxWidth,
-          target_height: FINAL_TRANSFORM_PROFILE.maxHeight,
-          below_target_hd:
-            transformed.targetWidth < FINAL_TRANSFORM_PROFILE.maxWidth ||
-            transformed.targetHeight < FINAL_TRANSFORM_PROFILE.maxHeight,
-          calculated_hash: calculatedHash,
-          transformed_hash: transformedContentHash,
-          final_name: finalName,
-          stored_status_on_s3: storedStatus,
-          upload_skipped_existing: uploadSkippedExisting,
-          fetch_elapsed_ms: fetchElapsedMs,
-          transform_elapsed_ms: transformElapsedMs,
-          upload_elapsed_ms: uploadElapsedMs,
-        });
+      results.push({
+        work_id: workId,
+        source_image_url: sourceDescriptor.sourceImageUrl,
+        source_fetch_mode: sourceDescriptor.mode,
+        source_host: sourceHost,
+        source_http_status: sourceStatus,
+        source_bytes: sourceBytes.byteLength,
+        source_width: transformed.sourceWidth,
+        source_height: transformed.sourceHeight,
+        transformed_bytes: transformedBytes.byteLength,
+        transformed_width: transformed.targetWidth,
+        transformed_height: transformed.targetHeight,
+        target_width: FINAL_TRANSFORM_PROFILE.maxWidth,
+        target_height: FINAL_TRANSFORM_PROFILE.maxHeight,
+        below_target_hd:
+          transformed.targetWidth < FINAL_TRANSFORM_PROFILE.maxWidth ||
+          transformed.targetHeight < FINAL_TRANSFORM_PROFILE.maxHeight,
+        calculated_hash: calculatedHash,
+        transformed_hash: transformedContentHash,
+        final_name: finalName,
+        stored_status_on_s3: storedStatus,
+        upload_skipped_existing: uploadSkippedExisting,
+        fetch_elapsed_ms: fetchElapsedMs,
+        transform_elapsed_ms: transformElapsedMs,
+        upload_elapsed_ms: uploadElapsedMs,
+      });
 
-        successCount += 1;
-        infoLog("item processing completed", {
-          worker_id: context.workerId,
-          item_index: context.itemIndex + 1,
-          total_count: context.totalCount,
-          work_id: workId,
-          source_fetch_mode: sourceDescriptor.mode,
-          source_host: sourceHost,
-          source_http_status: sourceStatus,
-          source_bytes: sourceBytes.byteLength,
-          transformed_bytes: transformedBytes.byteLength,
-          source_width: transformed.sourceWidth,
-          source_height: transformed.sourceHeight,
-          transformed_width: transformed.targetWidth,
-          transformed_height: transformed.targetHeight,
-          target_width: FINAL_TRANSFORM_PROFILE.maxWidth,
-          target_height: FINAL_TRANSFORM_PROFILE.maxHeight,
-          below_target_hd:
-            transformed.targetWidth < FINAL_TRANSFORM_PROFILE.maxWidth ||
-            transformed.targetHeight < FINAL_TRANSFORM_PROFILE.maxHeight,
-          source_content_hash: sourceContentHash,
-          transformed_content_hash: transformedContentHash,
-          stored_status_on_s3: storedStatus,
-          item_elapsed_ms: Date.now() - itemStartedAtMs,
-        });
-      } catch (error: unknown) {
-        const classified = classifyError(error);
-        errors.push({
-          work_id: workId,
-          source_image_url: sourceDescriptor.sourceImageUrl,
-          code: classified.code,
-          message: classified.message,
-        });
+      successCount += 1;
+      infoLog("item processing completed", {
+        worker_id: context.workerId,
+        item_index: context.itemIndex + 1,
+        total_count: context.totalCount,
+        work_id: workId,
+        source_fetch_mode: sourceDescriptor.mode,
+        source_host: sourceHost,
+        source_http_status: sourceStatus,
+        source_bytes: sourceBytes.byteLength,
+        transformed_bytes: transformedBytes.byteLength,
+        source_width: transformed.sourceWidth,
+        source_height: transformed.sourceHeight,
+        transformed_width: transformed.targetWidth,
+        transformed_height: transformed.targetHeight,
+        target_width: FINAL_TRANSFORM_PROFILE.maxWidth,
+        target_height: FINAL_TRANSFORM_PROFILE.maxHeight,
+        below_target_hd:
+          transformed.targetWidth < FINAL_TRANSFORM_PROFILE.maxWidth ||
+          transformed.targetHeight < FINAL_TRANSFORM_PROFILE.maxHeight,
+        source_content_hash: sourceContentHash,
+        transformed_content_hash: transformedContentHash,
+        stored_status_on_s3: storedStatus,
+        item_elapsed_ms: Date.now() - itemStartedAtMs,
+      });
+    } catch (error: unknown) {
+      const classified = classifyError(error);
+      errors.push({
+        work_id: workId,
+        source_image_url: sourceDescriptor.sourceImageUrl,
+        code: classified.code,
+        message: classified.message,
+      });
 
-        failedCount += 1;
-        infoLog("item processing failed", {
-          worker_id: context.workerId,
-          item_index: context.itemIndex + 1,
-          total_count: context.totalCount,
-          work_id: workId,
-          source_image_url: sourceDescriptor.sourceImageUrl,
-          code: classified.code,
-          error: classified.message,
-          item_elapsed_ms: Date.now() - itemStartedAtMs,
+      failedCount += 1;
+      infoLog("item processing failed", {
+        worker_id: context.workerId,
+        item_index: context.itemIndex + 1,
+        total_count: context.totalCount,
+        work_id: workId,
+        source_image_url: sourceDescriptor.sourceImageUrl,
+        code: classified.code,
+        error: classified.message,
+        item_elapsed_ms: Date.now() - itemStartedAtMs,
+      });
+    } finally {
+      completedCount += 1;
+      publishProgress("completed", {
+        workId: workId || null,
+        sourceHost: sourceDescriptor.sourceHost,
+        errorCode:
+          errors.length > 0 && errors[errors.length - 1]?.work_id === workId
+            ? errors[errors.length - 1]?.code || null
+            : null,
+      });
+      if (
+        completedCount % progressEvery === 0 ||
+        completedCount === totalItemCount
+      ) {
+        infoLog("batch progress", {
+          completed_count: completedCount,
+          total_count: totalItemCount,
+          success_count: successCount,
+          failed_count: failedCount,
         });
-      } finally {
-        completedCount += 1;
-        publishProgress("completed", {
-          workId: workId || null,
-          sourceHost: sourceDescriptor.sourceHost,
-          errorCode:
-            errors.length > 0 && errors[errors.length - 1]?.work_id === workId
-              ? errors[errors.length - 1]?.code || null
-              : null,
-        });
-        if (
-          completedCount % progressEvery === 0 ||
-          completedCount === totalItemCount
-        ) {
-          infoLog("batch progress", {
-            completed_count: completedCount,
-            total_count: totalItemCount,
-            success_count: successCount,
-            failed_count: failedCount,
-          });
-        }
       }
     }
+  }
 
-    async function workerLoop(workerId: number): Promise<void> {
-      infoLog("worker loop started", {
-        worker_id: workerId,
-      });
-      while (cursor < totalItemCount) {
-        const index = cursor;
-        cursor += 1;
-        const item = scheduledItems[index];
-        await processOne(item, {
-          workerId,
-          itemIndex: index,
-          totalCount: totalItemCount,
-        });
-      }
-      infoLog("worker loop completed", {
-        worker_id: workerId,
-      });
-    }
-
-    const workers = Array.from(
-      { length: Math.min(workerConcurrency, totalItemCount) },
-      (_, index) => workerLoop(index + 1),
-    );
-    await Promise.all(workers);
-
-    const completedAt = new Date().toISOString();
-    const elapsedMs = Date.now() - startedAtDate.getTime();
-
-    infoLog("image-processing-task completed", {
-      item_count: totalItemCount,
-      processed_count: results.length,
-      failed_count: errors.length,
-      dry_run: dryRun,
-      elapsed_ms: elapsedMs,
+  async function workerLoop(workerId: number): Promise<void> {
+    infoLog("worker loop started", {
+      worker_id: workerId,
     });
+    while (cursor < totalItemCount) {
+      const index = cursor;
+      cursor += 1;
+      const item = scheduledItems[index];
+      await processOne(item, {
+        workerId,
+        itemIndex: index,
+        totalCount: totalItemCount,
+      });
+    }
+    infoLog("worker loop completed", {
+      worker_id: workerId,
+    });
+  }
 
-    return {
-      operation_id: operationId,
-      batch_id: batchId,
-      batch_index: batchIndex,
-      batch_count: batchCount,
-      item_count: totalItemCount,
-      processed_count: results.length,
-      failed_count: errors.length,
-      worker_concurrency: workerConcurrency,
-      sleep_seconds_per_item: sleepSecondsPerItem,
-      dry_run: dryRun,
-      upload_prefix: uploadPrefix,
-      items: results,
-      errors,
-      started_at: startedAt,
-      completed_at: completedAt,
-      elapsed_ms: elapsedMs,
-    };
-  },
-});
+  const workers = Array.from(
+    { length: Math.min(workerConcurrency, totalItemCount) },
+    (_, index) => workerLoop(index + 1),
+  );
+  await Promise.all(workers);
+
+  const completedAt = new Date().toISOString();
+  const elapsedMs = Date.now() - startedAtDate.getTime();
+
+  infoLog("image-processing-task completed", {
+    item_count: totalItemCount,
+    processed_count: results.length,
+    failed_count: errors.length,
+    dry_run: dryRun,
+    elapsed_ms: elapsedMs,
+  });
+
+  return {
+    operation_id: operationId,
+    batch_id: batchId,
+    batch_index: batchIndex,
+    batch_count: batchCount,
+    item_count: totalItemCount,
+    processed_count: results.length,
+    failed_count: errors.length,
+    worker_concurrency: workerConcurrency,
+    sleep_seconds_per_item: sleepSecondsPerItem,
+    dry_run: dryRun,
+    upload_prefix: uploadPrefix,
+    items: results,
+    errors,
+    started_at: startedAt,
+    completed_at: completedAt,
+    elapsed_ms: elapsedMs,
+  };
+}

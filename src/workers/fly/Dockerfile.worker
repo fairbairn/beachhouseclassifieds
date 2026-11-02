@@ -1,0 +1,26 @@
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /app
+
+COPY src/workers/fly/package.worker.json ./package.json
+COPY tsconfig.worker.json ./
+COPY src/workers/run-image-worker.ts ./src/workers/run-image-worker.ts
+COPY src/workers/image-processing-task.ts ./src/workers/image-processing-task.ts
+COPY src/workers/image-queue.ts ./src/workers/image-queue.ts
+COPY src/core/tooling/env/profile-env.ts ./src/core/tooling/env/profile-env.ts
+
+RUN npm install --no-audit --no-fund
+RUN npx tsc -p tsconfig.worker.json
+
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY src/workers/fly/package.worker.json ./package.json
+RUN npm install --omit=dev && npm cache clean --force
+
+COPY --from=build /app/dist-worker ./dist-worker
+
+CMD ["node", "dist-worker/workers/run-image-worker.js"]

@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "rootDir": "src",
+    "outDir": "dist-worker",
+    "resolveJsonModule": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": false,
+    "declaration": false,
+    "sourceMap": false,
+    "types": ["node"],
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": [
+    "src/workers/run-image-worker.ts",
+    "src/workers/image-processing-task.ts",
+    "src/workers/image-queue.ts",
+    "src/core/tooling/env/profile-env.ts"
+  ],
+  "exclude": ["src/workers/**/*.trigger-backup.ts"]
+}
