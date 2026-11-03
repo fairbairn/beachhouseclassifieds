@@ -1,10 +1,10 @@
 app = "beachhouseclassifieds-image-worker"
-primary_region = "mia"
+primary_region = "iad"
 kill_signal = "SIGTERM"
 kill_timeout = 30
 
 [build]
-  dockerfile = "src/workers/fly/Dockerfile.worker"
+  dockerfile = "Dockerfile.worker"
 
 [env]
   NODE_ENV = "production"
@@ -17,7 +17,7 @@ kill_timeout = 30
   ]
 
 [processes]
-  worker = "node dist-worker/workers/run-image-worker.js"
+  worker = "node dist-worker/workers/run-image-worker.js --concurrency 2"
 
 [[vm]]
   size = "shared-cpu-1x"

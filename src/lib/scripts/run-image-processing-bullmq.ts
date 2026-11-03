@@ -482,10 +482,40 @@ async function waitForRunCompletion(params: {
     completed: number;
     failed: number;
     expected: number;
+    processedItems: number;
+    failedItems: number;
+    completedJobIds: string[];
+    failedJobIds: string[];
   }) => void;
 }): Promise<{ completedJobIds: string[]; failedJobIds: string[] }> {
   const completedSet = new Set<string>();
   const failedSet = new Set<string>();
+  const progressByJob = new Map<
+    string,
+    { succeeded: number; failed: number }
+  >();
+
+  const summarizeLiveItems = (): {
+    processedItems: number;
+    failedItems: number;
+  } => {
+    let processedItems = 0;
+    let failedItems = 0;
+
+    for (const entry of progressByJob.values()) {
+      processedItems += Math.max(0, Number(entry.succeeded) || 0);
+      failedItems += Math.max(0, Number(entry.failed) || 0);
+    }
+
+    // If a job failed before reporting structured progress, treat it as one failed item.
+    for (const failedJobId of failedSet) {
+      if (!progressByJob.has(failedJobId)) {
+        failedItems += 1;
+      }
+    }
+
+    return { processedItems, failedItems };
+  };
 
   return await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -498,10 +528,15 @@ async function waitForRunCompletion(params: {
     }, params.timeoutMs);
 
     const maybeDone = (): void => {
+      const liveItems = summarizeLiveItems();
       params.onProgress({
         completed: completedSet.size,
         failed: failedSet.size,
         expected: params.expectedJobs,
+        processedItems: liveItems.processedItems,
+        failedItems: liveItems.failedItems,
+        completedJobIds: [...completedSet],
+        failedJobIds: [...failedSet],
       });
 
       if (completedSet.size + failedSet.size >= params.expectedJobs) {
@@ -523,14 +558,46 @@ async function waitForRunCompletion(params: {
       maybeDone();
     };
 
+    const onProgressEvent = (event: { jobId: string; data: unknown }): void => {
+      const jobId = String(event?.jobId || "");
+      if (!jobId) {
+        return;
+      }
+
+      const payload =
+        event?.data &&
+        typeof event.data === "object" &&
+        !Array.isArray(event.data)
+          ? (event.data as Record<string, unknown>)
+          : null;
+
+      if (!payload) {
+        return;
+      }
+
+      const succeeded = Number(payload.succeeded);
+      const failed = Number(payload.failed);
+      if (!Number.isFinite(succeeded) && !Number.isFinite(failed)) {
+        return;
+      }
+
+      progressByJob.set(jobId, {
+        succeeded: Number.isFinite(succeeded) ? Math.max(0, succeeded) : 0,
+        failed: Number.isFinite(failed) ? Math.max(0, failed) : 0,
+      });
+      maybeDone();
+    };
+
     const cleanup = (): void => {
       clearTimeout(timeout);
       params.queueEvents.off("completed", onCompleted);
       params.queueEvents.off("failed", onFailed);
+      params.queueEvents.off("progress", onProgressEvent);
     };
 
     params.queueEvents.on("completed", onCompleted);
     params.queueEvents.on("failed", onFailed);
+    params.queueEvents.on("progress", onProgressEvent);
   });
 }
 
@@ -736,143 +803,274 @@ async function main(): Promise<void> {
     }
 
     progress.phase("enqueueing bullmq jobs");
+    const jobRetentionCount = Math.max(1000, options.targetCount * 2);
     const queuedJobs = await Promise.all(
       claimedItems.map((item, index) =>
-        queue.add("process-image", {
-          operationId,
-          batchId: `${operationId}-job-${String(index + 1).padStart(5, "0")}`,
-          batchIndex: index,
-          batchCount: claimedItems.length,
-          workId: item.workId,
-          sourceType: "url",
-          sourceImageUrl: item.sourceImageUrl,
-          fetchTimeoutMs: options.fetchTimeoutMs,
-          fetchRetryCount: options.fetchRetryCount,
-          dryRun: options.dryRunCloud,
-          uploadPrefix: options.uploadPrefix,
-          verboseLogs: false,
-          sleepSecondsPerItem: 0,
-        } satisfies ImageProcessingQueueJob),
+        queue.add(
+          "process-image",
+          {
+            operationId,
+            batchId: `${operationId}-job-${String(index + 1).padStart(5, "0")}`,
+            batchIndex: index,
+            batchCount: claimedItems.length,
+            workId: item.workId,
+            sourceType: "url",
+            sourceImageUrl: item.sourceImageUrl,
+            fetchTimeoutMs: options.fetchTimeoutMs,
+            fetchRetryCount: options.fetchRetryCount,
+            dryRun: options.dryRunCloud,
+            uploadPrefix: options.uploadPrefix,
+            verboseLogs: false,
+            sleepSecondsPerItem: 0,
+          } satisfies ImageProcessingQueueJob,
+          {
+            // Keep enough completed/failed jobs to allow end-of-run result reload.
+            removeOnComplete: jobRetentionCount,
+            removeOnFail: jobRetentionCount,
+          },
+        ),
       ),
     );
     report.queued_count = queuedJobs.length;
     progress.info(
-      `queued_jobs=${queuedJobs.length} queue=${IMAGE_QUEUE_NAME} target_images=${report.claimed_count}`,
+      `queued_jobs=${queuedJobs.length} queue=${IMAGE_QUEUE_NAME} target_images=${report.claimed_count} retention=${jobRetentionCount}`,
     );
 
-    progress.phase("waiting for worker completion");
-    const completion = await waitForRunCompletion({
-      queueEvents,
-      queueName: IMAGE_QUEUE_NAME,
-      expectedJobs: queuedJobs.length,
-      timeoutMs: Math.max(1, options.waitTimeoutSeconds) * 1000,
-      onProgress: ({ completed, failed, expected }) => {
-        report.completed_jobs = completed;
-        report.failed_jobs = failed;
-        const finalized = completed + failed;
-        const line = formatModeProgressLine({
-          mode: "desktop-bullmq",
-          completed: finalized,
-          total: expected,
-          startedAtMs,
-          text:
-            `jobs_completed=${completed} jobs_failed=${failed} ` +
-            `images_processed=${report.processed_items}/${report.claimed_count} ` +
-            `items_failed=${report.failed_items}`,
-        });
-        progress.progress(`queue ${line}`);
-      },
-    });
-
-    progress.phase("collecting results and applying writeback");
-    const completedJobSet = new Set(completion.completedJobIds);
-
+    const jobsById = new Map<string, Job<ImageProcessingQueueJob>>();
     for (const job of queuedJobs) {
       const jobId = String(job.id || "");
       if (!jobId) {
         continue;
       }
+      jobsById.set(jobId, job);
+    }
 
-      const reloaded = await Job.fromId(queue, jobId);
-      if (!reloaded) {
-        allErrors.push({
-          work_id: String(job.data.workId),
-          source_image_url: String(job.data.sourceImageUrl || ""),
-          code: "missing_job_result",
-          message: `bullmq result missing for jobId=${jobId}`,
-        });
-        continue;
+    const seenCompletedJobIds = new Set<string>();
+    const seenFailedJobIds = new Set<string>();
+    const handledJobIds = new Set<string>();
+    const jobMissingReloadCount = new Map<string, number>();
+
+    const pendingSuccessItems: ImageProcessingItemResult[] = [];
+    const pendingErrors: ImageProcessingTaskError[] = [];
+    let flushedProcessedItems = 0;
+    let flushedFailedItems = 0;
+    let flushedBatchCount = 0;
+
+    async function flushPendingWrites(reason: string): Promise<void> {
+      if (pendingSuccessItems.length === 0 && pendingErrors.length === 0) {
+        return;
       }
 
-      if (!completedJobSet.has(jobId)) {
-        const failedReason = String(
-          reloaded.failedReason || "job failed without reason",
-        );
-        allErrors.push({
-          work_id: String(job.data.workId),
-          source_image_url: String(job.data.sourceImageUrl || ""),
-          code: "worker_error",
-          message: failedReason,
-        });
-        report.jobs.push({
-          job_id: jobId,
-          work_id: String(job.data.workId),
-          state: "failed",
-          processed_count: 0,
-          failed_count: 1,
-          elapsed_ms: null,
-          source_network_modes: [],
-        });
+      const successBatch = pendingSuccessItems.splice(
+        0,
+        pendingSuccessItems.length,
+      );
+      const errorBatch = pendingErrors.splice(0, pendingErrors.length);
+      const writeStats = await updateSuccessRows(pool, successBatch);
+      await updateFailureRows(pool, errorBatch, "bullmq_dispatch");
 
-        progress.warn(
-          `job_failed job_id=${jobId} work_id=${job.data.workId} reason=${failedReason}`,
-        );
-        continue;
-      }
+      allSuccessItems.push(...successBatch);
+      allErrors.push(...errorBatch);
 
-      const result = (reloaded.returnvalue || {}) as {
-        items?: ImageProcessingItemResult[];
-        errors?: ImageProcessingTaskError[];
-        processed_count?: number;
-        failed_count?: number;
-        elapsed_ms?: number;
-      };
-
-      const items = Array.isArray(result.items) ? result.items : [];
-      const errors = Array.isArray(result.errors) ? result.errors : [];
-
-      const writeStats = await updateSuccessRows(pool, items);
-      await updateFailureRows(pool, errors, "bullmq_dispatch");
-
-      allSuccessItems.push(...items);
-      report.processed_items += writeStats.uploadedCount;
-      report.failed_items += errors.length;
-      report.failed_items += writeStats.notUploadedCount;
-      allErrors.push(...errors);
-
-      const modes = [...new Set(items.map((row) => row.source_network_mode))]
-        .filter(Boolean)
-        .map((value) => String(value));
-
-      report.jobs.push({
-        job_id: jobId,
-        work_id: String(job.data.workId),
-        state: errors.length > 0 ? "failed" : "completed",
-        processed_count: Number(result.processed_count ?? items.length),
-        failed_count: Number(result.failed_count ?? errors.length),
-        elapsed_ms: Number.isFinite(result.elapsed_ms)
-          ? Number(result.elapsed_ms)
-          : null,
-        source_network_modes: modes,
-      });
+      flushedProcessedItems += writeStats.uploadedCount;
+      flushedFailedItems += errorBatch.length + writeStats.notUploadedCount;
+      report.processed_items = flushedProcessedItems;
+      report.failed_items = flushedFailedItems;
+      flushedBatchCount += 1;
 
       progress.info(
-        `job_result job_id=${jobId} work_id=${job.data.workId} processed=${writeStats.uploadedCount} failed=${errors.length + writeStats.notUploadedCount} modes=${modes.join(",") || "none"}`,
+        `writeback_flush reason=${reason} batch=${flushedBatchCount} success_items=${successBatch.length} errors=${errorBatch.length} uploaded=${writeStats.uploadedCount} withheld=${writeStats.notUploadedCount} totals_processed=${flushedProcessedItems} totals_failed=${flushedFailedItems}`,
       );
     }
 
-    if (allErrors.length > 0) {
-      await updateFailureRows(pool, allErrors, "bullmq_dispatch_summary");
+    async function processFinalizedJobs(options: {
+      reason: string;
+      finalPass: boolean;
+    }): Promise<void> {
+      for (const [jobId, job] of jobsById) {
+        if (handledJobIds.has(jobId)) {
+          continue;
+        }
+
+        const finalized =
+          seenCompletedJobIds.has(jobId) || seenFailedJobIds.has(jobId);
+        if (!finalized && !options.finalPass) {
+          continue;
+        }
+
+        const reloaded = await Job.fromId(queue, jobId);
+        if (!reloaded) {
+          const misses = (jobMissingReloadCount.get(jobId) || 0) + 1;
+          jobMissingReloadCount.set(jobId, misses);
+          if (!options.finalPass) {
+            continue;
+          }
+
+          pendingErrors.push({
+            work_id: String(job.data.workId),
+            source_image_url: String(job.data.sourceImageUrl || ""),
+            code: "missing_job_result",
+            message: `bullmq result missing for jobId=${jobId} after ${misses} reload attempts`,
+          });
+          handledJobIds.add(jobId);
+          progress.warn(
+            `job_missing_result job_id=${jobId} work_id=${job.data.workId} reload_attempts=${misses}`,
+          );
+          continue;
+        }
+
+        const isCompleted = seenCompletedJobIds.has(jobId);
+        if (!isCompleted) {
+          const failedReason = String(
+            reloaded.failedReason || "job failed without reason",
+          );
+          pendingErrors.push({
+            work_id: String(job.data.workId),
+            source_image_url: String(job.data.sourceImageUrl || ""),
+            code: "worker_error",
+            message: failedReason,
+          });
+          report.jobs.push({
+            job_id: jobId,
+            work_id: String(job.data.workId),
+            state: "failed",
+            processed_count: 0,
+            failed_count: 1,
+            elapsed_ms: null,
+            source_network_modes: [],
+          });
+          handledJobIds.add(jobId);
+          progress.warn(
+            `job_failed job_id=${jobId} work_id=${job.data.workId} reason=${failedReason}`,
+          );
+          continue;
+        }
+
+        const result = (reloaded.returnvalue || {}) as {
+          items?: ImageProcessingItemResult[];
+          errors?: ImageProcessingTaskError[];
+          processed_count?: number;
+          failed_count?: number;
+          elapsed_ms?: number;
+        };
+
+        const items = Array.isArray(result.items) ? result.items : [];
+        const errors = Array.isArray(result.errors) ? result.errors : [];
+        pendingSuccessItems.push(...items);
+        pendingErrors.push(...errors);
+
+        const modes = [...new Set(items.map((row) => row.source_network_mode))]
+          .filter(Boolean)
+          .map((value) => String(value));
+
+        report.jobs.push({
+          job_id: jobId,
+          work_id: String(job.data.workId),
+          state: errors.length > 0 ? "failed" : "completed",
+          processed_count: Number(result.processed_count ?? items.length),
+          failed_count: Number(result.failed_count ?? errors.length),
+          elapsed_ms: Number.isFinite(result.elapsed_ms)
+            ? Number(result.elapsed_ms)
+            : null,
+          source_network_modes: modes,
+        });
+
+        handledJobIds.add(jobId);
+        progress.info(
+          `job_buffered reason=${options.reason} job_id=${jobId} work_id=${job.data.workId} items=${items.length} errors=${errors.length} modes=${modes.join(",") || "none"}`,
+        );
+      }
+    }
+
+    const periodicFlushIntervalMs = 15_000;
+    let periodicFlushTimer: NodeJS.Timeout | null = null;
+    let harvestChain: Promise<void> = Promise.resolve();
+
+    const enqueueHarvestCycle = (
+      reason: string,
+      finalPass: boolean,
+    ): Promise<void> => {
+      harvestChain = harvestChain.then(async () => {
+        await processFinalizedJobs({ reason, finalPass });
+        await flushPendingWrites(reason);
+      });
+      return harvestChain;
+    };
+
+    try {
+      periodicFlushTimer = setInterval(() => {
+        void enqueueHarvestCycle("periodic", false).catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          progress.warn(`periodic_flush_failed message=${message}`);
+        });
+      }, periodicFlushIntervalMs);
+
+      progress.phase("waiting for worker completion");
+      const completion = await waitForRunCompletion({
+        queueEvents,
+        queueName: IMAGE_QUEUE_NAME,
+        expectedJobs: queuedJobs.length,
+        timeoutMs: Math.max(1, options.waitTimeoutSeconds) * 1000,
+        onProgress: ({
+          completed,
+          failed,
+          expected,
+          processedItems,
+          failedItems,
+          completedJobIds,
+          failedJobIds,
+        }) => {
+          report.completed_jobs = completed;
+          report.failed_jobs = failed;
+
+          for (const jobId of completedJobIds) {
+            seenCompletedJobIds.add(jobId);
+          }
+          for (const jobId of failedJobIds) {
+            seenFailedJobIds.add(jobId);
+          }
+
+          // Use whichever is higher so live telemetry does not regress between flushes.
+          report.processed_items = Math.max(
+            flushedProcessedItems,
+            processedItems,
+          );
+          report.failed_items = Math.max(flushedFailedItems, failedItems);
+
+          const finalized = completed + failed;
+          const line = formatModeProgressLine({
+            mode: "desktop-bullmq",
+            completed: finalized,
+            total: expected,
+            startedAtMs,
+            text:
+              `jobs_completed=${completed} jobs_failed=${failed} ` +
+              `images_processed=${report.processed_items}/${report.claimed_count} ` +
+              `items_failed=${report.failed_items}`,
+          });
+          progress.progress(`queue ${line}`);
+        },
+      });
+
+      progress.phase("collecting results and applying writeback");
+
+      for (const jobId of completion.completedJobIds) {
+        seenCompletedJobIds.add(jobId);
+      }
+      for (const jobId of completion.failedJobIds) {
+        seenFailedJobIds.add(jobId);
+      }
+
+      await enqueueHarvestCycle("finalize", false);
+      await enqueueHarvestCycle("final-pass", true);
+
+      report.processed_items = flushedProcessedItems;
+      report.failed_items = flushedFailedItems;
+    } finally {
+      if (periodicFlushTimer) {
+        clearInterval(periodicFlushTimer);
+      }
     }
 
     report.finished_at = new Date().toISOString();
