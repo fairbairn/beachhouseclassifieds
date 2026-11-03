@@ -17,6 +17,11 @@ import {
   createRedisConnection,
   type ImageProcessingQueueJob,
 } from "../../workers/image-queue";
+import {
+  defaultRunnerControlSettings,
+  readRunnerControlSettings,
+  writeRunnerStatus,
+} from "../workers/image-runner-control";
 
 const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
 const DEFAULT_FETCH_RETRY_COUNT = 2;
@@ -762,6 +767,73 @@ async function main(): Promise<void> {
   const allErrors: ImageProcessingTaskError[] = [];
   const allSuccessItems: ImageProcessingItemResult[] = [];
 
+  let controlSettings = defaultRunnerControlSettings();
+  try {
+    controlSettings = await readRunnerControlSettings(queueConnection);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    progress.warn(`control_settings_read_failed message=${message}`);
+  }
+
+  const pendingSuccessItems: ImageProcessingItemResult[] = [];
+  const pendingErrors: ImageProcessingTaskError[] = [];
+  let flushedProcessedItems = 0;
+  let flushedFailedItems = 0;
+  let flushedBatchCount = 0;
+  let lastFlushAt: string | null = null;
+  let queueWaiting = 0;
+  let queueActive = 0;
+  let queueCompleted = 0;
+  let queueFailed = 0;
+  let queueDelayed = 0;
+  let queuePaused = 0;
+
+  async function publishRunnerStatus(
+    mode: "running" | "idle" | "stopping" | "done" | "failed",
+  ): Promise<void> {
+    try {
+      const counts = await queue.getJobCounts(
+        "waiting",
+        "active",
+        "completed",
+        "failed",
+        "delayed",
+        "paused",
+      );
+      queueWaiting = counts.waiting || 0;
+      queueActive = counts.active || 0;
+      queueCompleted = counts.completed || 0;
+      queueFailed = counts.failed || 0;
+      queueDelayed = counts.delayed || 0;
+      queuePaused = counts.paused || 0;
+    } catch {
+      // Keep last-known queue counters when redis read temporarily fails.
+    }
+
+    await writeRunnerStatus(queueConnection, {
+      operationId,
+      mode,
+      claimedCount: report.claimed_count,
+      queuedCount: report.queued_count,
+      completedJobs: report.completed_jobs,
+      failedJobs: report.failed_jobs,
+      processedItems: report.processed_items,
+      failedItems: report.failed_items,
+      queueWaiting,
+      queueActive,
+      queueCompleted,
+      queueFailed,
+      queueDelayed,
+      queuePaused,
+      queueBacklog: queueWaiting + queueActive + queueDelayed,
+      lastFlushAt,
+      flushBatchCount: flushedBatchCount,
+      pendingSuccessBuffer: pendingSuccessItems.length,
+      pendingErrorBuffer: pendingErrors.length,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   const heartbeat = setInterval(
     () => {
       const finalized = report.completed_jobs + report.failed_jobs;
@@ -777,11 +849,16 @@ async function main(): Promise<void> {
           `items_failed=${report.failed_items}`,
       });
       progress.progress(`heartbeat ${line}`);
+      void publishRunnerStatus("running").catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        progress.warn(`status_publish_failed message=${message}`);
+      });
     },
     Math.max(5, options.heartbeatSeconds) * 1000,
   );
 
   try {
+    await publishRunnerStatus("running");
     progress.phase("claiming rows from postgres");
     const claimPoolSize = Math.max(
       options.targetCount,
@@ -799,6 +876,7 @@ async function main(): Promise<void> {
 
     if (claimedItems.length === 0) {
       progress.done("no rows claimed; exiting");
+      await publishRunnerStatus("done");
       return;
     }
 
@@ -850,12 +928,6 @@ async function main(): Promise<void> {
     const handledJobIds = new Set<string>();
     const jobMissingReloadCount = new Map<string, number>();
 
-    const pendingSuccessItems: ImageProcessingItemResult[] = [];
-    const pendingErrors: ImageProcessingTaskError[] = [];
-    let flushedProcessedItems = 0;
-    let flushedFailedItems = 0;
-    let flushedBatchCount = 0;
-
     async function flushPendingWrites(reason: string): Promise<void> {
       if (pendingSuccessItems.length === 0 && pendingErrors.length === 0) {
         return;
@@ -877,10 +949,12 @@ async function main(): Promise<void> {
       report.processed_items = flushedProcessedItems;
       report.failed_items = flushedFailedItems;
       flushedBatchCount += 1;
+      lastFlushAt = new Date().toISOString();
 
       progress.info(
         `writeback_flush reason=${reason} batch=${flushedBatchCount} success_items=${successBatch.length} errors=${errorBatch.length} uploaded=${writeStats.uploadedCount} withheld=${writeStats.notUploadedCount} totals_processed=${flushedProcessedItems} totals_failed=${flushedFailedItems}`,
       );
+      await publishRunnerStatus("running");
     }
 
     async function processFinalizedJobs(options: {
@@ -982,7 +1056,8 @@ async function main(): Promise<void> {
       }
     }
 
-    const periodicFlushIntervalMs = 15_000;
+    let lastControlRefreshAtMs = 0;
+    let lastPeriodicHarvestAtMs = 0;
     let periodicFlushTimer: NodeJS.Timeout | null = null;
     let harvestChain: Promise<void> = Promise.resolve();
 
@@ -999,12 +1074,39 @@ async function main(): Promise<void> {
 
     try {
       periodicFlushTimer = setInterval(() => {
-        void enqueueHarvestCycle("periodic", false).catch((error: unknown) => {
+        void (async () => {
+          const nowMs = Date.now();
+          if (nowMs - lastControlRefreshAtMs >= 5000) {
+            lastControlRefreshAtMs = nowMs;
+            try {
+              controlSettings =
+                await readRunnerControlSettings(queueConnection);
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              progress.warn(
+                `control_settings_refresh_failed message=${message}`,
+              );
+            }
+          }
+
+          if (!controlSettings.harvestEnabled) {
+            return;
+          }
+
+          if (
+            nowMs - lastPeriodicHarvestAtMs >=
+            Math.max(1000, controlSettings.flushIntervalMs)
+          ) {
+            lastPeriodicHarvestAtMs = nowMs;
+            await enqueueHarvestCycle("periodic", false);
+          }
+        })().catch((error: unknown) => {
           const message =
             error instanceof Error ? error.message : String(error);
           progress.warn(`periodic_flush_failed message=${message}`);
         });
-      }, periodicFlushIntervalMs);
+      }, 1000);
 
       progress.phase("waiting for worker completion");
       const completion = await waitForRunCompletion({
@@ -1050,6 +1152,11 @@ async function main(): Promise<void> {
               `items_failed=${report.failed_items}`,
           });
           progress.progress(`queue ${line}`);
+          void publishRunnerStatus("running").catch((error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            progress.warn(`status_publish_failed message=${message}`);
+          });
         },
       });
 
@@ -1067,6 +1174,7 @@ async function main(): Promise<void> {
 
       report.processed_items = flushedProcessedItems;
       report.failed_items = flushedFailedItems;
+      await publishRunnerStatus("done");
     } finally {
       if (periodicFlushTimer) {
         clearInterval(periodicFlushTimer);
@@ -1160,6 +1268,9 @@ async function main(): Promise<void> {
     progress.done(
       `completed claimed=${report.claimed_count} processed=${report.processed_items} failed=${report.failed_items}`,
     );
+  } catch (error) {
+    await publishRunnerStatus("failed").catch(() => undefined);
+    throw error;
   } finally {
     clearInterval(heartbeat);
     await closeWithTimeout("queue_events_close", queueEvents.close());

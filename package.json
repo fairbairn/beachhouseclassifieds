@@ -227,6 +227,8 @@
     "workers:image:envbundle:stub": "npm run workers:image:envbundle:stub:raw",
     "workers:image:envbundle:cli:raw": "tsx src/lib/scripts/run-env-bundle-cli.ts",
     "workers:image:envbundle:cli": "npm run workers:image:envbundle:cli:raw --",
+    "workers:image:ops:raw": "tsx src/lib/scripts/run-image-ops-cli.ts",
+    "workers:image:ops": "npm run workers:image:ops:raw --",
     "images:storage:reconcile:raw": "tsx src/lib/scripts/run-image-storage-reconciliation.ts",
     "images:storage:reconcile": "npm run images:storage:reconcile:raw --",
     "images:storage:prune-unreferenced:raw": "tsx src/lib/scripts/run-prune-unreferenced-bunny-keys.ts",
