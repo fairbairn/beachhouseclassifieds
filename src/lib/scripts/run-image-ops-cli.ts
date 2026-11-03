@@ -1,36 +1,64 @@
 import "@/core/tooling/env/load-env-profile";
 
-import { execFile } from "node:child_process";
 import { createInterface } from "node:readline/promises";
-import { promisify } from "node:util";
 
-import { Queue } from "bullmq";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { Pool } from "pg";
 
+import { IMAGE_QUEUE_NAME } from "../../workers/image-queue";
 import {
-  IMAGE_QUEUE_NAME,
-  createRedisConnection,
-} from "../../workers/image-queue";
+  clearOpsQueueIfPaused,
+  createOpsUiStateWatcher,
+  maybePurgeForDesiredMode,
+  pauseOpsSystemFlow,
+  readOpsControlSettings,
+  readOpsControlSnapshot,
+  readOpsFlyMachines,
+  readOpsQueuePausedState,
+  readOpsRedisIoAggregateStats,
+  readOpsRedisIoStats,
+  readOpsUiSnapshot,
+  refreshOpsInfraFromFly,
+  resetOpsRedisIoStats,
+  resumeOpsSystemFlow,
+  scaleOpsWorkers,
+  setOpsDesiredModeWithQueueAction,
+  updateOpsControlSettings,
+  writeOpsControlSettings,
+  type OpsRedisIoAggregateStats,
+  type OpsRedisIoStats,
+  type OpsUiSnapshot,
+  type OpsUiStateWatcher,
+} from "../workers/image-ops-control-module";
+import { deriveOpsTelemetry } from "../workers/image-ops-state-machine";
 import {
-  readRunnerControlSettings,
-  readRunnerStatus,
-  writeRunnerControlSettings,
+  purgePendingImageQueueJobs,
+  readImageQueueCounts,
+  type ImageQueueCounts,
+} from "../workers/image-queue-ops";
+import {
   type RunnerControlSettings,
+  type RunnerDesiredMode,
+  type RunnerInfraSnapshot,
   type RunnerStatusSnapshot,
 } from "../workers/image-runner-control";
 
-const execFileAsync = promisify(execFile);
 const DEFAULT_APP = "beachhouseclassifieds-image-worker";
 
 type Command =
   | "dashboard"
+  | "telemetry-dump"
   | "fly-scale"
   | "fly-stop-all"
   | "fly-status"
+  | "start-run"
+  | "drain-and-scale-down"
   | "control-show"
   | "control-set"
+  | "pause-system"
+  | "resume-system"
+  | "clear-queue"
+  | "redis-io-reset"
   | "help";
 
 type ParsedArgs = {
@@ -39,29 +67,7 @@ type ParsedArgs = {
   flags: Set<string>;
 };
 
-type FlyMachine = {
-  id: string;
-  name: string;
-  state: string;
-  region: string;
-};
-
-type QueueCounts = {
-  waiting: number;
-  active: number;
-  completed: number;
-  failed: number;
-  delayed: number;
-  paused: number;
-  backlog: number;
-};
-
-type DbProgress = {
-  processed: number;
-  pending: number;
-  total: number;
-  pct: number;
-} | null;
+type QueueCounts = ImageQueueCounts;
 
 type DashboardSample = {
   atMs: number;
@@ -74,17 +80,14 @@ type DashboardSample = {
 };
 
 type DashboardSnapshot = {
-  machines: FlyMachine[] | null;
+  machines: OpsUiSnapshot["machines"];
   queue: QueueCounts | null;
-  db: DbProgress;
+  db: OpsUiSnapshot["db"];
   settings: RunnerControlSettings | null;
+  infra: RunnerInfraSnapshot | null;
   status: RunnerStatusSnapshot | null;
-  errors: {
-    fly?: string;
-    queue?: string;
-    db?: string;
-    control?: string;
-  };
+  projections: OpsUiSnapshot["projections"];
+  errors: OpsUiSnapshot["errors"];
 };
 
 type TopUiState = {
@@ -101,13 +104,21 @@ function usage(): string {
     "Image Ops Control Tower",
     "",
     "Usage:",
-    "  npm run workers:image:ops -- dashboard [--watch] [--top] [--interval-seconds 3] [--app <flyApp>]",
-    "      top watch keys: q quit, h help, s settings, + faster, - slower, r reset trends",
+    "  npm run workers:image:ops -- dashboard [--watch] [--top] [--interval-seconds 5] [--app <flyApp>]",
+    "  npm run workers:image:ops -- telemetry-dump [--app <flyApp>]",
+    "      top watch keys: q quit, h help, s settings, : command, + slower, - faster, r reset trends",
     "  npm run workers:image:ops -- fly-scale --count <n> [--app <flyApp>]",
     "  npm run workers:image:ops -- fly-stop-all [--app <flyApp>]",
     "  npm run workers:image:ops -- fly-status [--app <flyApp>]",
+    "  npm run workers:image:ops -- start-run --count <n> [--app <flyApp>]",
+    "  npm run workers:image:ops -- drain-and-scale-down [--timeout-seconds 900] [--poll-seconds 5] [--app <flyApp>]",
     "  npm run workers:image:ops -- control-show",
-    "  npm run workers:image:ops -- control-set [--flush-interval-ms <n>] [--harvest-enabled true|false]",
+    "  npm run workers:image:ops -- control-set [--desired-mode run|idle|drain|stop] [--enqueue-enabled true|false] [--require-workers-for-enqueue true|false] [--min-workers-to-enqueue <n>] [--flush-interval-ms <n>] [--harvest-enabled true|false]",
+    "  npm run workers:image:ops -- control-set [--desired-mode run|idle|drain|stop] [--enqueue-enabled true|false] [--require-workers-for-enqueue true|false] [--min-workers-to-enqueue <n>] [--max-queue-backlog <n>] [--refill-low-watermark <n>] [--refill-target-backlog <n>] [--max-claim-per-cycle <n>] [--flush-interval-ms <n>] [--harvest-enabled true|false]",
+    "  npm run workers:image:ops -- pause-system",
+    "  npm run workers:image:ops -- resume-system",
+    "  npm run workers:image:ops -- clear-queue",
+    "  npm run workers:image:ops -- redis-io-reset",
   ].join("\n");
 }
 
@@ -115,11 +126,18 @@ function parseArgs(argv: string[]): ParsedArgs {
   const raw = (argv[0] || "help").trim().toLowerCase();
   const command: Command =
     raw === "dashboard" ||
+    raw === "telemetry-dump" ||
     raw === "fly-scale" ||
     raw === "fly-stop-all" ||
     raw === "fly-status" ||
+    raw === "start-run" ||
+    raw === "drain-and-scale-down" ||
     raw === "control-show" ||
-    raw === "control-set"
+    raw === "control-set" ||
+    raw === "pause-system" ||
+    raw === "resume-system" ||
+    raw === "clear-queue" ||
+    raw === "redis-io-reset"
       ? raw
       : "help";
 
@@ -155,6 +173,17 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return parsed;
 }
 
+function parseNonNegativeInt(
+  raw: string | undefined,
+  fallback: number,
+): number {
+  const parsed = Number.parseInt(String(raw || "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
 function parseBoolean(raw: string | undefined): boolean | null {
   if (!raw) {
     return null;
@@ -179,6 +208,18 @@ function clamp(value: number, low: number, high: number): number {
 
 function fixedOne(value: number): string {
   return (Math.round(value * 10) / 10).toFixed(1);
+}
+
+function formatBitrateFromKbps(kbps: number): string {
+  const safeKbps = Number.isFinite(kbps) && kbps > 0 ? kbps : 0;
+  const bps = safeKbps * 1000;
+  if (bps < 1000) {
+    return `${bps.toFixed(1)} bps`;
+  }
+  if (bps < 1_000_000) {
+    return `${(bps / 1000).toFixed(1)} Kbps`;
+  }
+  return `${(bps / 1_000_000).toFixed(2)} Mbps`;
 }
 
 function takeTail<T>(values: T[], max: number): T[] {
@@ -226,154 +267,26 @@ function shortError(error: unknown): string {
   return String(error);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function runFlyctl(args: string[]): Promise<string> {
-  const { stdout, stderr } = await execFileAsync("flyctl", args, {
-    maxBuffer: 2 * 1024 * 1024,
-  });
-  return `${stdout || ""}${stderr || ""}`;
-}
-
-async function fetchFlyMachines(app: string): Promise<FlyMachine[]> {
-  try {
-    const output = await runFlyctl(["machines", "list", "-a", app, "--json"]);
-    const parsed = JSON.parse(output) as FlyMachine[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
 async function fetchQueueCounts(): Promise<QueueCounts> {
-  const connection = createRedisConnection();
-  const queue = new Queue(IMAGE_QUEUE_NAME, { connection });
-  try {
-    const counts = await queue.getJobCounts(
-      "waiting",
-      "active",
-      "completed",
-      "failed",
-      "delayed",
-      "paused",
-    );
-    const waiting = counts.waiting || 0;
-    const active = counts.active || 0;
-    const delayed = counts.delayed || 0;
-    return {
-      waiting,
-      active,
-      completed: counts.completed || 0,
-      failed: counts.failed || 0,
-      delayed,
-      paused: counts.paused || 0,
-      backlog: waiting + active + delayed,
-    };
-  } finally {
-    await queue.close();
-    await connection.quit();
-  }
-}
-
-async function fetchDbProgress(): Promise<DbProgress> {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) {
-    return null;
-  }
-
-  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
-  try {
-    const [{ rows: processedRows }, { rows: pendingRows }] = await Promise.all([
-      pool.query<{ count: string }>(
-        "select count(*)::bigint as count from listing_source_image where status = 'processed_site'",
-      ),
-      pool.query<{ count: string }>(
-        `select count(*)::bigint as count
-         from listing_source_image lsi
-         join listing_source_link lsl on lsl.id = lsi.source_link_id
-         where lsi.site_image is null
-           and coalesce(lsi.source_image_url, '') <> ''
-           and lsl.source_status = 'active'
-           and lsl.active_to is null`,
-      ),
-    ]);
-
-    const processed = Number(processedRows[0]?.count || 0);
-    const pending = Number(pendingRows[0]?.count || 0);
-    const total = processed + pending;
-
-    return {
-      processed,
-      pending,
-      total,
-      pct: total > 0 ? (processed / total) * 100 : 0,
-    };
-  } finally {
-    await pool.end();
-  }
+  return readImageQueueCounts();
 }
 
 async function fetchControlSnapshot(): Promise<{
   settings: RunnerControlSettings;
+  infra: RunnerInfraSnapshot | null;
   status: RunnerStatusSnapshot | null;
 }> {
-  const connection = createRedisConnection();
-  try {
-    const settings = await readRunnerControlSettings(connection);
-    const status = await readRunnerStatus(connection);
-    return { settings, status };
-  } finally {
-    await connection.quit();
-  }
+  return readOpsControlSnapshot();
 }
 
 async function gatherDashboardSnapshot(
   app: string,
 ): Promise<DashboardSnapshot> {
-  const [machinesResult, queueResult, dbResult, controlResult] =
-    await Promise.allSettled([
-      fetchFlyMachines(app),
-      fetchQueueCounts(),
-      fetchDbProgress(),
-      fetchControlSnapshot(),
-    ]);
-
-  return {
-    machines:
-      machinesResult.status === "fulfilled" ? machinesResult.value : null,
-    queue: queueResult.status === "fulfilled" ? queueResult.value : null,
-    db: dbResult.status === "fulfilled" ? dbResult.value : null,
-    settings:
-      controlResult.status === "fulfilled"
-        ? controlResult.value.settings
-        : null,
-    status:
-      controlResult.status === "fulfilled" ? controlResult.value.status : null,
-    errors: {
-      fly:
-        machinesResult.status === "rejected"
-          ? shortError(machinesResult.reason)
-          : undefined,
-      queue:
-        queueResult.status === "rejected"
-          ? shortError(queueResult.reason)
-          : undefined,
-      db:
-        dbResult.status === "rejected"
-          ? shortError(dbResult.reason)
-          : undefined,
-      control:
-        controlResult.status === "rejected"
-          ? shortError(controlResult.reason)
-          : undefined,
-    },
-  };
+  return readOpsUiSnapshot(app, 8000);
 }
 
 async function panelFly(app: string): Promise<void> {
-  const machines = await fetchFlyMachines(app);
+  const machines = await readOpsFlyMachines(app);
   const byState = new Map<string, number>();
   for (const machine of machines) {
     const state = String(machine.state || "unknown").toLowerCase();
@@ -424,7 +337,7 @@ async function panelQueue(): Promise<void> {
 }
 
 async function panelDb(): Promise<void> {
-  const snapshot = await fetchDbProgress();
+  const snapshot = (await readOpsUiSnapshot(DEFAULT_APP, 8000)).db;
   if (!snapshot) {
     process.stdout.write(
       chalk.yellow("DATABASE_URL missing; DB panel skipped\n"),
@@ -446,17 +359,77 @@ async function panelDb(): Promise<void> {
 }
 
 async function panelControl(): Promise<void> {
-  const { settings, status } = await fetchControlSnapshot();
+  const { settings, infra, status } = await fetchControlSnapshot();
+  let liveQueue: QueueCounts | null = null;
+  let liveQueueError: string | null = null;
+  let queueGloballyPaused: boolean | null = null;
+  let queuePauseError: string | null = null;
+  try {
+    liveQueue = await fetchQueueCounts();
+  } catch (error) {
+    liveQueueError = shortError(error);
+  }
+  try {
+    queueGloballyPaused = await readOpsQueuePausedState();
+  } catch (error) {
+    queuePauseError = shortError(error);
+  }
 
   const settingsTable = new Table({
     head: ["Control Setting", "Value"],
     style: { head: ["cyan"] },
   });
   settingsTable.push(
+    ["desired_mode", settings.desiredMode],
+    ["enqueue_enabled", settings.enqueueEnabled],
+    ["require_workers_for_enqueue", settings.requireWorkersForEnqueue],
+    ["min_workers_to_enqueue", settings.minWorkersToEnqueue],
+    ["max_queue_backlog", settings.maxQueueBacklog],
+    ["refill_low_watermark", settings.refillLowWatermark],
+    ["refill_target_backlog", settings.refillTargetBacklog],
+    ["max_claim_per_cycle", settings.maxClaimPerCycle],
     ["flush_interval_ms", settings.flushIntervalMs],
     ["harvest_enabled", settings.harvestEnabled],
+    [
+      "queue_globally_paused",
+      queueGloballyPaused === null ? "unknown" : queueGloballyPaused,
+    ],
   );
   process.stdout.write(`${settingsTable.toString()}\n`);
+
+  const infraTable = new Table({
+    head: ["Infra Signal", "Value"],
+    style: { head: ["cyan"] },
+  });
+  infraTable.push(
+    ["workers_running", infra?.workersRunning ?? 0],
+    ["source", infra?.source ?? "none"],
+    ["updated_at", infra?.updatedAt ?? "-"],
+  );
+  process.stdout.write(`${infraTable.toString()}\n`);
+
+  const queueTable = new Table({
+    head: ["Queue Source", "Waiting", "Active", "Delayed", "Backlog"],
+    style: { head: ["cyan"] },
+  });
+  queueTable.push([
+    "live",
+    liveQueue?.waiting ?? "n/a",
+    liveQueue?.active ?? "n/a",
+    liveQueue?.delayed ?? "n/a",
+    liveQueue?.backlog ?? "n/a",
+  ]);
+  process.stdout.write(`${queueTable.toString()}\n`);
+  if (liveQueueError) {
+    process.stdout.write(
+      chalk.yellow(`live queue unavailable: ${liveQueueError}\n`),
+    );
+  }
+  if (queuePauseError) {
+    process.stdout.write(
+      chalk.yellow(`queue pause state unavailable: ${queuePauseError}\n`),
+    );
+  }
 
   if (!status) {
     process.stdout.write(
@@ -466,31 +439,89 @@ async function panelControl(): Promise<void> {
   }
 
   const statusTable = new Table({
-    head: ["Runner Metric", "Value"],
+    head: ["Runner Snapshot Metric", "Value"],
     style: { head: ["cyan"] },
   });
+  const gateState = status.gateReason === "gate=open" ? "open" : "blocked";
   statusTable.push(
-    ["operation_id", status.operationId],
-    ["mode", status.mode],
-    ["claimed_count", status.claimedCount],
-    ["queued_count", status.queuedCount],
-    ["completed_jobs", status.completedJobs],
-    ["failed_jobs", status.failedJobs],
-    ["processed_items", status.processedItems],
-    ["failed_items", status.failedItems],
-    ["queue_waiting", status.queueWaiting],
-    ["queue_active", status.queueActive],
-    ["queue_completed", status.queueCompleted],
-    ["queue_failed", status.queueFailed],
-    ["queue_delayed", status.queueDelayed],
-    ["queue_paused", status.queuePaused],
-    ["queue_backlog", status.queueBacklog],
-    ["pending_success_buffer", status.pendingSuccessBuffer],
-    ["pending_error_buffer", status.pendingErrorBuffer],
-    ["last_flush_at", status.lastFlushAt || "-"],
-    ["updated_at", status.updatedAt],
+    ["snapshot_operation_id", status.operationId],
+    ["snapshot_mode", status.mode],
+    ["snapshot_desired_mode", status.desiredMode],
+    ["snapshot_gate_state", gateState],
+    ["snapshot_gate_reason", status.gateReason || "-"],
+    ["snapshot_workers_running", status.workersRunning],
+    ["snapshot_claimed_count", status.claimedCount],
+    ["snapshot_queued_count", status.queuedCount],
+    ["snapshot_completed_jobs", status.completedJobs],
+    ["snapshot_failed_jobs", status.failedJobs],
+    ["snapshot_processed_items", status.processedItems],
+    ["snapshot_failed_items", status.failedItems],
+    ["snapshot_queue_waiting", status.queueWaiting],
+    ["snapshot_queue_active", status.queueActive],
+    ["snapshot_queue_completed", status.queueCompleted],
+    ["snapshot_queue_failed", status.queueFailed],
+    ["snapshot_queue_delayed", status.queueDelayed],
+    ["snapshot_queue_paused", status.queuePaused],
+    ["snapshot_queue_backlog", status.queueBacklog],
+    ["snapshot_pending_success_buffer", status.pendingSuccessBuffer],
+    ["snapshot_pending_error_buffer", status.pendingErrorBuffer],
+    ["snapshot_last_flush_at", status.lastFlushAt || "-"],
+    ["snapshot_updated_at", status.updatedAt],
   );
   process.stdout.write(`${statusTable.toString()}\n`);
+
+  const telemetry = deriveOpsTelemetry({
+    settings,
+    infra,
+    status,
+    queue: liveQueue,
+    errors: {},
+  });
+  if (
+    telemetry.runnerStaleSeconds !== null &&
+    telemetry.runnerStaleSeconds > 30
+  ) {
+    process.stdout.write(
+      chalk.yellow(
+        `runner status is stale: age_ms=${telemetry.runnerStaleSeconds * 1000}\n`,
+      ),
+    );
+  }
+  if (telemetry.backlogMismatch) {
+    process.stdout.write(
+      chalk.yellow(
+        `queue mismatch: live_backlog=${liveQueue.backlog} status_backlog=${status.queueBacklog}\n`,
+      ),
+    );
+  }
+}
+
+async function runTelemetryDump(args: ParsedArgs): Promise<void> {
+  const app = appName(args.options);
+  const snapshot = await gatherDashboardSnapshot(app);
+  const telemetry = deriveOpsTelemetry({
+    settings: snapshot.settings,
+    infra: snapshot.infra,
+    status: snapshot.status,
+    queue: snapshot.queue,
+    errors: snapshot.errors,
+  });
+
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    app,
+    sources: {
+      settings: snapshot.settings,
+      infra: snapshot.infra,
+      status: snapshot.status,
+      queue: snapshot.queue,
+      db: snapshot.db,
+      errors: snapshot.errors,
+    },
+    derived: telemetry,
+  };
+
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
 function renderTopLikeDashboard(params: {
@@ -498,8 +529,10 @@ function renderTopLikeDashboard(params: {
   watch: boolean;
   ui: TopUiState;
   snapshot: DashboardSnapshot;
+  redisIo: OpsRedisIoStats;
+  redisIoAggregate: OpsRedisIoAggregateStats;
 }): void {
-  const { app, watch, ui, snapshot } = params;
+  const { app, watch, ui, snapshot, redisIo, redisIoAggregate } = params;
   const { intervalSeconds, samples } = ui;
   const byState = new Map<string, number>();
   for (const machine of snapshot.machines || []) {
@@ -508,10 +541,11 @@ function renderTopLikeDashboard(params: {
   }
 
   const status = snapshot.status;
+  const projection = snapshot.projections;
   const latest = samples[samples.length - 1] || null;
   const previous = samples.length > 1 ? samples[samples.length - 2] : null;
 
-  let ratePerMin = 0;
+  let fallbackRatePerMin = 0;
   if (
     latest &&
     previous &&
@@ -521,17 +555,30 @@ function renderTopLikeDashboard(params: {
     const deltaItems = latest.processedItems - previous.processedItems;
     const deltaSeconds = (latest.atMs - previous.atMs) / 1000;
     if (deltaSeconds > 0) {
-      ratePerMin = (deltaItems / deltaSeconds) * 60;
+      fallbackRatePerMin = (deltaItems / deltaSeconds) * 60;
     }
   }
 
+  const ratePerMin =
+    projection.sampleCount > 0
+      ? projection.headline.ipmAvg30
+      : fallbackRatePerMin;
+
   const backlogTrend = renderTrend(
-    samples.map((sample) => sample.queueBacklog),
+    projection.sampleCount > 0
+      ? projection.queueBacklogTrendSmoothed
+      : samples.map((sample) => sample.queueBacklog),
   );
   const processedTrend = renderTrend(
-    samples.map((sample) => sample.processedItems),
+    projection.sampleCount > 0
+      ? projection.processedItemsTrend
+      : samples.map((sample) => sample.processedItems),
   );
-  const failedTrend = renderTrend(samples.map((sample) => sample.failedItems));
+  const failedTrend = renderTrend(
+    projection.sampleCount > 0
+      ? projection.failedItemsTrend
+      : samples.map((sample) => sample.failedItems),
+  );
 
   const machineStates = [...byState.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -542,7 +589,13 @@ function renderTopLikeDashboard(params: {
   process.stdout.write(chalk.gray(`${new Date().toISOString()}\n`));
   process.stdout.write(
     chalk.gray(
-      `watch=${watch} interval=${intervalSeconds}s samples=${samples.length} app=${app}\n\n`,
+      `watch=${watch} interval=${intervalSeconds}s samples=${projection.sampleCount || samples.length} app=${app}\n\n`,
+    ),
+  );
+  process.stdout.write(
+    chalk.gray(
+      `redis_io aggregate: wire=${formatBitrateFromKbps(redisIoAggregate.redisWireKbps)} rx=${formatBitrateFromKbps(redisIoAggregate.redisIngressKbps)} tx=${formatBitrateFromKbps(redisIoAggregate.redisEgressKbps)} instances=${redisIoAggregate.activeInstances} reads=${redisIoAggregate.redisIngressReads} writes=${redisIoAggregate.redisEgressWrites}\n` +
+        `redis_io local: wire=${formatBitrateFromKbps(redisIo.redisWireKbps)} rx=${formatBitrateFromKbps(redisIo.redisIngressKbps)} tx=${formatBitrateFromKbps(redisIo.redisEgressKbps)} reads=${redisIo.redisIngressReads} writes=${redisIo.redisEgressWrites} last_read_at=${redisIo.lastReadAt || "-"}\n\n`,
     ),
   );
 
@@ -553,7 +606,12 @@ function renderTopLikeDashboard(params: {
   if (ui.showHelp) {
     process.stdout.write(
       chalk.gray(
-        "keys: q quit | h toggle-help | s settings prompt | + faster refresh | - slower refresh | r reset trends\n\n",
+        "keys: q quit | h toggle-help | s settings prompt | : command prompt | + slower refresh | - faster refresh | r reset trends\n",
+      ),
+    );
+    process.stdout.write(
+      chalk.gray(
+        "cmd: 5 | scale 5 | run|idle|drain|stop | pause | resume | set flush 15000 | set harvest on/off\n\n",
       ),
     );
   }
@@ -565,7 +623,7 @@ function renderTopLikeDashboard(params: {
     );
   } else {
     process.stdout.write(
-      `flush_interval_ms=${snapshot.settings.flushIntervalMs} harvest_enabled=${snapshot.settings.harvestEnabled}\n\n`,
+      `desired_mode=${snapshot.settings.desiredMode} enqueue_enabled=${snapshot.settings.enqueueEnabled} workers_gate=${snapshot.settings.requireWorkersForEnqueue} min_workers=${snapshot.settings.minWorkersToEnqueue} max_backlog=${snapshot.settings.maxQueueBacklog} refill_low=${snapshot.settings.refillLowWatermark} refill_target=${snapshot.settings.refillTargetBacklog} max_claim_cycle=${snapshot.settings.maxClaimPerCycle} flush_interval_ms=${snapshot.settings.flushIntervalMs} harvest_enabled=${snapshot.settings.harvestEnabled}\n\n`,
     );
   }
 
@@ -599,14 +657,18 @@ function renderTopLikeDashboard(params: {
   if (!status) {
     process.stdout.write("runner_status=none\n");
   } else {
+    const gateState = status.gateReason === "gate=open" ? "open" : "blocked";
     process.stdout.write(
       `operation=${status.operationId} mode=${status.mode} updated_at=${status.updatedAt}\n`,
+    );
+    process.stdout.write(
+      `desired_mode=${status.desiredMode} gate_state=${gateState} workers_running=${status.workersRunning} gate_reason=${status.gateReason || "-"}\n`,
     );
     process.stdout.write(
       `jobs completed=${status.completedJobs} failed=${status.failedJobs} queued=${status.queuedCount} claimed=${status.claimedCount}\n`,
     );
     process.stdout.write(
-      `items processed=${status.processedItems} failed=${status.failedItems} rate=${fixedOne(ratePerMin)} images/min\n`,
+      `items processed=${status.processedItems} failed=${status.failedItems} rate=${fixedOne(ratePerMin)} images/min smoothed=${fixedOne(projection.headline.ipsSmoothedNow * 60)} avg30=${fixedOne(projection.headline.ipmAvg30)}\n`,
     );
     process.stdout.write(
       `buffers success=${status.pendingSuccessBuffer} error=${status.pendingErrorBuffer} flush_batches=${status.flushBatchCount} last_flush_at=${status.lastFlushAt || "-"}\n`,
@@ -630,48 +692,163 @@ function renderTopLikeDashboard(params: {
 }
 
 async function promptTopSettings(ui: TopUiState): Promise<void> {
-  const connection = createRedisConnection();
+  const current = await readOpsControlSettings();
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
   try {
-    const current = await readRunnerControlSettings(connection);
-    const rl = createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    try {
-      process.stdout.write("\n");
-      const flushRaw = await rl.question(
-        `flush_interval_ms [${current.flushIntervalMs}]: `,
-      );
-      const harvestRaw = await rl.question(
-        `harvest_enabled true|false [${current.harvestEnabled}]: `,
-      );
+    process.stdout.write("\n");
+    const flushRaw = await rl.question(
+      `flush_interval_ms [${current.flushIntervalMs}]: `,
+    );
+    const harvestRaw = await rl.question(
+      `harvest_enabled true|false [${current.harvestEnabled}]: `,
+    );
 
-      const next = {
-        flushIntervalMs: flushRaw.trim()
-          ? Math.max(
-              1000,
-              Math.min(
-                60000,
-                parsePositiveInt(flushRaw, current.flushIntervalMs),
-              ),
-            )
-          : current.flushIntervalMs,
-        harvestEnabled: harvestRaw.trim()
-          ? (parseBoolean(harvestRaw) ?? current.harvestEnabled)
-          : current.harvestEnabled,
-      };
+    const next: RunnerControlSettings = {
+      ...current,
+      flushIntervalMs: flushRaw.trim()
+        ? Math.max(
+            1000,
+            Math.min(
+              60000,
+              parsePositiveInt(flushRaw, current.flushIntervalMs),
+            ),
+          )
+        : current.flushIntervalMs,
+      harvestEnabled: harvestRaw.trim()
+        ? (parseBoolean(harvestRaw) ?? current.harvestEnabled)
+        : current.harvestEnabled,
+    };
 
-      await writeRunnerControlSettings(connection, next);
-      ui.notice = `settings updated: flush_interval_ms=${next.flushIntervalMs} harvest_enabled=${next.harvestEnabled}`;
-    } finally {
-      rl.close();
-    }
+    await writeOpsControlSettings(next);
+    ui.notice = `settings updated: flush_interval_ms=${next.flushIntervalMs} harvest_enabled=${next.harvestEnabled}`;
   } finally {
-    await connection.quit();
+    rl.close();
   }
 }
 
-function installTopKeyControls(ui: TopUiState): () => void {
+async function promptTopCommand(ui: TopUiState, app: string): Promise<void> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    process.stdout.write("\n");
+    const raw = (await rl.question("command (? for help): ")).trim();
+    const lower = raw.toLowerCase();
+
+    if (!raw) {
+      ui.notice = "command cancelled";
+      return;
+    }
+
+    if (lower === "?" || lower === "help") {
+      ui.notice =
+        "commands: 5 | scale 5 | run|idle|drain|stop | pause | resume | clear | set flush 15000 | set harvest on/off";
+      return;
+    }
+
+    if (/^\d+$/.test(lower)) {
+      const count = parsePositiveInt(lower, -1);
+      if (count < 0) {
+        ui.notice = `invalid worker count: ${raw}`;
+        return;
+      }
+      await scaleOpsWorkers(app, count);
+      await publishInfraSnapshotFromFly(app);
+      ui.notice = `scaled workers to ${count}`;
+      return;
+    }
+
+    if (
+      lower.startsWith("scale ") ||
+      lower.startsWith("workers ") ||
+      lower.startsWith("w ")
+    ) {
+      const countRaw = lower
+        .replace(/^scale\s+/, "")
+        .replace(/^workers\s+/, "")
+        .replace(/^w\s+/, "")
+        .trim();
+      const count = parsePositiveInt(countRaw, -1);
+      if (count < 0) {
+        ui.notice = `invalid worker count: ${countRaw}`;
+        return;
+      }
+      await scaleOpsWorkers(app, count);
+      await publishInfraSnapshotFromFly(app);
+      ui.notice = `scaled workers to ${count}`;
+      return;
+    }
+
+    if (
+      lower === "run" ||
+      lower === "idle" ||
+      lower === "drain" ||
+      lower === "stop"
+    ) {
+      const next = await setDesiredMode(lower as RunnerDesiredMode);
+      ui.notice = `desired_mode=${next.desiredMode}`;
+      return;
+    }
+
+    if (lower === "pause") {
+      const result = await pauseOpsSystemFlow();
+      ui.notice = `system paused: desired_mode=${result.settings.desiredMode} enqueue_enabled=${result.settings.enqueueEnabled} queue_paused=${result.queuePaused}`;
+      return;
+    }
+
+    if (lower === "resume") {
+      const result = await resumeOpsSystemFlow();
+      ui.notice = `system resumed: desired_mode=${result.settings.desiredMode} enqueue_enabled=${result.settings.enqueueEnabled} queue_paused=${result.queuePaused}`;
+      return;
+    }
+
+    if (lower === "clear" || lower === "clear-queue") {
+      const result = await clearOpsQueueIfPaused();
+      ui.notice =
+        `queue cleared: queue_paused=${result.queuePaused} ` +
+        `purged=${result.purge.removed} waiting=${result.purge.remainingWaiting} ` +
+        `delayed=${result.purge.remainingDelayed} paused=${result.purge.remainingPaused} active=${result.purge.remainingActive}`;
+      return;
+    }
+
+    if (lower.startsWith("set flush ")) {
+      const flushRaw = lower.replace("set flush ", "").trim();
+      const flushMs = parsePositiveInt(flushRaw, -1);
+      if (flushMs <= 0) {
+        ui.notice = `invalid flush ms: ${flushRaw}`;
+        return;
+      }
+
+      const next = await updateOpsControlSettings((current) => ({
+        ...current,
+        flushIntervalMs: Math.max(1000, Math.min(60000, flushMs)),
+      }));
+      ui.notice = `flush_interval_ms=${next.flushIntervalMs}`;
+      return;
+    }
+
+    if (lower === "set harvest on" || lower === "set harvest off") {
+      const enabled = lower.endsWith("on");
+      const next = await updateOpsControlSettings((current) => ({
+        ...current,
+        harvestEnabled: enabled,
+      }));
+      ui.notice = `harvest_enabled=${next.harvestEnabled}`;
+      return;
+    }
+
+    ui.notice = `unknown command: ${raw} (type ?)`;
+  } finally {
+    rl.close();
+  }
+}
+
+function installTopKeyControls(ui: TopUiState, app: string): () => void {
   if (!process.stdin.isTTY) {
     ui.notice = "stdin is not a TTY; keyboard controls disabled";
     return () => undefined;
@@ -705,13 +882,13 @@ function installTopKeyControls(ui: TopUiState): () => void {
     }
 
     if (key === "+") {
-      ui.intervalSeconds = Math.max(1, ui.intervalSeconds - 1);
+      ui.intervalSeconds = Math.min(30, ui.intervalSeconds + 1);
       ui.notice = `refresh interval ${ui.intervalSeconds}s`;
       return;
     }
 
     if (key === "-") {
-      ui.intervalSeconds = Math.min(30, ui.intervalSeconds + 1);
+      ui.intervalSeconds = Math.max(1, ui.intervalSeconds - 1);
       ui.notice = `refresh interval ${ui.intervalSeconds}s`;
       return;
     }
@@ -722,6 +899,22 @@ function installTopKeyControls(ui: TopUiState): () => void {
       void promptTopSettings(ui)
         .catch((error: unknown) => {
           ui.notice = `settings update failed: ${shortError(error)}`;
+        })
+        .finally(() => {
+          if (process.stdin.isTTY) {
+            process.stdin.setRawMode(true);
+          }
+          ui.isPrompting = false;
+        });
+      return;
+    }
+
+    if (key === ":") {
+      ui.isPrompting = true;
+      process.stdin.setRawMode(false);
+      void promptTopCommand(ui, app)
+        .catch((error: unknown) => {
+          ui.notice = `command failed: ${shortError(error)}`;
         })
         .finally(() => {
           if (process.stdin.isTTY) {
@@ -748,7 +941,7 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
   const topMode = args.flags.has("top");
   const intervalSeconds = parsePositiveInt(
     args.options.get("interval-seconds"),
-    3,
+    5,
   );
   const app = appName(args.options);
   const ui: TopUiState = {
@@ -761,15 +954,69 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
   };
 
   let teardownTopKeys = (): void => undefined;
+  let uiStateWatcher: OpsUiStateWatcher | null = null;
+  let stopSignalListener = (): void => undefined;
   if (watch && topMode) {
-    teardownTopKeys = installTopKeyControls(ui);
+    teardownTopKeys = installTopKeyControls(ui, app);
+  }
+
+  if (watch && topMode) {
+    try {
+      uiStateWatcher = await createOpsUiStateWatcher({
+        appName: app,
+        snapshotTimeoutMs: 8000,
+        minRefreshIntervalMs: 500,
+        fallbackRefreshIntervalMs: 5000,
+      });
+      ui.notice = "reactive updates enabled";
+    } catch {
+      uiStateWatcher = null;
+      ui.notice = "reactive updates unavailable; using interval polling";
+    }
   }
 
   try {
+    let shouldRefresh = true;
+    let lastSeenStateVersion = uiStateWatcher
+      ? uiStateWatcher.getStateVersion()
+      : 0;
+    if (uiStateWatcher) {
+      stopSignalListener = uiStateWatcher.onStateChange(() => {
+        shouldRefresh = true;
+      });
+    }
+
     while (ui.running) {
+      if (!shouldRefresh) {
+        if (!watch) {
+          ui.running = false;
+          continue;
+        }
+
+        const waitMs = Math.max(1, ui.intervalSeconds) * 1000;
+        if (uiStateWatcher) {
+          if (uiStateWatcher.hasStateChangedSince(lastSeenStateVersion)) {
+            shouldRefresh = true;
+            continue;
+          }
+          const signal = await uiStateWatcher.waitForState(500);
+          shouldRefresh = signal === "state";
+        } else {
+          await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+          shouldRefresh = true;
+        }
+        continue;
+      }
+
+      shouldRefresh = false;
       clearScreen();
       if (topMode) {
-        const snapshot = await gatherDashboardSnapshot(app);
+        const snapshot = uiStateWatcher
+          ? uiStateWatcher.getSnapshot() || (await uiStateWatcher.refreshNow())
+          : await gatherDashboardSnapshot(app);
+        if (uiStateWatcher) {
+          lastSeenStateVersion = uiStateWatcher.getStateVersion();
+        }
         ui.samples.push({
           atMs: Date.now(),
           queueBacklog: snapshot.queue?.backlog || 0,
@@ -786,6 +1033,8 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
           watch,
           ui,
           snapshot,
+          redisIo: readOpsRedisIoStats(),
+          redisIoAggregate: await readOpsRedisIoAggregateStats(),
         });
       } else {
         process.stdout.write(chalk.bold.cyan("Image Control Tower\n"));
@@ -829,9 +1078,24 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
         continue;
       }
 
-      await sleep(Math.max(1, ui.intervalSeconds) * 1000);
+      const waitMs = Math.max(1, ui.intervalSeconds) * 1000;
+      if (uiStateWatcher) {
+        if (uiStateWatcher.hasStateChangedSince(lastSeenStateVersion)) {
+          shouldRefresh = true;
+          continue;
+        }
+        const signal = await uiStateWatcher.waitForState(500);
+        shouldRefresh = signal === "state";
+      } else {
+        await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+        shouldRefresh = true;
+      }
     }
   } finally {
+    stopSignalListener();
+    if (uiStateWatcher) {
+      await uiStateWatcher.close();
+    }
     teardownTopKeys();
   }
 }
@@ -846,46 +1110,249 @@ async function runFlyScale(args: ParsedArgs): Promise<void> {
     throw new Error(`Invalid --count: ${countRaw}`);
   }
 
-  const output = await runFlyctl([
-    "scale",
-    "count",
-    String(count),
-    "--process-group",
-    "worker",
-    "-a",
-    appName(args.options),
-    "--yes",
-  ]);
-  process.stdout.write(output);
+  const app = appName(args.options);
+  await scaleOpsWorkers(app, count);
+  process.stdout.write(
+    `${chalk.green("fly-scale complete")} workers_target=${count}\n`,
+  );
+  await publishInfraSnapshotFromFly(app);
 }
 
 async function runFlyStopAll(args: ParsedArgs): Promise<void> {
-  const output = await runFlyctl([
-    "scale",
-    "count",
-    "0",
-    "--process-group",
-    "worker",
-    "-a",
-    appName(args.options),
-    "--yes",
-  ]);
-  process.stdout.write(output);
+  const app = appName(args.options);
+  await scaleOpsWorkers(app, 0);
+  process.stdout.write(
+    `${chalk.green("fly-stop-all complete")} workers_target=0\n`,
+  );
+  await publishInfraSnapshotFromFly(app);
 }
 
-async function runControlSet(args: ParsedArgs): Promise<void> {
-  const flushIntervalRaw = args.options.get("flush-interval-ms");
-  const harvestEnabledRaw = args.options.get("harvest-enabled");
-  if (!flushIntervalRaw && harvestEnabledRaw === undefined) {
-    throw new Error(
-      "control-set requires --flush-interval-ms and/or --harvest-enabled",
+async function setDesiredMode(
+  mode: RunnerDesiredMode,
+): Promise<RunnerControlSettings> {
+  const result = await setOpsDesiredModeWithQueueAction(mode);
+  return result.settings;
+}
+
+async function runStartRun(args: ParsedArgs): Promise<void> {
+  const countRaw = args.options.get("count");
+  if (!countRaw) {
+    throw new Error("Missing --count for start-run");
+  }
+  const count = parsePositiveInt(countRaw, -1);
+  if (count < 0) {
+    throw new Error(`Invalid --count: ${countRaw}`);
+  }
+
+  const app = appName(args.options);
+  await scaleOpsWorkers(app, count);
+  await publishInfraSnapshotFromFly(app);
+
+  const next = await setDesiredMode("run");
+  process.stdout.write(
+    `${chalk.green("start-run complete")} workers_target=${count} desired_mode=${next.desiredMode}\n`,
+  );
+}
+
+async function waitForQueueDrain(params: {
+  timeoutSeconds: number;
+  pollSeconds: number;
+}): Promise<void> {
+  const startedAt = Date.now();
+  const timeoutMs = Math.max(1, params.timeoutSeconds) * 1000;
+  const pollMs = Math.max(1, params.pollSeconds) * 1000;
+
+  while (true) {
+    const counts = await fetchQueueCounts();
+    process.stdout.write(
+      `drain-check waiting=${counts.waiting} active=${counts.active} delayed=${counts.delayed} paused=${counts.paused} backlog=${counts.backlog}\n`,
+    );
+
+    if (counts.waiting + counts.active + counts.delayed + counts.paused === 0) {
+      return;
+    }
+
+    if (Date.now() - startedAt >= timeoutMs) {
+      throw new Error(
+        `drain timeout after ${params.timeoutSeconds}s waiting=${counts.waiting} active=${counts.active} delayed=${counts.delayed} paused=${counts.paused}`,
+      );
+    }
+
+    await sleep(pollMs);
+  }
+}
+
+async function purgePendingQueueJobs(): Promise<{
+  removed: number;
+  remainingWaiting: number;
+  remainingDelayed: number;
+  remainingActive: number;
+  remainingPaused: number;
+}> {
+  return purgePendingImageQueueJobs();
+}
+
+async function runDrainAndScaleDown(args: ParsedArgs): Promise<void> {
+  const app = appName(args.options);
+  const timeoutSeconds = parsePositiveInt(
+    args.options.get("timeout-seconds"),
+    900,
+  );
+  const pollSeconds = parsePositiveInt(args.options.get("poll-seconds"), 5);
+
+  const drainSettings = await setDesiredMode("drain");
+  process.stdout.write(
+    `${chalk.cyan("drain requested")} desired_mode=${drainSettings.desiredMode}\n`,
+  );
+
+  const preDrainInfra = await fetchControlSnapshot();
+  const preDrainQueue = await fetchQueueCounts();
+  if (
+    (preDrainInfra.infra?.workersRunning ?? 0) <= 0 &&
+    preDrainQueue.backlog > 0
+  ) {
+    const purge = await purgePendingQueueJobs();
+    process.stdout.write(
+      `${chalk.yellow("no workers running; purged pending queue before drain wait")} purged=${purge.removed} waiting=${purge.remainingWaiting} delayed=${purge.remainingDelayed} paused=${purge.remainingPaused} active=${purge.remainingActive}\n`,
     );
   }
 
-  const connection = createRedisConnection();
+  await waitForQueueDrain({ timeoutSeconds, pollSeconds });
+
+  await scaleOpsWorkers(app, 0);
+  await publishInfraSnapshotFromFly(app);
+
+  const idleSettings = await setDesiredMode("idle");
+  process.stdout.write(
+    `${chalk.green("drain-and-scale-down complete")} desired_mode=${idleSettings.desiredMode}\n`,
+  );
+}
+
+function parseDesiredMode(raw: string | undefined): RunnerDesiredMode | null {
+  if (!raw) {
+    return null;
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (
+    normalized === "run" ||
+    normalized === "idle" ||
+    normalized === "drain" ||
+    normalized === "stop"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+async function publishInfraSnapshotFromFly(app: string): Promise<void> {
+  await refreshOpsInfraFromFly(app);
+}
+
+async function runControlSet(args: ParsedArgs): Promise<void> {
+  const desiredModeRaw = args.options.get("desired-mode");
+  const enqueueEnabledRaw = args.options.get("enqueue-enabled");
+  const requireWorkersRaw = args.options.get("require-workers-for-enqueue");
+  const minWorkersRaw = args.options.get("min-workers-to-enqueue");
+  const maxQueueBacklogRaw = args.options.get("max-queue-backlog");
+  const refillLowWatermarkRaw = args.options.get("refill-low-watermark");
+  const refillTargetBacklogRaw = args.options.get("refill-target-backlog");
+  const maxClaimPerCycleRaw = args.options.get("max-claim-per-cycle");
+  const flushIntervalRaw = args.options.get("flush-interval-ms");
+  const harvestEnabledRaw = args.options.get("harvest-enabled");
+  if (
+    desiredModeRaw === undefined &&
+    enqueueEnabledRaw === undefined &&
+    requireWorkersRaw === undefined &&
+    minWorkersRaw === undefined &&
+    maxQueueBacklogRaw === undefined &&
+    refillLowWatermarkRaw === undefined &&
+    refillTargetBacklogRaw === undefined &&
+    maxClaimPerCycleRaw === undefined &&
+    !flushIntervalRaw &&
+    harvestEnabledRaw === undefined
+  ) {
+    throw new Error("control-set requires at least one setting flag");
+  }
+
   try {
-    const current = await readRunnerControlSettings(connection);
+    const current = await readOpsControlSettings();
+    const desiredMode = parseDesiredMode(desiredModeRaw);
+    if (desiredModeRaw !== undefined && !desiredMode) {
+      throw new Error(`invalid --desired-mode: ${desiredModeRaw}`);
+    }
     const next = {
+      desiredMode: desiredMode || current.desiredMode,
+      enqueueEnabled:
+        enqueueEnabledRaw === undefined
+          ? current.enqueueEnabled
+          : (parseBoolean(enqueueEnabledRaw) ?? current.enqueueEnabled),
+      requireWorkersForEnqueue:
+        requireWorkersRaw === undefined
+          ? current.requireWorkersForEnqueue
+          : (parseBoolean(requireWorkersRaw) ??
+            current.requireWorkersForEnqueue),
+      minWorkersToEnqueue:
+        minWorkersRaw === undefined
+          ? current.minWorkersToEnqueue
+          : Math.max(
+              0,
+              Math.min(
+                200,
+                parseNonNegativeInt(minWorkersRaw, current.minWorkersToEnqueue),
+              ),
+            ),
+      maxQueueBacklog:
+        maxQueueBacklogRaw === undefined
+          ? current.maxQueueBacklog
+          : Math.max(
+              10,
+              Math.min(
+                100_000,
+                parseNonNegativeInt(
+                  maxQueueBacklogRaw,
+                  current.maxQueueBacklog,
+                ),
+              ),
+            ),
+      refillLowWatermark:
+        refillLowWatermarkRaw === undefined
+          ? current.refillLowWatermark
+          : Math.max(
+              1,
+              Math.min(
+                100_000,
+                parseNonNegativeInt(
+                  refillLowWatermarkRaw,
+                  current.refillLowWatermark,
+                ),
+              ),
+            ),
+      refillTargetBacklog:
+        refillTargetBacklogRaw === undefined
+          ? current.refillTargetBacklog
+          : Math.max(
+              1,
+              Math.min(
+                100_000,
+                parseNonNegativeInt(
+                  refillTargetBacklogRaw,
+                  current.refillTargetBacklog,
+                ),
+              ),
+            ),
+      maxClaimPerCycle:
+        maxClaimPerCycleRaw === undefined
+          ? current.maxClaimPerCycle
+          : Math.max(
+              1,
+              Math.min(
+                10_000,
+                parseNonNegativeInt(
+                  maxClaimPerCycleRaw,
+                  current.maxClaimPerCycle,
+                ),
+              ),
+            ),
       flushIntervalMs: flushIntervalRaw
         ? Math.max(
             1000,
@@ -901,13 +1368,67 @@ async function runControlSet(args: ParsedArgs): Promise<void> {
           : (parseBoolean(harvestEnabledRaw) ?? current.harvestEnabled),
     };
 
-    await writeRunnerControlSettings(connection, next);
+    if (next.refillTargetBacklog > next.maxQueueBacklog) {
+      next.refillTargetBacklog = next.maxQueueBacklog;
+    }
+    if (next.refillLowWatermark > next.refillTargetBacklog) {
+      next.refillLowWatermark = next.refillTargetBacklog;
+    }
+
+    await writeOpsControlSettings(next);
+    if (desiredMode === "stop") {
+      const purge = await purgePendingQueueJobs();
+      process.stdout.write(
+        `${chalk.green("control settings updated")} desired_mode=${next.desiredMode} enqueue_enabled=${next.enqueueEnabled} require_workers_for_enqueue=${next.requireWorkersForEnqueue} min_workers_to_enqueue=${next.minWorkersToEnqueue} max_queue_backlog=${next.maxQueueBacklog} refill_low_watermark=${next.refillLowWatermark} refill_target_backlog=${next.refillTargetBacklog} max_claim_per_cycle=${next.maxClaimPerCycle} flush_interval_ms=${next.flushIntervalMs} harvest_enabled=${next.harvestEnabled} purged=${purge.removed} waiting=${purge.remainingWaiting} delayed=${purge.remainingDelayed} paused=${purge.remainingPaused} active=${purge.remainingActive}\n`,
+      );
+      return;
+    }
+
+    if (desiredMode === "drain") {
+      const [snapshot, queue] = await Promise.all([
+        readOpsControlSnapshot(),
+        fetchQueueCounts(),
+      ]);
+      const purge = await maybePurgeForDesiredMode({
+        desiredMode,
+        queue,
+        infra: snapshot.infra,
+      });
+      if (purge) {
+        process.stdout.write(
+          `${chalk.green("control settings updated")} desired_mode=${next.desiredMode} enqueue_enabled=${next.enqueueEnabled} require_workers_for_enqueue=${next.requireWorkersForEnqueue} min_workers_to_enqueue=${next.minWorkersToEnqueue} max_queue_backlog=${next.maxQueueBacklog} refill_low_watermark=${next.refillLowWatermark} refill_target_backlog=${next.refillTargetBacklog} max_claim_per_cycle=${next.maxClaimPerCycle} flush_interval_ms=${next.flushIntervalMs} harvest_enabled=${next.harvestEnabled} purged=${purge.removed} waiting=${purge.remainingWaiting} delayed=${purge.remainingDelayed} paused=${purge.remainingPaused} active=${purge.remainingActive}\n`,
+        );
+        return;
+      }
+    }
+
     process.stdout.write(
-      `${chalk.green("control settings updated")} flush_interval_ms=${next.flushIntervalMs} harvest_enabled=${next.harvestEnabled}\n`,
+      `${chalk.green("control settings updated")} desired_mode=${next.desiredMode} enqueue_enabled=${next.enqueueEnabled} require_workers_for_enqueue=${next.requireWorkersForEnqueue} min_workers_to_enqueue=${next.minWorkersToEnqueue} max_queue_backlog=${next.maxQueueBacklog} refill_low_watermark=${next.refillLowWatermark} refill_target_backlog=${next.refillTargetBacklog} max_claim_per_cycle=${next.maxClaimPerCycle} flush_interval_ms=${next.flushIntervalMs} harvest_enabled=${next.harvestEnabled}\n`,
     );
   } finally {
-    await connection.quit();
+    // no-op
   }
+}
+
+async function runPauseSystem(): Promise<void> {
+  const result = await pauseOpsSystemFlow();
+  process.stdout.write(
+    `${chalk.green("pause-system complete")} desired_mode=${result.settings.desiredMode} enqueue_enabled=${result.settings.enqueueEnabled} queue_paused=${result.queuePaused}\n`,
+  );
+}
+
+async function runResumeSystem(): Promise<void> {
+  const result = await resumeOpsSystemFlow();
+  process.stdout.write(
+    `${chalk.green("resume-system complete")} desired_mode=${result.settings.desiredMode} enqueue_enabled=${result.settings.enqueueEnabled} queue_paused=${result.queuePaused}\n`,
+  );
+}
+
+async function runClearQueue(): Promise<void> {
+  const result = await clearOpsQueueIfPaused();
+  process.stdout.write(
+    `${chalk.green("clear-queue complete")} queue_paused=${result.queuePaused} purged=${result.purge.removed} waiting=${result.purge.remainingWaiting} delayed=${result.purge.remainingDelayed} paused=${result.purge.remainingPaused} active=${result.purge.remainingActive}\n`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -916,6 +1437,9 @@ async function main(): Promise<void> {
     case "dashboard":
       await runDashboard(args);
       return;
+    case "telemetry-dump":
+      await runTelemetryDump(args);
+      return;
     case "fly-scale":
       await runFlyScale(args);
       return;
@@ -923,13 +1447,35 @@ async function main(): Promise<void> {
       await runFlyStopAll(args);
       return;
     case "fly-status":
+      await publishInfraSnapshotFromFly(appName(args.options));
       await panelFly(appName(args.options));
+      return;
+    case "start-run":
+      await runStartRun(args);
+      return;
+    case "drain-and-scale-down":
+      await runDrainAndScaleDown(args);
       return;
     case "control-show":
       await panelControl();
       return;
     case "control-set":
       await runControlSet(args);
+      return;
+    case "pause-system":
+      await runPauseSystem();
+      return;
+    case "resume-system":
+      await runResumeSystem();
+      return;
+    case "clear-queue":
+      await runClearQueue();
+      return;
+    case "redis-io-reset":
+      resetOpsRedisIoStats();
+      process.stdout.write(
+        `${chalk.green("redis io counters reset")} window_seconds=0 reads=0 bytes=0\n`,
+      );
       return;
     case "help":
     default:

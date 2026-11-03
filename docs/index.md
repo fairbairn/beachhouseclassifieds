@@ -23,6 +23,7 @@ Welcome to the docs site scaffold.
 - Use [Known Peculiarities and Workarounds](./known-peculiarities-and-workarounds.md) for recurring runtime notices (including Google Maps JS client notices) and current no-change/workaround guidance.
 - Use [Pricing and Conformance System Reference](./pricing-system-reference.md) as the hub for scrape, quote, cache, validation, and readiness workflows.
 - Use [CLI Runner Reference](./cli-runner-reference.md) for primary operational commands and their main flags.
+- Use [Image Ops Control Tower Notes](./image-ops-control-tower-notes.md) as the living interaction-first record for runner controls, HQTUI evolution, and open unknowns.
 - Use [src/lib/scripts Catalog](./scripts-catalog.md) for full script inventory coverage, package alias mapping, and active/internal status tracking.
 - Use [Listings Operations and Exclusion Spec](./listings-operations-and-exclusion-spec.md) as the living operations contract for AI enrichment, sleeping arrangement processing, duplicate analysis, and keyco exclusion remap rules.
 - Use [Adapter Data Refresh Runbook](./adapter-data-refresh-runbook.md) for the standard end-to-end sequence to ingest listing/image/pricing updates, run enrichment + sleep repair, apply listing/image data, and backfill geocoding holes.

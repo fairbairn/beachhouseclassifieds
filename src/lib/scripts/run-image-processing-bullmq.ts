@@ -1,6 +1,6 @@
 import "@/core/tooling/env/load-env-profile";
 
-import { Job, QueueEvents } from "bullmq";
+import { Job } from "bullmq";
 import chalk from "chalk";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
@@ -13,14 +13,26 @@ import type {
 } from "../../workers/image-processing-task";
 import {
   IMAGE_QUEUE_NAME,
-  createImageQueue,
   createRedisConnection,
   type ImageProcessingQueueJob,
 } from "../../workers/image-queue";
 import {
-  defaultRunnerControlSettings,
-  readRunnerControlSettings,
-  writeRunnerStatus,
+  applyFailureRows,
+  applySuccessRows,
+  claimPendingImageRows,
+  createOpsDbPool,
+  createOpsQueueRuntime,
+  enqueueOpsImageJobsForOperation,
+  readOpsControlSnapshot,
+  readOpsQueuePausedState,
+  readOpsQueueSnapshot,
+  waitForOpsRunCompletion,
+  writeOpsRunnerStatus,
+} from "../workers/image-ops-control-module";
+import { evaluateLiveGate } from "../workers/image-ops-telemetry";
+import {
+  type RunnerControlSettings,
+  type RunnerStatusSnapshot,
 } from "../workers/image-runner-control";
 
 const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
@@ -260,190 +272,19 @@ function parseArgs(argv: string[]): RunnerOptions {
   };
 }
 
-function sourceStatusForErrorCode(code: string): string {
-  if (code === "source_403") {
-    return "failed_source_exception_403";
-  }
-  if (code === "source_429") {
-    return "failed_source_exception_429";
-  }
-  if (code === "source_404") {
-    return "failed_source_retry_later_404";
-  }
-  if (code === "source_5xx") {
-    return "failed_source_retry_later_5xx";
-  }
-  return "failed_trigger";
-}
-
 async function claimPendingRows(
   pool: Pool,
   targetCount: number,
   claimPoolSize: number,
 ): Promise<ClaimedItem[]> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const query = `
-      with candidate_pool as (
-        select
-          lsi.id,
-          lsi.source_image_url,
-          coalesce(
-            nullif(substring(lsi.source_image_url from '^https?://([^/]+)'), ''),
-            'unknown-host'
-          ) as source_host
-        from listing_source_image lsi
-        join listing_source_link lsl
-          on lsl.id = lsi.source_link_id
-        where lsi.site_image is null
-          and coalesce(lsi.source_image_url, '') <> ''
-          and lsl.source_status = 'active'
-          and lsl.active_to is null
-          and (
-            lsi.status in (
-              'pending',
-              'ready_source',
-              'failed_trigger',
-              'failed_source_403',
-              'failed_source_exception_403',
-              'failed_source_exception_429',
-              'failed_source_retry_later_404',
-              'failed_source_retry_later_5xx',
-              'failed_cloakbrowser_recovery'
-            )
-            or (
-              lsi.status in ('processing_worker', 'processing_trigger')
-              and lsi.updated_at < (now() - interval '30 minutes')
-            )
-          )
-        order by random(), lsi.id
-        limit $2
-        for update of lsi skip locked
-      ),
-      ranked as (
-        select
-          candidate_pool.id,
-          candidate_pool.source_image_url,
-          row_number() over (
-            partition by candidate_pool.source_host
-            order by random(), candidate_pool.id
-          ) as host_round,
-          random() as tie_breaker
-        from candidate_pool
-      ),
-      picked as (
-        select ranked.id, ranked.source_image_url
-        from ranked
-        order by ranked.host_round asc, ranked.tie_breaker asc
-        limit $1
-      )
-      update listing_source_image lsi
-      set
-        status = 'processing_worker',
-        error_payload = coalesce(lsi.error_payload, '{}'::jsonb) || jsonb_build_object(
-          'bullmq_attempt_started_at', now()::text
-        ),
-        updated_at = now()
-      from picked
-      where lsi.id = picked.id
-      returning lsi.id, lsi.source_image_url
-    `;
-
-    const { rows } = await client.query(query, [targetCount, claimPoolSize]);
-    await client.query("COMMIT");
-    return rows.map((row) => ({
-      workId: String(row.id),
-      sourceImageUrl: String(row.source_image_url),
-    }));
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  return claimPendingImageRows(pool, targetCount, claimPoolSize);
 }
 
 async function updateSuccessRows(
   pool: Pool,
   items: ImageProcessingItemResult[],
 ): Promise<{ uploadedCount: number; notUploadedCount: number }> {
-  let uploadedCount = 0;
-  let notUploadedCount = 0;
-
-  for (const item of items) {
-    const storedStatus = String(item.stored_status_on_s3 || "unknown");
-    const isUploaded = storedStatus === "uploaded";
-
-    const info = {
-      source_mode: "url",
-      source_content_hash: item.calculated_hash ?? null,
-      transformed_content_hash: item.transformed_hash ?? null,
-      source_fetch_mode: item.source_fetch_mode ?? null,
-      source_http_status: item.source_http_status ?? null,
-      transformed_bytes: item.transformed_bytes ?? null,
-      source_width: item.source_width ?? null,
-      source_height: item.source_height ?? null,
-      transformed_width: item.transformed_width ?? null,
-      transformed_height: item.transformed_height ?? null,
-      fetch_elapsed_ms: item.fetch_elapsed_ms ?? null,
-      transform_elapsed_ms: item.transform_elapsed_ms ?? null,
-      upload_elapsed_ms: item.upload_elapsed_ms ?? null,
-      upload_skipped_existing: item.upload_skipped_existing ?? null,
-      target_width: item.target_width ?? null,
-      target_height: item.target_height ?? null,
-      below_target_hd: item.below_target_hd ?? null,
-      stored_status_on_s3: item.stored_status_on_s3 ?? null,
-      processed_at: new Date().toISOString(),
-      pipeline: "bullmq",
-    };
-
-    if (isUploaded) {
-      await pool.query(
-        `
-        update listing_source_image
-        set
-          status = 'processed_site',
-          source_content_hash = $2,
-          site_image = $3,
-          error_payload = coalesce(error_payload, '{}'::jsonb) || $4::jsonb,
-          updated_at = now()
-        where id = $1
-        `,
-        [
-          String(item.work_id),
-          String(item.calculated_hash || ""),
-          String(item.final_name || ""),
-          JSON.stringify(info),
-        ],
-      );
-      uploadedCount += 1;
-      continue;
-    }
-
-    const notUploadedPayload = {
-      ...info,
-      error_stage: "storage_finalize",
-      error_code: "storage_not_uploaded",
-      error_message:
-        "worker item did not reach definitive uploaded S3 status; completion withheld",
-    };
-
-    await pool.query(
-      `
-      update listing_source_image
-      set
-        status = 'failed_trigger',
-        error_payload = coalesce(error_payload, '{}'::jsonb) || $2::jsonb,
-        updated_at = now()
-      where id = $1
-      `,
-      [String(item.work_id), JSON.stringify(notUploadedPayload)],
-    );
-    notUploadedCount += 1;
-  }
-
-  return { uploadedCount, notUploadedCount };
+  return applySuccessRows(pool, items);
 }
 
 async function updateFailureRows(
@@ -451,159 +292,7 @@ async function updateFailureRows(
   errors: ImageProcessingTaskError[],
   marker: string,
 ): Promise<void> {
-  for (const errorRow of errors) {
-    const code = String(errorRow.code || "worker_error");
-    const status = sourceStatusForErrorCode(code);
-
-    const payload = {
-      error_stage: marker,
-      error_code: code,
-      error_message: String(errorRow.message || "unknown error"),
-      failed_at: new Date().toISOString(),
-      source_image_url: errorRow.source_image_url || null,
-      pipeline: "bullmq",
-    };
-
-    await pool.query(
-      `
-      update listing_source_image
-      set
-        status = $2,
-        error_payload = coalesce(error_payload, '{}'::jsonb) || $3::jsonb,
-        updated_at = now()
-      where id = $1
-      `,
-      [String(errorRow.work_id), status, JSON.stringify(payload)],
-    );
-  }
-}
-
-async function waitForRunCompletion(params: {
-  queueEvents: QueueEvents;
-  queueName: string;
-  expectedJobs: number;
-  timeoutMs: number;
-  onProgress: (state: {
-    completed: number;
-    failed: number;
-    expected: number;
-    processedItems: number;
-    failedItems: number;
-    completedJobIds: string[];
-    failedJobIds: string[];
-  }) => void;
-}): Promise<{ completedJobIds: string[]; failedJobIds: string[] }> {
-  const completedSet = new Set<string>();
-  const failedSet = new Set<string>();
-  const progressByJob = new Map<
-    string,
-    { succeeded: number; failed: number }
-  >();
-
-  const summarizeLiveItems = (): {
-    processedItems: number;
-    failedItems: number;
-  } => {
-    let processedItems = 0;
-    let failedItems = 0;
-
-    for (const entry of progressByJob.values()) {
-      processedItems += Math.max(0, Number(entry.succeeded) || 0);
-      failedItems += Math.max(0, Number(entry.failed) || 0);
-    }
-
-    // If a job failed before reporting structured progress, treat it as one failed item.
-    for (const failedJobId of failedSet) {
-      if (!progressByJob.has(failedJobId)) {
-        failedItems += 1;
-      }
-    }
-
-    return { processedItems, failedItems };
-  };
-
-  return await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(
-        new Error(
-          `timeout waiting for queue completion queue=${params.queueName} completed=${completedSet.size} failed=${failedSet.size} expected=${params.expectedJobs}`,
-        ),
-      );
-    }, params.timeoutMs);
-
-    const maybeDone = (): void => {
-      const liveItems = summarizeLiveItems();
-      params.onProgress({
-        completed: completedSet.size,
-        failed: failedSet.size,
-        expected: params.expectedJobs,
-        processedItems: liveItems.processedItems,
-        failedItems: liveItems.failedItems,
-        completedJobIds: [...completedSet],
-        failedJobIds: [...failedSet],
-      });
-
-      if (completedSet.size + failedSet.size >= params.expectedJobs) {
-        cleanup();
-        resolve({
-          completedJobIds: [...completedSet],
-          failedJobIds: [...failedSet],
-        });
-      }
-    };
-
-    const onCompleted = (event: { jobId: string }): void => {
-      completedSet.add(String(event.jobId));
-      maybeDone();
-    };
-
-    const onFailed = (event: { jobId: string }): void => {
-      failedSet.add(String(event.jobId));
-      maybeDone();
-    };
-
-    const onProgressEvent = (event: { jobId: string; data: unknown }): void => {
-      const jobId = String(event?.jobId || "");
-      if (!jobId) {
-        return;
-      }
-
-      const payload =
-        event?.data &&
-        typeof event.data === "object" &&
-        !Array.isArray(event.data)
-          ? (event.data as Record<string, unknown>)
-          : null;
-
-      if (!payload) {
-        return;
-      }
-
-      const succeeded = Number(payload.succeeded);
-      const failed = Number(payload.failed);
-      if (!Number.isFinite(succeeded) && !Number.isFinite(failed)) {
-        return;
-      }
-
-      progressByJob.set(jobId, {
-        succeeded: Number.isFinite(succeeded) ? Math.max(0, succeeded) : 0,
-        failed: Number.isFinite(failed) ? Math.max(0, failed) : 0,
-      });
-      maybeDone();
-    };
-
-    const cleanup = (): void => {
-      clearTimeout(timeout);
-      params.queueEvents.off("completed", onCompleted);
-      params.queueEvents.off("failed", onFailed);
-      params.queueEvents.off("progress", onProgressEvent);
-    };
-
-    params.queueEvents.on("completed", onCompleted);
-    params.queueEvents.on("failed", onFailed);
-    params.queueEvents.on("progress", onProgressEvent);
-  });
+  await applyFailureRows(pool, errors, marker);
 }
 
 function countErrorsByCode(
@@ -718,14 +407,15 @@ async function closeWithTimeout(
   ]);
 }
 
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, Math.max(1, ms));
+  });
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const progress = createProgress("image-processing-bullmq");
-
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) {
-    throw new Error("Missing DATABASE_URL");
-  }
 
   if (!options.dryRunCloud) {
     const secret = process.env.BUNNY_STORAGE_SECRET_ACCESS_KEY?.trim() || "";
@@ -739,15 +429,14 @@ async function main(): Promise<void> {
   const operationId = `bullmq-op-${new Date().toISOString().replace(/[.:]/g, "-")}-${randomUUID().slice(0, 6)}`;
   const startedAtMs = Date.now();
 
-  const pool = new Pool({ connectionString: databaseUrl, max: 6 });
-  const queueConnection = createRedisConnection();
-  const queue = createImageQueue(queueConnection);
-  const queueEventsConnection = createRedisConnection();
-  const queueEvents = new QueueEvents(IMAGE_QUEUE_NAME, {
-    connection: queueEventsConnection,
-  });
-
-  await queueEvents.waitUntilReady();
+  const pool = createOpsDbPool(6);
+  const controlConnection = createRedisConnection();
+  const queueRuntime = await createOpsQueueRuntime({ withEvents: true });
+  const queue = queueRuntime.queue;
+  const queueEvents = queueRuntime.queueEvents;
+  if (!queueEvents) {
+    throw new Error("queue events runtime unavailable");
+  }
 
   const report: RunnerReport = {
     started_at: new Date().toISOString(),
@@ -766,73 +455,143 @@ async function main(): Promise<void> {
 
   const allErrors: ImageProcessingTaskError[] = [];
   const allSuccessItems: ImageProcessingItemResult[] = [];
-
-  let controlSettings = defaultRunnerControlSettings();
-  try {
-    controlSettings = await readRunnerControlSettings(queueConnection);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    progress.warn(`control_settings_read_failed message=${message}`);
-  }
-
-  const pendingSuccessItems: ImageProcessingItemResult[] = [];
-  const pendingErrors: ImageProcessingTaskError[] = [];
-  let flushedProcessedItems = 0;
-  let flushedFailedItems = 0;
-  let flushedBatchCount = 0;
+  let flushBatchCount = 0;
   let lastFlushAt: string | null = null;
-  let queueWaiting = 0;
-  let queueActive = 0;
-  let queueCompleted = 0;
-  let queueFailed = 0;
-  let queueDelayed = 0;
-  let queuePaused = 0;
 
-  async function publishRunnerStatus(
-    mode: "running" | "idle" | "stopping" | "done" | "failed",
-  ): Promise<void> {
-    try {
-      const counts = await queue.getJobCounts(
-        "waiting",
-        "active",
-        "completed",
-        "failed",
-        "delayed",
-        "paused",
-      );
-      queueWaiting = counts.waiting || 0;
-      queueActive = counts.active || 0;
-      queueCompleted = counts.completed || 0;
-      queueFailed = counts.failed || 0;
-      queueDelayed = counts.delayed || 0;
-      queuePaused = counts.paused || 0;
-    } catch {
-      // Keep last-known queue counters when redis read temporarily fails.
+  const readQueueSnapshot = async (): Promise<{
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+    paused: number;
+    backlog: number;
+  }> => {
+    return readOpsQueueSnapshot();
+  };
+
+  const controlSnapshot = await readOpsControlSnapshot(controlConnection);
+  let controlSettings: RunnerControlSettings = controlSnapshot.settings;
+  const inferredWorkersRunning = Number(controlSnapshot.infra?.workersRunning);
+  let workersRunning =
+    Number.isFinite(inferredWorkersRunning) && inferredWorkersRunning > 0
+      ? inferredWorkersRunning
+      : 0;
+
+  const publishRunnerStatus = async (params: {
+    mode: RunnerStatusSnapshot["mode"];
+    gateReason: string;
+    pendingSuccessBuffer?: number;
+    pendingErrorBuffer?: number;
+  }): Promise<void> => {
+    const queueSnapshot = await readQueueSnapshot();
+    await writeOpsRunnerStatus(
+      {
+        operationId,
+        mode: params.mode,
+        desiredMode: controlSettings.desiredMode,
+        gateReason: params.gateReason,
+        workersRunning,
+        claimedCount: report.claimed_count,
+        queuedCount: report.queued_count,
+        completedJobs: report.completed_jobs,
+        failedJobs: report.failed_jobs,
+        processedItems: report.processed_items,
+        failedItems: report.failed_items,
+        queueWaiting: queueSnapshot.waiting,
+        queueActive: queueSnapshot.active,
+        queueCompleted: queueSnapshot.completed,
+        queueFailed: queueSnapshot.failed,
+        queueDelayed: queueSnapshot.delayed,
+        queuePaused: queueSnapshot.paused,
+        queueBacklog: queueSnapshot.backlog,
+        lastFlushAt,
+        flushBatchCount,
+        pendingSuccessBuffer: Math.max(0, params.pendingSuccessBuffer ?? 0),
+        pendingErrorBuffer: Math.max(0, params.pendingErrorBuffer ?? 0),
+        updatedAt: new Date().toISOString(),
+      },
+      controlConnection,
+    );
+  };
+
+  const computeGateState = async (): Promise<{
+    queueSnapshot: {
+      waiting: number;
+      active: number;
+      completed: number;
+      failed: number;
+      delayed: number;
+      paused: number;
+      backlog: number;
+    };
+    queueGloballyPaused: boolean;
+    gateReason: string;
+  }> => {
+    const [queueSnapshot, pausedState, freshControlSnapshot] =
+      await Promise.all([
+        readQueueSnapshot(),
+        readOpsQueuePausedState(),
+        readOpsControlSnapshot(controlConnection),
+      ]);
+
+    controlSettings = freshControlSnapshot.settings;
+    const freshWorkers = Number(freshControlSnapshot.infra?.workersRunning);
+    workersRunning =
+      Number.isFinite(freshWorkers) && freshWorkers > 0 ? freshWorkers : 0;
+
+    const liveGate = evaluateLiveGate({
+      settings: controlSettings,
+      workersRunning,
+      queueBacklog: queueSnapshot.backlog,
+    });
+
+    let gateReason =
+      liveGate === "live=gate_open"
+        ? "gate=open"
+        : liveGate.replace(/^live=/, "");
+    if (pausedState) {
+      gateReason = "queue_globally_paused";
+    }
+    if (controlSettings.desiredMode !== "run") {
+      gateReason = `desired_mode=${controlSettings.desiredMode} not run`;
     }
 
-    await writeRunnerStatus(queueConnection, {
-      operationId,
-      mode,
-      claimedCount: report.claimed_count,
-      queuedCount: report.queued_count,
-      completedJobs: report.completed_jobs,
-      failedJobs: report.failed_jobs,
-      processedItems: report.processed_items,
-      failedItems: report.failed_items,
-      queueWaiting,
-      queueActive,
-      queueCompleted,
-      queueFailed,
-      queueDelayed,
-      queuePaused,
-      queueBacklog: queueWaiting + queueActive + queueDelayed,
-      lastFlushAt,
-      flushBatchCount: flushedBatchCount,
-      pendingSuccessBuffer: pendingSuccessItems.length,
-      pendingErrorBuffer: pendingErrors.length,
-      updatedAt: new Date().toISOString(),
-    });
+    return {
+      queueSnapshot,
+      queueGloballyPaused: pausedState,
+      gateReason,
+    };
+  };
+
+  let {
+    queueSnapshot: initialQueueSnapshot,
+    queueGloballyPaused,
+    gateReason,
+  } = await computeGateState();
+
+  progress.info(
+    `startup_stats queue_waiting=${initialQueueSnapshot.waiting} queue_active=${initialQueueSnapshot.active} queue_delayed=${initialQueueSnapshot.delayed} queue_paused=${initialQueueSnapshot.paused} queue_backlog=${initialQueueSnapshot.backlog} workers_running=${workersRunning} desired_mode=${controlSettings.desiredMode} queue_globally_paused=${queueGloballyPaused}`,
+  );
+  await publishRunnerStatus({ mode: "idle", gateReason });
+
+  const gatePollMs = Math.max(3000, options.heartbeatSeconds * 1000);
+  while (gateReason !== "gate=open") {
+    progress.warn(`runner gate blocked: ${gateReason}`);
+    progress.info(
+      `gate_monitor queue_backlog=${initialQueueSnapshot.backlog} workers_running=${workersRunning} desired_mode=${controlSettings.desiredMode} poll_ms=${gatePollMs}`,
+    );
+    await sleepMs(gatePollMs);
+    const nextGateState = await computeGateState();
+    initialQueueSnapshot = nextGateState.queueSnapshot;
+    queueGloballyPaused = nextGateState.queueGloballyPaused;
+    gateReason = nextGateState.gateReason;
+    await publishRunnerStatus({ mode: "idle", gateReason });
   }
+
+  progress.done(
+    `runner gate opened queue_backlog=${initialQueueSnapshot.backlog} workers_running=${workersRunning}`,
+  );
 
   const heartbeat = setInterval(
     () => {
@@ -844,74 +603,86 @@ async function main(): Promise<void> {
         total,
         startedAtMs,
         text:
-          `images_processed=${report.processed_items}/${report.claimed_count} ` +
+          `operation_images_processed=${report.processed_items}/${report.claimed_count} ` +
           `jobs_completed=${report.completed_jobs} jobs_failed=${report.failed_jobs} ` +
           `items_failed=${report.failed_items}`,
       });
-      progress.progress(`heartbeat ${line}`);
-      void publishRunnerStatus("running").catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        progress.warn(`status_publish_failed message=${message}`);
-      });
+      void readQueueSnapshot()
+        .then((snapshot) => {
+          progress.progress(
+            `heartbeat ${line} queue_pending=${snapshot.backlog}`,
+          );
+        })
+        .catch(() => {
+          progress.progress(`heartbeat ${line}`);
+        });
     },
     Math.max(5, options.heartbeatSeconds) * 1000,
   );
 
   try {
-    await publishRunnerStatus("running");
+    const requestedTargetCount = Math.max(1, options.targetCount);
+    const liveQueueBacklog = initialQueueSnapshot.backlog;
+    const shouldRefill = liveQueueBacklog < controlSettings.refillLowWatermark;
+    const refillGap = shouldRefill
+      ? Math.max(0, controlSettings.refillTargetBacklog - liveQueueBacklog)
+      : 0;
+    const policyClaimCap = Math.max(1, controlSettings.maxClaimPerCycle);
+    const effectiveTargetCount = Math.max(
+      0,
+      Math.min(requestedTargetCount, policyClaimCap, refillGap),
+    );
+
+    progress.info(
+      `queue_preflight waiting=${initialQueueSnapshot.waiting} active=${initialQueueSnapshot.active} delayed=${initialQueueSnapshot.delayed} paused=${initialQueueSnapshot.paused} backlog=${liveQueueBacklog}`,
+    );
+    progress.info(
+      `claim_policy requested_target=${requestedTargetCount} refill_low=${controlSettings.refillLowWatermark} refill_target=${controlSettings.refillTargetBacklog} should_refill=${shouldRefill} max_claim_cycle=${policyClaimCap} effective_target=${effectiveTargetCount}`,
+    );
+
+    if (effectiveTargetCount <= 0) {
+      progress.done("queue is above refill threshold; no new claims this run");
+      return;
+    }
+
     progress.phase("claiming rows from postgres");
     const claimPoolSize = Math.max(
-      options.targetCount,
+      effectiveTargetCount,
       Math.min(
         options.claimPoolMax,
-        options.targetCount * options.claimPoolMultiplier,
+        effectiveTargetCount * options.claimPoolMultiplier,
       ),
     );
     const claimedItems = await claimPendingRows(
       pool,
-      options.targetCount,
+      effectiveTargetCount,
       claimPoolSize,
     );
     report.claimed_count = claimedItems.length;
 
     if (claimedItems.length === 0) {
       progress.done("no rows claimed; exiting");
-      await publishRunnerStatus("done");
       return;
     }
 
     progress.phase("enqueueing bullmq jobs");
-    const jobRetentionCount = Math.max(1000, options.targetCount * 2);
-    const queuedJobs = await Promise.all(
-      claimedItems.map((item, index) =>
-        queue.add(
-          "process-image",
-          {
-            operationId,
-            batchId: `${operationId}-job-${String(index + 1).padStart(5, "0")}`,
-            batchIndex: index,
-            batchCount: claimedItems.length,
-            workId: item.workId,
-            sourceType: "url",
-            sourceImageUrl: item.sourceImageUrl,
-            fetchTimeoutMs: options.fetchTimeoutMs,
-            fetchRetryCount: options.fetchRetryCount,
-            dryRun: options.dryRunCloud,
-            uploadPrefix: options.uploadPrefix,
-            verboseLogs: false,
-            sleepSecondsPerItem: 0,
-          } satisfies ImageProcessingQueueJob,
-          {
-            // Keep enough completed/failed jobs to allow end-of-run result reload.
-            removeOnComplete: jobRetentionCount,
-            removeOnFail: jobRetentionCount,
-          },
-        ),
-      ),
-    );
+    const jobRetentionCount = Math.max(1000, effectiveTargetCount * 2);
+    const queuedJobs = await enqueueOpsImageJobsForOperation({
+      queue,
+      operationId,
+      claimedItems,
+      options: {
+        fetchTimeoutMs: options.fetchTimeoutMs,
+        fetchRetryCount: options.fetchRetryCount,
+        dryRunCloud: options.dryRunCloud,
+        uploadPrefix: options.uploadPrefix,
+        jobRetentionCount,
+      },
+    });
     report.queued_count = queuedJobs.length;
+    const postEnqueueSnapshot = await readQueueSnapshot();
     progress.info(
-      `queued_jobs=${queuedJobs.length} queue=${IMAGE_QUEUE_NAME} target_images=${report.claimed_count} retention=${jobRetentionCount}`,
+      `queued_jobs=${queuedJobs.length} queue=${IMAGE_QUEUE_NAME} operation_target_images=${report.claimed_count} queue_pending_after_enqueue=${postEnqueueSnapshot.backlog} retention=${jobRetentionCount}`,
     );
 
     const jobsById = new Map<string, Job<ImageProcessingQueueJob>>();
@@ -927,6 +698,11 @@ async function main(): Promise<void> {
     const seenFailedJobIds = new Set<string>();
     const handledJobIds = new Set<string>();
     const jobMissingReloadCount = new Map<string, number>();
+
+    const pendingSuccessItems: ImageProcessingItemResult[] = [];
+    const pendingErrors: ImageProcessingTaskError[] = [];
+    let flushedProcessedItems = 0;
+    let flushedFailedItems = 0;
 
     async function flushPendingWrites(reason: string): Promise<void> {
       if (pendingSuccessItems.length === 0 && pendingErrors.length === 0) {
@@ -948,13 +724,19 @@ async function main(): Promise<void> {
       flushedFailedItems += errorBatch.length + writeStats.notUploadedCount;
       report.processed_items = flushedProcessedItems;
       report.failed_items = flushedFailedItems;
-      flushedBatchCount += 1;
+      flushBatchCount += 1;
       lastFlushAt = new Date().toISOString();
 
       progress.info(
-        `writeback_flush reason=${reason} batch=${flushedBatchCount} success_items=${successBatch.length} errors=${errorBatch.length} uploaded=${writeStats.uploadedCount} withheld=${writeStats.notUploadedCount} totals_processed=${flushedProcessedItems} totals_failed=${flushedFailedItems}`,
+        `writeback_flush reason=${reason} batch=${flushBatchCount} success_items=${successBatch.length} errors=${errorBatch.length} uploaded=${writeStats.uploadedCount} withheld=${writeStats.notUploadedCount} totals_processed=${flushedProcessedItems} totals_failed=${flushedFailedItems}`,
       );
-      await publishRunnerStatus("running");
+
+      await publishRunnerStatus({
+        mode: "running",
+        gateReason: "gate=open",
+        pendingSuccessBuffer: pendingSuccessItems.length,
+        pendingErrorBuffer: pendingErrors.length,
+      });
     }
 
     async function processFinalizedJobs(options: {
@@ -1056,8 +838,10 @@ async function main(): Promise<void> {
       }
     }
 
-    let lastControlRefreshAtMs = 0;
-    let lastPeriodicHarvestAtMs = 0;
+    const periodicFlushIntervalMs = Math.max(
+      1_000,
+      Math.min(60_000, controlSettings.flushIntervalMs),
+    );
     let periodicFlushTimer: NodeJS.Timeout | null = null;
     let harvestChain: Promise<void> = Promise.resolve();
 
@@ -1073,43 +857,23 @@ async function main(): Promise<void> {
     };
 
     try {
+      progress.info(`periodic_flush_interval_ms=${periodicFlushIntervalMs}`);
       periodicFlushTimer = setInterval(() => {
-        void (async () => {
-          const nowMs = Date.now();
-          if (nowMs - lastControlRefreshAtMs >= 5000) {
-            lastControlRefreshAtMs = nowMs;
-            try {
-              controlSettings =
-                await readRunnerControlSettings(queueConnection);
-            } catch (error) {
-              const message =
-                error instanceof Error ? error.message : String(error);
-              progress.warn(
-                `control_settings_refresh_failed message=${message}`,
-              );
-            }
-          }
-
-          if (!controlSettings.harvestEnabled) {
-            return;
-          }
-
-          if (
-            nowMs - lastPeriodicHarvestAtMs >=
-            Math.max(1000, controlSettings.flushIntervalMs)
-          ) {
-            lastPeriodicHarvestAtMs = nowMs;
-            await enqueueHarvestCycle("periodic", false);
-          }
-        })().catch((error: unknown) => {
+        void enqueueHarvestCycle("periodic", false).catch((error: unknown) => {
           const message =
             error instanceof Error ? error.message : String(error);
           progress.warn(`periodic_flush_failed message=${message}`);
         });
-      }, 1000);
+      }, periodicFlushIntervalMs);
 
       progress.phase("waiting for worker completion");
-      const completion = await waitForRunCompletion({
+      await publishRunnerStatus({
+        mode: "running",
+        gateReason: "gate=open",
+        pendingSuccessBuffer: pendingSuccessItems.length,
+        pendingErrorBuffer: pendingErrors.length,
+      });
+      const completion = await waitForOpsRunCompletion({
         queueEvents,
         queueName: IMAGE_QUEUE_NAME,
         expectedJobs: queuedJobs.length,
@@ -1148,11 +912,16 @@ async function main(): Promise<void> {
             startedAtMs,
             text:
               `jobs_completed=${completed} jobs_failed=${failed} ` +
-              `images_processed=${report.processed_items}/${report.claimed_count} ` +
+              `operation_images_processed=${report.processed_items}/${report.claimed_count} ` +
               `items_failed=${report.failed_items}`,
           });
           progress.progress(`queue ${line}`);
-          void publishRunnerStatus("running").catch((error: unknown) => {
+          void publishRunnerStatus({
+            mode: "running",
+            gateReason: "gate=open",
+            pendingSuccessBuffer: pendingSuccessItems.length,
+            pendingErrorBuffer: pendingErrors.length,
+          }).catch((error: unknown) => {
             const message =
               error instanceof Error ? error.message : String(error);
             progress.warn(`status_publish_failed message=${message}`);
@@ -1174,7 +943,12 @@ async function main(): Promise<void> {
 
       report.processed_items = flushedProcessedItems;
       report.failed_items = flushedFailedItems;
-      await publishRunnerStatus("done");
+      await publishRunnerStatus({
+        mode: "done",
+        gateReason: "gate=open",
+        pendingSuccessBuffer: pendingSuccessItems.length,
+        pendingErrorBuffer: pendingErrors.length,
+      });
     } finally {
       if (periodicFlushTimer) {
         clearInterval(periodicFlushTimer);
@@ -1268,24 +1042,23 @@ async function main(): Promise<void> {
     progress.done(
       `completed claimed=${report.claimed_count} processed=${report.processed_items} failed=${report.failed_items}`,
     );
-  } catch (error) {
-    await publishRunnerStatus("failed").catch(() => undefined);
-    throw error;
   } finally {
     clearInterval(heartbeat);
-    await closeWithTimeout("queue_events_close", queueEvents.close());
-    await closeWithTimeout("queue_events_quit", queueEventsConnection.quit());
-    await closeWithTimeout("queue_close", queue.close());
-    await closeWithTimeout("queue_connection_quit", queueConnection.quit());
+    await closeWithTimeout("queue_runtime_close", queueRuntime.close());
+    await closeWithTimeout("control_connection_quit", controlConnection.quit());
     await closeWithTimeout("pool_end", pool.end());
   }
 }
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : null;
   process.stderr.write(
     `${chalk.gray(stamp())} ${chalk.bgBlue.white.bold(" image-processing-bullmq ")} ${chalk.bgRed.white.bold(" fail ")} ${chalk.red(message)}\n`,
   );
+  if (stack) {
+    process.stderr.write(`${stack}\n`);
+  }
   process.stderr.write(`run-image-processing-bullmq failed: ${message}\n`);
   process.exit(1);
 });

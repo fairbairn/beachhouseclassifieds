@@ -2,6 +2,7 @@ import { Queue } from "bullmq";
 import IORedis from "ioredis";
 
 export const IMAGE_QUEUE_NAME = "image-processing";
+export const DEFAULT_LOCAL_REDIS_URL = "redis://127.0.0.1:6379";
 
 export type ImageProcessingQueueJob = {
   operationId: string;
@@ -21,8 +22,8 @@ export type ImageProcessingQueueJob = {
   verboseLogs?: boolean;
 };
 
-function resolveRedisUrl(): string {
-  return process.env.REDIS_URL?.trim() || "redis://127.0.0.1:6379";
+export function resolveRedisUrl(): string {
+  return process.env.REDIS_URL?.trim() || DEFAULT_LOCAL_REDIS_URL;
 }
 
 export function createRedisConnection(): IORedis {
