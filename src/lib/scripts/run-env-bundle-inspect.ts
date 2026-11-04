@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     throw new Error("Missing ENVIRONMENT");
   }
 
-  const tokenMatch = environment.match(/^([0-9a-fA-F]{16})\.([^\.]+)\.(.+)$/);
+  const tokenMatch = environment.match(/^([0-9a-fA-F]{16})\.([^.]+)\.(.+)$/);
   if (!tokenMatch) {
     throw new Error("ENVIRONMENT token must be hash16.share2.base58");
   }

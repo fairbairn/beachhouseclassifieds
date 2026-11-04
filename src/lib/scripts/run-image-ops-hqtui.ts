@@ -2,9 +2,11 @@ import "@/core/tooling/env/load-env-profile";
 import { createApp, type TextEditState } from "@profullstack/hqtui";
 
 import {
+  configureRedisTarget,
   createRedisConnection,
   formatRedisEndpointForLogs,
   resolveRedisUrl,
+  type RedisTarget,
 } from "../../workers/image-queue";
 import {
   clearOpsQueueIfPaused,
@@ -46,6 +48,7 @@ type DashboardSnapshot = {
   at: OpsUiSnapshot["at"];
   machines: OpsUiSnapshot["machines"];
   queue: QueueCounts | null;
+  recentJobs24h: OpsUiSnapshot["recentJobs24h"];
   queuePaused: boolean | null;
   db: OpsUiSnapshot["db"];
   settings: RunnerControlSettings | null;
@@ -362,6 +365,7 @@ function parseArgs(argv: string[]): {
   intervalSeconds: number;
   trendSamples: number;
   chartTimingMode: ChartTimingMode;
+  redisTarget: RedisTarget;
 } {
   const options = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 1) {
@@ -382,6 +386,17 @@ function parseArgs(argv: string[]): {
     chartTimingRaw === "interpolated" || chartTimingRaw === "timebucket"
       ? "interpolated"
       : "ordinal";
+  const redisTargetRaw = options.get("redis-target")?.trim().toLowerCase();
+  const redisTarget: RedisTarget =
+    !redisTargetRaw || redisTargetRaw === "local"
+      ? "local"
+      : redisTargetRaw === "cloud"
+        ? "cloud"
+        : (() => {
+            throw new Error(
+              `Invalid --redis-target: ${options.get("redis-target")}. Use local or cloud.`,
+            );
+          })();
 
   return {
     appName: options.get("app")?.trim() || DEFAULT_APP,
@@ -392,6 +407,7 @@ function parseArgs(argv: string[]): {
       100,
     ),
     chartTimingMode,
+    redisTarget,
   };
 }
 
@@ -579,6 +595,7 @@ async function preflightRedisForGui(input?: {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  const redisSelection = configureRedisTarget(args.redisTarget);
   const initialIntervalMs = Math.max(1000, args.intervalSeconds * 1000);
   const initialTrendWindowMs = args.trendSamples * initialIntervalMs;
   const redisPreflight = await preflightRedisForGui();
@@ -605,7 +622,7 @@ async function main(): Promise<void> {
     valuePromptHint: "",
     valuePromptAction: null,
     valuePromptInput: textState(),
-    notice: `redis preflight ok endpoint=${redisPreflight.endpoint} auth=${redisPreflight.authMode}`,
+    notice: `redis target=${redisSelection.target} preflight ok endpoint=${redisPreflight.endpoint} auth=${redisPreflight.authMode}`,
     noticePinnedUntilMs: 0,
     activeScreen: "summary",
     historyBacklog: [],
@@ -751,6 +768,7 @@ async function main(): Promise<void> {
         ...snapshot,
         machines: snapshot.machines ?? previous.machines,
         queue: snapshot.queue ?? previous.queue,
+        recentJobs24h: snapshot.recentJobs24h ?? previous.recentJobs24h,
         queuePaused: snapshot.queuePaused ?? previous.queuePaused,
         db: snapshot.db ?? previous.db,
         settings: snapshot.settings ?? previous.settings,
@@ -1776,6 +1794,12 @@ async function main(): Promise<void> {
     const status = snapshot.status;
     const queue = snapshot.queue;
     const projection = snapshot.projections;
+    const perfRollups = snapshot.performanceRollups;
+    const rollup15s = perfRollups?.rollup15s;
+    const rollup1m = perfRollups?.rollup1m;
+    const rollup15m = perfRollups?.rollup15m;
+    const rollup24h = perfRollups?.rollup24h;
+    const rollupDeep = perfRollups?.rollupDeep;
     const moduleBacklogTrend =
       projection.queueBacklogTrendSmoothed.length > 0
         ? projection.queueBacklogTrendSmoothed
@@ -1788,17 +1812,39 @@ async function main(): Promise<void> {
       projection.backlogDeltaSmoothed.length > 0
         ? projection.backlogDeltaSmoothed
         : state.historyBacklogDeltaPerSec;
-    const ipsNow =
+    const historyIpsNow =
       state.historyIps.length > 0
         ? state.historyIps[state.historyIps.length - 1] || 0
         : 0;
+    const statusIpsNow = Math.max(
+      0,
+      Number(status?.throughputImagesPerMinute || 0) / 60,
+    );
+    const projectionIpsNow =
+      projection.sampleCount > 0
+        ? Math.max(0, projection.headline.ipsSmoothedNow)
+        : 0;
+    const rollup15sIpsNow = Math.max(0, Number(rollup15s?.ips || 0));
+    const rollup1mIpsNow = Math.max(0, Number(rollup1m?.ips || 0));
+    const rollup15mIpsNow = Math.max(0, Number(rollup15m?.ips || 0));
+    const ipsNow = Math.max(
+      historyIpsNow,
+      projectionIpsNow,
+      statusIpsNow,
+      rollup15sIpsNow,
+      rollup1mIpsNow,
+      rollup15mIpsNow,
+    );
     const ipmNow = ipsNow * 60;
     const secPerImageNow = ipsNow > 0 ? 1 / ipsNow : null;
     const ipsAvg30 =
-      state.historyIps.length > 0 ? average(tail(state.historyIps, 30)) : 0;
+      state.historyIps.length > 0
+        ? average(tail(state.historyIps, 30))
+        : Math.max(0, Number(rollup24h?.ips || 0));
     const ipmAvg30 = ipsAvg30 * 60;
     const backlog = queue?.backlog ?? 0;
-    const etaQueueEmptySeconds = ipsNow > 0 ? backlog / ipsNow : null;
+    const etaQueueEmptySeconds =
+      backlog === 0 ? 0 : ipsNow > 0 ? backlog / ipsNow : null;
     const backlogDeltaNow =
       projection.sampleCount > 0
         ? projection.headline.backlogDeltaSmoothedNow
@@ -1880,14 +1926,28 @@ async function main(): Promise<void> {
                       : theme.success,
               },
               { label: "p_hotkey_action", value: pauseHotkeyActionLabel },
-              { label: "ips_now", value: formatRate(ipsNow, 2) },
-              { label: "ipm_now", value: formatRate(ipmNow, 2) },
+              {
+                label: "ips_15s",
+                value: formatRate(Number(rollup15s?.ips || ipsNow), 2),
+              },
+              {
+                label: "ipm_15s",
+                value: formatRate(Number(rollup15s?.ipm || ipmNow), 2),
+              },
+              {
+                label: "ips_1m",
+                value: formatRate(Number(rollup1m?.ips || ipsNow), 2),
+              },
+              {
+                label: "ipm_1m",
+                value: formatRate(Number(rollup1m?.ipm || ipmNow), 2),
+              },
               {
                 label: "sec_per_image",
                 value:
-                  secPerImageNow === null
+                  (rollup1m?.secPerImage ?? secPerImageNow) === null
                     ? "n/a"
-                    : formatRate(secPerImageNow, 2),
+                    : formatRate(rollup1m?.secPerImage ?? secPerImageNow, 2),
               },
               { label: "queue_pending", value: String(backlog) },
               { label: "queue_active", value: String(queueActive) },
@@ -2008,7 +2068,10 @@ async function main(): Promise<void> {
               },
               { label: "pending", value: String(backlog) },
               { label: "active_jobs", value: String(queueActive) },
-              { label: "completed_jobs", value: String(queueCompleted) },
+              {
+                label: "completed_jobs",
+                value: String(status?.completedJobs ?? queueCompleted),
+              },
               { label: "failed_jobs", value: String(queueFailed) },
               { label: "op", value: status?.operationId || "none" },
               {
@@ -2038,6 +2101,10 @@ async function main(): Promise<void> {
               {
                 label: "pending",
                 value: String(snapshot.db?.pending ?? 0),
+              },
+              {
+                label: "failed",
+                value: String(snapshot.db?.failed ?? 0),
               },
               { label: "total", value: String(snapshot.db?.total ?? 0) },
               {
@@ -2072,6 +2139,28 @@ async function main(): Promise<void> {
               { label: "ipm_avg30", value: formatRate(ipmAvg30, 2) },
               { label: "drain_q/s", value: drainPerSec.toFixed(2) },
               { label: "fill_q/s", value: refillPerSec.toFixed(2) },
+              {
+                label: "avg_fetch_ms",
+                value: String(status?.avgFetchMs || rollup15m?.avgFetchMs || 0),
+              },
+              {
+                label: "avg_transform_ms",
+                value: String(
+                  status?.avgTransformMs || rollup15m?.avgTransformMs || 0,
+                ),
+              },
+              {
+                label: "avg_upload_ms",
+                value: String(
+                  status?.avgUploadMs || rollup15m?.avgUploadMs || 0,
+                ),
+              },
+              {
+                label: "avg_end_to_end_ms",
+                value: String(
+                  status?.avgEndToEndMs || rollup15m?.avgEndToEndMs || 0,
+                ),
+              },
             ]);
           });
 
@@ -2158,7 +2247,7 @@ async function main(): Promise<void> {
 
     if (state.activeScreen === "queues") {
       ui.grid(
-        { columns: ["1fr", "1fr"], rows: [8, 12, 12], gap: 1 },
+        { columns: ["1fr", "1fr"], rows: [8, 10, 10, 10], gap: 1 },
         (grid) => {
           grid.panel({ title: "Queue Health" }, (panel) => {
             panel.keyValues([
@@ -2266,6 +2355,147 @@ async function main(): Promise<void> {
               },
             );
           });
+
+          grid.panel({ title: "Job Outcome Trends" }, (panel) => {
+            panel.multiGraph(
+              [
+                {
+                  values: state.historyQueueCompleted,
+                  color: theme.success,
+                  label: "completed_live",
+                },
+                {
+                  values: state.historyQueueFailed,
+                  color: theme.danger,
+                  label: "failed_live",
+                },
+                {
+                  values: state.historyProcessed,
+                  color: theme.info,
+                  label: "processed_status",
+                },
+              ],
+              {
+                min: 0,
+                axis: true,
+                legend: true,
+              },
+            );
+          });
+
+          grid.panel({ title: "Active Window (15m)" }, (panel) => {
+            panel.keyValues([
+              {
+                label: "status_completed_jobs",
+                value: String(status?.completedJobs ?? 0),
+              },
+              {
+                label: "status_failed_jobs",
+                value: String(status?.failedJobs ?? 0),
+              },
+              {
+                label: "status_processed_items",
+                value: String(status?.processedItems ?? 0),
+              },
+              {
+                label: "status_failed_items",
+                value: String(status?.failedItems ?? 0),
+              },
+              {
+                label: "status_queued_count",
+                value: String(status?.queuedCount ?? 0),
+              },
+              {
+                label: "status_claimed_count",
+                value: String(status?.claimedCount ?? 0),
+              },
+              {
+                label: "status_updated_at",
+                value: status?.updatedAt || "-",
+              },
+              {
+                label: "runner_stale_s",
+                value:
+                  runnerStatusAgeSeconds === null
+                    ? "n/a"
+                    : String(runnerStatusAgeSeconds),
+              },
+            ]);
+          });
+
+          grid.panel({ title: "Daily Window (24h)" }, (panel) => {
+            panel.keyValues([
+              {
+                label: "daily_completed_jobs",
+                value: String(snapshot.recentJobs24h?.completedJobs ?? 0),
+              },
+              {
+                label: "daily_failed_jobs",
+                value: String(snapshot.recentJobs24h?.failedJobs ?? 0),
+              },
+              {
+                label: "daily_processed_items",
+                value: String(snapshot.recentJobs24h?.processedItems ?? 0),
+              },
+              {
+                label: "daily_failed_items",
+                value: String(snapshot.recentJobs24h?.failedItems ?? 0),
+              },
+              {
+                label: "daily_window_start",
+                value: snapshot.recentJobs24h?.windowStartAt || "-",
+              },
+              {
+                label: "daily_sampled_at",
+                value: snapshot.recentJobs24h?.sampledAt || "-",
+              },
+            ]);
+          });
+
+          grid.panel({ title: "All Windows" }, (panel) => {
+            panel.keyValues([
+              {
+                label: "15s_jobs",
+                value: `${rollup15s?.completedJobs ?? 0}/${rollup15s?.failedJobs ?? 0}`,
+              },
+              {
+                label: "15s_ipm",
+                value: formatRate(Number(rollup15s?.ipm || 0), 2),
+              },
+              {
+                label: "1m_jobs",
+                value: `${rollup1m?.completedJobs ?? 0}/${rollup1m?.failedJobs ?? 0}`,
+              },
+              {
+                label: "1m_ipm",
+                value: formatRate(Number(rollup1m?.ipm || 0), 2),
+              },
+              {
+                label: "15m_jobs",
+                value: `${rollup15m?.completedJobs ?? 0}/${rollup15m?.failedJobs ?? 0}`,
+              },
+              {
+                label: "15m_ipm",
+                value: formatRate(Number(rollup15m?.ipm || 0), 2),
+              },
+              {
+                label: "24h_jobs",
+                value: `${rollup24h?.completedJobs ?? 0}/${rollup24h?.failedJobs ?? 0}`,
+              },
+              {
+                label: "24h_ipm",
+                value: formatRate(Number(rollup24h?.ipm || 0), 2),
+              },
+              {
+                label: "deep_jobs",
+                value: `${rollupDeep?.completedJobs ?? 0}/${rollupDeep?.failedJobs ?? 0}`,
+              },
+              {
+                label: "deep_ipm",
+                value: formatRate(Number(rollupDeep?.ipm || 0), 2),
+              },
+            ]);
+          });
         },
       );
     }
@@ -2352,27 +2582,64 @@ async function main(): Promise<void> {
             panel.keyValues([
               {
                 label: "ips_now",
-                value: formatRate(ipsNow, 2),
+                value: formatRate(
+                  Math.max(ipsNow, Number(rollupDeep?.ips || 0)),
+                  2,
+                ),
               },
               {
                 label: "ipm_now",
-                value: formatRate(ipmNow, 2),
+                value: formatRate(
+                  Math.max(ipmNow, Number(rollupDeep?.ipm || 0)),
+                  2,
+                ),
               },
               {
                 label: "sec_per_image",
                 value:
-                  secPerImageNow === null
+                  secPerImageNow === null && !rollupDeep?.secPerImage
                     ? "n/a"
-                    : formatRate(secPerImageNow, 2),
+                    : formatRate(
+                        secPerImageNow ?? Number(rollupDeep?.secPerImage || 0),
+                        2,
+                      ),
               },
               {
                 label: "eta_queue_empty",
                 value: formatDuration(etaQueueEmptySeconds),
               },
-              { label: "ips_avg30", value: formatRate(ipsAvg30, 2) },
-              { label: "ipm_avg30", value: formatRate(ipmAvg30, 2) },
+              {
+                label: "ips_avg30",
+                value: formatRate(
+                  Math.max(ipsAvg30, Number(rollupDeep?.ips || 0)),
+                  2,
+                ),
+              },
+              {
+                label: "ipm_avg30",
+                value: formatRate(
+                  Math.max(ipmAvg30, Number(rollupDeep?.ipm || 0)),
+                  2,
+                ),
+              },
               { label: "drain_q/s", value: drainPerSec.toFixed(2) },
               { label: "fill_q/s", value: refillPerSec.toFixed(2) },
+              {
+                label: "avg_fetch_ms",
+                value: String(rollupDeep?.avgFetchMs ?? 0),
+              },
+              {
+                label: "avg_transform_ms",
+                value: String(rollupDeep?.avgTransformMs ?? 0),
+              },
+              {
+                label: "avg_upload_ms",
+                value: String(rollupDeep?.avgUploadMs ?? 0),
+              },
+              {
+                label: "avg_end_to_end_ms",
+                value: String(rollupDeep?.avgEndToEndMs ?? 0),
+              },
             ]);
           });
 
@@ -2406,11 +2673,15 @@ async function main(): Promise<void> {
               },
               {
                 label: "completed_jobs",
-                value: String(queueCompleted),
+                value: String(rollupDeep?.completedJobs ?? queueCompleted),
               },
               {
                 label: "failed_jobs",
-                value: String(queueFailed),
+                value: String(rollupDeep?.failedJobs ?? queueFailed),
+              },
+              {
+                label: "sampled_jobs",
+                value: String(rollupDeep?.sampledCompletedJobs ?? 0),
               },
               {
                 label: "pending_success",

@@ -61,6 +61,8 @@ export type ImageProcessingItemResult = {
   fetch_elapsed_ms: number;
   transform_elapsed_ms: number;
   upload_elapsed_ms: number;
+  item_started_at: string;
+  item_completed_at: string;
 };
 
 export type ImageProcessingTaskError = {
@@ -1213,6 +1215,7 @@ export async function processImageProcessingBatch(
     item: ImageProcessingItem,
     context: ProcessingContext,
   ): Promise<void> {
+    const itemStartedAt = new Date().toISOString();
     const workId = item.workId?.trim();
     const sourceImageUrl = item.sourceImageUrl?.trim();
     let sourceDescriptor: SourceDescriptor;
@@ -1357,6 +1360,7 @@ export async function processImageProcessingBatch(
         }
       }
 
+      const itemCompletedAt = new Date().toISOString();
       results.push({
         work_id: workId,
         source_image_url: sourceDescriptor.sourceImageUrl,
@@ -1383,6 +1387,8 @@ export async function processImageProcessingBatch(
         fetch_elapsed_ms: fetchElapsedMs,
         transform_elapsed_ms: transformElapsedMs,
         upload_elapsed_ms: uploadElapsedMs,
+        item_started_at: itemStartedAt,
+        item_completed_at: itemCompletedAt,
       });
 
       successCount += 1;

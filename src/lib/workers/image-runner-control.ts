@@ -49,6 +49,11 @@ export type RunnerStatusSnapshot = {
   flushBatchCount: number;
   pendingSuccessBuffer: number;
   pendingErrorBuffer: number;
+  throughputImagesPerMinute: number;
+  avgFetchMs: number;
+  avgTransformMs: number;
+  avgUploadMs: number;
+  avgEndToEndMs: number;
   updatedAt: string;
 };
 
@@ -94,6 +99,17 @@ function parseNonNegativeInt(
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(String(value || "").trim(), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function parseNonNegativeNumber(
+  value: string | undefined,
+  fallback: number,
+): number {
+  const parsed = Number.parseFloat(String(value || "").trim());
+  if (!Number.isFinite(parsed) || parsed < 0) {
     return fallback;
   }
   return parsed;
@@ -280,6 +296,11 @@ export async function writeRunnerStatus(
     flush_batch_count: String(status.flushBatchCount),
     pending_success_buffer: String(status.pendingSuccessBuffer),
     pending_error_buffer: String(status.pendingErrorBuffer),
+    throughput_images_per_minute: String(status.throughputImagesPerMinute),
+    avg_fetch_ms: String(status.avgFetchMs),
+    avg_transform_ms: String(status.avgTransformMs),
+    avg_upload_ms: String(status.avgUploadMs),
+    avg_end_to_end_ms: String(status.avgEndToEndMs),
     updated_at: status.updatedAt,
   });
 }
@@ -333,6 +354,14 @@ export async function readRunnerStatus(
     flushBatchCount: parseNonNegativeInt(values.flush_batch_count, 0),
     pendingSuccessBuffer: parseNonNegativeInt(values.pending_success_buffer, 0),
     pendingErrorBuffer: parseNonNegativeInt(values.pending_error_buffer, 0),
+    throughputImagesPerMinute: parseNonNegativeNumber(
+      values.throughput_images_per_minute,
+      0,
+    ),
+    avgFetchMs: parseNonNegativeInt(values.avg_fetch_ms, 0),
+    avgTransformMs: parseNonNegativeInt(values.avg_transform_ms, 0),
+    avgUploadMs: parseNonNegativeInt(values.avg_upload_ms, 0),
+    avgEndToEndMs: parseNonNegativeInt(values.avg_end_to_end_ms, 0),
     updatedAt: values.updated_at || new Date().toISOString(),
   };
 }

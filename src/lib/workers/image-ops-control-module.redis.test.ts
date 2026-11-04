@@ -3,22 +3,22 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   maybePurgeForDesiredMode,
+  OPS_SNAPSHOT_TREND_METRIC_REGISTRY,
   OPS_TREND_METRIC_REGISTRY,
-  OPS_UI_TREND_METRIC_REGISTRY,
   readOpsControlSettings,
   readOpsControlSnapshot,
+  readOpsSnapshotTrendRows,
+  readOpsSnapshotTrendSeries,
   readOpsTrendHistory,
   readOpsTrendProjection,
   readOpsTrendProjectionSampled,
   readOpsUiSnapshot,
-  readOpsUiTrendRows,
-  readOpsUiTrendSeries,
   setOpsDesiredModeWithQueueAction,
   updateOpsControlSettings,
   writeOpsControlSettings,
   writeOpsInfraSnapshot,
   writeOpsRunnerStatus,
-  writeOpsUiTrendMetrics,
+  writeOpsSnapshotTrendMetrics,
 } from "@/lib/workers/image-ops-control-module";
 import {
   IMAGE_RUNNER_INFRA_KEY,
@@ -64,7 +64,9 @@ function assertLoopbackRedisUrl(rawUrl: string): void {
 }
 
 const RUNNER_TREND_KEYS = OPS_TREND_METRIC_REGISTRY.map((metric) => metric.key);
-const UI_TREND_KEYS = OPS_UI_TREND_METRIC_REGISTRY.map((metric) => metric.key);
+const UI_TREND_KEYS = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map(
+  (metric) => metric.key,
+);
 const RUNNER_TREND_LATEST_KEYS = RUNNER_TREND_KEYS.map(
   (key) => `${key}:latest`,
 );
@@ -874,7 +876,7 @@ describeRedis("image-ops-control-module redis integration", () => {
       );
 
       const projection = await readOpsTrendProjection(50, redis);
-      await writeOpsUiTrendMetrics(
+      await writeOpsSnapshotTrendMetrics(
         {
           at: new Date().toISOString(),
           machines: [],
@@ -950,7 +952,7 @@ describeRedis("image-ops-control-module redis integration", () => {
 
   it("reads ui trend rows with timestamps and stable ordering", async () => {
     for (let index = 1; index <= 6; index += 1) {
-      await writeOpsUiTrendMetrics(
+      await writeOpsSnapshotTrendMetrics(
         {
           at: new Date().toISOString(),
           machines: [],
@@ -1030,7 +1032,7 @@ describeRedis("image-ops-control-module redis integration", () => {
       );
     }
 
-    const rows = await readOpsUiTrendRows(
+    const rows = await readOpsSnapshotTrendRows(
       {
         metricNames: ["queueWaitingLive", "workersRunningLive"],
         limit: 6,
@@ -1052,7 +1054,7 @@ describeRedis("image-ops-control-module redis integration", () => {
 
   it("returns sampled ui trend series and supports smaller requested limits", async () => {
     for (let index = 1; index <= 40; index += 1) {
-      await writeOpsUiTrendMetrics(
+      await writeOpsSnapshotTrendMetrics(
         {
           at: new Date().toISOString(),
           machines: [],
@@ -1121,7 +1123,7 @@ describeRedis("image-ops-control-module redis integration", () => {
       );
     }
 
-    const sampled20 = await readOpsUiTrendSeries(
+    const sampled20 = await readOpsSnapshotTrendSeries(
       {
         metricNames: ["queueWaitingLive"],
         limit: 20,
@@ -1137,7 +1139,7 @@ describeRedis("image-ops-control-module redis integration", () => {
 
   it("filters stale ui trend rows when max age is applied", async () => {
     const queueWaitingKey =
-      OPS_UI_TREND_METRIC_REGISTRY.find(
+      OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
         (metric) => metric.name === "queueWaitingLive",
       )?.key || "";
     expect(queueWaitingKey).not.toBe("");
@@ -1156,7 +1158,7 @@ describeRedis("image-ops-control-module redis integration", () => {
     await redis.zadd(queueWaitingKey, now - 500, JSON.stringify({ value: 3 }));
     await redis.zadd(queueWaitingKey, now, JSON.stringify({ value: 4 }));
 
-    const rowsFresh = await readOpsUiTrendRows(
+    const rowsFresh = await readOpsSnapshotTrendRows(
       {
         metricNames: ["queueWaitingLive"],
         limit: 10,

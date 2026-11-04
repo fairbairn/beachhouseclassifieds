@@ -355,6 +355,46 @@ async function downscaleFlyWorkersViaMachinesApi(input: {
   );
 }
 
+async function upscaleFlyWorkersViaMachinesApi(input: {
+  app: string;
+  token: string;
+  targetCount: number;
+}): Promise<string> {
+  const machines = await listFlyMachinesViaRest(input.app, input.token, {
+    includeDeleted: true,
+  });
+  const activeWorkers = activeWorkerMachines(machines);
+  const currentActive = activeWorkers.length;
+
+  if (currentActive >= input.targetCount) {
+    return (
+      `scaled app=${input.app} process_group=worker target=${input.targetCount} ` +
+      `via=machines-api-create requested_create=0 active_workers=${currentActive}`
+    );
+  }
+
+  const template = latestWorkerTemplateMachine(machines);
+  if (!template) {
+    throw new Error(
+      `unable to scale up app=${input.app}: no worker template machine found`,
+    );
+  }
+
+  const createCount = input.targetCount - currentActive;
+  for (let i = 0; i < createCount; i += 1) {
+    await createFlyMachineViaRest({
+      app: input.app,
+      token: input.token,
+      template,
+    });
+  }
+
+  return (
+    `scaled app=${input.app} process_group=worker target=${input.targetCount} ` +
+    `via=machines-api-create requested_create=${createCount} active_before=${currentActive}`
+  );
+}
+
 async function fetchFlyAppId(app: string, token: string): Promise<string> {
   const data = await postFlyGraphql<{
     app?: {
@@ -591,6 +631,26 @@ export async function scaleFlyWorkers(
 
     throw new Error(
       `scale retry after unsuspend failed for app=${app}: ${secondAttempt.lastError?.message || "unknown error"}; attempts=${secondAttempt.errors.join(" | ")}`,
+    );
+  }
+
+  try {
+    const fallbackMessage = await upscaleFlyWorkersViaMachinesApi({
+      app,
+      token,
+      targetCount,
+    });
+    const afterFallbackMachines = await listFlyMachinesViaRest(app, token);
+    const activeAfterFallback = activeWorkerMachines(
+      afterFallbackMachines,
+    ).length;
+    if (activeAfterFallback >= targetCount) {
+      return `${fallbackMessage} active_workers=${activeAfterFallback}`;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `failed to scale workers via Fly API for app=${app}: ${firstAttempt.lastError?.message || "unknown error"}; machines_fallback_error=${message}; attempts=${firstAttempt.errors.join(" | ")}`,
     );
   }
 

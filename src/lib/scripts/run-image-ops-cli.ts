@@ -6,6 +6,10 @@ import chalk from "chalk";
 import Table from "cli-table3";
 
 import {
+  configureRedisTarget,
+  type RedisTarget,
+} from "../../workers/image-queue";
+import {
   clearOpsQueueIfPaused,
   createOpsUiStateWatcher,
   maybePurgeForDesiredMode,
@@ -80,6 +84,8 @@ type DashboardSample = {
 type DashboardSnapshot = {
   machines: OpsUiSnapshot["machines"];
   queue: QueueCounts | null;
+  recentJobs15m: OpsUiSnapshot["recentJobs15m"];
+  recentJobs24h: OpsUiSnapshot["recentJobs24h"];
   queuePaused?: boolean | null;
   db: OpsUiSnapshot["db"];
   settings: RunnerControlSettings | null;
@@ -105,6 +111,7 @@ function usage(): string {
     "Image Ops Control Tower",
     "",
     "Usage:",
+    "  (global) add --redis-target local|cloud to any command (default local; cloud uses FLY_REDIS)",
     "  npm run workers:image:ops -- dashboard [--watch] [--top] [--interval-seconds 1] [--app <flyApp>]",
     "  npm run workers:image:ops -- telemetry-dump [--app <flyApp>]",
     "      top watch keys: q quit, h help, s settings, : command, + slower, - faster, r reset trends",
@@ -121,6 +128,19 @@ function usage(): string {
     "  npm run workers:image:ops -- clear-queue",
     "  npm run workers:image:ops -- redis-io-reset",
   ].join("\n");
+}
+
+function parseRedisTargetOption(options: Map<string, string>): RedisTarget {
+  const raw = options.get("redis-target")?.trim().toLowerCase();
+  if (!raw) {
+    return "local";
+  }
+  if (raw === "local" || raw === "cloud") {
+    return raw;
+  }
+  throw new Error(
+    `invalid --redis-target: ${options.get("redis-target")}. Use local or cloud.`,
+  );
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -211,6 +231,58 @@ function fixedOne(value: number): string {
   return (Math.round(value * 10) / 10).toFixed(1);
 }
 
+function fixedTwo(value: number): string {
+  return (Math.round(value * 100) / 100).toFixed(2);
+}
+
+function formatMaybeNumber(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "n/a";
+  }
+  return fixedTwo(value);
+}
+
+function deriveWindowPerformance(window: OpsUiSnapshot["recentJobs24h"]): {
+  completedJobs: number;
+  failedJobs: number;
+  processedItems: number;
+  failedItems: number;
+  ips: number;
+  ipm: number;
+  secPerImage: number | null;
+  avgFetchMs: number;
+  avgTransformMs: number;
+  avgUploadMs: number;
+  avgEndToEndMs: number;
+} | null {
+  if (!window) {
+    return null;
+  }
+
+  const completedJobs = Math.max(0, Number(window.completedJobs || 0));
+  const failedJobs = Math.max(0, Number(window.failedJobs || 0));
+  const processedItems = Math.max(0, Number(window.processedItems || 0));
+  const failedItems = Math.max(0, Number(window.failedItems || 0));
+  const windowSeconds = Math.max(1, Number(window.windowMs || 0) / 1000);
+  const ips = processedItems / windowSeconds;
+  const ipm = ips * 60;
+  const secPerImage = ips > 0 ? 1 / ips : null;
+
+  return {
+    completedJobs,
+    failedJobs,
+    processedItems,
+    failedItems,
+    ips,
+    ipm,
+    secPerImage,
+    avgFetchMs: Math.max(0, Number(window.avgFetchMs || 0)),
+    avgTransformMs: Math.max(0, Number(window.avgTransformMs || 0)),
+    avgUploadMs: Math.max(0, Number(window.avgUploadMs || 0)),
+    avgEndToEndMs: Math.max(0, Number(window.avgEndToEndMs || 0)),
+  };
+}
+
 function formatBitrateFromKbps(kbps: number): string {
   const safeKbps = Number.isFinite(kbps) && kbps > 0 ? kbps : 0;
   const bps = safeKbps * 1000;
@@ -282,11 +354,21 @@ async function fetchControlSnapshot(): Promise<{
 
 async function gatherDashboardSnapshot(
   app: string,
+  input?: {
+    snapshotTimeoutMs?: number;
+    waitForStateMs?: number;
+  },
 ): Promise<DashboardSnapshot> {
+  const snapshotTimeoutMs = Math.max(
+    1000,
+    input?.snapshotTimeoutMs ?? STARTUP_SNAPSHOT_TIMEOUT_MS,
+  );
+  const waitForStateMs = Math.max(500, input?.waitForStateMs ?? 1500);
+
   const watcher = await createOpsUiStateWatcher({
     appName: app,
-    snapshotTimeoutMs: STARTUP_SNAPSHOT_TIMEOUT_MS,
-    skipInitialRefresh: true,
+    snapshotTimeoutMs,
+    skipInitialRefresh: false,
     profile: "cli",
   });
   try {
@@ -294,7 +376,7 @@ async function gatherDashboardSnapshot(
     if (snapshot) {
       return snapshot;
     }
-    await watcher.waitForState(1500);
+    await watcher.waitForState(waitForStateMs);
     const next = watcher.getSnapshot();
     if (!next) {
       throw new Error("module state snapshot unavailable");
@@ -346,6 +428,14 @@ function renderSnapshotDashboard(params: {
   );
   process.stdout.write(
     `queue backlog=${snapshot.queue?.backlog ?? 0} waiting=${snapshot.queue?.waiting ?? 0} active=${snapshot.queue?.active ?? 0} delayed=${snapshot.queue?.delayed ?? 0} paused=${snapshot.queue?.paused ?? 0} queue_paused=${snapshot.queuePaused === null || snapshot.queuePaused === undefined ? "unknown" : String(snapshot.queuePaused)}\n`,
+  );
+  const perf15m = deriveWindowPerformance(snapshot.recentJobs15m);
+  const perf24h = deriveWindowPerformance(snapshot.recentJobs24h);
+  process.stdout.write(
+    `perf_15m ipm=${formatMaybeNumber(perf15m?.ipm ?? null)} ips=${formatMaybeNumber(perf15m?.ips ?? null)} sec_per_image=${formatMaybeNumber(perf15m?.secPerImage ?? null)} jobs=${perf15m?.completedJobs ?? 0}/${perf15m?.failedJobs ?? 0} avg_fetch_ms=${perf15m?.avgFetchMs ?? 0} avg_transform_ms=${perf15m?.avgTransformMs ?? 0} avg_upload_ms=${perf15m?.avgUploadMs ?? 0} avg_end_to_end_ms=${perf15m?.avgEndToEndMs ?? 0}\n`,
+  );
+  process.stdout.write(
+    `perf_24h ipm=${formatMaybeNumber(perf24h?.ipm ?? null)} ips=${formatMaybeNumber(perf24h?.ips ?? null)} sec_per_image=${formatMaybeNumber(perf24h?.secPerImage ?? null)} jobs=${perf24h?.completedJobs ?? 0}/${perf24h?.failedJobs ?? 0} avg_fetch_ms=${perf24h?.avgFetchMs ?? 0} avg_transform_ms=${perf24h?.avgTransformMs ?? 0} avg_upload_ms=${perf24h?.avgUploadMs ?? 0} avg_end_to_end_ms=${perf24h?.avgEndToEndMs ?? 0}\n`,
   );
   process.stdout.write(
     `runner mode=${snapshot.status?.mode || "n/a"} desired_mode=${snapshot.settings?.desiredMode || "n/a"} gate=${telemetry.liveGate} workers_running=${telemetry.liveWorkersRunning}\n`,
@@ -556,7 +646,10 @@ async function panelControl(): Promise<void> {
 
 async function runTelemetryDump(args: ParsedArgs): Promise<void> {
   const app = appName(args.options);
-  const snapshot = await gatherDashboardSnapshot(app);
+  const snapshot = await gatherDashboardSnapshot(app, {
+    snapshotTimeoutMs: 8000,
+    waitForStateMs: 8000,
+  });
   const telemetry = deriveOpsTelemetry({
     settings: snapshot.settings,
     infra: snapshot.infra,
@@ -573,6 +666,8 @@ async function runTelemetryDump(args: ParsedArgs): Promise<void> {
       infra: snapshot.infra,
       status: snapshot.status,
       queue: snapshot.queue,
+      recentJobs15m: snapshot.recentJobs15m,
+      recentJobs24h: snapshot.recentJobs24h,
       db: snapshot.db,
       errors: snapshot.errors,
     },
@@ -744,7 +839,7 @@ function renderTopLikeDashboard(params: {
     }
   } else {
     process.stdout.write(
-      `processed=${snapshot.db.processed} pending=${snapshot.db.pending} total=${snapshot.db.total} progress=${snapshot.db.pct.toFixed(2)}%\n`,
+      `processed=${snapshot.db.processed} pending=${snapshot.db.pending} failed=${snapshot.db.failed} total=${snapshot.db.total} progress=${snapshot.db.pct.toFixed(2)}%\n`,
     );
   }
 }
@@ -1014,10 +1109,10 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
   let teardownTopKeys = (): void => undefined;
   const uiStateWatcher: OpsUiStateWatcher = await createOpsUiStateWatcher({
     appName: app,
-    snapshotTimeoutMs: STARTUP_SNAPSHOT_TIMEOUT_MS,
+    snapshotTimeoutMs: 6000,
     minRefreshIntervalMs: 1000,
-    fallbackRefreshIntervalMs: 30000,
-    skipInitialRefresh: true,
+    fallbackRefreshIntervalMs: 5000,
+    skipInitialRefresh: false,
     profile: "cli",
   });
   let stopSignalListener = (): void => undefined;
@@ -1122,18 +1217,49 @@ async function runFlyScale(args: ParsedArgs): Promise<void> {
   }
 
   const app = appName(args.options);
+  let zeroPolicyApplied = false;
+  if (count === 0) {
+    await updateOpsControlSettings((current) => ({
+      ...current,
+      desiredMode: "stop",
+      enqueueEnabled: false,
+      requireWorkersForEnqueue: false,
+      minWorkersToEnqueue: 0,
+    }));
+    zeroPolicyApplied = true;
+  }
+
   await scaleOpsWorkers(app, count);
   process.stdout.write(
     `${chalk.green("fly-scale complete")} workers_target=${count}\n`,
   );
+  if (zeroPolicyApplied) {
+    process.stdout.write(
+      chalk.gray(
+        "applied zero policy desired_mode=stop enqueue_enabled=false require_workers_for_enqueue=false min_workers_to_enqueue=0\n",
+      ),
+    );
+  }
   await publishInfraSnapshotFromFly(app);
 }
 
 async function runFlyStopAll(args: ParsedArgs): Promise<void> {
   const app = appName(args.options);
+  await updateOpsControlSettings((current) => ({
+    ...current,
+    desiredMode: "stop",
+    enqueueEnabled: false,
+    requireWorkersForEnqueue: false,
+    minWorkersToEnqueue: 0,
+  }));
   await scaleOpsWorkers(app, 0);
   process.stdout.write(
     `${chalk.green("fly-stop-all complete")} workers_target=0\n`,
+  );
+  process.stdout.write(
+    chalk.gray(
+      "applied zero policy desired_mode=stop enqueue_enabled=false require_workers_for_enqueue=false min_workers_to_enqueue=0\n",
+    ),
   );
   await publishInfraSnapshotFromFly(app);
 }
@@ -1156,12 +1282,19 @@ async function runStartRun(args: ParsedArgs): Promise<void> {
   }
 
   const app = appName(args.options);
+  await updateOpsControlSettings((current) => ({
+    ...current,
+    desiredMode: "run",
+    enqueueEnabled: true,
+    requireWorkersForEnqueue: true,
+    minWorkersToEnqueue: Math.max(1, current.minWorkersToEnqueue || 0),
+  }));
   await scaleOpsWorkers(app, count);
   await publishInfraSnapshotFromFly(app);
 
   const next = await setDesiredMode("run");
   process.stdout.write(
-    `${chalk.green("start-run complete")} workers_target=${count} desired_mode=${next.desiredMode}\n`,
+    `${chalk.green("start-run complete")} workers_target=${count} desired_mode=${next.desiredMode} enqueue_enabled=true require_workers_for_enqueue=true min_workers_to_enqueue>=1\n`,
   );
 }
 
@@ -1444,6 +1577,11 @@ async function runClearQueue(): Promise<void> {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  const redisTarget = parseRedisTargetOption(args.options);
+  const redisSelection = configureRedisTarget(redisTarget);
+  process.stdout.write(
+    `${chalk.gray("redis target")} target=${redisSelection.target} endpoint=${redisSelection.endpoint}\n`,
+  );
   switch (args.command) {
     case "dashboard":
       await runDashboard(args);

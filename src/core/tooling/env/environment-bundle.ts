@@ -53,7 +53,7 @@ export type LoadEnvironmentBundleIntoProcessEnvResult = {
 const ENVIRONMENT_AAD = "beachhouseclassifieds.environment.v1";
 const ENVIRONMENT_HKDF_SALT = "beachhouseclassifieds.environment.keysplit.v1";
 const ENVIRONMENT_HKDF_INFO = "environment-bundle-aes256gcm-key";
-const ENVIRONMENT_TOKEN_RE = /^([0-9a-fA-F]{16})\.([^\.]+)\.(.+)$/;
+const ENVIRONMENT_TOKEN_RE = /^([0-9a-fA-F]{16})\.([^.]+)\.(.+)$/;
 
 export const ENVIRONMENT_BUNDLE_DEFAULT_ALLOWLIST = [
   "APP_ENV_PROFILE",

@@ -19,13 +19,21 @@ import {
   type FlyAppSnapshot,
   type FlyMachine,
 } from "./image-fly-ops";
+import { readImageJobMetricRollupWindows } from "./image-job-metric-trends";
+import {
+  IMAGE_PERF_ROLLUPS_HASH_KEY,
+  IMAGE_SLICE_WINDOW_MS,
+  imageTrendSeriesKey,
+} from "./image-metrics-redis-keys";
 import {
   purgePendingImageQueueJobs,
   readImageQueueCounts,
   readImageQueuePausedState,
+  readImageQueueRecentJobWindow,
   readImageQueueWorkersRunning,
   setImageQueuePaused,
   type ImageQueueCounts,
+  type ImageQueueRecentJobWindow,
 } from "./image-queue-ops";
 import {
   readRunnerControlSettings,
@@ -65,6 +73,7 @@ export type OpsSharedState = {
 export type OpsDbProgress = {
   processed: number;
   pending: number;
+  failed: number;
   total: number;
   pct: number;
 } | null;
@@ -142,6 +151,9 @@ export type OpsUiSnapshot = {
   at: string;
   machines: FlyMachine[] | null;
   queue: ImageQueueCounts | null;
+  recentJobs15m: ImageQueueRecentJobWindow | null;
+  recentJobs24h: ImageQueueRecentJobWindow | null;
+  performanceRollups: OpsPerformanceRollupSet | null;
   queuePaused?: boolean | null;
   db: OpsDbProgress;
   settings: RunnerControlSettings | null;
@@ -158,20 +170,70 @@ export type OpsUiSnapshot = {
   };
 };
 
-export type OpsUiTrendMetricDescriptor = {
+export type OpsPerformanceRollup = {
+  windowId: "15s" | "1m" | "15m" | "24h" | "deep";
+  windowMs: number;
+  completedJobs: number;
+  failedJobs: number;
+  processedItems: number;
+  failedItems: number;
+  sampledCompletedJobs: number;
+  metricFetchLatencyMsLow: number;
+  metricFetchLatencyMsHigh: number;
+  metricFetchLatencyMsAvg: number;
+  metricProcessingLatencyMsLow: number;
+  metricProcessingLatencyMsHigh: number;
+  metricProcessingLatencyMsAvg: number;
+  metricStorageLatencyMsLow: number;
+  metricStorageLatencyMsHigh: number;
+  metricStorageLatencyMsAvg: number;
+  metricJobElapsedMsLow: number;
+  metricJobElapsedMsHigh: number;
+  metricJobElapsedMsAvg: number;
+  metricSourceBytesLow: number;
+  metricSourceBytesHigh: number;
+  metricSourceBytesAvg: number;
+  metricTransformedBytesLow: number;
+  metricTransformedBytesHigh: number;
+  metricTransformedBytesAvg: number;
+  avgFetchMs: number;
+  avgTransformMs: number;
+  avgUploadMs: number;
+  avgEndToEndMs: number;
+  ips: number;
+  ipm: number;
+  secPerImage: number | null;
+  computedAt: string;
+};
+
+export type OpsPerformanceRollupSet = {
+  rollup15s: OpsPerformanceRollup;
+  rollup1m: OpsPerformanceRollup;
+  rollup15m: OpsPerformanceRollup;
+  rollup24h: OpsPerformanceRollup;
+  rollupDeep: OpsPerformanceRollup;
+};
+
+export type OpsSnapshotTrendMetricDescriptor = {
   name: string;
   key: string;
   getValue: (snapshot: OpsUiSnapshot) => number;
 };
 
-export type OpsUiTrendSeriesMap = Record<string, number[]>;
-export type OpsUiTrendRow = {
+export type OpsSnapshotTrendSeriesMap = Record<string, number[]>;
+export type OpsSnapshotTrendRow = {
   atMs: number;
   value: number;
 };
-export type OpsUiTrendRowSeriesMap = Record<string, OpsUiTrendRow[]>;
+export type OpsSnapshotTrendRowSeriesMap = Record<
+  string,
+  OpsSnapshotTrendRow[]
+>;
 export type OpsTrendSampleMode = "raw" | "interpolated";
-export type OpsTrendLatestSeriesMap = Record<string, OpsUiTrendRow | null>;
+export type OpsTrendLatestSeriesMap = Record<
+  string,
+  OpsSnapshotTrendRow | null
+>;
 export type OpsRedisIoStats = {
   redisEgressBytes: number;
   redisIngressBytes: number;
@@ -225,7 +287,20 @@ export type OpsRedisIoInstanceStats = {
 };
 
 const OPS_TREND_HISTORY_MAX = 100;
+const OPS_TREND_REDIS_QUERY_LIMIT_MAX = 30_000;
+const OPS_TREND_REDIS_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const OPS_TREND_PROJECTION_DEFAULT_LIMIT = 50;
+const OPS_LIVE_STATUS_STALE_THRESHOLD_MS = 10_000;
+const OPS_LIVE_STATUS_PUBLISH_MIN_INTERVAL_MS = 2_000;
+const OPS_15S_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["15s"];
+const OPS_1M_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["1m"];
+const OPS_BULLMQ_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["15m"];
+const OPS_DAILY_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["24h"];
+const OPS_DEEP_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS.deep;
+const OPS_RECENT_15M_REFRESH_MIN_INTERVAL_MS = 5_000;
+const OPS_RECENT_24H_REFRESH_MIN_INTERVAL_MS = 60_000;
+const OPS_PERFORMANCE_ROLLUP_REFRESH_MIN_INTERVAL_MS = 5_000;
+const OPS_PERFORMANCE_ROLLUP_HASH_KEY = IMAGE_PERF_ROLLUPS_HASH_KEY;
 let lastTrendTimestampMs = 0;
 const OPS_REDIS_IO_INSTANCES_HASH_KEY =
   "image:runner:control:redis_io:instances";
@@ -260,7 +335,12 @@ type OpsTrendMetricName =
   | "queueBacklog"
   | "flushBatchCount"
   | "pendingSuccessBuffer"
-  | "pendingErrorBuffer";
+  | "pendingErrorBuffer"
+  | "throughputImagesPerMinute"
+  | "avgFetchMs"
+  | "avgTransformMs"
+  | "avgUploadMs"
+  | "avgEndToEndMs";
 
 export type OpsTrendMetricDescriptor = {
   name: OpsTrendMetricName;
@@ -271,262 +351,249 @@ export type OpsTrendMetricDescriptor = {
 export const OPS_TREND_METRIC_REGISTRY: OpsTrendMetricDescriptor[] = [
   {
     name: "workersRunning",
-    key: "image:runner:control:trend:workers_running",
+    key: imageTrendSeriesKey("runtime", "workers_running"),
     getValue: (status) => status.workersRunning,
   },
   {
     name: "claimedCount",
-    key: "image:runner:control:trend:claimed_count",
+    key: imageTrendSeriesKey("runtime", "claimed_count"),
     getValue: (status) => status.claimedCount,
   },
   {
     name: "queuedCount",
-    key: "image:runner:control:trend:queued_count",
+    key: imageTrendSeriesKey("runtime", "queued_count"),
     getValue: (status) => status.queuedCount,
   },
   {
     name: "completedJobs",
-    key: "image:runner:control:trend:completed_jobs",
+    key: imageTrendSeriesKey("runtime", "completed_jobs"),
     getValue: (status) => status.completedJobs,
   },
   {
     name: "failedJobs",
-    key: "image:runner:control:trend:failed_jobs",
+    key: imageTrendSeriesKey("runtime", "failed_jobs"),
     getValue: (status) => status.failedJobs,
   },
   {
     name: "processedItems",
-    key: "image:runner:control:trend:processed_items",
+    key: imageTrendSeriesKey("runtime", "processed_items"),
     getValue: (status) => status.processedItems,
   },
   {
     name: "failedItems",
-    key: "image:runner:control:trend:failed_items",
+    key: imageTrendSeriesKey("runtime", "failed_items"),
     getValue: (status) => status.failedItems,
   },
   {
     name: "queueWaiting",
-    key: "image:runner:control:trend:queue_waiting",
+    key: imageTrendSeriesKey("runtime", "queue_waiting"),
     getValue: (status) => status.queueWaiting,
   },
   {
     name: "queueActive",
-    key: "image:runner:control:trend:queue_active",
+    key: imageTrendSeriesKey("runtime", "queue_active"),
     getValue: (status) => status.queueActive,
   },
   {
     name: "queueCompleted",
-    key: "image:runner:control:trend:queue_completed",
+    key: imageTrendSeriesKey("runtime", "queue_completed"),
     getValue: (status) => status.queueCompleted,
   },
   {
     name: "queueFailed",
-    key: "image:runner:control:trend:queue_failed",
+    key: imageTrendSeriesKey("runtime", "queue_failed"),
     getValue: (status) => status.queueFailed,
   },
   {
     name: "queueDelayed",
-    key: "image:runner:control:trend:queue_delayed",
+    key: imageTrendSeriesKey("runtime", "queue_delayed"),
     getValue: (status) => status.queueDelayed,
   },
   {
     name: "queuePaused",
-    key: "image:runner:control:trend:queue_paused",
+    key: imageTrendSeriesKey("runtime", "queue_paused"),
     getValue: (status) => status.queuePaused,
   },
   {
     name: "queueBacklog",
-    key: "image:runner:control:trend:queue_backlog",
+    key: imageTrendSeriesKey("runtime", "queue_backlog"),
     getValue: (status) => status.queueBacklog,
   },
   {
     name: "flushBatchCount",
-    key: "image:runner:control:trend:flush_batch_count",
+    key: imageTrendSeriesKey("runtime", "flush_batch_count"),
     getValue: (status) => status.flushBatchCount,
   },
   {
     name: "pendingSuccessBuffer",
-    key: "image:runner:control:trend:pending_success_buffer",
+    key: imageTrendSeriesKey("runtime", "pending_success_buffer"),
     getValue: (status) => status.pendingSuccessBuffer,
   },
   {
     name: "pendingErrorBuffer",
-    key: "image:runner:control:trend:pending_error_buffer",
+    key: imageTrendSeriesKey("runtime", "pending_error_buffer"),
     getValue: (status) => status.pendingErrorBuffer,
+  },
+  {
+    name: "throughputImagesPerMinute",
+    key: imageTrendSeriesKey("runtime", "throughput_images_per_minute"),
+    getValue: (status) => status.throughputImagesPerMinute,
+  },
+  {
+    name: "avgFetchMs",
+    key: imageTrendSeriesKey("runtime", "avg_fetch_ms"),
+    getValue: (status) => status.avgFetchMs,
+  },
+  {
+    name: "avgTransformMs",
+    key: imageTrendSeriesKey("runtime", "avg_transform_ms"),
+    getValue: (status) => status.avgTransformMs,
+  },
+  {
+    name: "avgUploadMs",
+    key: imageTrendSeriesKey("runtime", "avg_upload_ms"),
+    getValue: (status) => status.avgUploadMs,
+  },
+  {
+    name: "avgEndToEndMs",
+    key: imageTrendSeriesKey("runtime", "avg_end_to_end_ms"),
+    getValue: (status) => status.avgEndToEndMs,
   },
 ];
 
-export const OPS_UI_TREND_METRIC_REGISTRY: OpsUiTrendMetricDescriptor[] = [
-  {
-    name: "errorsCount",
-    key: "image:runner:control:trend:ui:errors_count",
-    getValue: (snapshot) => Object.keys(snapshot.errors).length,
-  },
-  {
-    name: "machinesTotal",
-    key: "image:runner:control:trend:ui:machines_total",
-    getValue: (snapshot) => snapshot.machines?.length ?? 0,
-  },
-  {
-    name: "workersRunningLive",
-    key: "image:runner:control:trend:ui:workers_running_live",
-    getValue: (snapshot) => snapshot.infra?.workersRunning ?? 0,
-  },
-  {
-    name: "queueWaitingLive",
-    key: "image:runner:control:trend:ui:queue_waiting_live",
-    getValue: (snapshot) => snapshot.queue?.waiting ?? 0,
-  },
-  {
-    name: "queueActiveLive",
-    key: "image:runner:control:trend:ui:queue_active_live",
-    getValue: (snapshot) => snapshot.queue?.active ?? 0,
-  },
-  {
-    name: "queueDelayedLive",
-    key: "image:runner:control:trend:ui:queue_delayed_live",
-    getValue: (snapshot) => snapshot.queue?.delayed ?? 0,
-  },
-  {
-    name: "queuePausedLive",
-    key: "image:runner:control:trend:ui:queue_paused_live",
-    getValue: (snapshot) => snapshot.queue?.paused ?? 0,
-  },
-  {
-    name: "queueCompletedLive",
-    key: "image:runner:control:trend:ui:queue_completed_live",
-    getValue: (snapshot) => snapshot.queue?.completed ?? 0,
-  },
-  {
-    name: "queueFailedLive",
-    key: "image:runner:control:trend:ui:queue_failed_live",
-    getValue: (snapshot) => snapshot.queue?.failed ?? 0,
-  },
-  {
-    name: "queueBacklogLive",
-    key: "image:runner:control:trend:ui:queue_backlog_live",
-    getValue: (snapshot) => snapshot.queue?.backlog ?? 0,
-  },
-  {
-    name: "statusProcessedItems",
-    key: "image:runner:control:trend:ui:status_processed_items",
-    getValue: (snapshot) => snapshot.status?.processedItems ?? 0,
-  },
-  {
-    name: "statusFailedItems",
-    key: "image:runner:control:trend:ui:status_failed_items",
-    getValue: (snapshot) => snapshot.status?.failedItems ?? 0,
-  },
-  {
-    name: "statusCompletedJobs",
-    key: "image:runner:control:trend:ui:status_completed_jobs",
-    getValue: (snapshot) => snapshot.status?.completedJobs ?? 0,
-  },
-  {
-    name: "statusFailedJobs",
-    key: "image:runner:control:trend:ui:status_failed_jobs",
-    getValue: (snapshot) => snapshot.status?.failedJobs ?? 0,
-  },
-  {
-    name: "statusPendingSuccessBuffer",
-    key: "image:runner:control:trend:ui:status_pending_success_buffer",
-    getValue: (snapshot) => snapshot.status?.pendingSuccessBuffer ?? 0,
-  },
-  {
-    name: "statusPendingErrorBuffer",
-    key: "image:runner:control:trend:ui:status_pending_error_buffer",
-    getValue: (snapshot) => snapshot.status?.pendingErrorBuffer ?? 0,
-  },
-  {
-    name: "statusFlushBatchCount",
-    key: "image:runner:control:trend:ui:status_flush_batch_count",
-    getValue: (snapshot) => snapshot.status?.flushBatchCount ?? 0,
-  },
-  {
-    name: "settingsFlushIntervalMs",
-    key: "image:runner:control:trend:ui:settings_flush_interval_ms",
-    getValue: (snapshot) => snapshot.settings?.flushIntervalMs ?? 0,
-  },
-  {
-    name: "settingsMaxQueueBacklog",
-    key: "image:runner:control:trend:ui:settings_max_queue_backlog",
-    getValue: (snapshot) => snapshot.settings?.maxQueueBacklog ?? 0,
-  },
-  {
-    name: "settingsRefillLowWatermark",
-    key: "image:runner:control:trend:ui:settings_refill_low_watermark",
-    getValue: (snapshot) => snapshot.settings?.refillLowWatermark ?? 0,
-  },
-  {
-    name: "settingsRefillTargetBacklog",
-    key: "image:runner:control:trend:ui:settings_refill_target_backlog",
-    getValue: (snapshot) => snapshot.settings?.refillTargetBacklog ?? 0,
-  },
-  {
-    name: "settingsMaxClaimPerCycle",
-    key: "image:runner:control:trend:ui:settings_max_claim_per_cycle",
-    getValue: (snapshot) => snapshot.settings?.maxClaimPerCycle ?? 0,
-  },
-  {
-    name: "dbProcessed",
-    key: "image:runner:control:trend:ui:db_processed",
-    getValue: (snapshot) => snapshot.db?.processed ?? 0,
-  },
-  {
-    name: "dbPending",
-    key: "image:runner:control:trend:ui:db_pending",
-    getValue: (snapshot) => snapshot.db?.pending ?? 0,
-  },
-  {
-    name: "dbTotal",
-    key: "image:runner:control:trend:ui:db_total",
-    getValue: (snapshot) => snapshot.db?.total ?? 0,
-  },
-  {
-    name: "dbProgressPct",
-    key: "image:runner:control:trend:ui:db_progress_pct",
-    getValue: (snapshot) => snapshot.db?.pct ?? 0,
-  },
-  {
-    name: "throughputIpsNow",
-    key: "image:runner:control:trend:ui:throughput_ips_now",
-    getValue: (snapshot) => snapshot.projections.headline.ipsSmoothedNow,
-  },
-  {
-    name: "throughputIpmNow",
-    key: "image:runner:control:trend:ui:throughput_ipm_now",
-    getValue: (snapshot) => snapshot.projections.headline.ipsSmoothedNow * 60,
-  },
-  {
-    name: "throughputIpsAvg30",
-    key: "image:runner:control:trend:ui:throughput_ips_avg30",
-    getValue: (snapshot) => snapshot.projections.headline.ipsAvg30,
-  },
-  {
-    name: "throughputIpmAvg30",
-    key: "image:runner:control:trend:ui:throughput_ipm_avg30",
-    getValue: (snapshot) => snapshot.projections.headline.ipmAvg30,
-  },
-  {
-    name: "throughputDrainQps",
-    key: "image:runner:control:trend:ui:throughput_drain_qps",
-    getValue: (snapshot) => snapshot.projections.headline.drainPerSecSmoothed,
-  },
-  {
-    name: "throughputFillQps",
-    key: "image:runner:control:trend:ui:throughput_fill_qps",
-    getValue: (snapshot) => snapshot.projections.headline.fillPerSecSmoothed,
-  },
-  {
-    name: "fillRatioPct",
-    key: "image:runner:control:trend:ui:fill_ratio_pct",
-    getValue: (snapshot) => {
-      const backlog = snapshot.queue?.backlog ?? 0;
-      const maxBacklog = Math.max(1, snapshot.settings?.maxQueueBacklog ?? 1);
-      return (backlog / maxBacklog) * 100;
+export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescriptor[] =
+  [
+    {
+      name: "errorsCount",
+      key: imageTrendSeriesKey("snapshot", "errors_count"),
+      getValue: (snapshot) => Object.keys(snapshot.errors).length,
     },
-  },
-];
+    {
+      name: "machinesTotal",
+      key: imageTrendSeriesKey("snapshot", "machines_total"),
+      getValue: (snapshot) => snapshot.machines?.length ?? 0,
+    },
+    {
+      name: "workersRunningLive",
+      key: imageTrendSeriesKey("snapshot", "workers_running_live"),
+      getValue: (snapshot) => snapshot.infra?.workersRunning ?? 0,
+    },
+    {
+      name: "queueWaitingLive",
+      key: imageTrendSeriesKey("snapshot", "queue_waiting_live"),
+      getValue: (snapshot) => snapshot.queue?.waiting ?? 0,
+    },
+    {
+      name: "queueActiveLive",
+      key: imageTrendSeriesKey("snapshot", "queue_active_live"),
+      getValue: (snapshot) => snapshot.queue?.active ?? 0,
+    },
+    {
+      name: "queueDelayedLive",
+      key: imageTrendSeriesKey("snapshot", "queue_delayed_live"),
+      getValue: (snapshot) => snapshot.queue?.delayed ?? 0,
+    },
+    {
+      name: "queuePausedLive",
+      key: imageTrendSeriesKey("snapshot", "queue_paused_live"),
+      getValue: (snapshot) => snapshot.queue?.paused ?? 0,
+    },
+    {
+      name: "queueCompletedLive",
+      key: imageTrendSeriesKey("snapshot", "queue_completed_live"),
+      getValue: (snapshot) => snapshot.queue?.completed ?? 0,
+    },
+    {
+      name: "queueFailedLive",
+      key: imageTrendSeriesKey("snapshot", "queue_failed_live"),
+      getValue: (snapshot) => snapshot.queue?.failed ?? 0,
+    },
+    {
+      name: "queueBacklogLive",
+      key: imageTrendSeriesKey("snapshot", "queue_backlog_live"),
+      getValue: (snapshot) => snapshot.queue?.backlog ?? 0,
+    },
+    {
+      name: "statusProcessedItems",
+      key: imageTrendSeriesKey("snapshot", "status_processed_items"),
+      getValue: (snapshot) => snapshot.status?.processedItems ?? 0,
+    },
+    {
+      name: "statusFailedItems",
+      key: imageTrendSeriesKey("snapshot", "status_failed_items"),
+      getValue: (snapshot) => snapshot.status?.failedItems ?? 0,
+    },
+    {
+      name: "statusCompletedJobs",
+      key: imageTrendSeriesKey("snapshot", "status_completed_jobs"),
+      getValue: (snapshot) => snapshot.status?.completedJobs ?? 0,
+    },
+    {
+      name: "statusFailedJobs",
+      key: imageTrendSeriesKey("snapshot", "status_failed_jobs"),
+      getValue: (snapshot) => snapshot.status?.failedJobs ?? 0,
+    },
+    {
+      name: "statusPendingSuccessBuffer",
+      key: imageTrendSeriesKey("snapshot", "status_pending_success_buffer"),
+      getValue: (snapshot) => snapshot.status?.pendingSuccessBuffer ?? 0,
+    },
+    {
+      name: "statusPendingErrorBuffer",
+      key: imageTrendSeriesKey("snapshot", "status_pending_error_buffer"),
+      getValue: (snapshot) => snapshot.status?.pendingErrorBuffer ?? 0,
+    },
+    {
+      name: "statusFlushBatchCount",
+      key: imageTrendSeriesKey("snapshot", "status_flush_batch_count"),
+      getValue: (snapshot) => snapshot.status?.flushBatchCount ?? 0,
+    },
+    {
+      name: "settingsFlushIntervalMs",
+      key: imageTrendSeriesKey("snapshot", "settings_flush_interval_ms"),
+      getValue: (snapshot) => snapshot.settings?.flushIntervalMs ?? 0,
+    },
+    {
+      name: "settingsMaxQueueBacklog",
+      key: imageTrendSeriesKey("snapshot", "settings_max_queue_backlog"),
+      getValue: (snapshot) => snapshot.settings?.maxQueueBacklog ?? 0,
+    },
+    {
+      name: "settingsRefillLowWatermark",
+      key: imageTrendSeriesKey("snapshot", "settings_refill_low_watermark"),
+      getValue: (snapshot) => snapshot.settings?.refillLowWatermark ?? 0,
+    },
+    {
+      name: "settingsRefillTargetBacklog",
+      key: imageTrendSeriesKey("snapshot", "settings_refill_target_backlog"),
+      getValue: (snapshot) => snapshot.settings?.refillTargetBacklog ?? 0,
+    },
+    {
+      name: "settingsMaxClaimPerCycle",
+      key: imageTrendSeriesKey("snapshot", "settings_max_claim_per_cycle"),
+      getValue: (snapshot) => snapshot.settings?.maxClaimPerCycle ?? 0,
+    },
+    {
+      name: "dbProcessed",
+      key: imageTrendSeriesKey("snapshot", "db_processed"),
+      getValue: (snapshot) => snapshot.db?.processed ?? 0,
+    },
+    {
+      name: "dbPending",
+      key: imageTrendSeriesKey("snapshot", "db_pending"),
+      getValue: (snapshot) => snapshot.db?.pending ?? 0,
+    },
+    {
+      name: "dbTotal",
+      key: imageTrendSeriesKey("snapshot", "db_total"),
+      getValue: (snapshot) => snapshot.db?.total ?? 0,
+    },
+    {
+      name: "dbProgressPct",
+      key: imageTrendSeriesKey("snapshot", "db_progress_pct"),
+      getValue: (snapshot) => snapshot.db?.pct ?? 0,
+    },
+  ];
 
 const OPS_TREND_METRIC_KEYS = {
   queueBacklog: OPS_TREND_METRIC_REGISTRY.find(
@@ -558,6 +625,331 @@ function shortError(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function parseNonNegativeNumber(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
+function buildPerformanceRollupFromWindow(
+  windowId: "15s" | "1m" | "15m" | "24h" | "deep",
+  windowMs: number,
+  window: ImageQueueRecentJobWindow | null,
+  computedAtIso: string,
+): OpsPerformanceRollup {
+  const completedJobs = Math.max(0, Number(window?.completedJobs || 0));
+  const failedJobs = Math.max(0, Number(window?.failedJobs || 0));
+  const processedItems = Math.max(0, Number(window?.processedItems || 0));
+  const failedItems = Math.max(0, Number(window?.failedItems || 0));
+  const sampledCompletedJobs = Math.max(
+    0,
+    Number(window?.sampledCompletedJobs || 0),
+  );
+  const avgFetchMs = parseNonNegativeNumber(window?.avgFetchMs);
+  const avgTransformMs = parseNonNegativeNumber(window?.avgTransformMs);
+  const avgUploadMs = parseNonNegativeNumber(window?.avgUploadMs);
+  const avgEndToEndMs = parseNonNegativeNumber(window?.avgEndToEndMs);
+  const metricFetchLatencyMsLow = parseNonNegativeNumber(
+    window?.fetchElapsedMsLow,
+  );
+  const metricFetchLatencyMsHigh = parseNonNegativeNumber(
+    window?.fetchElapsedMsHigh,
+  );
+  const metricFetchLatencyMsAvg = parseNonNegativeNumber(
+    window?.fetchElapsedMsAvg,
+  );
+  const metricProcessingLatencyMsLow = parseNonNegativeNumber(
+    window?.transformElapsedMsLow,
+  );
+  const metricProcessingLatencyMsHigh = parseNonNegativeNumber(
+    window?.transformElapsedMsHigh,
+  );
+  const metricProcessingLatencyMsAvg = parseNonNegativeNumber(
+    window?.transformElapsedMsAvg,
+  );
+  const metricStorageLatencyMsLow = parseNonNegativeNumber(
+    window?.uploadElapsedMsLow,
+  );
+  const metricStorageLatencyMsHigh = parseNonNegativeNumber(
+    window?.uploadElapsedMsHigh,
+  );
+  const metricStorageLatencyMsAvg = parseNonNegativeNumber(
+    window?.uploadElapsedMsAvg,
+  );
+  const metricJobElapsedMsLow = parseNonNegativeNumber(window?.elapsedMsLow);
+  const metricJobElapsedMsHigh = parseNonNegativeNumber(window?.elapsedMsHigh);
+  const metricJobElapsedMsAvg = parseNonNegativeNumber(window?.elapsedMsAvg);
+  const metricSourceBytesLow = parseNonNegativeNumber(window?.sourceBytesLow);
+  const metricSourceBytesHigh = parseNonNegativeNumber(window?.sourceBytesHigh);
+  const metricSourceBytesAvg = parseNonNegativeNumber(window?.sourceBytesAvg);
+  const metricTransformedBytesLow = parseNonNegativeNumber(
+    window?.transformedBytesLow,
+  );
+  const metricTransformedBytesHigh = parseNonNegativeNumber(
+    window?.transformedBytesHigh,
+  );
+  const metricTransformedBytesAvg = parseNonNegativeNumber(
+    window?.transformedBytesAvg,
+  );
+
+  const windowSeconds = Math.max(1, Math.floor(windowMs / 1000));
+  const ipsFromWindow = processedItems / windowSeconds;
+  const ipsFromLatency =
+    avgEndToEndMs > 0 ? 1000 / Math.max(1, avgEndToEndMs) : 0;
+  const ips = Math.max(ipsFromWindow, ipsFromLatency);
+
+  return {
+    windowId,
+    windowMs,
+    completedJobs,
+    failedJobs,
+    processedItems,
+    failedItems,
+    sampledCompletedJobs,
+    metricFetchLatencyMsLow: Math.round(metricFetchLatencyMsLow),
+    metricFetchLatencyMsHigh: Math.round(metricFetchLatencyMsHigh),
+    metricFetchLatencyMsAvg: Math.round(metricFetchLatencyMsAvg),
+    metricProcessingLatencyMsLow: Math.round(metricProcessingLatencyMsLow),
+    metricProcessingLatencyMsHigh: Math.round(metricProcessingLatencyMsHigh),
+    metricProcessingLatencyMsAvg: Math.round(metricProcessingLatencyMsAvg),
+    metricStorageLatencyMsLow: Math.round(metricStorageLatencyMsLow),
+    metricStorageLatencyMsHigh: Math.round(metricStorageLatencyMsHigh),
+    metricStorageLatencyMsAvg: Math.round(metricStorageLatencyMsAvg),
+    metricJobElapsedMsLow: Math.round(metricJobElapsedMsLow),
+    metricJobElapsedMsHigh: Math.round(metricJobElapsedMsHigh),
+    metricJobElapsedMsAvg: Math.round(metricJobElapsedMsAvg),
+    metricSourceBytesLow: Math.round(metricSourceBytesLow),
+    metricSourceBytesHigh: Math.round(metricSourceBytesHigh),
+    metricSourceBytesAvg: Math.round(metricSourceBytesAvg),
+    metricTransformedBytesLow: Math.round(metricTransformedBytesLow),
+    metricTransformedBytesHigh: Math.round(metricTransformedBytesHigh),
+    metricTransformedBytesAvg: Math.round(metricTransformedBytesAvg),
+    avgFetchMs: Math.round(avgFetchMs),
+    avgTransformMs: Math.round(avgTransformMs),
+    avgUploadMs: Math.round(avgUploadMs),
+    avgEndToEndMs: Math.round(avgEndToEndMs),
+    ips,
+    ipm: ips * 60,
+    secPerImage: ips > 0 ? 1 / ips : null,
+    computedAt: computedAtIso,
+  };
+}
+
+function parsePerformanceRollupField(
+  raw: string | undefined,
+): OpsPerformanceRollup | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as OpsPerformanceRollup;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    if (
+      parsed.windowId !== "15s" &&
+      parsed.windowId !== "1m" &&
+      parsed.windowId !== "15m" &&
+      parsed.windowId !== "24h" &&
+      parsed.windowId !== "deep"
+    ) {
+      return null;
+    }
+    return {
+      ...parsed,
+      completedJobs: parseNonNegativeNumber(parsed.completedJobs),
+      failedJobs: parseNonNegativeNumber(parsed.failedJobs),
+      processedItems: parseNonNegativeNumber(parsed.processedItems),
+      failedItems: parseNonNegativeNumber(parsed.failedItems),
+      sampledCompletedJobs: parseNonNegativeNumber(parsed.sampledCompletedJobs),
+      metricFetchLatencyMsLow: parseNonNegativeNumber(
+        parsed.metricFetchLatencyMsLow,
+      ),
+      metricFetchLatencyMsHigh: parseNonNegativeNumber(
+        parsed.metricFetchLatencyMsHigh,
+      ),
+      metricFetchLatencyMsAvg: parseNonNegativeNumber(
+        parsed.metricFetchLatencyMsAvg,
+      ),
+      metricProcessingLatencyMsLow: parseNonNegativeNumber(
+        parsed.metricProcessingLatencyMsLow,
+      ),
+      metricProcessingLatencyMsHigh: parseNonNegativeNumber(
+        parsed.metricProcessingLatencyMsHigh,
+      ),
+      metricProcessingLatencyMsAvg: parseNonNegativeNumber(
+        parsed.metricProcessingLatencyMsAvg,
+      ),
+      metricStorageLatencyMsLow: parseNonNegativeNumber(
+        parsed.metricStorageLatencyMsLow,
+      ),
+      metricStorageLatencyMsHigh: parseNonNegativeNumber(
+        parsed.metricStorageLatencyMsHigh,
+      ),
+      metricStorageLatencyMsAvg: parseNonNegativeNumber(
+        parsed.metricStorageLatencyMsAvg,
+      ),
+      metricJobElapsedMsLow: parseNonNegativeNumber(
+        parsed.metricJobElapsedMsLow,
+      ),
+      metricJobElapsedMsHigh: parseNonNegativeNumber(
+        parsed.metricJobElapsedMsHigh,
+      ),
+      metricJobElapsedMsAvg: parseNonNegativeNumber(
+        parsed.metricJobElapsedMsAvg,
+      ),
+      metricSourceBytesLow: parseNonNegativeNumber(parsed.metricSourceBytesLow),
+      metricSourceBytesHigh: parseNonNegativeNumber(
+        parsed.metricSourceBytesHigh,
+      ),
+      metricSourceBytesAvg: parseNonNegativeNumber(parsed.metricSourceBytesAvg),
+      metricTransformedBytesLow: parseNonNegativeNumber(
+        parsed.metricTransformedBytesLow,
+      ),
+      metricTransformedBytesHigh: parseNonNegativeNumber(
+        parsed.metricTransformedBytesHigh,
+      ),
+      metricTransformedBytesAvg: parseNonNegativeNumber(
+        parsed.metricTransformedBytesAvg,
+      ),
+      avgFetchMs: parseNonNegativeNumber(parsed.avgFetchMs),
+      avgTransformMs: parseNonNegativeNumber(parsed.avgTransformMs),
+      avgUploadMs: parseNonNegativeNumber(parsed.avgUploadMs),
+      avgEndToEndMs: parseNonNegativeNumber(parsed.avgEndToEndMs),
+      ips: parseNonNegativeNumber(parsed.ips),
+      ipm: parseNonNegativeNumber(parsed.ipm),
+      secPerImage:
+        parsed.secPerImage === null
+          ? null
+          : parseNonNegativeNumber(parsed.secPerImage),
+      windowMs: Math.max(
+        1,
+        Math.floor(parseNonNegativeNumber(parsed.windowMs)),
+      ),
+      computedAt:
+        typeof parsed.computedAt === "string"
+          ? parsed.computedAt
+          : new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writeOpsPerformanceRollupSet(
+  rollups: OpsPerformanceRollupSet,
+  redis?: IORedis,
+): Promise<void> {
+  await withControlRedis(redis, async (connection) => {
+    await connection.hset(OPS_PERFORMANCE_ROLLUP_HASH_KEY, {
+      rollup_15s: JSON.stringify(rollups.rollup15s),
+      rollup_1m: JSON.stringify(rollups.rollup1m),
+      rollup_15m: JSON.stringify(rollups.rollup15m),
+      rollup_24h: JSON.stringify(rollups.rollup24h),
+      rollup_deep: JSON.stringify(rollups.rollupDeep),
+      updated_at: new Date().toISOString(),
+    });
+  });
+}
+
+async function readOpsPerformanceRollupSet(
+  redis?: IORedis,
+): Promise<OpsPerformanceRollupSet | null> {
+  return withControlRedis(redis, async (connection) => {
+    const values = await connection.hgetall(OPS_PERFORMANCE_ROLLUP_HASH_KEY);
+    const rollup15s = parsePerformanceRollupField(values.rollup_15s);
+    const rollup1m = parsePerformanceRollupField(values.rollup_1m);
+    const rollup15m = parsePerformanceRollupField(values.rollup_15m);
+    const rollup24h = parsePerformanceRollupField(values.rollup_24h);
+    const rollupDeep = parsePerformanceRollupField(values.rollup_deep);
+    if (!rollup15s || !rollup1m || !rollup15m || !rollup24h || !rollupDeep) {
+      return null;
+    }
+    return {
+      rollup15s,
+      rollup1m,
+      rollup15m,
+      rollup24h,
+      rollupDeep,
+    };
+  });
+}
+
+async function buildOpsPerformanceRollupSetFromWindows(): Promise<{
+  rollups: OpsPerformanceRollupSet;
+  window15s: ImageQueueRecentJobWindow | null;
+  window1m: ImageQueueRecentJobWindow | null;
+  window15m: ImageQueueRecentJobWindow | null;
+  window24h: ImageQueueRecentJobWindow | null;
+  windowDeep: ImageQueueRecentJobWindow | null;
+}> {
+  const rollupSource = await readImageJobMetricRollupWindows({
+    windowsMs: [
+      OPS_15S_METRICS_WINDOW_MS,
+      OPS_1M_METRICS_WINDOW_MS,
+      OPS_BULLMQ_METRICS_WINDOW_MS,
+      OPS_DAILY_METRICS_WINDOW_MS,
+    ],
+    deepSampleLimit: 1000,
+    syncBeforeRead: true,
+  }).catch(() => null);
+  const windows = rollupSource?.windows || {};
+  const computedAtIso = new Date().toISOString();
+  const window15s = windows[String(OPS_15S_METRICS_WINDOW_MS)] || null;
+  const window1m = windows[String(OPS_1M_METRICS_WINDOW_MS)] || null;
+  const window15m = windows[String(OPS_BULLMQ_METRICS_WINDOW_MS)] || null;
+  const window24h = windows[String(OPS_DAILY_METRICS_WINDOW_MS)] || null;
+  const windowDeep = rollupSource?.deepWindow || null;
+  const deepWindowMs = Math.max(
+    1_000,
+    Math.floor(windowDeep?.windowMs || OPS_DEEP_METRICS_WINDOW_MS),
+  );
+
+  const rollups: OpsPerformanceRollupSet = {
+    rollup15s: buildPerformanceRollupFromWindow(
+      "15s",
+      OPS_15S_METRICS_WINDOW_MS,
+      window15s,
+      computedAtIso,
+    ),
+    rollup1m: buildPerformanceRollupFromWindow(
+      "1m",
+      OPS_1M_METRICS_WINDOW_MS,
+      window1m,
+      computedAtIso,
+    ),
+    rollup15m: buildPerformanceRollupFromWindow(
+      "15m",
+      OPS_BULLMQ_METRICS_WINDOW_MS,
+      window15m,
+      computedAtIso,
+    ),
+    rollup24h: buildPerformanceRollupFromWindow(
+      "24h",
+      OPS_DAILY_METRICS_WINDOW_MS,
+      window24h,
+      computedAtIso,
+    ),
+    rollupDeep: buildPerformanceRollupFromWindow(
+      "deep",
+      deepWindowMs,
+      windowDeep,
+      computedAtIso,
+    ),
+  };
+
+  return {
+    rollups,
+    window15s,
+    window1m,
+    window15m,
+    window24h,
+    windowDeep,
+  };
 }
 
 function trackRedisIngressBytes(bytes: number): void {
@@ -955,10 +1347,6 @@ function encodeTrendMetricMember(value: number, atMs: number): string {
   });
 }
 
-function trendMetricLatestKey(key: string): string {
-  return `${key}:latest`;
-}
-
 function parseTrendMetricValue(member: string): number | null {
   try {
     const parsed = JSON.parse(member) as { value?: unknown };
@@ -981,11 +1369,10 @@ async function appendTrendMetric(
   atMs: number,
   value: number,
 ): Promise<void> {
-  const latestPayload = JSON.stringify({ atMs, value });
+  const pruneBeforeMs = Math.max(0, atMs - OPS_TREND_REDIS_RETENTION_MS);
   const pipeline = connection.pipeline();
   pipeline.zadd(key, atMs, encodeTrendMetricMember(value, atMs));
-  pipeline.zremrangebyrank(key, 0, -(OPS_TREND_HISTORY_MAX + 1));
-  pipeline.set(trendMetricLatestKey(key), latestPayload);
+  pipeline.zremrangebyscore(key, "0", String(pruneBeforeMs));
   const result = await pipeline.exec();
   const requestBytes =
     redisCommandPayloadBytes([
@@ -995,36 +1382,15 @@ async function appendTrendMetric(
       encodeTrendMetricMember(value, atMs),
     ]) +
     redisCommandPayloadBytes([
-      "ZREMRANGEBYRANK",
+      "ZREMRANGEBYSCORE",
       key,
       "0",
-      String(-(OPS_TREND_HISTORY_MAX + 1)),
-    ]) +
-    redisCommandPayloadBytes(["SET", trendMetricLatestKey(key), latestPayload]);
+      String(pruneBeforeMs),
+    ]);
   const responseBytes = Array.isArray(result)
     ? result.reduce((sum, row) => sum + redisReplyPayloadBytes(row?.[1]), 0)
     : 0;
   trackRedisWriteIo(requestBytes, responseBytes);
-}
-
-function parseTrendMetricLatestPayload(
-  raw: string | null,
-): TrendMetricRow | null {
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as { atMs?: unknown; value?: unknown };
-    const atMs = Number(parsed.atMs);
-    const value = Number(parsed.value);
-    if (Number.isFinite(atMs) && Number.isFinite(value)) {
-      return { atMs, value };
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 async function readTrendMetricLatestBatch<TName extends string>(
@@ -1033,7 +1399,7 @@ async function readTrendMetricLatestBatch<TName extends string>(
 ): Promise<Array<{ name: TName; row: TrendMetricRow | null }>> {
   const pipeline = connection.pipeline();
   for (const descriptor of descriptors) {
-    pipeline.get(trendMetricLatestKey(descriptor.key));
+    pipeline.zrevrange(descriptor.key, 0, 0, "WITHSCORES");
   }
 
   const rawResults = await pipeline.exec();
@@ -1043,8 +1409,11 @@ async function readTrendMetricLatestBatch<TName extends string>(
         (sum, descriptor) =>
           sum +
           redisCommandPayloadBytes([
-            "GET",
-            trendMetricLatestKey(descriptor.key),
+            "ZREVRANGE",
+            descriptor.key,
+            "0",
+            "0",
+            "WITHSCORES",
           ]),
         0,
       ),
@@ -1060,7 +1429,13 @@ async function readTrendMetricLatestBatch<TName extends string>(
     descriptors.reduce(
       (sum, descriptor) =>
         sum +
-        redisCommandPayloadBytes(["GET", trendMetricLatestKey(descriptor.key)]),
+        redisCommandPayloadBytes([
+          "ZREVRANGE",
+          descriptor.key,
+          "0",
+          "0",
+          "WITHSCORES",
+        ]),
       0,
     ),
     rawResults.reduce((sum, result) => {
@@ -1071,9 +1446,15 @@ async function readTrendMetricLatestBatch<TName extends string>(
   return descriptors.map((descriptor, index) => {
     const result = rawResults[index];
     const raw = result?.[1];
-    const row = parseTrendMetricLatestPayload(
-      typeof raw === "string" ? raw : null,
-    );
+    let row: TrendMetricRow | null = null;
+    if (Array.isArray(raw) && raw.length >= 2) {
+      const member = String(raw[0] || "");
+      const atMs = Number(raw[1]);
+      const value = parseTrendMetricValue(member);
+      if (Number.isFinite(atMs) && Number.isFinite(value)) {
+        row = { atMs, value: Number(value) };
+      }
+    }
     return {
       name: descriptor.name,
       row,
@@ -1311,14 +1692,14 @@ function filterStaleTrendRows(
   return rows.filter((row) => row.atMs >= minAtMs);
 }
 
-export async function writeOpsUiTrendMetrics(
+export async function writeOpsSnapshotTrendMetrics(
   snapshot: OpsUiSnapshot,
   redis?: IORedis,
 ): Promise<void> {
   await withControlRedis(redis, async (connection) => {
     const atMs = nextTrendTimestampMs();
     await Promise.all(
-      OPS_UI_TREND_METRIC_REGISTRY.map((metric) => {
+      OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map((metric) => {
         const value = metric.getValue(snapshot);
         const normalized = Number.isFinite(value) ? Number(value) : 0;
         return appendTrendMetric(connection, metric.key, atMs, normalized);
@@ -1327,7 +1708,7 @@ export async function writeOpsUiTrendMetrics(
   });
 }
 
-export async function readOpsUiTrendSeries(input?: {
+export async function readOpsSnapshotTrendSeries(input?: {
   metricNames?: string[];
   limit?: number;
   sampleMode?: OpsTrendSampleMode;
@@ -1336,16 +1717,19 @@ export async function readOpsUiTrendSeries(input?: {
   sampleAnchorAtMs?: number;
   sampleWindowMs?: number;
   redis?: IORedis;
-}): Promise<OpsUiTrendSeriesMap> {
+}): Promise<OpsSnapshotTrendSeriesMap> {
   const boundedLimit = Math.max(
     1,
-    Math.min(OPS_TREND_HISTORY_MAX, input?.limit ?? OPS_TREND_HISTORY_MAX),
+    Math.min(
+      OPS_TREND_REDIS_QUERY_LIMIT_MAX,
+      input?.limit ?? OPS_TREND_HISTORY_MAX,
+    ),
   );
   const selected = input?.metricNames?.length
-    ? OPS_UI_TREND_METRIC_REGISTRY.filter((metric) =>
+    ? OPS_SNAPSHOT_TREND_METRIC_REGISTRY.filter((metric) =>
         input.metricNames?.includes(metric.name),
       )
-    : OPS_UI_TREND_METRIC_REGISTRY;
+    : OPS_SNAPSHOT_TREND_METRIC_REGISTRY;
   const sampleMode = input?.sampleMode ?? "raw";
   const sampleMaxGapMs = input?.sampleMaxGapMs;
   const sampleMaxAgeMs = input?.sampleMaxAgeMs;
@@ -1362,7 +1746,7 @@ export async function readOpsUiTrendSeries(input?: {
       boundedLimit,
     );
 
-    const output: OpsUiTrendSeriesMap = {};
+    const output: OpsSnapshotTrendSeriesMap = {};
     for (const row of rowsByMetric) {
       const rows = filterStaleTrendRows(row.rows, sampleMaxAgeMs);
       output[row.name] = sampleTrendRows(
@@ -1380,21 +1764,24 @@ export async function readOpsUiTrendSeries(input?: {
   });
 }
 
-export async function readOpsUiTrendRows(input?: {
+export async function readOpsSnapshotTrendRows(input?: {
   metricNames?: string[];
   limit?: number;
   maxAgeMs?: number;
   redis?: IORedis;
-}): Promise<OpsUiTrendRowSeriesMap> {
+}): Promise<OpsSnapshotTrendRowSeriesMap> {
   const boundedLimit = Math.max(
     1,
-    Math.min(OPS_TREND_HISTORY_MAX, input?.limit ?? OPS_TREND_HISTORY_MAX),
+    Math.min(
+      OPS_TREND_REDIS_QUERY_LIMIT_MAX,
+      input?.limit ?? OPS_TREND_HISTORY_MAX,
+    ),
   );
   const selected = input?.metricNames?.length
-    ? OPS_UI_TREND_METRIC_REGISTRY.filter((metric) =>
+    ? OPS_SNAPSHOT_TREND_METRIC_REGISTRY.filter((metric) =>
         input.metricNames?.includes(metric.name),
       )
-    : OPS_UI_TREND_METRIC_REGISTRY;
+    : OPS_SNAPSHOT_TREND_METRIC_REGISTRY;
   const maxAgeMs = input?.maxAgeMs;
 
   return withControlRedis(input?.redis, async (connection) => {
@@ -1407,7 +1794,7 @@ export async function readOpsUiTrendRows(input?: {
       boundedLimit,
     );
 
-    const output: OpsUiTrendRowSeriesMap = {};
+    const output: OpsSnapshotTrendRowSeriesMap = {};
     for (const row of rowsByMetric) {
       output[row.name] = filterStaleTrendRows(row.rows, maxAgeMs);
     }
@@ -1415,15 +1802,15 @@ export async function readOpsUiTrendRows(input?: {
   });
 }
 
-export async function readOpsUiTrendLatest(input?: {
+export async function readOpsSnapshotTrendLatest(input?: {
   metricNames?: string[];
   redis?: IORedis;
 }): Promise<OpsTrendLatestSeriesMap> {
   const selected = input?.metricNames?.length
-    ? OPS_UI_TREND_METRIC_REGISTRY.filter((metric) =>
+    ? OPS_SNAPSHOT_TREND_METRIC_REGISTRY.filter((metric) =>
         input.metricNames?.includes(metric.name),
       )
-    : OPS_UI_TREND_METRIC_REGISTRY;
+    : OPS_SNAPSHOT_TREND_METRIC_REGISTRY;
 
   return withControlRedis(input?.redis, async (connection) => {
     const latestRows = await readTrendMetricLatestBatch(
@@ -1445,7 +1832,7 @@ export async function readOpsUiTrendLatest(input?: {
 export async function readOpsRunnerTrendLatest(input?: {
   metricNames?: OpsTrendMetricName[];
   redis?: IORedis;
-}): Promise<Partial<Record<OpsTrendMetricName, OpsUiTrendRow | null>>> {
+}): Promise<Partial<Record<OpsTrendMetricName, OpsSnapshotTrendRow | null>>> {
   const selected = input?.metricNames?.length
     ? OPS_TREND_METRIC_REGISTRY.filter((metric) =>
         input.metricNames?.includes(metric.name),
@@ -1461,8 +1848,9 @@ export async function readOpsRunnerTrendLatest(input?: {
       })),
     );
 
-    const output: Partial<Record<OpsTrendMetricName, OpsUiTrendRow | null>> =
-      {};
+    const output: Partial<
+      Record<OpsTrendMetricName, OpsSnapshotTrendRow | null>
+    > = {};
     for (const row of latestRows) {
       output[row.name] = row.row;
     }
@@ -1816,8 +2204,78 @@ export async function createOpsUiStateWatcher(input: {
   let closed = false;
   let loopInFlight: Promise<void> | null = null;
   let queueSignalPending = false;
+  let lastBullmqStatusPublishAtMs = 0;
+  let recent15mWindowCache: ImageQueueRecentJobWindow | null = null;
+  let recent24hWindowCache: ImageQueueRecentJobWindow | null = null;
+  let lastRecent15mReadAtMs = 0;
+  let lastRecent24hReadAtMs = 0;
+  let performanceRollupsCache: OpsPerformanceRollupSet | null = null;
+  let lastPerformanceRollupRefreshAtMs = 0;
   const stateWaiters = new Set<() => void>();
   const listeners = new Set<() => void>();
+
+  const readRecent15mWindow = async (
+    nowMs: number,
+  ): Promise<ImageQueueRecentJobWindow | null> => {
+    if (
+      recent15mWindowCache &&
+      nowMs - lastRecent15mReadAtMs < OPS_RECENT_15M_REFRESH_MIN_INTERVAL_MS
+    ) {
+      return recent15mWindowCache;
+    }
+    const next = await readImageQueueRecentJobWindow(
+      OPS_BULLMQ_METRICS_WINDOW_MS,
+    ).catch(() => null);
+    if (next) {
+      recent15mWindowCache = next;
+      lastRecent15mReadAtMs = nowMs;
+    }
+    return recent15mWindowCache;
+  };
+
+  const readRecent24hWindow = async (nowMs: number): Promise<void> => {
+    if (
+      recent24hWindowCache &&
+      nowMs - lastRecent24hReadAtMs < OPS_RECENT_24H_REFRESH_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+    const next = await readImageQueueRecentJobWindow(
+      OPS_DAILY_METRICS_WINDOW_MS,
+    ).catch(() => null);
+    if (next) {
+      recent24hWindowCache = next;
+      lastRecent24hReadAtMs = nowMs;
+    }
+  };
+
+  const refreshPerformanceRollups = async (
+    nowMs: number,
+  ): Promise<OpsPerformanceRollupSet | null> => {
+    if (
+      performanceRollupsCache &&
+      nowMs - lastPerformanceRollupRefreshAtMs <
+        OPS_PERFORMANCE_ROLLUP_REFRESH_MIN_INTERVAL_MS
+    ) {
+      return performanceRollupsCache;
+    }
+
+    const built = await buildOpsPerformanceRollupSetFromWindows().catch(
+      () => null,
+    );
+    if (!built) {
+      return performanceRollupsCache;
+    }
+
+    recent15mWindowCache = built.window15m;
+    lastRecent15mReadAtMs = nowMs;
+    recent24hWindowCache = built.window24h;
+    lastRecent24hReadAtMs = nowMs;
+    performanceRollupsCache = built.rollups;
+    lastPerformanceRollupRefreshAtMs = nowMs;
+    void writeOpsPerformanceRollupSet(built.rollups).catch(() => undefined);
+    return performanceRollupsCache;
+  };
 
   const onQueueSignal = (): void => {
     queueSignalPending = true;
@@ -1904,6 +2362,9 @@ export async function createOpsUiStateWatcher(input: {
       at: nowIso,
       machines: snapshot?.machines ?? null,
       queue: snapshot?.queue ?? null,
+      recentJobs15m: snapshot?.recentJobs15m ?? null,
+      recentJobs24h: snapshot?.recentJobs24h ?? null,
+      performanceRollups: snapshot?.performanceRollups ?? null,
       queuePaused: snapshot?.queuePaused ?? null,
       db: snapshot?.db ?? null,
       settings: snapshot?.settings ?? null,
@@ -1921,6 +2382,7 @@ export async function createOpsUiStateWatcher(input: {
       db,
       liveWorkers,
       trendProjection,
+      recentJobs24h,
       queuePaused,
       redisIoInstances,
     ] = await Promise.allSettled([
@@ -1942,6 +2404,11 @@ export async function createOpsUiStateWatcher(input: {
           sampleAnchorAtMs: trendSampleWindowMs ? Date.now() : undefined,
           sampleWindowMs: trendSampleWindowMs,
         }),
+      ),
+      withTimeout(
+        "recentJobs24h",
+        snapshotTimeoutMs,
+        readImageQueueRecentJobWindow(24 * 60 * 60 * 1000),
       ),
       withTimeout("queuePaused", snapshotTimeoutMs, readOpsQueuePausedState()),
       withTimeout(
@@ -1987,6 +2454,10 @@ export async function createOpsUiStateWatcher(input: {
       nextSnapshot.projections = trendProjection.value;
     }
 
+    if (recentJobs24h.status === "fulfilled") {
+      nextSnapshot.recentJobs24h = recentJobs24h.value;
+    }
+
     if (queuePaused.status === "fulfilled") {
       nextSnapshot.queuePaused = queuePaused.value;
     }
@@ -2004,6 +2475,33 @@ export async function createOpsUiStateWatcher(input: {
       projections:
         trendPoints.length > 0 ? projectTrend() : nextSnapshot.projections,
     };
+    const nowMs = Date.now();
+    snapshot.performanceRollups = await refreshPerformanceRollups(nowMs);
+    snapshot.recentJobs15m = await readRecent15mWindow(nowMs);
+    await readRecent24hWindow(nowMs);
+    snapshot.recentJobs24h = recent24hWindowCache;
+    const recentWindow15m = snapshot.recentJobs15m;
+    if (
+      shouldReconcileBullmqStatus({
+        status: snapshot.status,
+        queue: snapshot.queue,
+        recentWindow: recentWindow15m,
+        nowMs,
+        lastPublishAtMs: lastBullmqStatusPublishAtMs,
+      }) &&
+      snapshot.queue
+    ) {
+      const reconciled = buildBullmqRepresentativeStatus({
+        status: snapshot.status,
+        settings: snapshot.settings,
+        infra: snapshot.infra,
+        queue: snapshot.queue,
+        recentWindow: recentWindow15m,
+      });
+      await writeOpsRunnerStatus(reconciled);
+      snapshot.status = reconciled;
+      lastBullmqStatusPublishAtMs = nowMs;
+    }
     lastRefreshAtMs = Date.now();
     notifyState();
     return snapshot;
@@ -2023,14 +2521,53 @@ export async function createOpsUiStateWatcher(input: {
 
     refreshInFlight = readOpsUiSnapshot(input.appName, snapshotTimeoutMs, {
       includeTrendProjection: false,
+      includeRecentJobs15m: false,
+      includeRecentJobs24h: false,
+      includePerformanceRollups: false,
     })
-      .then((nextSnapshot) => {
+      .then(async (nextSnapshot) => {
         appendTrendPointFromSnapshot(nextSnapshot);
-        snapshot = {
+        const next = {
           ...nextSnapshot,
           projections:
             trendPoints.length > 0 ? projectTrend() : nextSnapshot.projections,
+          recentJobs15m:
+            nextSnapshot.recentJobs15m ?? snapshot?.recentJobs15m ?? null,
+          recentJobs24h:
+            nextSnapshot.recentJobs24h ?? snapshot?.recentJobs24h ?? null,
+          performanceRollups:
+            nextSnapshot.performanceRollups ??
+            snapshot?.performanceRollups ??
+            null,
         };
+        const nowMs = Date.now();
+        next.performanceRollups = await refreshPerformanceRollups(nowMs);
+        next.recentJobs15m = await readRecent15mWindow(nowMs);
+        await readRecent24hWindow(nowMs);
+        next.recentJobs24h = recent24hWindowCache;
+        const recentWindow15m = next.recentJobs15m;
+        if (
+          shouldReconcileBullmqStatus({
+            status: next.status,
+            queue: next.queue,
+            recentWindow: recentWindow15m,
+            nowMs,
+            lastPublishAtMs: lastBullmqStatusPublishAtMs,
+          }) &&
+          next.queue
+        ) {
+          const reconciled = buildBullmqRepresentativeStatus({
+            status: next.status,
+            settings: next.settings,
+            infra: next.infra,
+            queue: next.queue,
+            recentWindow: recentWindow15m,
+          });
+          void writeOpsRunnerStatus(reconciled).catch(() => undefined);
+          next.status = reconciled;
+          lastBullmqStatusPublishAtMs = nowMs;
+        }
+        snapshot = next;
         lastRefreshAtMs = Date.now();
         notifyState();
         return snapshot;
@@ -2500,6 +3037,164 @@ function queueCountsFromStatus(
   };
 }
 
+function runnerStatusUpdatedAtMs(status: RunnerStatusSnapshot | null): number {
+  if (!status) {
+    return 0;
+  }
+  const parsed = Date.parse(String(status.updatedAt || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function shouldReconcileBullmqStatus(input: {
+  status: RunnerStatusSnapshot | null;
+  queue: ImageQueueCounts | null;
+  recentWindow?: ImageQueueRecentJobWindow | null;
+  nowMs: number;
+  lastPublishAtMs: number;
+}): boolean {
+  const { status, queue, recentWindow, nowMs, lastPublishAtMs } = input;
+  if (!queue) {
+    return false;
+  }
+
+  if (nowMs - lastPublishAtMs < OPS_LIVE_STATUS_PUBLISH_MIN_INTERVAL_MS) {
+    return false;
+  }
+
+  if (!status) {
+    return true;
+  }
+
+  const statusAgeMs = Math.max(0, nowMs - runnerStatusUpdatedAtMs(status));
+  if (statusAgeMs >= OPS_LIVE_STATUS_STALE_THRESHOLD_MS) {
+    return true;
+  }
+
+  const recentCompletedJobs = Math.max(
+    0,
+    Number(recentWindow?.completedJobs || 0),
+  );
+  const recentLatencyAvailable =
+    Math.max(0, Number(recentWindow?.avgEndToEndMs || 0)) > 0;
+  if (
+    recentCompletedJobs > 0 &&
+    (Math.max(0, Number(status.throughputImagesPerMinute || 0)) === 0 ||
+      (recentLatencyAvailable &&
+        Math.max(0, Number(status.avgEndToEndMs || 0)) === 0))
+  ) {
+    return true;
+  }
+
+  if (
+    recentWindow &&
+    nowMs - lastPublishAtMs >= OPS_RECENT_15M_REFRESH_MIN_INTERVAL_MS
+  ) {
+    return true;
+  }
+
+  return (
+    status.queueWaiting !== queue.waiting ||
+    status.queueActive !== queue.active ||
+    status.queueDelayed !== queue.delayed ||
+    status.queuePaused !== queue.paused ||
+    status.queueBacklog !== queue.backlog
+  );
+}
+
+function buildBullmqRepresentativeStatus(input: {
+  status: RunnerStatusSnapshot | null;
+  settings: RunnerControlSettings | null;
+  infra: RunnerInfraSnapshot | null;
+  queue: ImageQueueCounts;
+  recentWindow?: ImageQueueRecentJobWindow | null;
+}): RunnerStatusSnapshot {
+  const { status, settings, infra, queue, recentWindow } = input;
+  const nowIso = new Date().toISOString();
+  const completedJobsWindow = Math.max(
+    0,
+    Number(recentWindow?.completedJobs || 0),
+  );
+  const failedJobsWindow = Math.max(0, Number(recentWindow?.failedJobs || 0));
+  const processedItemsWindow = Math.max(
+    0,
+    Number(recentWindow?.processedItems || completedJobsWindow),
+  );
+  const failedItemsWindow = Math.max(
+    0,
+    Number(recentWindow?.failedItems || failedJobsWindow),
+  );
+  const queuedCountLive =
+    queue.waiting +
+    queue.active +
+    queue.delayed +
+    queue.paused +
+    completedJobsWindow +
+    failedJobsWindow;
+  const workersRunning = Math.max(
+    0,
+    Number(infra?.workersRunning || 0),
+    Number(status?.workersRunning || 0),
+  );
+  const completedJobs = completedJobsWindow;
+  const failedJobs = failedJobsWindow;
+  const processedItems = processedItemsWindow;
+  const failedItems = failedItemsWindow;
+  const claimedCount = queuedCountLive;
+  const queuedCount = queuedCountLive;
+  const mode: RunnerStatusSnapshot["mode"] =
+    queue.backlog > 0 || queue.active > 0 ? "running" : "idle";
+  const windowMinutes = Math.max(1 / 60, (recentWindow?.windowMs || 0) / 60000);
+  const throughputImagesPerMinute =
+    Math.round((processedItems / windowMinutes) * 100) / 100;
+  const avgFetchMs = Math.max(
+    0,
+    Number(recentWindow?.avgFetchMs || status?.avgFetchMs || 0),
+  );
+  const avgTransformMs = Math.max(
+    0,
+    Number(recentWindow?.avgTransformMs || status?.avgTransformMs || 0),
+  );
+  const avgUploadMs = Math.max(
+    0,
+    Number(recentWindow?.avgUploadMs || status?.avgUploadMs || 0),
+  );
+  const avgEndToEndMs = Math.max(
+    0,
+    Number(recentWindow?.avgEndToEndMs || status?.avgEndToEndMs || 0),
+  );
+
+  return {
+    operationId: status?.operationId || "queue-live",
+    mode,
+    desiredMode: settings?.desiredMode || status?.desiredMode || "run",
+    gateReason: "gate=open:queue-live:15m-window",
+    workersRunning,
+    claimedCount,
+    queuedCount,
+    completedJobs,
+    failedJobs,
+    processedItems,
+    failedItems,
+    queueWaiting: queue.waiting,
+    queueActive: queue.active,
+    queueCompleted: completedJobsWindow,
+    queueFailed: failedJobsWindow,
+    queueDelayed: queue.delayed,
+    queuePaused: queue.paused,
+    queueBacklog: queue.backlog,
+    lastFlushAt: status?.lastFlushAt || null,
+    flushBatchCount: Number(status?.flushBatchCount || 0),
+    pendingSuccessBuffer: Number(status?.pendingSuccessBuffer || 0),
+    pendingErrorBuffer: Number(status?.pendingErrorBuffer || 0),
+    throughputImagesPerMinute,
+    avgFetchMs,
+    avgTransformMs,
+    avgUploadMs,
+    avgEndToEndMs,
+    updatedAt: nowIso,
+  };
+}
+
 function applyLiveWorkersToControlSnapshot(input: {
   infra: RunnerInfraSnapshot | null;
   status: RunnerStatusSnapshot | null;
@@ -2522,7 +3217,7 @@ function applyLiveWorkersToControlSnapshot(input: {
 
   const infra: RunnerInfraSnapshot = {
     workersRunning,
-    source: input.infra?.source || "image-ops-module:bullmq-workers",
+    source: input.infra?.source || "image-ops-module:queue-workers",
     updatedAt: input.infra?.updatedAt || new Date().toISOString(),
   };
   const status = input.status
@@ -2641,7 +3336,11 @@ export async function readOpsDbProgress(): Promise<OpsDbProgress> {
 
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   try {
-    const [{ rows: processedRows }, { rows: pendingRows }] = await Promise.all([
+    const [
+      { rows: processedRows },
+      { rows: pendingRows },
+      { rows: failedRows },
+    ] = await Promise.all([
       pool.query<{ count: string }>(
         "select count(*)::bigint as count from listing_source_image where status = 'processed_site'",
       ),
@@ -2654,15 +3353,27 @@ export async function readOpsDbProgress(): Promise<OpsDbProgress> {
            and lsl.source_status = 'active'
            and lsl.active_to is null`,
       ),
+      pool.query<{ count: string }>(
+        `select count(*)::bigint as count
+         from listing_source_image lsi
+         join listing_source_link lsl on lsl.id = lsi.source_link_id
+         where lsi.site_image is null
+           and coalesce(lsi.source_image_url, '') <> ''
+           and lsl.source_status = 'active'
+           and lsl.active_to is null
+           and lsi.status like 'failed%'`,
+      ),
     ]);
 
     const processed = Number(processedRows[0]?.count || 0);
     const pending = Number(pendingRows[0]?.count || 0);
-    const total = processed + pending;
+    const failed = Number(failedRows[0]?.count || 0);
+    const total = processed + pending + failed;
 
     return {
       processed,
       pending,
+      failed,
       total,
       pct: total > 0 ? (processed / total) * 100 : 0,
     };
@@ -2675,10 +3386,21 @@ export async function readOpsUiSnapshot(
   appName: string,
   timeoutMs = 8000,
   input?: {
+    includeFly?: boolean;
     includeTrendProjection?: boolean;
+    includeRecentJobs15m?: boolean;
+    includeRecentJobs24h?: boolean;
+    includePerformanceRollups?: boolean;
+    awaitPerformanceRollupWrite?: boolean;
   },
 ): Promise<OpsUiSnapshot> {
+  const includeFly = input?.includeFly ?? true;
   const includeTrendProjection = input?.includeTrendProjection ?? true;
+  const includeRecentJobs15m = input?.includeRecentJobs15m ?? true;
+  const includeRecentJobs24h = input?.includeRecentJobs24h ?? true;
+  const includePerformanceRollups = input?.includePerformanceRollups ?? true;
+  const awaitPerformanceRollupWrite =
+    input?.awaitPerformanceRollupWrite ?? false;
   const projectionLimit = OPS_TREND_PROJECTION_DEFAULT_LIMIT;
   const projectionAnchorAtMs = Date.now();
   const projectionWindowMs = projectionLimit * 1000;
@@ -2687,6 +3409,9 @@ export async function readOpsUiSnapshot(
     at: new Date().toISOString(),
     machines: null,
     queue: null,
+    recentJobs15m: null,
+    recentJobs24h: null,
+    performanceRollups: null,
     queuePaused: null,
     db: null,
     settings: null,
@@ -2698,16 +3423,18 @@ export async function readOpsUiSnapshot(
     errors: {},
   };
 
-  try {
-    const fly = await withTimeout(
-      "fly",
-      timeoutMs,
-      refreshOpsInfraFromFly(appName),
-    );
-    snapshot.machines = fly.machines;
-    snapshot.infra = fly.infra;
-  } catch (error) {
-    snapshot.errors.fly = shortError(error);
+  if (includeFly) {
+    try {
+      const fly = await withTimeout(
+        "fly",
+        timeoutMs,
+        refreshOpsInfraFromFly(appName),
+      );
+      snapshot.machines = fly.machines;
+      snapshot.infra = fly.infra;
+    } catch (error) {
+      snapshot.errors.fly = shortError(error);
+    }
   }
 
   const [
@@ -2716,6 +3443,10 @@ export async function readOpsUiSnapshot(
     db,
     liveWorkers,
     trendProjection,
+    recentJobs24h,
+    recentJobs15m,
+    performanceRollupsStored,
+    performanceRollupsComputed,
     queuePaused,
     redisIoInstances,
   ] = await Promise.allSettled([
@@ -2735,6 +3466,39 @@ export async function readOpsUiSnapshot(
           }),
         )
       : Promise.resolve<OpsTrendProjection>(deriveOpsTrendProjection([])),
+    includeRecentJobs24h
+      ? withTimeout(
+          "recentJobs24h",
+          timeoutMs,
+          readImageQueueRecentJobWindow(OPS_DAILY_METRICS_WINDOW_MS),
+        )
+      : Promise.resolve<ImageQueueRecentJobWindow | null>(null),
+    includeRecentJobs15m
+      ? withTimeout(
+          "recentJobs15m",
+          timeoutMs,
+          readImageQueueRecentJobWindow(OPS_BULLMQ_METRICS_WINDOW_MS),
+        )
+      : Promise.resolve<ImageQueueRecentJobWindow | null>(null),
+    includePerformanceRollups
+      ? withTimeout(
+          "performanceRollupsStored",
+          timeoutMs,
+          readOpsPerformanceRollupSet(),
+        )
+      : Promise.resolve<OpsPerformanceRollupSet | null>(null),
+    includePerformanceRollups
+      ? withTimeout(
+          "performanceRollupsComputed",
+          timeoutMs,
+          buildOpsPerformanceRollupSetFromWindows(),
+        )
+      : Promise.resolve<{
+          rollups: OpsPerformanceRollupSet;
+          window15m: ImageQueueRecentJobWindow | null;
+          window24h: ImageQueueRecentJobWindow | null;
+          windowDeep: ImageQueueRecentJobWindow | null;
+        } | null>(null),
     withTimeout("queuePaused", timeoutMs, readOpsQueuePausedState()),
     withTimeout("redisIoInstances", timeoutMs, readOpsRedisIoInstanceStats()),
   ]);
@@ -2774,6 +3538,41 @@ export async function readOpsUiSnapshot(
     snapshot.projections = trendProjection.value;
   }
 
+  if (recentJobs15m.status === "fulfilled") {
+    snapshot.recentJobs15m = recentJobs15m.value || null;
+  }
+
+  if (recentJobs24h.status === "fulfilled") {
+    snapshot.recentJobs24h = recentJobs24h.value || null;
+  }
+
+  if (performanceRollupsStored.status === "fulfilled") {
+    snapshot.performanceRollups = performanceRollupsStored.value || null;
+  }
+
+  if (
+    performanceRollupsComputed.status === "fulfilled" &&
+    performanceRollupsComputed.value
+  ) {
+    const computed = performanceRollupsComputed.value;
+    snapshot.performanceRollups = computed.rollups;
+    if (!snapshot.recentJobs15m) {
+      snapshot.recentJobs15m = computed.window15m;
+    }
+    if (!snapshot.recentJobs24h) {
+      snapshot.recentJobs24h = computed.window24h;
+    }
+    if (awaitPerformanceRollupWrite) {
+      await writeOpsPerformanceRollupSet(computed.rollups).catch(
+        () => undefined,
+      );
+    } else {
+      void writeOpsPerformanceRollupSet(computed.rollups).catch(
+        () => undefined,
+      );
+    }
+  }
+
   if (queuePaused.status === "fulfilled") {
     snapshot.queuePaused = queuePaused.value;
   }
@@ -2785,9 +3584,97 @@ export async function readOpsUiSnapshot(
     );
   }
 
-  await writeOpsUiTrendMetrics(snapshot);
+  await writeOpsSnapshotTrendMetrics(snapshot);
 
   return snapshot;
+}
+
+export type OpsOneShotPerformanceRefreshResult = {
+  rollups: OpsPerformanceRollupSet;
+  window15s: ImageQueueRecentJobWindow | null;
+  window1m: ImageQueueRecentJobWindow | null;
+  window15m: ImageQueueRecentJobWindow | null;
+  window24h: ImageQueueRecentJobWindow | null;
+  windowDeep: ImageQueueRecentJobWindow | null;
+};
+
+export async function runOpsOneShotPerformanceRefresh(): Promise<OpsOneShotPerformanceRefreshResult> {
+  const built = await buildOpsPerformanceRollupSetFromWindows();
+  await writeOpsPerformanceRollupSet(built.rollups);
+  return {
+    rollups: built.rollups,
+    window15s: built.window15s,
+    window1m: built.window1m,
+    window15m: built.window15m,
+    window24h: built.window24h,
+    windowDeep: built.windowDeep,
+  };
+}
+
+export type OpsOneShotPipelineOptions = {
+  appName: string;
+  timeoutMs?: number;
+  includeFly?: boolean;
+  includeTrendProjection?: boolean;
+  includeRecentJobs15m?: boolean;
+  includeRecentJobs24h?: boolean;
+  includePerformanceRollups?: boolean;
+  reconcileBullmqStatus?: boolean;
+};
+
+export type OpsOneShotPipelineResult = {
+  snapshot: OpsUiSnapshot;
+  statusReconciled: boolean;
+};
+
+export async function runOpsOneShotPipeline(
+  input: OpsOneShotPipelineOptions,
+): Promise<OpsOneShotPipelineResult> {
+  const snapshot = await readOpsUiSnapshot(
+    input.appName,
+    input.timeoutMs ?? 8000,
+    {
+      includeFly: input.includeFly ?? false,
+      includeTrendProjection: input.includeTrendProjection ?? true,
+      includeRecentJobs15m: input.includeRecentJobs15m ?? true,
+      includeRecentJobs24h: input.includeRecentJobs24h ?? true,
+      includePerformanceRollups: input.includePerformanceRollups ?? true,
+      awaitPerformanceRollupWrite: true,
+    },
+  );
+
+  if ((input.reconcileBullmqStatus ?? true) && snapshot.queue) {
+    const nowMs = Date.now();
+    const recentWindow = snapshot.recentJobs15m;
+    if (
+      shouldReconcileBullmqStatus({
+        status: snapshot.status,
+        queue: snapshot.queue,
+        recentWindow,
+        nowMs,
+        lastPublishAtMs: 0,
+      })
+    ) {
+      const reconciled = buildBullmqRepresentativeStatus({
+        status: snapshot.status,
+        settings: snapshot.settings,
+        infra: snapshot.infra,
+        queue: snapshot.queue,
+        recentWindow,
+      });
+      await writeOpsRunnerStatus(reconciled);
+      snapshot.status = reconciled;
+      return {
+        snapshot,
+        statusReconciled: true,
+      };
+    }
+  }
+
+  return {
+    snapshot,
+    statusReconciled: false,
+  };
 }
 
 export async function scaleOpsWorkers(
@@ -2916,7 +3803,7 @@ export async function claimPendingImageRows(
       set
         status = 'processing_worker',
         error_payload = coalesce(lsi.error_payload, '{}'::jsonb) || jsonb_build_object(
-          'bullmq_attempt_started_at', now()::text
+          'queue_attempt_started_at', now()::text
         ),
         updated_at = now()
       from picked
@@ -2969,7 +3856,7 @@ export async function applySuccessRows(
       below_target_hd: item.below_target_hd ?? null,
       stored_status_on_s3: item.stored_status_on_s3 ?? null,
       processed_at: new Date().toISOString(),
-      pipeline: "bullmq",
+      pipeline: "queue",
     };
 
     if (isUploaded) {
@@ -3034,7 +3921,7 @@ export async function applyFailureRows(
       error_message: String(errorRow.message || "unknown error"),
       failed_at: new Date().toISOString(),
       source_image_url: errorRow.source_image_url || null,
-      pipeline: "bullmq",
+      pipeline: "queue",
     };
 
     await pool.query(
@@ -3102,7 +3989,10 @@ export async function readOpsTrendHistory(
   limit = 120,
   redis?: IORedis,
 ): Promise<OpsTrendPoint[]> {
-  const boundedLimit = Math.max(1, Math.min(OPS_TREND_HISTORY_MAX, limit));
+  const boundedLimit = Math.max(
+    1,
+    Math.min(OPS_TREND_REDIS_QUERY_LIMIT_MAX, limit),
+  );
   return withControlRedis(redis, async (connection) => {
     const rowsByMetric = await readTrendMetricRowsBatch(
       connection,
@@ -3168,7 +4058,7 @@ export async function readOpsTrendProjectionSampled(input?: {
   const limit = Math.max(
     1,
     Math.min(
-      OPS_TREND_HISTORY_MAX,
+      OPS_TREND_REDIS_QUERY_LIMIT_MAX,
       input?.limit ?? OPS_TREND_PROJECTION_DEFAULT_LIMIT,
     ),
   );
