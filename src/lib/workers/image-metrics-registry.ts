@@ -37,6 +37,42 @@ export type ImageMetricDefinition = {
   sliceEnabled: boolean;
 };
 
+export const IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS = [
+  "completed_jobs",
+  "failed_jobs",
+  "processed_items",
+  "failed_items",
+  "sampled_completed_jobs",
+  "fetch_latency_ms_low",
+  "fetch_latency_ms_high",
+  "fetch_latency_ms_avg",
+  "processing_latency_ms_low",
+  "processing_latency_ms_high",
+  "processing_latency_ms_avg",
+  "storage_latency_ms_low",
+  "storage_latency_ms_high",
+  "storage_latency_ms_avg",
+  "job_elapsed_ms_low",
+  "job_elapsed_ms_high",
+  "job_elapsed_ms_avg",
+  "source_bytes_low",
+  "source_bytes_high",
+  "source_bytes_avg",
+  "transformed_bytes_low",
+  "transformed_bytes_high",
+  "transformed_bytes_avg",
+  "avg_fetch_ms",
+  "avg_transform_ms",
+  "avg_upload_ms",
+  "avg_end_to_end_ms",
+  "ips",
+  "ipm",
+  "sec_per_image",
+] as const;
+
+export type ImagePerformanceSliceMetricSlug =
+  (typeof IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS)[number];
+
 export const IMAGE_METRIC_DEFAULT_WINDOWS = IMAGE_SLICE_WINDOWS.map(
   (window) => window.id,
 );

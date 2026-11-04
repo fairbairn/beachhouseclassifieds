@@ -71,6 +71,8 @@ export function imageMetricSliceHashKey(metricSlug: string): string {
   return `${IMAGE_SLICE_METRIC_PREFIX}:${metricSlug}`;
 }
 
-export function imageMetricSliceWindowField(windowId: ImageSliceWindowId): string {
+export function imageMetricSliceWindowField(
+  windowId: ImageSliceWindowId,
+): string {
   return `w_${windowId}`;
 }

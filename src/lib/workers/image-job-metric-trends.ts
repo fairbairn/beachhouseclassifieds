@@ -150,7 +150,10 @@ function inferItemCompletedAtTimeline(input: {
   jobCompletedAtMs: number;
   itemSamples: ParsedJobPayload["itemSamples"];
 }): number[] {
-  if (!Number.isFinite(input.jobCompletedAtMs) || input.itemSamples.length === 0) {
+  if (
+    !Number.isFinite(input.jobCompletedAtMs) ||
+    input.itemSamples.length === 0
+  ) {
     return [];
   }
 
@@ -248,7 +251,8 @@ function parseJobReturnPayload(raw: string | null): ParsedJobPayload | null {
         uploadMs,
         endToEndMs: fetchMs + transformMs + uploadMs,
         // Legacy payloads expose elapsed at job scope only; mirror it to each item point.
-        elapsedMs: jobElapsedMs > 0 ? jobElapsedMs : fetchMs + transformMs + uploadMs,
+        elapsedMs:
+          jobElapsedMs > 0 ? jobElapsedMs : fetchMs + transformMs + uploadMs,
         sourceBytes: Math.max(0, parseNumber(item.source_bytes)),
         transformedBytes: Math.max(0, parseNumber(item.transformed_bytes)),
         completedAtMs: parseItemCompletedAtMs(item),
@@ -633,7 +637,8 @@ export async function syncImageJobMetricTrends(input?: {
       }
 
       if (parsed.itemSamples.length > 0) {
-        const jobCompletedAtMs = parsed.completedAtMs ?? completedRow.finishedAtMs;
+        const jobCompletedAtMs =
+          parsed.completedAtMs ?? completedRow.finishedAtMs;
         const inferredItemTimeline = inferItemCompletedAtTimeline({
           jobCompletedAtMs,
           itemSamples: parsed.itemSamples,

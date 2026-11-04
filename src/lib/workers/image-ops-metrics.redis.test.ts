@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
-import { readFile } from "node:fs/promises";
 import IORedis from "ioredis";
+import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -18,8 +18,8 @@ import {
   imageRawJobTrendMetricValuesKey,
 } from "@/lib/workers/image-metrics-redis-keys";
 import {
-  OPS_TREND_METRIC_REGISTRY,
   OPS_SNAPSHOT_TREND_METRIC_REGISTRY,
+  OPS_TREND_METRIC_REGISTRY,
   readOpsRunnerTrendLatest,
   readOpsSnapshotTrendLatest,
   runOpsOneShotPerformanceRefresh,
@@ -406,7 +406,10 @@ async function seedCompletedJobMetrics(input: {
   for (const row of input.rows) {
     const itemCount = Math.max(1, Math.floor(row.processedCount));
     const includeItemTimestamps = row.includeItemTimestamps !== false;
-    const perItemElapsedMs = Math.max(1, row.fetchMs + row.transformMs + row.uploadMs);
+    const perItemElapsedMs = Math.max(
+      1,
+      row.fetchMs + row.transformMs + row.uploadMs,
+    );
     const jobCompletedAtMs = row.finishedAtMs;
     const jobStartedAtMs =
       jobCompletedAtMs - Math.max(1, perItemElapsedMs * itemCount);
@@ -566,7 +569,8 @@ function buildTimedRawRows(nowMs: number): SeededMetricRow[] {
       id: `raw-contract-job-${sequence}`,
       finishedAtMs: nowMs - offsetMs,
       itemsCount,
-      elapsedMs: (80 + (sequence % 17)) + (40 + (sequence % 13)) + (25 + (sequence % 11)),
+      elapsedMs:
+        80 + (sequence % 17) + (40 + (sequence % 13)) + (25 + (sequence % 11)),
       processedCount: itemsCount,
       failedCount: sequence % 3 === 0 ? 1 : 0,
       fetchMs: 80 + (sequence % 17),
@@ -1006,7 +1010,8 @@ async function buildRawMetricFixture(
       upload_ms: latest.uploadMs,
       end_to_end_ms: latest.fetchMs + latest.transformMs + latest.uploadMs,
       elapsed_ms:
-        latest.elapsedMs ?? latest.fetchMs + latest.transformMs + latest.uploadMs,
+        latest.elapsedMs ??
+        latest.fetchMs + latest.transformMs + latest.uploadMs,
       source_bytes: latest.sourceBytes,
       transformed_bytes: latest.transformedBytes,
       processed_items: pointsForRow(latest) > 1 ? 1 : latest.processedCount,
@@ -1270,7 +1275,12 @@ describeRedis("image ops metrics seeded contract", () => {
         transformedBytes: 72_000,
       };
 
-      await seedCompletedJobMetrics({ redis, queue, rows: [row], failedAtMs: [] });
+      await seedCompletedJobMetrics({
+        redis,
+        queue,
+        rows: [row],
+        failedAtMs: [],
+      });
       const sync = await syncImageJobMetricTrends({
         sampleLimit: 100,
         depthLimit: 100,
@@ -1327,13 +1337,18 @@ describeRedis("image ops metrics seeded contract", () => {
       });
       expect(sync.parsedCompletedJobs).toBe(entries.length);
 
-      const metricNames = imageJobMetricTrendKeys().map((entry) => entry.metric);
+      const metricNames = imageJobMetricTrendKeys().map(
+        (entry) => entry.metric,
+      );
       const expectedByMetric = Object.fromEntries(
         metricNames.map((metric) => [
           metric,
           new Map<string, { atMs: number; value: number }>(),
         ]),
-      ) as Record<ImageJobMetricName, Map<string, { atMs: number; value: number }>>;
+      ) as Record<
+        ImageJobMetricName,
+        Map<string, { atMs: number; value: number }>
+      >;
 
       const toNonNegative = (value: unknown): number => {
         const parsed = Number(value);
@@ -1409,7 +1424,10 @@ describeRedis("image ops metrics seeded contract", () => {
             const duration = fetchMs + transformMs + uploadMs;
             return duration > 0 ? duration : 1;
           });
-          const totalDurationMs = durations.reduce((sum, value) => sum + value, 0);
+          const totalDurationMs = durations.reduce(
+            (sum, value) => sum + value,
+            0,
+          );
           const startedAtMs = jobCompletedAtMs - Math.max(1, totalDurationMs);
           const inferredItemAtMs: number[] = [];
           let cursorMs = startedAtMs;
@@ -1517,7 +1535,10 @@ describeRedis("image ops metrics seeded contract", () => {
                 ...ids,
               )
             : [];
-        const actualByMember = new Map<string, { atMs: number; value: number }>();
+        const actualByMember = new Map<
+          string,
+          { atMs: number; value: number }
+        >();
         for (let index = 0; index < ids.length; index += 1) {
           const memberId = ids[index];
           const atMs = actualAtByMember.get(memberId);

@@ -104,7 +104,10 @@ function parseArgs(argv: string[]): Args {
       ".tmp/fixtures/image-ops-bullmq-snapshots.json",
     limit: parsePositiveInt(values.get("limit"), 10),
     scanLimit: parsePositiveInt(values.get("scan-limit"), 400),
-    minItemCount: Math.max(1, parsePositiveInt(values.get("min-item-count"), 2)),
+    minItemCount: Math.max(
+      1,
+      parsePositiveInt(values.get("min-item-count"), 2),
+    ),
   };
 }
 
@@ -170,7 +173,9 @@ async function run(): Promise<void> {
       String(Math.max(1, args.scanLimit)),
     );
 
-    const completedRows = parseCompletedRows(Array.isArray(rawRows) ? rawRows : []);
+    const completedRows = parseCompletedRows(
+      Array.isArray(rawRows) ? rawRows : [],
+    );
     if (completedRows.length === 0) {
       throw new Error("No completed Bull jobs found to export.");
     }
@@ -202,13 +207,22 @@ async function run(): Promise<void> {
     }
 
     if (candidates.length === 0) {
-      throw new Error("Found completed jobs but none had returnvalue payloads.");
+      throw new Error(
+        "Found completed jobs but none had returnvalue payloads.",
+      );
     }
 
-    const multiItem = candidates.filter((entry) => entry.itemCount >= args.minItemCount);
-    const singleItem = candidates.filter((entry) => entry.itemCount < args.minItemCount);
+    const multiItem = candidates.filter(
+      (entry) => entry.itemCount >= args.minItemCount,
+    );
+    const singleItem = candidates.filter(
+      (entry) => entry.itemCount < args.minItemCount,
+    );
 
-    const selected = [...multiItem, ...singleItem].slice(0, Math.max(1, args.limit));
+    const selected = [...multiItem, ...singleItem].slice(
+      0,
+      Math.max(1, args.limit),
+    );
     if (selected.length === 0) {
       throw new Error("No fixture snapshots selected.");
     }
@@ -225,8 +239,12 @@ async function run(): Promise<void> {
         minItemCount: args.minItemCount,
       },
       selectedCounts: {
-        multiItem: selected.filter((entry) => entry.itemCount >= args.minItemCount).length,
-        singleItem: selected.filter((entry) => entry.itemCount < args.minItemCount).length,
+        multiItem: selected.filter(
+          (entry) => entry.itemCount >= args.minItemCount,
+        ).length,
+        singleItem: selected.filter(
+          (entry) => entry.itemCount < args.minItemCount,
+        ).length,
       },
       entries: selected,
     };
@@ -253,8 +271,6 @@ async function run(): Promise<void> {
 
 run().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(
-    `workers:image:ops:metrics:export failed: ${message}\n`,
-  );
+  process.stderr.write(`workers:image:ops:metrics:export failed: ${message}\n`);
   process.exit(1);
 });

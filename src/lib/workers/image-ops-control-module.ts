@@ -22,9 +22,13 @@ import {
 import { readImageJobMetricRollupWindows } from "./image-job-metric-trends";
 import {
   IMAGE_PERF_ROLLUPS_HASH_KEY,
+  IMAGE_SLICE_UPDATED_AT_FIELD,
   IMAGE_SLICE_WINDOW_MS,
+  imageMetricSliceHashKey,
+  imageMetricSliceWindowField,
   imageTrendSeriesKey,
 } from "./image-metrics-redis-keys";
+import { IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS } from "./image-metrics-registry";
 import {
   purgePendingImageQueueJobs,
   readImageQueueCounts,
@@ -853,6 +857,91 @@ async function writeOpsPerformanceRollupSet(
       rollup_deep: JSON.stringify(rollups.rollupDeep),
       updated_at: new Date().toISOString(),
     });
+
+    const perMetricFieldsByKey = new Map<string, Record<string, string>>();
+    const windows: Array<{ field: string; rollup: OpsPerformanceRollup }> = [
+      {
+        field: imageMetricSliceWindowField("15s"),
+        rollup: rollups.rollup15s,
+      },
+      {
+        field: imageMetricSliceWindowField("1m"),
+        rollup: rollups.rollup1m,
+      },
+      {
+        field: imageMetricSliceWindowField("15m"),
+        rollup: rollups.rollup15m,
+      },
+      {
+        field: imageMetricSliceWindowField("24h"),
+        rollup: rollups.rollup24h,
+      },
+      {
+        field: imageMetricSliceWindowField("deep"),
+        rollup: rollups.rollupDeep,
+      },
+    ];
+
+    const valueByMetric = (
+      rollup: OpsPerformanceRollup,
+    ): Record<string, number | null> => ({
+      completed_jobs: rollup.completedJobs,
+      failed_jobs: rollup.failedJobs,
+      processed_items: rollup.processedItems,
+      failed_items: rollup.failedItems,
+      sampled_completed_jobs: rollup.sampledCompletedJobs,
+      fetch_latency_ms_low: rollup.metricFetchLatencyMsLow,
+      fetch_latency_ms_high: rollup.metricFetchLatencyMsHigh,
+      fetch_latency_ms_avg: rollup.metricFetchLatencyMsAvg,
+      processing_latency_ms_low: rollup.metricProcessingLatencyMsLow,
+      processing_latency_ms_high: rollup.metricProcessingLatencyMsHigh,
+      processing_latency_ms_avg: rollup.metricProcessingLatencyMsAvg,
+      storage_latency_ms_low: rollup.metricStorageLatencyMsLow,
+      storage_latency_ms_high: rollup.metricStorageLatencyMsHigh,
+      storage_latency_ms_avg: rollup.metricStorageLatencyMsAvg,
+      job_elapsed_ms_low: rollup.metricJobElapsedMsLow,
+      job_elapsed_ms_high: rollup.metricJobElapsedMsHigh,
+      job_elapsed_ms_avg: rollup.metricJobElapsedMsAvg,
+      source_bytes_low: rollup.metricSourceBytesLow,
+      source_bytes_high: rollup.metricSourceBytesHigh,
+      source_bytes_avg: rollup.metricSourceBytesAvg,
+      transformed_bytes_low: rollup.metricTransformedBytesLow,
+      transformed_bytes_high: rollup.metricTransformedBytesHigh,
+      transformed_bytes_avg: rollup.metricTransformedBytesAvg,
+      avg_fetch_ms: rollup.avgFetchMs,
+      avg_transform_ms: rollup.avgTransformMs,
+      avg_upload_ms: rollup.avgUploadMs,
+      avg_end_to_end_ms: rollup.avgEndToEndMs,
+      ips: rollup.ips,
+      ipm: rollup.ipm,
+      sec_per_image: rollup.secPerImage,
+    });
+
+    for (const window of windows) {
+      const metricValues = valueByMetric(window.rollup);
+      for (const metricSlug of IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS) {
+        const key = imageMetricSliceHashKey(metricSlug);
+        const existing = perMetricFieldsByKey.get(key) || {};
+        const metricValue = metricValues[metricSlug] ?? 0;
+        existing[window.field] = JSON.stringify({
+          windowId: window.rollup.windowId,
+          windowMs: window.rollup.windowMs,
+          sampledAt: window.rollup.computedAt,
+          value: metricValue,
+        });
+        perMetricFieldsByKey.set(key, existing);
+      }
+    }
+
+    const updatedAt = new Date().toISOString();
+    const pipeline = connection.pipeline();
+    for (const [key, fields] of perMetricFieldsByKey.entries()) {
+      pipeline.hset(key, {
+        ...fields,
+        [IMAGE_SLICE_UPDATED_AT_FIELD]: updatedAt,
+      });
+    }
+    await pipeline.exec();
   });
 }
 
