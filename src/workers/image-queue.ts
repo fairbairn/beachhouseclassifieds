@@ -26,10 +26,31 @@ export function resolveRedisUrl(): string {
   return process.env.REDIS_URL?.trim() || DEFAULT_LOCAL_REDIS_URL;
 }
 
+export function formatRedisEndpointForLogs(
+  redisUrl = resolveRedisUrl(),
+): string {
+  try {
+    const parsed = new URL(redisUrl);
+    const scheme = parsed.protocol || "redis:";
+    const host = parsed.hostname || "unknown-host";
+    const isIpv6 = host.includes(":") && !host.startsWith("[");
+    const displayHost = isIpv6 ? `[${host}]` : host;
+    const port = parsed.port || "6379";
+    const dbPath =
+      parsed.pathname && parsed.pathname !== "/" ? parsed.pathname : "";
+    return `${scheme}//${displayHost}:${port}${dbPath}`;
+  } catch {
+    return "invalid-redis-url";
+  }
+}
+
 export function createRedisConnection(): IORedis {
   return new IORedis(resolveRedisUrl(), {
     maxRetriesPerRequest: null,
-    enableReadyCheck: true,
+    // Managed/proxy Redis endpoints can block or delay INFO-based ready checks.
+    // Disabling ready-check keeps connect+PING behavior consistent with redis-cli.
+    enableReadyCheck: false,
+    connectTimeout: 5000,
   });
 }
 

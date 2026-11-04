@@ -47,6 +47,18 @@ export async function readImageQueueCounts(): Promise<ImageQueueCounts> {
   }
 }
 
+export async function readImageQueueWorkersRunning(): Promise<number> {
+  const connection = createRedisConnection();
+  const queue = new Queue(IMAGE_QUEUE_NAME, { connection });
+  try {
+    const workers = await queue.getWorkers();
+    return Array.isArray(workers) ? workers.length : 0;
+  } finally {
+    await queue.close().catch(() => undefined);
+    await connection.quit().catch(() => undefined);
+  }
+}
+
 export async function readImageQueuePausedState(): Promise<boolean> {
   const connection = createRedisConnection();
   const queue = new Queue(IMAGE_QUEUE_NAME, { connection });

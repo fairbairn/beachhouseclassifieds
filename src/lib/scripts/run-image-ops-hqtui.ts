@@ -2,15 +2,15 @@ import "@/core/tooling/env/load-env-profile";
 import { createApp, type TextEditState } from "@profullstack/hqtui";
 
 import {
+  createRedisConnection,
+  formatRedisEndpointForLogs,
+  resolveRedisUrl,
+} from "../../workers/image-queue";
+import {
   clearOpsQueueIfPaused,
   createOpsUiStateWatcher,
   pauseOpsSystemFlow,
-  readOpsQueuePausedState,
-  readOpsRedisIoAggregateStats,
-  readOpsRedisIoInstanceStats,
   readOpsRedisIoStats,
-  readOpsTrendProjection,
-  readOpsUiSnapshot,
   resetOpsRedisIoStats,
   resumeOpsSystemFlow,
   scaleOpsWorkers,
@@ -37,6 +37,7 @@ import {
 } from "../workers/image-runner-control";
 
 const DEFAULT_APP = "beachhouseclassifieds-image-worker";
+const STARTUP_SNAPSHOT_TIMEOUT_MS = 1500;
 
 type QueueCounts = ImageQueueCounts;
 type ChartTimingMode = "ordinal" | "interpolated";
@@ -45,10 +46,13 @@ type DashboardSnapshot = {
   at: OpsUiSnapshot["at"];
   machines: OpsUiSnapshot["machines"];
   queue: QueueCounts | null;
+  queuePaused: boolean | null;
   db: OpsUiSnapshot["db"];
   settings: RunnerControlSettings | null;
   infra: RunnerInfraSnapshot | null;
   status: RunnerStatusSnapshot | null;
+  redisIoAggregate?: OpsRedisIoAggregateStats;
+  redisIoInstances?: OpsRedisIoInstanceStats[];
   projections: OpsTrendProjection;
   errors: OpsUiSnapshot["errors"];
 };
@@ -76,6 +80,7 @@ type State = {
   valuePromptAction: ValuePromptAction | null;
   valuePromptInput: TextEditState;
   notice: string;
+  noticePinnedUntilMs: number;
   activeScreen: "summary" | "queues" | "workers" | "redis";
   historyBacklog: number[];
   historyProcessed: number[];
@@ -101,6 +106,8 @@ type State = {
   lastRedisIngressReads: number | null;
   lastDbProcessed: number | null;
   lastBacklog: number | null;
+  lastQueueCompleted: number | null;
+  lastRunnerMode: string | null;
   queueGloballyPaused: boolean | null;
   machine: OpsMachineState;
   snapshot: DashboardSnapshot;
@@ -133,21 +140,6 @@ const SCREEN_ORDER: Array<"summary" | "queues" | "workers" | "redis"> = [
   "redis",
 ];
 
-function screenLabel(
-  screen: "summary" | "queues" | "workers" | "redis",
-): string {
-  if (screen === "summary") {
-    return "Summary";
-  }
-  if (screen === "queues") {
-    return "Queues";
-  }
-  if (screen === "workers") {
-    return "Workers";
-  }
-  return "Redis";
-}
-
 function nextScreen(
   screen: "summary" | "queues" | "workers" | "redis",
 ): "summary" | "queues" | "workers" | "redis" {
@@ -158,6 +150,77 @@ function nextScreen(
 
 function textState(value = ""): TextEditState {
   return { value, cursor: value.length };
+}
+
+type TextEditKeyEvent = {
+  key: string;
+  text?: string;
+};
+
+function insertText(state: TextEditState, text: string): TextEditState {
+  if (!text) {
+    return state;
+  }
+  const cursor = Math.max(0, Math.min(state.cursor, state.value.length));
+  const nextValue =
+    state.value.slice(0, cursor) + text + state.value.slice(cursor);
+  return {
+    value: nextValue,
+    cursor: cursor + text.length,
+  };
+}
+
+function editText(
+  state: TextEditState,
+  event: TextEditKeyEvent,
+): TextEditState | null {
+  const cursor = Math.max(0, Math.min(state.cursor, state.value.length));
+
+  if (event.key === "left") {
+    return { value: state.value, cursor: Math.max(0, cursor - 1) };
+  }
+  if (event.key === "right") {
+    return {
+      value: state.value,
+      cursor: Math.min(state.value.length, cursor + 1),
+    };
+  }
+  if (event.key === "home") {
+    return { value: state.value, cursor: 0 };
+  }
+  if (event.key === "end") {
+    return { value: state.value, cursor: state.value.length };
+  }
+  if (event.key === "backspace") {
+    if (cursor <= 0) {
+      return null;
+    }
+    return {
+      value: state.value.slice(0, cursor - 1) + state.value.slice(cursor),
+      cursor: cursor - 1,
+    };
+  }
+  if (event.key === "delete") {
+    if (cursor >= state.value.length) {
+      return null;
+    }
+    return {
+      value: state.value.slice(0, cursor) + state.value.slice(cursor + 1),
+      cursor,
+    };
+  }
+
+  const printable =
+    typeof event.text === "string"
+      ? event.text
+      : event.key.length === 1
+        ? event.key
+        : "";
+  if (!printable) {
+    return null;
+  }
+
+  return insertText(state, printable);
 }
 
 const localClockFormatter = new Intl.DateTimeFormat(undefined, {
@@ -364,6 +427,41 @@ function formatBitrateFromKbps(kbps: number): string {
   return `${(bps / 1_000_000).toFixed(2)} Mbps`;
 }
 
+function formatRate(value: number, digits = 2): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0";
+  }
+  if (value < 0.01) {
+    return "<0.01";
+  }
+  if (value < 0.1) {
+    return value.toFixed(Math.max(digits, 3));
+  }
+  return value.toFixed(digits);
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds) || seconds < 0) {
+    return "n/a";
+  }
+  if (seconds < 1) {
+    return "<1s";
+  }
+
+  const totalSeconds = Math.floor(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  }
+  return `${secs}s`;
+}
+
 function tail(values: number[], count: number): number[] {
   if (values.length <= count) {
     return values;
@@ -402,10 +500,6 @@ async function updateRunnerSettings(
   return updateOpsControlSettings(updater);
 }
 
-async function gatherSnapshot(appName: string): Promise<DashboardSnapshot> {
-  return readOpsUiSnapshot(appName, 8000);
-}
-
 async function scaleWorkers(appName: string, count: number): Promise<void> {
   await scaleOpsWorkers(appName, count);
 }
@@ -430,16 +524,69 @@ function machineStateSummary(machines: OpsUiSnapshot["machines"]): string {
     .join(" ");
 }
 
+function shouldUseMachineNotice(state: State): boolean {
+  return Date.now() >= state.noticePinnedUntilMs;
+}
+
+function parseRedisAuthMode(
+  redisUrl: string,
+): "present" | "missing" | "unknown" {
+  try {
+    const parsed = new URL(redisUrl);
+    return parsed.username || parsed.password ? "present" : "missing";
+  } catch {
+    return "unknown";
+  }
+}
+
+async function preflightRedisForGui(input?: {
+  timeoutMs?: number;
+}): Promise<{ endpoint: string; authMode: "present" | "missing" | "unknown" }> {
+  const redisUrl = resolveRedisUrl();
+  const endpoint = formatRedisEndpointForLogs(redisUrl);
+  const authMode = parseRedisAuthMode(redisUrl);
+  const timeoutMs = Math.max(1000, input?.timeoutMs ?? 4000);
+
+  const connection = createRedisConnection();
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    await Promise.race([
+      connection.ping(),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`redis preflight timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+    return { endpoint, authMode };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const authHint =
+      message.toUpperCase().includes("NOAUTH") || authMode !== "present"
+        ? "If using a local proxy to Upstash, include credentials in REDIS_URL, e.g. redis://:PASSWORD@127.0.0.1:16379/0"
+        : "Check proxy health, network reachability, and Redis credentials.";
+    throw new Error(
+      `Redis preflight failed endpoint=${endpoint} auth=${authMode} reason=${message}. ${authHint}`,
+    );
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    await connection.quit().catch(() => undefined);
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const preloadProjectionPromise = readOpsTrendProjection(
-    args.trendSamples,
-  ).catch(() => emptyProjection());
+  const initialIntervalMs = Math.max(1000, args.intervalSeconds * 1000);
+  const initialTrendWindowMs = args.trendSamples * initialIntervalMs;
+  const redisPreflight = await preflightRedisForGui();
 
   const state: State = {
     appName: args.appName,
     uiClockAt: formatLocalClockAt(),
-    intervalMs: Math.max(1000, args.intervalSeconds * 1000),
+    intervalMs: initialIntervalMs,
     trendSamples: args.trendSamples,
     running: true,
     polling: false,
@@ -458,7 +605,8 @@ async function main(): Promise<void> {
     valuePromptHint: "",
     valuePromptAction: null,
     valuePromptInput: textState(),
-    notice: "starting UI...",
+    notice: `redis preflight ok endpoint=${redisPreflight.endpoint} auth=${redisPreflight.authMode}`,
+    noticePinnedUntilMs: 0,
     activeScreen: "summary",
     historyBacklog: [],
     historyProcessed: [],
@@ -484,16 +632,21 @@ async function main(): Promise<void> {
     lastRedisIngressReads: null,
     lastDbProcessed: null,
     lastBacklog: null,
+    lastQueueCompleted: null,
+    lastRunnerMode: null,
     queueGloballyPaused: null,
     machine: initialOpsMachineState(),
     snapshot: {
       at: new Date().toISOString(),
       machines: null,
       queue: null,
+      queuePaused: null,
       db: null,
       settings: null,
       infra: null,
       status: null,
+      redisIoAggregate: undefined,
+      redisIoInstances: undefined,
       projections: emptyProjection(),
       errors: {},
     },
@@ -543,6 +696,17 @@ async function main(): Promise<void> {
 
   let pollDelayTimer: ReturnType<typeof setTimeout> | null = null;
   let pollDelayResolve: (() => void) | null = null;
+  const wakeRefreshLoop = (): void => {
+    if (pollDelayTimer) {
+      clearTimeout(pollDelayTimer);
+      pollDelayTimer = null;
+    }
+    if (pollDelayResolve) {
+      const resolve = pollDelayResolve;
+      pollDelayResolve = null;
+      resolve();
+    }
+  };
   const uiClockTimer = setInterval(() => {
     if (!state.running) {
       return;
@@ -557,15 +721,7 @@ async function main(): Promise<void> {
     }
     explicitQuitRequested = true;
     state.running = false;
-    if (pollDelayTimer) {
-      clearTimeout(pollDelayTimer);
-      pollDelayTimer = null;
-    }
-    if (pollDelayResolve) {
-      const resolve = pollDelayResolve;
-      pollDelayResolve = null;
-      resolve();
-    }
+    wakeRefreshLoop();
     app.quit();
   };
 
@@ -576,7 +732,6 @@ async function main(): Promise<void> {
   process.on("SIGINT", onSigint);
 
   let uiStateWatcher: OpsUiStateWatcher | null = null;
-  let lastRefreshCompletedAtMs = 0;
 
   const refresh = async (): Promise<void> => {
     if (state.polling || !state.running) {
@@ -584,9 +739,10 @@ async function main(): Promise<void> {
     }
     state.polling = true;
     try {
-      const snapshot = uiStateWatcher
-        ? uiStateWatcher.getSnapshot()
-        : await gatherSnapshot(state.appName);
+      if (!uiStateWatcher) {
+        return;
+      }
+      const snapshot = uiStateWatcher.getSnapshot();
       if (!snapshot) {
         return;
       }
@@ -595,13 +751,45 @@ async function main(): Promise<void> {
         ...snapshot,
         machines: snapshot.machines ?? previous.machines,
         queue: snapshot.queue ?? previous.queue,
+        queuePaused: snapshot.queuePaused ?? previous.queuePaused,
         db: snapshot.db ?? previous.db,
         settings: snapshot.settings ?? previous.settings,
         infra: snapshot.infra ?? previous.infra,
         status: snapshot.status ?? previous.status,
+        redisIoAggregate:
+          snapshot.redisIoAggregate ?? previous.redisIoAggregate,
+        redisIoInstances:
+          snapshot.redisIoInstances ?? previous.redisIoInstances,
         projections: snapshot.projections,
       };
       state.snapshot = merged;
+      const historyMax = Math.max(10, state.trendSamples);
+
+      if (
+        state.historyBacklog.length === 0 &&
+        merged.projections.sampleCount > 0
+      ) {
+        state.historyBacklog = [
+          ...merged.projections.queueBacklogTrendSmoothed.slice(-historyMax),
+        ];
+        state.historyProcessed = [
+          ...merged.projections.processedItemsTrend.slice(-historyMax),
+        ];
+        state.historyFailures = [
+          ...merged.projections.failedItemsTrend.slice(-historyMax),
+        ];
+      }
+
+      const runnerModeNow = merged.status?.mode ?? null;
+      if (
+        state.lastRunnerMode !== null &&
+        runnerModeNow !== null &&
+        state.lastRunnerMode !== runnerModeNow &&
+        runnerModeNow !== "running"
+      ) {
+        state.historyIps = [];
+      }
+      state.lastRunnerMode = runnerModeNow;
 
       const nowMs = Date.now();
       const currentBacklog = merged.queue?.backlog ?? 0;
@@ -609,10 +797,14 @@ async function main(): Promise<void> {
         merged.status?.processedItems ?? merged.db?.processed ?? 0;
       const currentFailed =
         merged.status?.failedItems ?? merged.queue?.failed ?? 0;
+      const currentCompleted =
+        merged.status?.completedJobs ??
+        merged.queue?.completed ??
+        currentProcessed;
 
-      pushHistory(state.historyBacklog, currentBacklog);
-      pushHistory(state.historyProcessed, currentProcessed);
-      pushHistory(state.historyFailures, currentFailed);
+      pushHistory(state.historyBacklog, currentBacklog, historyMax);
+      pushHistory(state.historyProcessed, currentProcessed, historyMax);
+      pushHistory(state.historyFailures, currentFailed, historyMax);
 
       if (
         state.lastSampleAtMs !== null &&
@@ -623,47 +815,78 @@ async function main(): Promise<void> {
           0.001,
           (nowMs - state.lastSampleAtMs) / 1000,
         );
-        const ipsNow = Math.max(
+        const completedDelta = Math.max(
           0,
-          (currentProcessed - state.lastDbProcessed) / elapsedSeconds,
+          currentCompleted - (state.lastQueueCompleted ?? currentCompleted),
         );
+        const ipsNow = completedDelta / elapsedSeconds;
         const backlogDeltaNow =
           (currentBacklog - state.lastBacklog) / elapsedSeconds;
-        pushHistory(state.historyIps, Number(ipsNow.toFixed(3)));
+        pushHistory(state.historyIps, Number(ipsNow.toFixed(3)), historyMax);
         pushHistory(
           state.historyBacklogDeltaPerSec,
           Number(backlogDeltaNow.toFixed(3)),
+          historyMax,
         );
       } else {
-        pushHistory(state.historyIps, 0);
-        pushHistory(state.historyBacklogDeltaPerSec, 0);
+        pushHistory(state.historyIps, 0, historyMax);
+        pushHistory(state.historyBacklogDeltaPerSec, 0, historyMax);
       }
 
       state.lastSampleAtMs = nowMs;
       state.lastDbProcessed = currentProcessed;
       state.lastBacklog = currentBacklog;
+      state.lastQueueCompleted = currentCompleted;
 
-      pushHistory(state.historyQueueWaiting, merged.queue?.waiting ?? 0);
-      pushHistory(state.historyQueueActive, merged.queue?.active ?? 0);
-      pushHistory(state.historyQueueDelayed, merged.queue?.delayed ?? 0);
-      pushHistory(state.historyQueuePaused, merged.queue?.paused ?? 0);
-      pushHistory(state.historyQueueCompleted, merged.queue?.completed ?? 0);
-      pushHistory(state.historyQueueFailed, merged.queue?.failed ?? 0);
+      pushHistory(
+        state.historyQueueWaiting,
+        merged.queue?.waiting ?? 0,
+        historyMax,
+      );
+      pushHistory(
+        state.historyQueueActive,
+        merged.queue?.active ?? 0,
+        historyMax,
+      );
+      pushHistory(
+        state.historyQueueDelayed,
+        merged.queue?.delayed ?? 0,
+        historyMax,
+      );
+      pushHistory(
+        state.historyQueuePaused,
+        merged.queue?.paused ?? 0,
+        historyMax,
+      );
+      pushHistory(
+        state.historyQueueCompleted,
+        merged.queue?.completed ?? 0,
+        historyMax,
+      );
+      pushHistory(
+        state.historyQueueFailed,
+        merged.queue?.failed ?? 0,
+        historyMax,
+      );
       pushHistory(
         state.historyWorkersRunning,
         merged.infra?.workersRunning ?? merged.status?.workersRunning ?? 0,
+        historyMax,
       );
       pushHistory(
         state.historyPendingSuccess,
         merged.status?.pendingSuccessBuffer ?? 0,
+        historyMax,
       );
       pushHistory(
         state.historyPendingError,
         merged.status?.pendingErrorBuffer ?? 0,
+        historyMax,
       );
       pushHistory(
         state.historyFlushBatches,
         merged.status?.flushBatchCount ?? 0,
+        historyMax,
       );
 
       state.machine = reduceOpsMachine(state.machine, {
@@ -678,16 +901,11 @@ async function main(): Promise<void> {
         nowMs,
       });
       state.redisIo = readOpsRedisIoStats();
-      const [aggregateIo, instanceIo] = await Promise.all([
-        readOpsRedisIoAggregateStats().catch(() => null),
-        readOpsRedisIoInstanceStats().catch(() => []),
-      ]);
-      const pausedState = await readOpsQueuePausedState().catch(() => null);
-      if (aggregateIo) {
-        state.redisIoAggregate = aggregateIo;
+      if (merged.redisIoAggregate) {
+        state.redisIoAggregate = merged.redisIoAggregate;
       }
-      state.redisIoInstances = instanceIo;
-      state.queueGloballyPaused = pausedState;
+      state.redisIoInstances = merged.redisIoInstances ?? [];
+      state.queueGloballyPaused = merged.queuePaused;
 
       if (state.lastRedisSampleAtMs !== null) {
         const elapsedSeconds = Math.max(
@@ -707,13 +925,19 @@ async function main(): Promise<void> {
         pushHistory(
           state.historyRedisKbps,
           Number((deltaBytes / 1024 / elapsedSeconds).toFixed(3)),
+          historyMax,
         );
         pushHistory(
           state.historyRedisReadsPerSec,
           Number((deltaReads / elapsedSeconds).toFixed(3)),
+          historyMax,
         );
       } else {
-        pushHistory(state.historyRedisKbps, state.redisIo.redisIngressKbps);
+        pushHistory(
+          state.historyRedisKbps,
+          state.redisIo.redisIngressKbps,
+          historyMax,
+        );
         pushHistory(
           state.historyRedisReadsPerSec,
           Number(
@@ -722,17 +946,18 @@ async function main(): Promise<void> {
               Math.max(1, state.redisIo.windowSeconds)
             ).toFixed(3),
           ),
+          historyMax,
         );
       }
       pushHistory(
         state.historyRedisAggregateKbps,
         state.redisIoAggregate.redisWireKbps,
+        historyMax,
       );
 
       state.lastRedisSampleAtMs = nowMs;
       state.lastRedisIngressBytes = state.redisIo.redisIngressBytes;
       state.lastRedisIngressReads = state.redisIo.redisIngressReads;
-      state.notice = state.machine.notice;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       state.machine = reduceOpsMachine(state.machine, {
@@ -740,10 +965,11 @@ async function main(): Promise<void> {
         message,
         nowMs: Date.now(),
       });
-      state.notice = state.machine.notice;
+      if (shouldUseMachineNotice(state)) {
+        state.notice = `refresh error: ${message}`;
+      }
     } finally {
       state.polling = false;
-      lastRefreshCompletedAtMs = Date.now();
       app.invalidate();
     }
   };
@@ -1032,6 +1258,10 @@ async function main(): Promise<void> {
       state.historyPendingSuccess = [];
       state.historyPendingError = [];
       state.historyFlushBatches = [];
+      state.lastSampleAtMs = null;
+      state.lastDbProcessed = null;
+      state.lastBacklog = null;
+      state.lastQueueCompleted = null;
       state.notice = "trends reset";
       app.invalidate();
       return;
@@ -1381,6 +1611,7 @@ async function main(): Promise<void> {
       state.chartTimingMode =
         state.chartTimingMode === "ordinal" ? "interpolated" : "ordinal";
       state.notice = `chart_timing=${state.chartTimingMode}`;
+      state.noticePinnedUntilMs = Date.now() + 2500;
       app.invalidate();
       await refresh();
       return;
@@ -1545,17 +1776,29 @@ async function main(): Promise<void> {
     const status = snapshot.status;
     const queue = snapshot.queue;
     const projection = snapshot.projections;
+    const moduleBacklogTrend =
+      projection.queueBacklogTrendSmoothed.length > 0
+        ? projection.queueBacklogTrendSmoothed
+        : state.historyBacklog;
+    const moduleIpsTrend =
+      projection.ipsSmoothed.length > 0
+        ? projection.ipsSmoothed
+        : state.historyIps;
+    const moduleBacklogDeltaTrend =
+      projection.backlogDeltaSmoothed.length > 0
+        ? projection.backlogDeltaSmoothed
+        : state.historyBacklogDeltaPerSec;
     const ipsNow =
-      projection.sampleCount > 0
-        ? projection.headline.ipsSmoothedNow
-        : state.historyIps[state.historyIps.length - 1] || 0;
+      state.historyIps.length > 0
+        ? state.historyIps[state.historyIps.length - 1] || 0
+        : 0;
     const ipmNow = ipsNow * 60;
+    const secPerImageNow = ipsNow > 0 ? 1 / ipsNow : null;
     const ipsAvg30 =
-      projection.sampleCount > 0
-        ? projection.headline.ipsAvg30
-        : average(tail(state.historyIps, 30));
-    const ipmAvg30 =
-      projection.sampleCount > 0 ? projection.headline.ipmAvg30 : ipsAvg30 * 60;
+      state.historyIps.length > 0 ? average(tail(state.historyIps, 30)) : 0;
+    const ipmAvg30 = ipsAvg30 * 60;
+    const backlog = queue?.backlog ?? 0;
+    const etaQueueEmptySeconds = ipsNow > 0 ? backlog / ipsNow : null;
     const backlogDeltaNow =
       projection.sampleCount > 0
         ? projection.headline.backlogDeltaSmoothedNow
@@ -1571,14 +1814,26 @@ async function main(): Promise<void> {
         ? projection.headline.drainPerSecSmoothed
         : Math.max(0, -backlogDeltaNow);
     const maxBacklog = Math.max(1, settings?.maxQueueBacklog ?? 1);
-    const backlog = queue?.backlog ?? 0;
     const backlogFillRatio = clamp(backlog / maxBacklog, 0, 1);
+    const queueWaiting = queue?.waiting ?? 0;
+    const queueActive = queue?.active ?? 0;
+    const queueDelayed = queue?.delayed ?? 0;
+    const queuePaused = queue?.paused ?? 0;
+    const queueCompleted = queue?.completed ?? 0;
+    const queueFailed = queue?.failed ?? 0;
+    const totalJobsRetained =
+      queueWaiting +
+      queueActive +
+      queueDelayed +
+      queuePaused +
+      queueCompleted +
+      queueFailed;
+    const activeJobRatio = backlog > 0 ? queueActive / backlog : 0;
     const backlogDeltaSeries = state.historyBacklogDeltaPerSec;
     const backlogDeltaAbsMax =
       backlogDeltaSeries.length > 0
         ? Math.max(1, ...backlogDeltaSeries.map((value) => Math.abs(value)))
         : 1;
-    const currentScreenLabel = screenLabel(state.activeScreen);
     const telemetry = deriveOpsTelemetry({
       settings,
       infra: snapshot.infra,
@@ -1586,36 +1841,86 @@ async function main(): Promise<void> {
       queue,
       errors: snapshot.errors,
     });
+    const runnerStatusAgeSeconds = telemetry.runnerStaleSeconds;
+    const runnerStatusIsStale =
+      runnerStatusAgeSeconds !== null && runnerStatusAgeSeconds > 30;
     const queueFlowStateLabel =
       state.queueGloballyPaused === null
         ? "unknown"
         : state.queueGloballyPaused
           ? "paused"
           : "running";
+    const pauseHotkeyActionLabel =
+      state.queueGloballyPaused === null
+        ? "unavailable"
+        : state.queueGloballyPaused
+          ? "resume-system"
+          : "pause-system";
 
     if (state.activeScreen === "summary") {
       ui.grid(
         { columns: ["1fr", "1fr"], rows: [8, 10, 10, 10], gap: 1 },
         (grid) => {
-          grid.panel({ title: "Control Tower" }, (panel) => {
+          grid.panel({ title: "Heads Up" }, (panel) => {
             panel.keyValues([
               { label: "app", value: state.appName },
-              { label: "screen", value: currentScreenLabel },
               { label: "time", value: state.uiClockAt },
-              { label: "queue_flow_state", value: queueFlowStateLabel },
-              { label: "notice", value: state.notice },
               {
-                label: "poll",
-                value: `${Math.round(state.intervalMs / 1000)}s${state.polling ? " (busy)" : ""}`,
+                label: "ui_interval_s",
+                value: String(Math.round(state.intervalMs / 1000)),
               },
               {
-                label: "redis_io",
+                label: "pause_status",
+                value: queueFlowStateLabel,
+                color:
+                  state.queueGloballyPaused === null
+                    ? theme.warning
+                    : state.queueGloballyPaused
+                      ? theme.danger
+                      : theme.success,
+              },
+              { label: "p_hotkey_action", value: pauseHotkeyActionLabel },
+              { label: "ips_now", value: formatRate(ipsNow, 2) },
+              { label: "ipm_now", value: formatRate(ipmNow, 2) },
+              {
+                label: "sec_per_image",
                 value:
-                  `wire=${formatBitrateFromKbps(state.redisIo.redisWireKbps)} ` +
-                  `rx=${formatBitrateFromKbps(state.redisIo.redisIngressKbps)} ` +
-                  `tx=${formatBitrateFromKbps(state.redisIo.redisEgressKbps)} ` +
-                  `reads=${state.redisIo.redisIngressReads}`,
+                  secPerImageNow === null
+                    ? "n/a"
+                    : formatRate(secPerImageNow, 2),
               },
+              { label: "queue_pending", value: String(backlog) },
+              { label: "queue_active", value: String(queueActive) },
+              {
+                label: "eta_queue_empty",
+                value: formatDuration(etaQueueEmptySeconds),
+              },
+              {
+                label: "db_complete",
+                value: `${(snapshot.db?.pct ?? 0).toFixed(2)}%`,
+              },
+              {
+                label: "queue_flow",
+                value: queueFlowStateLabel,
+                color:
+                  state.queueGloballyPaused === null
+                    ? theme.warning
+                    : state.queueGloballyPaused
+                      ? theme.danger
+                      : theme.success,
+              },
+              {
+                label: "live_status",
+                value: state.machine.notice,
+                color:
+                  state.machine.notice.toLowerCase().includes("error") ||
+                  state.machine.notice.toLowerCase().includes("fail")
+                    ? theme.danger
+                    : state.machine.notice.toLowerCase().includes("stale")
+                      ? theme.warning
+                      : theme.success,
+              },
+              { label: "notice", value: state.notice },
               {
                 label: "errors",
                 value: `${Object.keys(snapshot.errors).length}`,
@@ -1634,85 +1939,97 @@ async function main(): Promise<void> {
                     ? "n/a"
                     : String(telemetry.infraStaleSeconds),
               },
-              { label: "chart_timing", value: state.chartTimingMode },
-              {
-                label: "redis_bytes",
-                value: String(state.redisIo.redisIngressBytes),
-              },
-              {
-                label: "redis_kb_per_read",
-                value: state.redisIo.redisIngressKbPerRead.toFixed(3),
-              },
-              { label: "redis_last", value: state.redisIo.lastReadAt || "-" },
+              { label: "gate_live", value: telemetry.liveGate },
             ]);
           });
 
-          grid.panel({ title: "Infra" }, (panel) => {
+          grid.panel({ title: "Infra Snapshot" }, (panel) => {
             panel.keyValues([
               {
                 label: "machines",
                 value: `${snapshot.machines?.length ?? 0} (${machineStateSummary(snapshot.machines)}) / workers ${telemetry.liveWorkersRunning}`,
               },
               {
-                label: "queue_size",
-                value: `${backlog} pending`,
+                label: "workers_running",
+                value: String(telemetry.liveWorkersRunning),
               },
-              { label: "q_wait", value: String(queue?.waiting ?? 0) },
-              { label: "q_active", value: String(queue?.active ?? 0) },
-              { label: "q_delayed", value: String(queue?.delayed ?? 0) },
-              { label: "q_backlog", value: String(queue?.backlog ?? 0) },
+              {
+                label: "redis_wire",
+                value: formatBitrateFromKbps(state.redisIo.redisWireKbps),
+              },
+              {
+                label: "redis_rx",
+                value: formatBitrateFromKbps(state.redisIo.redisIngressKbps),
+              },
+              {
+                label: "redis_tx",
+                value: formatBitrateFromKbps(state.redisIo.redisEgressKbps),
+              },
+              {
+                label: "redis_reads",
+                value: String(state.redisIo.redisIngressReads),
+              },
+              { label: "redis_last", value: state.redisIo.lastReadAt || "-" },
             ]);
           });
 
           grid.panel({ title: "Queue Backlog Trend", rowSpan: 1 }, (panel) => {
             panel.graph({
-              values: state.historyBacklog,
+              values: moduleBacklogTrend,
               min: 0,
               axis: true,
               color: theme.warning,
             });
           });
 
-          grid.panel({ title: "Processed Trend", rowSpan: 1 }, (panel) => {
-            panel.graph({
-              values:
-                state.historyProcessed.length > 0
-                  ? state.historyProcessed
-                  : [status?.processedItems ?? snapshot.db?.processed ?? 0],
-              min: 0,
-              axis: true,
-              color: theme.success,
-            });
-          });
+          grid.panel(
+            { title: "Images Processed Trend", rowSpan: 1 },
+            (panel) => {
+              panel.graph({
+                values: moduleIpsTrend.length > 0 ? moduleIpsTrend : [0],
+                min: 0,
+                axis: true,
+                color: theme.success,
+              });
+            },
+          );
 
-          grid.panel({ title: "Runner / Settings" }, (panel) => {
+          grid.panel({ title: "Queue & Jobs Snapshot" }, (panel) => {
             panel.keyValues([
               { label: "mode", value: status?.mode || "none" },
-              { label: "gate_live", value: telemetry.liveGate },
-              { label: "gate_snapshot", value: telemetry.snapshotGateLabel },
-              { label: "op", value: status?.operationId || "none" },
               {
-                label: "processed",
-                value: String(status?.processedItems ?? 0),
+                label: "runner_snapshot",
+                value: runnerStatusIsStale ? "stale" : "fresh",
+                color: runnerStatusIsStale ? theme.warning : theme.success,
               },
-              { label: "failed", value: String(status?.failedItems ?? 0) },
-              { label: "jobs_done", value: String(status?.completedJobs ?? 0) },
-              { label: "jobs_fail", value: String(status?.failedJobs ?? 0) },
+              {
+                label: "desired_mode",
+                value: status?.desiredMode || settings?.desiredMode || "n/a",
+              },
+              { label: "pending", value: String(backlog) },
+              { label: "active_jobs", value: String(queueActive) },
+              { label: "completed_jobs", value: String(queueCompleted) },
+              { label: "failed_jobs", value: String(queueFailed) },
+              { label: "op", value: status?.operationId || "none" },
               {
                 label: "flush_ms",
                 value: String(settings?.flushIntervalMs ?? "n/a"),
               },
               {
-                label: "harvest",
+                label: "harvest_enabled",
                 value:
                   settings?.harvestEnabled === undefined
                     ? "n/a"
                     : String(settings.harvestEnabled),
               },
             ]);
+            panel.gauge({
+              value: activeJobRatio,
+              label: `active jobs ${queueActive}`,
+            });
           });
 
-          grid.panel({ title: "Database" }, (panel) => {
+          grid.panel({ title: "Database Completeness" }, (panel) => {
             panel.keyValues([
               {
                 label: "processed",
@@ -1730,12 +2047,29 @@ async function main(): Promise<void> {
             ]);
           });
 
-          grid.panel({ title: "Throughput" }, (panel) => {
+          grid.panel({ title: "Processing Performance" }, (panel) => {
             panel.keyValues([
-              { label: "ips_now", value: ipsNow.toFixed(2) },
-              { label: "ipm_now", value: ipmNow.toFixed(1) },
-              { label: "ips_avg30", value: ipsAvg30.toFixed(2) },
-              { label: "ipm_avg30", value: ipmAvg30.toFixed(1) },
+              {
+                label: "ips_now",
+                value: formatRate(ipsNow, 2),
+              },
+              {
+                label: "ipm_now",
+                value: formatRate(ipmNow, 2),
+              },
+              {
+                label: "sec_per_image",
+                value:
+                  secPerImageNow === null
+                    ? "n/a"
+                    : formatRate(secPerImageNow, 2),
+              },
+              {
+                label: "eta_queue_empty",
+                value: formatDuration(etaQueueEmptySeconds),
+              },
+              { label: "ips_avg30", value: formatRate(ipsAvg30, 2) },
+              { label: "ipm_avg30", value: formatRate(ipmAvg30, 2) },
               { label: "drain_q/s", value: drainPerSec.toFixed(2) },
               { label: "fill_q/s", value: refillPerSec.toFixed(2) },
             ]);
@@ -1744,10 +2078,10 @@ async function main(): Promise<void> {
           grid.panel({ title: "Queue Size" }, (panel) => {
             panel.gauge({
               value: backlogFillRatio,
-              label: String(backlog),
+              label: `pending ${backlog}`,
             });
             panel.graph({
-              values: state.historyBacklog,
+              values: moduleBacklogTrend,
               min: 0,
               axis: true,
               color: theme.warning,
@@ -1828,7 +2162,6 @@ async function main(): Promise<void> {
         (grid) => {
           grid.panel({ title: "Queue Health" }, (panel) => {
             panel.keyValues([
-              { label: "screen", value: currentScreenLabel },
               { label: "queue_size_pending", value: String(backlog) },
               {
                 label: "queue_size_formula",
@@ -1845,6 +2178,8 @@ async function main(): Promise<void> {
                 label: "queue_size_match",
                 value: telemetry.backlogMismatch ? "false" : "true",
               },
+              { label: "gate_live", value: telemetry.liveGate },
+              { label: "gate_snapshot", value: telemetry.snapshotGateLabel },
               { label: "waiting_live", value: String(queue?.waiting ?? 0) },
               { label: "active_live", value: String(queue?.active ?? 0) },
               { label: "delayed_live", value: String(queue?.delayed ?? 0) },
@@ -1857,7 +2192,7 @@ async function main(): Promise<void> {
             ]);
           });
 
-          grid.panel({ title: "Queue Fill Policy" }, (panel) => {
+          grid.panel({ title: "Queue Policy" }, (panel) => {
             panel.keyValues([
               {
                 label: "queue_size_pending",
@@ -1884,14 +2219,6 @@ async function main(): Promise<void> {
                 value: String(settings?.maxClaimPerCycle ?? "n/a"),
               },
               {
-                label: "gate_live",
-                value: telemetry.liveGate,
-              },
-              {
-                label: "gate_snapshot",
-                value: telemetry.snapshotGateLabel,
-              },
-              {
                 label: "backlog_snapshot",
                 value:
                   telemetry.snapshotBacklog === null
@@ -1907,23 +2234,23 @@ async function main(): Promise<void> {
 
           grid.panel({ title: "Backlog Trend" }, (panel) => {
             panel.graph({
-              values: state.historyBacklog,
+              values: moduleBacklogTrend,
               min: 0,
               axis: true,
               color: theme.warning,
             });
           });
 
-          grid.panel({ title: "Backlog Delta / Fill-Drain" }, (panel) => {
+          grid.panel({ title: "Backlog Delta vs Processing" }, (panel) => {
             panel.multiGraph(
               [
                 {
-                  values: state.historyBacklogDeltaPerSec,
+                  values: moduleBacklogDeltaTrend,
                   color: theme.warning,
                   label: "dq/s",
                 },
                 {
-                  values: state.historyIps,
+                  values: moduleIpsTrend,
                   color: theme.success,
                   label: "ips",
                 },
@@ -1932,7 +2259,7 @@ async function main(): Promise<void> {
                 min: -backlogDeltaAbsMax,
                 max: Math.max(
                   backlogDeltaAbsMax,
-                  Math.max(...state.historyIps, 0),
+                  Math.max(...moduleIpsTrend, 0),
                 ),
                 axis: true,
                 legend: true,
@@ -1944,17 +2271,17 @@ async function main(): Promise<void> {
     }
 
     if (state.activeScreen === "workers") {
-      const redisMax = Math.max(
-        1,
-        ...state.historyRedisKbps,
-        ...state.historyRedisReadsPerSec,
-      );
+      const processedRateMax = Math.max(1, ...moduleIpsTrend);
+      const queueBacklog =
+        queueWaiting + queueActive + queueDelayed + queuePaused;
+      const queuePendingShareRatio =
+        totalJobsRetained > 0 ? queueBacklog / totalJobsRetained : 0;
+      const activeJobRatio = queueBacklog > 0 ? queueActive / queueBacklog : 0;
       ui.grid(
         { columns: ["1fr", "1fr"], rows: [8, 12, 12], gap: 1 },
         (grid) => {
-          grid.panel({ title: "Workers & Infra" }, (panel) => {
+          grid.panel({ title: "Workers & Runner" }, (panel) => {
             panel.keyValues([
-              { label: "screen", value: currentScreenLabel },
               {
                 label: "machines",
                 value: `${snapshot.machines?.length ?? 0} (${machineStateSummary(snapshot.machines)}) / workers ${telemetry.liveWorkersRunning}`,
@@ -1991,45 +2318,100 @@ async function main(): Promise<void> {
                 label: "redis_window_s",
                 value: String(state.redisIo.windowSeconds),
               },
+              {
+                label: "status_age_s",
+                value:
+                  runnerStatusAgeSeconds === null
+                    ? "n/a"
+                    : String(runnerStatusAgeSeconds),
+              },
             ]);
           });
 
-          grid.panel({ title: "Throughput" }, (panel) => {
+          grid.panel({ title: "Queue (Live)" }, (panel) => {
             panel.keyValues([
-              { label: "ips_now", value: ipsNow.toFixed(2) },
-              { label: "ipm_now", value: ipmNow.toFixed(1) },
-              { label: "ips_avg30", value: ipsAvg30.toFixed(2) },
-              { label: "ipm_avg30", value: ipmAvg30.toFixed(1) },
+              { label: "pending", value: String(queueBacklog) },
+              { label: "waiting", value: String(queueWaiting) },
+              { label: "active", value: String(queueActive) },
+              { label: "delayed", value: String(queueDelayed) },
+              { label: "paused", value: String(queuePaused) },
+              { label: "completed", value: String(queueCompleted) },
+              { label: "failed", value: String(queueFailed) },
+              {
+                label: "pending_share",
+                value: `${(queuePendingShareRatio * 100).toFixed(1)}%`,
+              },
+            ]);
+            panel.gauge({
+              value: queuePendingShareRatio,
+              label: `pending jobs ${queueBacklog}`,
+            });
+          });
+
+          grid.panel({ title: "Performance (Deep)" }, (panel) => {
+            panel.keyValues([
+              {
+                label: "ips_now",
+                value: formatRate(ipsNow, 2),
+              },
+              {
+                label: "ipm_now",
+                value: formatRate(ipmNow, 2),
+              },
+              {
+                label: "sec_per_image",
+                value:
+                  secPerImageNow === null
+                    ? "n/a"
+                    : formatRate(secPerImageNow, 2),
+              },
+              {
+                label: "eta_queue_empty",
+                value: formatDuration(etaQueueEmptySeconds),
+              },
+              { label: "ips_avg30", value: formatRate(ipsAvg30, 2) },
+              { label: "ipm_avg30", value: formatRate(ipmAvg30, 2) },
               { label: "drain_q/s", value: drainPerSec.toFixed(2) },
               { label: "fill_q/s", value: refillPerSec.toFixed(2) },
             ]);
           });
 
-          grid.panel({ title: "Processed Rate Trend" }, (panel) => {
+          grid.panel({ title: "Images Processed" }, (panel) => {
             panel.multiGraph(
               [
                 {
-                  values: state.historyRedisKbps,
+                  values: moduleIpsTrend,
                   color: theme.success,
-                  label: "kbps",
-                },
-                {
-                  values: state.historyRedisReadsPerSec,
-                  color: theme.info,
-                  label: "reads/s",
+                  label: "ips",
                 },
               ],
               {
                 min: 0,
-                max: redisMax,
+                max: processedRateMax,
                 axis: true,
                 legend: true,
               },
             );
           });
 
-          grid.panel({ title: "Runner Status Buffers" }, (panel) => {
+          grid.panel({ title: "Jobs (Deep)" }, (panel) => {
             panel.keyValues([
+              {
+                label: "total_jobs_retained",
+                value: String(totalJobsRetained),
+              },
+              {
+                label: "active_jobs",
+                value: String(queueActive),
+              },
+              {
+                label: "completed_jobs",
+                value: String(queueCompleted),
+              },
+              {
+                label: "failed_jobs",
+                value: String(queueFailed),
+              },
               {
                 label: "pending_success",
                 value: String(status?.pendingSuccessBuffer ?? 0),
@@ -2055,6 +2437,10 @@ async function main(): Promise<void> {
                 value: status?.updatedAt || "-",
               },
             ]);
+            panel.gauge({
+              value: activeJobRatio,
+              label: `active jobs ${queueActive}`,
+            });
           });
         },
       );
@@ -2087,9 +2473,8 @@ async function main(): Promise<void> {
       ui.grid(
         { columns: ["1fr", "1fr"], rows: [8, 12, 12], gap: 1 },
         (grid) => {
-          grid.panel({ title: "Redis Aggregate" }, (panel) => {
+          grid.panel({ title: "Infra: Redis Aggregate" }, (panel) => {
             panel.keyValues([
-              { label: "screen", value: currentScreenLabel },
               { label: "sampled_at", value: aggregate.sampledAt },
               {
                 label: "active_instances",
@@ -2126,11 +2511,11 @@ async function main(): Promise<void> {
             ]);
           });
 
-          grid.panel({ title: "Influence Breakdown" }, (panel) => {
+          grid.panel({ title: "Infra: Influence Breakdown" }, (panel) => {
             panel.keyValues(influenceRows);
           });
 
-          grid.panel({ title: "Aggregate Redis Wire KB/s Trend" }, (panel) => {
+          grid.panel({ title: "Infra: Redis Wire Trend" }, (panel) => {
             panel.graph({
               values: state.historyRedisAggregateKbps,
               min: 0,
@@ -2140,7 +2525,7 @@ async function main(): Promise<void> {
             });
           });
 
-          grid.panel({ title: "Local Module I/O" }, (panel) => {
+          grid.panel({ title: "Infra: Local Module I/O" }, (panel) => {
             panel.keyValues([
               {
                 label: "local_wire",
@@ -2481,59 +2866,6 @@ async function main(): Promise<void> {
   });
 
   app.invalidate();
-  void (async () => {
-    const preloadProjection = await preloadProjectionPromise;
-    if (!state.running || preloadProjection.sampleCount <= 0) {
-      return;
-    }
-    if (
-      state.historyBacklog.length === 0 &&
-      preloadProjection.queueBacklogTrendSmoothed.length > 0
-    ) {
-      state.historyBacklog = [...preloadProjection.queueBacklogTrendSmoothed];
-    }
-    if (
-      state.historyProcessed.length === 0 &&
-      preloadProjection.processedItemsTrend.length > 0
-    ) {
-      state.historyProcessed = [...preloadProjection.processedItemsTrend];
-    }
-    if (
-      state.historyFailures.length === 0 &&
-      preloadProjection.failedItemsTrend.length > 0
-    ) {
-      state.historyFailures = [...preloadProjection.failedItemsTrend];
-    }
-    if (
-      state.historyIps.length === 0 &&
-      preloadProjection.ipsSmoothed.length > 0
-    ) {
-      state.historyIps = [...preloadProjection.ipsSmoothed];
-    }
-    if (
-      state.historyBacklogDeltaPerSec.length === 0 &&
-      preloadProjection.backlogDeltaSmoothed.length > 0
-    ) {
-      state.historyBacklogDeltaPerSec = [
-        ...preloadProjection.backlogDeltaSmoothed,
-      ];
-    }
-    if (
-      state.lastSampleAtMs === null &&
-      preloadProjection.latestAtMs !== null
-    ) {
-      state.lastSampleAtMs = preloadProjection.latestAtMs;
-    }
-    const processedTail = preloadProjection.processedItemsTrend;
-    state.lastDbProcessed =
-      processedTail.length > 0 ? processedTail[processedTail.length - 1] : null;
-    const backlogTail = preloadProjection.queueBacklogTrendRaw;
-    state.lastBacklog =
-      backlogTail.length > 0 ? backlogTail[backlogTail.length - 1] : null;
-    state.notice = "trend history loaded";
-    app.invalidate();
-  })();
-
   void refresh();
 
   state.notice = "connecting to module watcher...";
@@ -2542,16 +2874,22 @@ async function main(): Promise<void> {
     uiStateWatcher = await createOpsUiStateWatcher({
       appName: state.appName,
       profile: "cli",
-      snapshotTimeoutMs: 8000,
+      snapshotTimeoutMs: STARTUP_SNAPSHOT_TIMEOUT_MS,
       minRefreshIntervalMs: 1000,
-      fallbackRefreshIntervalMs: state.intervalMs,
+      skipInitialRefresh: true,
+      trendProjectionLimit: state.trendSamples,
+      trendSampleMode:
+        state.chartTimingMode === "interpolated" ? "interpolated" : "raw",
+      trendSampleWindowMs: initialTrendWindowMs,
+      trendSampleMaxGapMs: Math.max(1000, state.intervalMs * 3),
     }).catch(() => null);
     if (!state.running) {
       return;
     }
     state.notice = uiStateWatcher
       ? "reactive watcher connected"
-      : "watcher unavailable; using timed refresh";
+      : "watcher unavailable; state feed offline";
+    wakeRefreshLoop();
     app.invalidate();
   })();
 
@@ -2566,14 +2904,8 @@ async function main(): Promise<void> {
         break;
       }
       if (uiStateWatcher) {
-        const signal = await uiStateWatcher.waitForState(1000);
-        if (signal === "state") {
-          needsRefresh = true;
-        } else {
-          const elapsedSinceRefresh =
-            Date.now() - Math.max(0, lastRefreshCompletedAtMs);
-          needsRefresh = elapsedSinceRefresh >= state.intervalMs;
-        }
+        const signal = await uiStateWatcher.waitForState(state.intervalMs);
+        needsRefresh = signal === "state";
       } else {
         await new Promise<void>((resolve) => {
           pollDelayResolve = () => {

@@ -13,6 +13,7 @@ import { processImageProcessingBatch } from "./image-processing-task.js";
 import {
   IMAGE_QUEUE_NAME,
   createRedisConnection,
+  formatRedisEndpointForLogs,
   type ImageProcessingQueueJob,
 } from "./image-queue.js";
 
@@ -157,6 +158,7 @@ function printStartupHeader(params: {
   concurrency: number;
   bundleLoaded: boolean;
   bundleAppliedCount: number;
+  redisEndpoint: string;
 }): void {
   const tokenDetected = Boolean(process.env.ENVIRONMENT?.trim());
   const hasRedisUrl = Boolean(process.env.REDIS_URL?.trim());
@@ -234,7 +236,7 @@ function printStartupHeader(params: {
     hasRedisUrl,
     "queue_endpoint",
     hasRedisUrl ? "custom" : "default_local",
-    "custom if injected; local default otherwise",
+    `resolved=${params.redisEndpoint}`,
   );
   printRow(
     hasStorageCredentials,
@@ -262,6 +264,7 @@ async function run(): Promise<void> {
     concurrency: args.concurrency,
     bundleLoaded: bundleResult.loaded,
     bundleAppliedCount: bundleResult.appliedKeys.length,
+    redisEndpoint: formatRedisEndpointForLogs(),
   });
   const readiness = reportEnvironmentReadiness(progress, bundleResult);
   const connection = createRedisConnection();

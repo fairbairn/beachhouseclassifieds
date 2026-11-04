@@ -5,7 +5,6 @@ import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
 import Table from "cli-table3";
 
-import { IMAGE_QUEUE_NAME } from "../../workers/image-queue";
 import {
   clearOpsQueueIfPaused,
   createOpsUiStateWatcher,
@@ -13,11 +12,9 @@ import {
   pauseOpsSystemFlow,
   readOpsControlSettings,
   readOpsControlSnapshot,
-  readOpsFlyMachines,
+  readOpsFlyAppSnapshot,
   readOpsQueuePausedState,
-  readOpsRedisIoAggregateStats,
   readOpsRedisIoStats,
-  readOpsUiSnapshot,
   refreshOpsInfraFromFly,
   resetOpsRedisIoStats,
   resumeOpsSystemFlow,
@@ -44,6 +41,7 @@ import {
 } from "../workers/image-runner-control";
 
 const DEFAULT_APP = "beachhouseclassifieds-image-worker";
+const STARTUP_SNAPSHOT_TIMEOUT_MS = 1500;
 
 type Command =
   | "dashboard"
@@ -82,10 +80,13 @@ type DashboardSample = {
 type DashboardSnapshot = {
   machines: OpsUiSnapshot["machines"];
   queue: QueueCounts | null;
+  queuePaused?: boolean | null;
   db: OpsUiSnapshot["db"];
   settings: RunnerControlSettings | null;
   infra: RunnerInfraSnapshot | null;
   status: RunnerStatusSnapshot | null;
+  redisIoAggregate?: OpsRedisIoAggregateStats;
+  redisIoInstances?: OpsUiSnapshot["redisIoInstances"];
   projections: OpsUiSnapshot["projections"];
   errors: OpsUiSnapshot["errors"];
 };
@@ -104,7 +105,7 @@ function usage(): string {
     "Image Ops Control Tower",
     "",
     "Usage:",
-    "  npm run workers:image:ops -- dashboard [--watch] [--top] [--interval-seconds 5] [--app <flyApp>]",
+    "  npm run workers:image:ops -- dashboard [--watch] [--top] [--interval-seconds 1] [--app <flyApp>]",
     "  npm run workers:image:ops -- telemetry-dump [--app <flyApp>]",
     "      top watch keys: q quit, h help, s settings, : command, + slower, - faster, r reset trends",
     "  npm run workers:image:ops -- fly-scale --count <n> [--app <flyApp>]",
@@ -282,12 +283,99 @@ async function fetchControlSnapshot(): Promise<{
 async function gatherDashboardSnapshot(
   app: string,
 ): Promise<DashboardSnapshot> {
-  return readOpsUiSnapshot(app, 8000);
+  const watcher = await createOpsUiStateWatcher({
+    appName: app,
+    snapshotTimeoutMs: STARTUP_SNAPSHOT_TIMEOUT_MS,
+    skipInitialRefresh: true,
+    profile: "cli",
+  });
+  try {
+    const snapshot = watcher.getSnapshot();
+    if (snapshot) {
+      return snapshot;
+    }
+    await watcher.waitForState(1500);
+    const next = watcher.getSnapshot();
+    if (!next) {
+      throw new Error("module state snapshot unavailable");
+    }
+    return next;
+  } finally {
+    await watcher.close();
+  }
+}
+
+function emptyRedisAggregate(): OpsRedisIoAggregateStats {
+  return {
+    sampledAt: new Date().toISOString(),
+    activeInstances: 0,
+    redisEgressBytes: 0,
+    redisIngressBytes: 0,
+    redisIngressReads: 0,
+    redisEgressWrites: 0,
+    redisEgressKbps: 0,
+    redisIngressKbps: 0,
+    redisWireKbps: 0,
+  };
+}
+
+function renderSnapshotDashboard(params: {
+  app: string;
+  watch: boolean;
+  intervalSeconds: number;
+  snapshot: DashboardSnapshot;
+}): void {
+  const { app, watch, intervalSeconds, snapshot } = params;
+  const telemetry = deriveOpsTelemetry({
+    settings: snapshot.settings,
+    infra: snapshot.infra,
+    status: snapshot.status,
+    queue: snapshot.queue,
+    errors: snapshot.errors,
+  });
+  const aggregate = snapshot.redisIoAggregate || emptyRedisAggregate();
+
+  process.stdout.write(chalk.bold.cyan("Image Control Tower\n"));
+  process.stdout.write(
+    chalk.gray(`${new Date().toISOString()} app=${app}\n\n`),
+  );
+  process.stdout.write(
+    chalk.gray(
+      `watch=${watch} interval=${intervalSeconds}s source=module-state\n\n`,
+    ),
+  );
+  process.stdout.write(
+    `queue backlog=${snapshot.queue?.backlog ?? 0} waiting=${snapshot.queue?.waiting ?? 0} active=${snapshot.queue?.active ?? 0} delayed=${snapshot.queue?.delayed ?? 0} paused=${snapshot.queue?.paused ?? 0} queue_paused=${snapshot.queuePaused === null || snapshot.queuePaused === undefined ? "unknown" : String(snapshot.queuePaused)}\n`,
+  );
+  process.stdout.write(
+    `runner mode=${snapshot.status?.mode || "n/a"} desired_mode=${snapshot.settings?.desiredMode || "n/a"} gate=${telemetry.liveGate} workers_running=${telemetry.liveWorkersRunning}\n`,
+  );
+  process.stdout.write(
+    `db processed=${snapshot.db?.processed ?? 0} pending=${snapshot.db?.pending ?? 0} total=${snapshot.db?.total ?? 0} progress_pct=${(snapshot.db?.pct ?? 0).toFixed(2)}\n`,
+  );
+  process.stdout.write(
+    `redis_io aggregate wire=${formatBitrateFromKbps(aggregate.redisWireKbps)} rx=${formatBitrateFromKbps(aggregate.redisIngressKbps)} tx=${formatBitrateFromKbps(aggregate.redisEgressKbps)} instances=${aggregate.activeInstances} reads=${aggregate.redisIngressReads} writes=${aggregate.redisEgressWrites}\n`,
+  );
 }
 
 async function panelFly(app: string): Promise<void> {
-  const machines = await readOpsFlyMachines(app);
+  const snapshot = await readOpsFlyAppSnapshot(app);
+  const machines = snapshot.machines;
   const byState = new Map<string, number>();
+  const activeStates = new Set([
+    "started",
+    "starting",
+    "stopping",
+    "restarting",
+    "created",
+    "suspended",
+  ]);
+  const activeMachines = machines.filter((machine) =>
+    activeStates.has(String(machine.state || "").toLowerCase()),
+  );
+  const destroyedMachines = machines.filter(
+    (machine) => String(machine.state || "").toLowerCase() === "destroyed",
+  );
   for (const machine of machines) {
     const state = String(machine.state || "unknown").toLowerCase();
     byState.set(state, (byState.get(state) || 0) + 1);
@@ -303,59 +391,29 @@ async function panelFly(app: string): Promise<void> {
     table.push([state, count]);
   }
 
-  process.stdout.write(chalk.cyan(`Fly App: ${app}\n`));
+  process.stdout.write(
+    chalk.cyan(`Fly App: ${snapshot.appName} app_id=${snapshot.appId}\n`),
+  );
   process.stdout.write(`${table.toString()}\n`);
-  process.stdout.write(chalk.gray(`total_machines=${machines.length}\n`));
-}
+  process.stdout.write(
+    chalk.gray(
+      `total_machines=${machines.length} active_machines=${activeMachines.length} destroyed_machines=${destroyedMachines.length}\n`,
+    ),
+  );
 
-async function panelQueue(): Promise<void> {
-  const counts = await fetchQueueCounts();
-  const table = new Table({
-    head: [
-      "Queue",
-      "Waiting",
-      "Active",
-      "Completed",
-      "Failed",
-      "Delayed",
-      "Paused",
-      "Backlog",
-    ],
+  const machineTable = new Table({
+    head: ["Machine ID", "Name", "State", "Region"],
     style: { head: ["cyan"] },
   });
-  table.push([
-    IMAGE_QUEUE_NAME,
-    counts.waiting,
-    counts.active,
-    counts.completed,
-    counts.failed,
-    counts.delayed,
-    counts.paused,
-    counts.backlog,
-  ]);
-  process.stdout.write(`${table.toString()}\n`);
-}
-
-async function panelDb(): Promise<void> {
-  const snapshot = (await readOpsUiSnapshot(DEFAULT_APP, 8000)).db;
-  if (!snapshot) {
-    process.stdout.write(
-      chalk.yellow("DATABASE_URL missing; DB panel skipped\n"),
-    );
-    return;
+  for (const machine of machines) {
+    machineTable.push([
+      machine.id || "-",
+      machine.name || "-",
+      machine.state || "unknown",
+      machine.region || "-",
+    ]);
   }
-
-  const table = new Table({
-    head: ["Processed", "Pending", "Total", "Progress %"],
-    style: { head: ["cyan"] },
-  });
-  table.push([
-    snapshot.processed,
-    snapshot.pending,
-    snapshot.total,
-    snapshot.pct.toFixed(2),
-  ]);
-  process.stdout.write(`${table.toString()}\n`);
+  process.stdout.write(`${machineTable.toString()}\n`);
 }
 
 async function panelControl(): Promise<void> {
@@ -941,7 +999,7 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
   const topMode = args.flags.has("top");
   const intervalSeconds = parsePositiveInt(
     args.options.get("interval-seconds"),
-    5,
+    1,
   );
   const app = appName(args.options);
   const ui: TopUiState = {
@@ -954,37 +1012,26 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
   };
 
   let teardownTopKeys = (): void => undefined;
-  let uiStateWatcher: OpsUiStateWatcher | null = null;
+  const uiStateWatcher: OpsUiStateWatcher = await createOpsUiStateWatcher({
+    appName: app,
+    snapshotTimeoutMs: STARTUP_SNAPSHOT_TIMEOUT_MS,
+    minRefreshIntervalMs: 1000,
+    fallbackRefreshIntervalMs: 30000,
+    skipInitialRefresh: true,
+    profile: "cli",
+  });
   let stopSignalListener = (): void => undefined;
   if (watch && topMode) {
     teardownTopKeys = installTopKeyControls(ui, app);
   }
-
-  if (watch && topMode) {
-    try {
-      uiStateWatcher = await createOpsUiStateWatcher({
-        appName: app,
-        snapshotTimeoutMs: 8000,
-        minRefreshIntervalMs: 500,
-        fallbackRefreshIntervalMs: 5000,
-      });
-      ui.notice = "reactive updates enabled";
-    } catch {
-      uiStateWatcher = null;
-      ui.notice = "reactive updates unavailable; using interval polling";
-    }
-  }
+  ui.notice = "module state watcher connected";
 
   try {
     let shouldRefresh = true;
-    let lastSeenStateVersion = uiStateWatcher
-      ? uiStateWatcher.getStateVersion()
-      : 0;
-    if (uiStateWatcher) {
-      stopSignalListener = uiStateWatcher.onStateChange(() => {
-        shouldRefresh = true;
-      });
-    }
+    let lastSeenStateVersion = uiStateWatcher.getStateVersion();
+    stopSignalListener = uiStateWatcher.onStateChange(() => {
+      shouldRefresh = true;
+    });
 
     while (ui.running) {
       if (!shouldRefresh) {
@@ -994,29 +1041,29 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
         }
 
         const waitMs = Math.max(1, ui.intervalSeconds) * 1000;
-        if (uiStateWatcher) {
-          if (uiStateWatcher.hasStateChangedSince(lastSeenStateVersion)) {
-            shouldRefresh = true;
-            continue;
-          }
-          const signal = await uiStateWatcher.waitForState(500);
-          shouldRefresh = signal === "state";
-        } else {
-          await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+        if (uiStateWatcher.hasStateChangedSince(lastSeenStateVersion)) {
           shouldRefresh = true;
+          continue;
         }
+        await uiStateWatcher.waitForState(waitMs);
+        shouldRefresh = true;
         continue;
       }
 
       shouldRefresh = false;
       clearScreen();
+      const snapshot = uiStateWatcher.getSnapshot();
+      if (!snapshot) {
+        ui.notice = "waiting for module state snapshot";
+        await uiStateWatcher.waitForState(
+          Math.max(1, ui.intervalSeconds) * 1000,
+        );
+        shouldRefresh = true;
+        continue;
+      }
+      lastSeenStateVersion = uiStateWatcher.getStateVersion();
+
       if (topMode) {
-        const snapshot = uiStateWatcher
-          ? uiStateWatcher.getSnapshot() || (await uiStateWatcher.refreshNow())
-          : await gatherDashboardSnapshot(app);
-        if (uiStateWatcher) {
-          lastSeenStateVersion = uiStateWatcher.getStateVersion();
-        }
         ui.samples.push({
           atMs: Date.now(),
           queueBacklog: snapshot.queue?.backlog || 0,
@@ -1034,43 +1081,15 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
           ui,
           snapshot,
           redisIo: readOpsRedisIoStats(),
-          redisIoAggregate: await readOpsRedisIoAggregateStats(),
+          redisIoAggregate: snapshot.redisIoAggregate || emptyRedisAggregate(),
         });
       } else {
-        process.stdout.write(chalk.bold.cyan("Image Control Tower\n"));
-        process.stdout.write(chalk.gray(`${new Date().toISOString()}\n\n`));
-
-        try {
-          await panelFly(app);
-        } catch (error) {
-          process.stdout.write(
-            `${chalk.yellow("Fly panel unavailable")}: ${shortError(error)}\n`,
-          );
-        }
-        process.stdout.write("\n");
-        try {
-          await panelQueue();
-        } catch (error) {
-          process.stdout.write(
-            `${chalk.yellow("Queue panel unavailable")}: ${shortError(error)}\n`,
-          );
-        }
-        process.stdout.write("\n");
-        try {
-          await panelDb();
-        } catch (error) {
-          process.stdout.write(
-            `${chalk.yellow("DB panel unavailable")}: ${shortError(error)}\n`,
-          );
-        }
-        process.stdout.write("\n");
-        try {
-          await panelControl();
-        } catch (error) {
-          process.stdout.write(
-            `${chalk.yellow("Control panel unavailable")}: ${shortError(error)}\n`,
-          );
-        }
+        renderSnapshotDashboard({
+          app,
+          watch,
+          intervalSeconds: ui.intervalSeconds,
+          snapshot,
+        });
       }
 
       if (!watch) {
@@ -1078,24 +1097,16 @@ async function runDashboard(args: ParsedArgs): Promise<void> {
         continue;
       }
 
-      const waitMs = Math.max(1, ui.intervalSeconds) * 1000;
-      if (uiStateWatcher) {
-        if (uiStateWatcher.hasStateChangedSince(lastSeenStateVersion)) {
-          shouldRefresh = true;
-          continue;
-        }
-        const signal = await uiStateWatcher.waitForState(500);
-        shouldRefresh = signal === "state";
-      } else {
-        await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+      if (uiStateWatcher.hasStateChangedSince(lastSeenStateVersion)) {
         shouldRefresh = true;
+        continue;
       }
+      await uiStateWatcher.waitForState(Math.max(1, ui.intervalSeconds) * 1000);
+      shouldRefresh = true;
     }
   } finally {
     stopSignalListener();
-    if (uiStateWatcher) {
-      await uiStateWatcher.close();
-    }
+    await uiStateWatcher.close();
     teardownTopKeys();
   }
 }
@@ -1105,7 +1116,7 @@ async function runFlyScale(args: ParsedArgs): Promise<void> {
   if (!countRaw) {
     throw new Error("Missing --count for fly-scale");
   }
-  const count = parsePositiveInt(countRaw, -1);
+  const count = parseNonNegativeInt(countRaw, -1);
   if (count < 0) {
     throw new Error(`Invalid --count: ${countRaw}`);
   }

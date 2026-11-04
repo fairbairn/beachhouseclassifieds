@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_LOCAL_REDIS_URL,
+  formatRedisEndpointForLogs,
   resolveRedisUrl,
 } from "@/workers/image-queue";
 
@@ -46,5 +47,15 @@ describe("resolveRedisUrl", () => {
         process.env.REDIS_URL = original;
       }
     }
+  });
+
+  it("formats redis endpoint for logs without credentials", () => {
+    expect(
+      formatRedisEndpointForLogs("redis://user:secret@localhost:16379/0"),
+    ).toBe("redis://localhost:16379/0");
+  });
+
+  it("returns sentinel for invalid redis url", () => {
+    expect(formatRedisEndpointForLogs("://bad-url")).toBe("invalid-redis-url");
   });
 });

@@ -1,6 +1,5 @@
 import "@/core/tooling/env/load-env-profile";
 
-import { Job } from "bullmq";
 import chalk from "chalk";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
@@ -13,7 +12,6 @@ import type {
 } from "../../workers/image-processing-task";
 import {
   IMAGE_QUEUE_NAME,
-  createRedisConnection,
   type ImageProcessingQueueJob,
 } from "../../workers/image-queue";
 import {
@@ -24,8 +22,11 @@ import {
   createOpsQueueRuntime,
   enqueueOpsImageJobsForOperation,
   readOpsControlSnapshot,
+  readOpsLiveWorkersRunning,
+  readOpsQueueJobById,
   readOpsQueuePausedState,
   readOpsQueueSnapshot,
+  requestOpsStateRefresh,
   waitForOpsRunCompletion,
   writeOpsRunnerStatus,
 } from "../workers/image-ops-control-module";
@@ -39,7 +40,7 @@ const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
 const DEFAULT_FETCH_RETRY_COUNT = 2;
 
 type RunnerOptions = {
-  targetCount: number;
+  targetCount: number | null;
   fetchTimeoutMs: number;
   fetchRetryCount: number;
   dryRunCloud: boolean;
@@ -89,6 +90,95 @@ function parsePositiveInt(
     return fallback;
   }
   return parsed;
+}
+
+function parseOptionalPositiveInt(rawValue: string | undefined): number | null {
+  if (rawValue === undefined) {
+    return null;
+  }
+  const parsed = Number.parseInt(String(rawValue).trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function deriveRefillPolicy(settings: RunnerControlSettings): {
+  refillLow: number;
+  refillTarget: number;
+  maxBacklog: number;
+  notes: string[];
+} {
+  const notes: string[] = [];
+  const maxBacklog = Math.max(10, Number(settings.maxQueueBacklog) || 10);
+
+  let refillTarget = Math.max(0, Number(settings.refillTargetBacklog) || 0);
+  if (refillTarget <= 0) {
+    refillTarget = Math.max(1, Math.floor(maxBacklog * 0.75));
+    notes.push("auto_target_from_max_backlog");
+  }
+  refillTarget = clampInt(refillTarget, 1, maxBacklog);
+
+  let refillLow = Math.max(0, Number(settings.refillLowWatermark) || 0);
+  if (refillLow <= 0) {
+    refillLow = Math.max(1, Math.floor(refillTarget * 0.67));
+    notes.push("auto_low_from_target");
+  }
+  if (refillLow >= refillTarget) {
+    refillLow = Math.max(0, refillTarget - 1);
+    notes.push("auto_low_below_target");
+  }
+
+  return {
+    refillLow,
+    refillTarget,
+    maxBacklog,
+    notes,
+  };
+}
+
+function deriveAdaptiveClaimCap(input: {
+  workersRunning: number;
+  policyClaimCap: number;
+  queueBacklog: number;
+  queueActive: number;
+  queueWaiting: number;
+  queueDelayed: number;
+  queuePaused: number;
+  refillGap: number;
+}): number {
+  const workerCount = Math.max(1, Math.floor(input.workersRunning));
+  const pendingVisible = Math.max(
+    0,
+    input.queueWaiting + input.queueDelayed + input.queuePaused,
+  );
+  const activePerWorker = input.queueActive / workerCount;
+
+  // Keep workers fed without over-claiming when queue pressure is already high.
+  let perWorkerBudget = 10;
+  if (activePerWorker >= 2) {
+    perWorkerBudget = 4;
+  } else if (activePerWorker >= 1) {
+    perWorkerBudget = 6;
+  }
+
+  if (pendingVisible > workerCount * 3) {
+    perWorkerBudget = Math.max(2, perWorkerBudget - 2);
+  }
+
+  const workerBasedCap = workerCount * perWorkerBudget;
+  const bootstrapFloor =
+    input.queueBacklog === 0 ? Math.max(4, workerCount * 2) : 0;
+  const desiredFromFeedback = Math.max(workerBasedCap, bootstrapFloor);
+
+  return Math.max(
+    1,
+    Math.min(input.policyClaimCap, input.refillGap, desiredFromFeedback),
+  );
 }
 
 function stamp(): string {
@@ -184,10 +274,14 @@ function formatModeProgressLine(input: {
 function usage(): string {
   return [
     "Usage:",
-    "  npm run workers:image:desktop -- [--target-count 1] [--dry-run-cloud true]",
+    "  npm run workers:image:desktop -- [--dry-run-cloud true]",
     "",
-    "Options:",
-    "  --target-count <n>            Number of rows to claim from postgres (default 1)",
+    "Behavior:",
+    "  Runner defaults to intelligent autopilot: it derives claim size from live queue pressure,",
+    "  worker availability, and refill policy. Provide flags only for exceptional overrides.",
+    "",
+    "Optional overrides:",
+    "  --target-count <n>            Optional hard cap on claims for this run",
     "  --fetch-timeout-ms <n>        Source fetch timeout (default 8000)",
     "  --fetch-retry-count <n>       Source fetch retries (default 2)",
     "  --dry-run-cloud true|false    Skip upload and DB final image writes when true (default false)",
@@ -236,7 +330,7 @@ function parseArgs(argv: string[]): RunnerOptions {
   }
 
   return {
-    targetCount: parsePositiveInt(values.get("target-count"), 1),
+    targetCount: parseOptionalPositiveInt(values.get("target-count")),
     fetchTimeoutMs: parsePositiveInt(
       values.get("fetch-timeout-ms"),
       parsePositiveInt(
@@ -430,7 +524,6 @@ async function main(): Promise<void> {
   const startedAtMs = Date.now();
 
   const pool = createOpsDbPool(6);
-  const controlConnection = createRedisConnection();
   const queueRuntime = await createOpsQueueRuntime({ withEvents: true });
   const queue = queueRuntime.queue;
   const queueEvents = queueRuntime.queueEvents;
@@ -470,13 +563,17 @@ async function main(): Promise<void> {
     return readOpsQueueSnapshot();
   };
 
-  const controlSnapshot = await readOpsControlSnapshot(controlConnection);
+  const controlSnapshot = await readOpsControlSnapshot();
   let controlSettings: RunnerControlSettings = controlSnapshot.settings;
   const inferredWorkersRunning = Number(controlSnapshot.infra?.workersRunning);
   let workersRunning =
     Number.isFinite(inferredWorkersRunning) && inferredWorkersRunning > 0
       ? inferredWorkersRunning
       : 0;
+
+  await requestOpsStateRefresh("runner:startup-initial-cache-load").catch(
+    () => undefined,
+  );
 
   const publishRunnerStatus = async (params: {
     mode: RunnerStatusSnapshot["mode"];
@@ -485,34 +582,31 @@ async function main(): Promise<void> {
     pendingErrorBuffer?: number;
   }): Promise<void> => {
     const queueSnapshot = await readQueueSnapshot();
-    await writeOpsRunnerStatus(
-      {
-        operationId,
-        mode: params.mode,
-        desiredMode: controlSettings.desiredMode,
-        gateReason: params.gateReason,
-        workersRunning,
-        claimedCount: report.claimed_count,
-        queuedCount: report.queued_count,
-        completedJobs: report.completed_jobs,
-        failedJobs: report.failed_jobs,
-        processedItems: report.processed_items,
-        failedItems: report.failed_items,
-        queueWaiting: queueSnapshot.waiting,
-        queueActive: queueSnapshot.active,
-        queueCompleted: queueSnapshot.completed,
-        queueFailed: queueSnapshot.failed,
-        queueDelayed: queueSnapshot.delayed,
-        queuePaused: queueSnapshot.paused,
-        queueBacklog: queueSnapshot.backlog,
-        lastFlushAt,
-        flushBatchCount,
-        pendingSuccessBuffer: Math.max(0, params.pendingSuccessBuffer ?? 0),
-        pendingErrorBuffer: Math.max(0, params.pendingErrorBuffer ?? 0),
-        updatedAt: new Date().toISOString(),
-      },
-      controlConnection,
-    );
+    await writeOpsRunnerStatus({
+      operationId,
+      mode: params.mode,
+      desiredMode: controlSettings.desiredMode,
+      gateReason: params.gateReason,
+      workersRunning,
+      claimedCount: report.claimed_count,
+      queuedCount: report.queued_count,
+      completedJobs: report.completed_jobs,
+      failedJobs: report.failed_jobs,
+      processedItems: report.processed_items,
+      failedItems: report.failed_items,
+      queueWaiting: queueSnapshot.waiting,
+      queueActive: queueSnapshot.active,
+      queueCompleted: queueSnapshot.completed,
+      queueFailed: queueSnapshot.failed,
+      queueDelayed: queueSnapshot.delayed,
+      queuePaused: queueSnapshot.paused,
+      queueBacklog: queueSnapshot.backlog,
+      lastFlushAt,
+      flushBatchCount,
+      pendingSuccessBuffer: Math.max(0, params.pendingSuccessBuffer ?? 0),
+      pendingErrorBuffer: Math.max(0, params.pendingErrorBuffer ?? 0),
+      updatedAt: new Date().toISOString(),
+    });
   };
 
   const computeGateState = async (): Promise<{
@@ -528,17 +622,24 @@ async function main(): Promise<void> {
     queueGloballyPaused: boolean;
     gateReason: string;
   }> => {
-    const [queueSnapshot, pausedState, freshControlSnapshot] =
+    const [queueSnapshot, pausedState, freshControlSnapshot, liveWorkers] =
       await Promise.all([
         readQueueSnapshot(),
         readOpsQueuePausedState(),
-        readOpsControlSnapshot(controlConnection),
+        readOpsControlSnapshot(),
+        readOpsLiveWorkersRunning(),
       ]);
 
     controlSettings = freshControlSnapshot.settings;
     const freshWorkers = Number(freshControlSnapshot.infra?.workersRunning);
-    workersRunning =
+    const snapshotWorkersRunning =
       Number.isFinite(freshWorkers) && freshWorkers > 0 ? freshWorkers : 0;
+    const inferredWorkersFromQueue = queueSnapshot.active > 0 ? 1 : 0;
+    workersRunning = Math.max(
+      snapshotWorkersRunning,
+      inferredWorkersFromQueue,
+      Math.max(0, Math.floor(liveWorkers || 0)),
+    );
 
     const liveGate = evaluateLiveGate({
       settings: controlSettings,
@@ -546,20 +647,22 @@ async function main(): Promise<void> {
       queueBacklog: queueSnapshot.backlog,
     });
 
+    const moduleVisiblePaused =
+      pausedState || (freshControlSnapshot.status?.queuePaused || 0) > 0;
     let gateReason =
       liveGate === "live=gate_open"
         ? "gate=open"
         : liveGate.replace(/^live=/, "");
-    if (pausedState) {
-      gateReason = "queue_globally_paused";
-    }
     if (controlSettings.desiredMode !== "run") {
       gateReason = `desired_mode=${controlSettings.desiredMode} not run`;
+    }
+    if (moduleVisiblePaused) {
+      gateReason = "queue_globally_paused";
     }
 
     return {
       queueSnapshot,
-      queueGloballyPaused: pausedState,
+      queueGloballyPaused: moduleVisiblePaused,
       gateReason,
     };
   };
@@ -574,6 +677,9 @@ async function main(): Promise<void> {
     `startup_stats queue_waiting=${initialQueueSnapshot.waiting} queue_active=${initialQueueSnapshot.active} queue_delayed=${initialQueueSnapshot.delayed} queue_paused=${initialQueueSnapshot.paused} queue_backlog=${initialQueueSnapshot.backlog} workers_running=${workersRunning} desired_mode=${controlSettings.desiredMode} queue_globally_paused=${queueGloballyPaused}`,
   );
   await publishRunnerStatus({ mode: "idle", gateReason });
+  await requestOpsStateRefresh("runner:startup-status-published").catch(
+    () => undefined,
+  );
 
   const gatePollMs = Math.max(3000, options.heartbeatSeconds * 1000);
   while (gateReason !== "gate=open") {
@@ -620,338 +726,408 @@ async function main(): Promise<void> {
     Math.max(5, options.heartbeatSeconds) * 1000,
   );
 
+  const continuousMode = options.targetCount === null;
+  const idleSleepMs = Math.max(3000, options.heartbeatSeconds * 1000);
+
   try {
-    const requestedTargetCount = Math.max(1, options.targetCount);
-    const liveQueueBacklog = initialQueueSnapshot.backlog;
-    const shouldRefill = liveQueueBacklog < controlSettings.refillLowWatermark;
-    const refillGap = shouldRefill
-      ? Math.max(0, controlSettings.refillTargetBacklog - liveQueueBacklog)
-      : 0;
-    const policyClaimCap = Math.max(1, controlSettings.maxClaimPerCycle);
-    const effectiveTargetCount = Math.max(
-      0,
-      Math.min(requestedTargetCount, policyClaimCap, refillGap),
-    );
+    while (true) {
+      const nextGateState = await computeGateState();
+      initialQueueSnapshot = nextGateState.queueSnapshot;
+      queueGloballyPaused = nextGateState.queueGloballyPaused;
+      gateReason = nextGateState.gateReason;
 
-    progress.info(
-      `queue_preflight waiting=${initialQueueSnapshot.waiting} active=${initialQueueSnapshot.active} delayed=${initialQueueSnapshot.delayed} paused=${initialQueueSnapshot.paused} backlog=${liveQueueBacklog}`,
-    );
-    progress.info(
-      `claim_policy requested_target=${requestedTargetCount} refill_low=${controlSettings.refillLowWatermark} refill_target=${controlSettings.refillTargetBacklog} should_refill=${shouldRefill} max_claim_cycle=${policyClaimCap} effective_target=${effectiveTargetCount}`,
-    );
-
-    if (effectiveTargetCount <= 0) {
-      progress.done("queue is above refill threshold; no new claims this run");
-      return;
-    }
-
-    progress.phase("claiming rows from postgres");
-    const claimPoolSize = Math.max(
-      effectiveTargetCount,
-      Math.min(
-        options.claimPoolMax,
-        effectiveTargetCount * options.claimPoolMultiplier,
-      ),
-    );
-    const claimedItems = await claimPendingRows(
-      pool,
-      effectiveTargetCount,
-      claimPoolSize,
-    );
-    report.claimed_count = claimedItems.length;
-
-    if (claimedItems.length === 0) {
-      progress.done("no rows claimed; exiting");
-      return;
-    }
-
-    progress.phase("enqueueing bullmq jobs");
-    const jobRetentionCount = Math.max(1000, effectiveTargetCount * 2);
-    const queuedJobs = await enqueueOpsImageJobsForOperation({
-      queue,
-      operationId,
-      claimedItems,
-      options: {
-        fetchTimeoutMs: options.fetchTimeoutMs,
-        fetchRetryCount: options.fetchRetryCount,
-        dryRunCloud: options.dryRunCloud,
-        uploadPrefix: options.uploadPrefix,
-        jobRetentionCount,
-      },
-    });
-    report.queued_count = queuedJobs.length;
-    const postEnqueueSnapshot = await readQueueSnapshot();
-    progress.info(
-      `queued_jobs=${queuedJobs.length} queue=${IMAGE_QUEUE_NAME} operation_target_images=${report.claimed_count} queue_pending_after_enqueue=${postEnqueueSnapshot.backlog} retention=${jobRetentionCount}`,
-    );
-
-    const jobsById = new Map<string, Job<ImageProcessingQueueJob>>();
-    for (const job of queuedJobs) {
-      const jobId = String(job.id || "");
-      if (!jobId) {
+      if (gateReason !== "gate=open") {
+        await publishRunnerStatus({ mode: "idle", gateReason });
+        progress.info(
+          `cycle_idle gate=${gateReason} queue_backlog=${initialQueueSnapshot.backlog} workers_running=${workersRunning} desired_mode=${controlSettings.desiredMode} sleep_ms=${idleSleepMs}`,
+        );
+        await sleepMs(idleSleepMs);
         continue;
       }
-      jobsById.set(jobId, job);
-    }
 
-    const seenCompletedJobIds = new Set<string>();
-    const seenFailedJobIds = new Set<string>();
-    const handledJobIds = new Set<string>();
-    const jobMissingReloadCount = new Map<string, number>();
-
-    const pendingSuccessItems: ImageProcessingItemResult[] = [];
-    const pendingErrors: ImageProcessingTaskError[] = [];
-    let flushedProcessedItems = 0;
-    let flushedFailedItems = 0;
-
-    async function flushPendingWrites(reason: string): Promise<void> {
-      if (pendingSuccessItems.length === 0 && pendingErrors.length === 0) {
-        return;
-      }
-
-      const successBatch = pendingSuccessItems.splice(
-        0,
-        pendingSuccessItems.length,
+      const requestedTargetCap = options.targetCount;
+      const liveQueueBacklog = initialQueueSnapshot.backlog;
+      const refillPolicy = deriveRefillPolicy(controlSettings);
+      const shouldRefill = liveQueueBacklog < refillPolicy.refillLow;
+      const refillGap = shouldRefill
+        ? Math.max(0, refillPolicy.refillTarget - liveQueueBacklog)
+        : 0;
+      const policyClaimCap = Math.max(1, controlSettings.maxClaimPerCycle);
+      const adaptiveClaimCap = deriveAdaptiveClaimCap({
+        workersRunning,
+        policyClaimCap,
+        queueBacklog: liveQueueBacklog,
+        queueActive: initialQueueSnapshot.active,
+        queueWaiting: initialQueueSnapshot.waiting,
+        queueDelayed: initialQueueSnapshot.delayed,
+        queuePaused: initialQueueSnapshot.paused,
+        refillGap,
+      });
+      const policyTargetCount = Math.min(
+        policyClaimCap,
+        refillGap,
+        adaptiveClaimCap,
       );
-      const errorBatch = pendingErrors.splice(0, pendingErrors.length);
-      const writeStats = await updateSuccessRows(pool, successBatch);
-      await updateFailureRows(pool, errorBatch, "bullmq_dispatch");
-
-      allSuccessItems.push(...successBatch);
-      allErrors.push(...errorBatch);
-
-      flushedProcessedItems += writeStats.uploadedCount;
-      flushedFailedItems += errorBatch.length + writeStats.notUploadedCount;
-      report.processed_items = flushedProcessedItems;
-      report.failed_items = flushedFailedItems;
-      flushBatchCount += 1;
-      lastFlushAt = new Date().toISOString();
+      const effectiveTargetCount =
+        requestedTargetCap === null
+          ? policyTargetCount
+          : Math.max(0, Math.min(requestedTargetCap, policyTargetCount));
 
       progress.info(
-        `writeback_flush reason=${reason} batch=${flushBatchCount} success_items=${successBatch.length} errors=${errorBatch.length} uploaded=${writeStats.uploadedCount} withheld=${writeStats.notUploadedCount} totals_processed=${flushedProcessedItems} totals_failed=${flushedFailedItems}`,
+        `queue_preflight waiting=${initialQueueSnapshot.waiting} active=${initialQueueSnapshot.active} delayed=${initialQueueSnapshot.delayed} paused=${initialQueueSnapshot.paused} backlog=${liveQueueBacklog}`,
+      );
+      progress.info(
+        `claim_policy target_cap=${requestedTargetCap === null ? "none" : String(requestedTargetCap)} refill_low=${refillPolicy.refillLow} refill_target=${refillPolicy.refillTarget} should_refill=${shouldRefill} refill_gap=${refillGap} max_claim_cycle=${policyClaimCap} adaptive_claim_cap=${adaptiveClaimCap} workers_running=${workersRunning} policy_target=${policyTargetCount} effective_target=${effectiveTargetCount} notes=${refillPolicy.notes.join(",") || "none"}`,
+      );
+      progress.info(
+        `feedback_loop queue_waiting=${initialQueueSnapshot.waiting} queue_active=${initialQueueSnapshot.active} queue_delayed=${initialQueueSnapshot.delayed} queue_paused=${initialQueueSnapshot.paused} queue_backlog=${liveQueueBacklog} workers_running=${workersRunning}`,
       );
 
-      await publishRunnerStatus({
-        mode: "running",
-        gateReason: "gate=open",
-        pendingSuccessBuffer: pendingSuccessItems.length,
-        pendingErrorBuffer: pendingErrors.length,
+      if (effectiveTargetCount <= 0) {
+        const skipReason = shouldRefill
+          ? "refill_blocked_by_target_cap"
+          : "queue_at_or_above_refill_low";
+        await publishRunnerStatus({ mode: "idle", gateReason: skipReason });
+        progress.done(
+          `cycle_no_claim reason=${skipReason} backlog=${liveQueueBacklog} refill_low=${refillPolicy.refillLow} refill_target=${refillPolicy.refillTarget}`,
+        );
+        await sleepMs(idleSleepMs);
+        if (!continuousMode) {
+          break;
+        }
+        continue;
+      }
+
+      progress.phase("claiming rows from postgres");
+      const claimPoolSize = Math.max(
+        effectiveTargetCount,
+        Math.min(
+          options.claimPoolMax,
+          effectiveTargetCount * options.claimPoolMultiplier,
+        ),
+      );
+      const claimedItems = await claimPendingRows(
+        pool,
+        effectiveTargetCount,
+        claimPoolSize,
+      );
+      report.claimed_count += claimedItems.length;
+
+      if (claimedItems.length === 0) {
+        await publishRunnerStatus({
+          mode: "idle",
+          gateReason: "no_rows_claimed",
+        });
+        progress.done("cycle_no_claim reason=no_rows_claimed");
+        await sleepMs(idleSleepMs);
+        if (!continuousMode) {
+          break;
+        }
+        continue;
+      }
+
+      progress.phase("enqueueing bullmq jobs");
+      const jobRetentionCount = Math.max(1000, effectiveTargetCount * 2);
+      const queuedJobs = await enqueueOpsImageJobsForOperation({
+        queue,
+        operationId,
+        claimedItems,
+        options: {
+          fetchTimeoutMs: options.fetchTimeoutMs,
+          fetchRetryCount: options.fetchRetryCount,
+          dryRunCloud: options.dryRunCloud,
+          uploadPrefix: options.uploadPrefix,
+          jobRetentionCount,
+        },
       });
-    }
+      report.queued_count += queuedJobs.length;
+      const postEnqueueSnapshot = await readQueueSnapshot();
+      progress.info(
+        `queued_jobs=${queuedJobs.length} queue=${IMAGE_QUEUE_NAME} operation_target_images=${claimedItems.length} queue_pending_after_enqueue=${postEnqueueSnapshot.backlog} retention=${jobRetentionCount}`,
+      );
 
-    async function processFinalizedJobs(options: {
-      reason: string;
-      finalPass: boolean;
-    }): Promise<void> {
-      for (const [jobId, job] of jobsById) {
-        if (handledJobIds.has(jobId)) {
+      const jobsById = new Map<string, Job<ImageProcessingQueueJob>>();
+      for (const job of queuedJobs) {
+        const jobId = String(job.id || "");
+        if (!jobId) {
           continue;
         }
+        jobsById.set(jobId, job);
+      }
 
-        const finalized =
-          seenCompletedJobIds.has(jobId) || seenFailedJobIds.has(jobId);
-        if (!finalized && !options.finalPass) {
-          continue;
+      const seenCompletedJobIds = new Set<string>();
+      const seenFailedJobIds = new Set<string>();
+      const handledJobIds = new Set<string>();
+      const jobMissingReloadCount = new Map<string, number>();
+
+      const pendingSuccessItems: ImageProcessingItemResult[] = [];
+      const pendingErrors: ImageProcessingTaskError[] = [];
+      let flushedProcessedItems = 0;
+      let flushedFailedItems = 0;
+
+      async function flushPendingWrites(reason: string): Promise<void> {
+        if (pendingSuccessItems.length === 0 && pendingErrors.length === 0) {
+          return;
         }
 
-        const reloaded = await Job.fromId(queue, jobId);
-        if (!reloaded) {
-          const misses = (jobMissingReloadCount.get(jobId) || 0) + 1;
-          jobMissingReloadCount.set(jobId, misses);
-          if (!options.finalPass) {
+        const successBatch = pendingSuccessItems.splice(
+          0,
+          pendingSuccessItems.length,
+        );
+        const errorBatch = pendingErrors.splice(0, pendingErrors.length);
+        const writeStats = await updateSuccessRows(pool, successBatch);
+        await updateFailureRows(pool, errorBatch, "bullmq_dispatch");
+
+        allSuccessItems.push(...successBatch);
+        allErrors.push(...errorBatch);
+
+        flushedProcessedItems += writeStats.uploadedCount;
+        flushedFailedItems += errorBatch.length + writeStats.notUploadedCount;
+        report.processed_items = flushedProcessedItems;
+        report.failed_items = flushedFailedItems;
+        flushBatchCount += 1;
+        lastFlushAt = new Date().toISOString();
+
+        progress.info(
+          `writeback_flush reason=${reason} batch=${flushBatchCount} success_items=${successBatch.length} errors=${errorBatch.length} uploaded=${writeStats.uploadedCount} withheld=${writeStats.notUploadedCount} totals_processed=${flushedProcessedItems} totals_failed=${flushedFailedItems}`,
+        );
+
+        await publishRunnerStatus({
+          mode: "running",
+          gateReason: "gate=open",
+          pendingSuccessBuffer: pendingSuccessItems.length,
+          pendingErrorBuffer: pendingErrors.length,
+        });
+      }
+
+      async function processFinalizedJobs(options: {
+        reason: string;
+        finalPass: boolean;
+      }): Promise<void> {
+        for (const [jobId, job] of jobsById) {
+          if (handledJobIds.has(jobId)) {
             continue;
           }
 
-          pendingErrors.push({
-            work_id: String(job.data.workId),
-            source_image_url: String(job.data.sourceImageUrl || ""),
-            code: "missing_job_result",
-            message: `bullmq result missing for jobId=${jobId} after ${misses} reload attempts`,
-          });
-          handledJobIds.add(jobId);
-          progress.warn(
-            `job_missing_result job_id=${jobId} work_id=${job.data.workId} reload_attempts=${misses}`,
-          );
-          continue;
-        }
+          const finalized =
+            seenCompletedJobIds.has(jobId) || seenFailedJobIds.has(jobId);
+          if (!finalized && !options.finalPass) {
+            continue;
+          }
 
-        const isCompleted = seenCompletedJobIds.has(jobId);
-        if (!isCompleted) {
-          const failedReason = String(
-            reloaded.failedReason || "job failed without reason",
-          );
-          pendingErrors.push({
-            work_id: String(job.data.workId),
-            source_image_url: String(job.data.sourceImageUrl || ""),
-            code: "worker_error",
-            message: failedReason,
-          });
+          const reloaded = await readOpsQueueJobById(queue, jobId);
+          if (!reloaded) {
+            const misses = (jobMissingReloadCount.get(jobId) || 0) + 1;
+            jobMissingReloadCount.set(jobId, misses);
+            if (!options.finalPass) {
+              continue;
+            }
+
+            pendingErrors.push({
+              work_id: String(job.data.workId),
+              source_image_url: String(job.data.sourceImageUrl || ""),
+              code: "missing_job_result",
+              message: `bullmq result missing for jobId=${jobId} after ${misses} reload attempts`,
+            });
+            handledJobIds.add(jobId);
+            progress.warn(
+              `job_missing_result job_id=${jobId} work_id=${job.data.workId} reload_attempts=${misses}`,
+            );
+            continue;
+          }
+
+          const isCompleted = seenCompletedJobIds.has(jobId);
+          if (!isCompleted) {
+            const failedReason = String(
+              reloaded.failedReason || "job failed without reason",
+            );
+            pendingErrors.push({
+              work_id: String(job.data.workId),
+              source_image_url: String(job.data.sourceImageUrl || ""),
+              code: "worker_error",
+              message: failedReason,
+            });
+            report.jobs.push({
+              job_id: jobId,
+              work_id: String(job.data.workId),
+              state: "failed",
+              processed_count: 0,
+              failed_count: 1,
+              elapsed_ms: null,
+              source_network_modes: [],
+            });
+            handledJobIds.add(jobId);
+            progress.warn(
+              `job_failed job_id=${jobId} work_id=${job.data.workId} reason=${failedReason}`,
+            );
+            continue;
+          }
+
+          const result = (reloaded.returnvalue || {}) as {
+            items?: ImageProcessingItemResult[];
+            errors?: ImageProcessingTaskError[];
+            processed_count?: number;
+            failed_count?: number;
+            elapsed_ms?: number;
+          };
+
+          const items = Array.isArray(result.items) ? result.items : [];
+          const errors = Array.isArray(result.errors) ? result.errors : [];
+          pendingSuccessItems.push(...items);
+          pendingErrors.push(...errors);
+
+          const modes = [
+            ...new Set(items.map((row) => row.source_network_mode)),
+          ]
+            .filter(Boolean)
+            .map((value) => String(value));
+
           report.jobs.push({
             job_id: jobId,
             work_id: String(job.data.workId),
-            state: "failed",
-            processed_count: 0,
-            failed_count: 1,
-            elapsed_ms: null,
-            source_network_modes: [],
+            state: errors.length > 0 ? "failed" : "completed",
+            processed_count: Number(result.processed_count ?? items.length),
+            failed_count: Number(result.failed_count ?? errors.length),
+            elapsed_ms: Number.isFinite(result.elapsed_ms)
+              ? Number(result.elapsed_ms)
+              : null,
+            source_network_modes: modes,
           });
+
           handledJobIds.add(jobId);
-          progress.warn(
-            `job_failed job_id=${jobId} work_id=${job.data.workId} reason=${failedReason}`,
+          progress.info(
+            `job_buffered reason=${options.reason} job_id=${jobId} work_id=${job.data.workId} items=${items.length} errors=${errors.length} modes=${modes.join(",") || "none"}`,
           );
+        }
+      }
+
+      const periodicFlushIntervalMs = Math.max(
+        1_000,
+        Math.min(60_000, controlSettings.flushIntervalMs),
+      );
+      let periodicFlushTimer: NodeJS.Timeout | null = null;
+      let harvestChain: Promise<void> = Promise.resolve();
+
+      const enqueueHarvestCycle = (
+        reason: string,
+        finalPass: boolean,
+      ): Promise<void> => {
+        harvestChain = harvestChain.then(async () => {
+          await processFinalizedJobs({ reason, finalPass });
+          await flushPendingWrites(reason);
+        });
+        return harvestChain;
+      };
+
+      try {
+        progress.info(`periodic_flush_interval_ms=${periodicFlushIntervalMs}`);
+        periodicFlushTimer = setInterval(() => {
+          void enqueueHarvestCycle("periodic", false).catch(
+            (error: unknown) => {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              progress.warn(`periodic_flush_failed message=${message}`);
+            },
+          );
+        }, periodicFlushIntervalMs);
+
+        progress.phase("waiting for worker completion");
+        await publishRunnerStatus({
+          mode: "running",
+          gateReason: "gate=open",
+          pendingSuccessBuffer: pendingSuccessItems.length,
+          pendingErrorBuffer: pendingErrors.length,
+        });
+        const completion = await waitForOpsRunCompletion({
+          queueEvents,
+          queueName: IMAGE_QUEUE_NAME,
+          expectedJobs: queuedJobs.length,
+          timeoutMs: Math.max(1, options.waitTimeoutSeconds) * 1000,
+          onProgress: ({
+            completed,
+            failed,
+            expected,
+            processedItems,
+            failedItems,
+            completedJobIds,
+            failedJobIds,
+          }) => {
+            report.completed_jobs = completed;
+            report.failed_jobs = failed;
+
+            for (const jobId of completedJobIds) {
+              seenCompletedJobIds.add(jobId);
+            }
+            for (const jobId of failedJobIds) {
+              seenFailedJobIds.add(jobId);
+            }
+
+            // Use whichever is higher so live telemetry does not regress between flushes.
+            report.processed_items = Math.max(
+              flushedProcessedItems,
+              processedItems,
+            );
+            report.failed_items = Math.max(flushedFailedItems, failedItems);
+
+            const finalized = completed + failed;
+            const line = formatModeProgressLine({
+              mode: "desktop-bullmq",
+              completed: finalized,
+              total: expected,
+              startedAtMs,
+              text:
+                `jobs_completed=${completed} jobs_failed=${failed} ` +
+                `operation_images_processed=${report.processed_items}/${report.claimed_count} ` +
+                `items_failed=${report.failed_items}`,
+            });
+            progress.progress(`queue ${line}`);
+            void publishRunnerStatus({
+              mode: "running",
+              gateReason: "gate=open",
+              pendingSuccessBuffer: pendingSuccessItems.length,
+              pendingErrorBuffer: pendingErrors.length,
+            }).catch((error: unknown) => {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              progress.warn(`status_publish_failed message=${message}`);
+            });
+          },
+        });
+
+        progress.phase("collecting results and applying writeback");
+
+        for (const jobId of completion.completedJobIds) {
+          seenCompletedJobIds.add(jobId);
+        }
+        for (const jobId of completion.failedJobIds) {
+          seenFailedJobIds.add(jobId);
+        }
+
+        await enqueueHarvestCycle("finalize", false);
+        await enqueueHarvestCycle("final-pass", true);
+
+        report.processed_items = flushedProcessedItems;
+        report.failed_items = flushedFailedItems;
+        await publishRunnerStatus({
+          mode: "done",
+          gateReason: "gate=open",
+          pendingSuccessBuffer: pendingSuccessItems.length,
+          pendingErrorBuffer: pendingErrors.length,
+        });
+
+        if (continuousMode) {
+          progress.done(
+            `cycle_complete claimed_total=${report.claimed_count} queued_total=${report.queued_count} processed_total=${report.processed_items} failed_total=${report.failed_items}`,
+          );
+          await sleepMs(idleSleepMs);
           continue;
         }
 
-        const result = (reloaded.returnvalue || {}) as {
-          items?: ImageProcessingItemResult[];
-          errors?: ImageProcessingTaskError[];
-          processed_count?: number;
-          failed_count?: number;
-          elapsed_ms?: number;
-        };
-
-        const items = Array.isArray(result.items) ? result.items : [];
-        const errors = Array.isArray(result.errors) ? result.errors : [];
-        pendingSuccessItems.push(...items);
-        pendingErrors.push(...errors);
-
-        const modes = [...new Set(items.map((row) => row.source_network_mode))]
-          .filter(Boolean)
-          .map((value) => String(value));
-
-        report.jobs.push({
-          job_id: jobId,
-          work_id: String(job.data.workId),
-          state: errors.length > 0 ? "failed" : "completed",
-          processed_count: Number(result.processed_count ?? items.length),
-          failed_count: Number(result.failed_count ?? errors.length),
-          elapsed_ms: Number.isFinite(result.elapsed_ms)
-            ? Number(result.elapsed_ms)
-            : null,
-          source_network_modes: modes,
-        });
-
-        handledJobIds.add(jobId);
-        progress.info(
-          `job_buffered reason=${options.reason} job_id=${jobId} work_id=${job.data.workId} items=${items.length} errors=${errors.length} modes=${modes.join(",") || "none"}`,
-        );
-      }
-    }
-
-    const periodicFlushIntervalMs = Math.max(
-      1_000,
-      Math.min(60_000, controlSettings.flushIntervalMs),
-    );
-    let periodicFlushTimer: NodeJS.Timeout | null = null;
-    let harvestChain: Promise<void> = Promise.resolve();
-
-    const enqueueHarvestCycle = (
-      reason: string,
-      finalPass: boolean,
-    ): Promise<void> => {
-      harvestChain = harvestChain.then(async () => {
-        await processFinalizedJobs({ reason, finalPass });
-        await flushPendingWrites(reason);
-      });
-      return harvestChain;
-    };
-
-    try {
-      progress.info(`periodic_flush_interval_ms=${periodicFlushIntervalMs}`);
-      periodicFlushTimer = setInterval(() => {
-        void enqueueHarvestCycle("periodic", false).catch((error: unknown) => {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          progress.warn(`periodic_flush_failed message=${message}`);
-        });
-      }, periodicFlushIntervalMs);
-
-      progress.phase("waiting for worker completion");
-      await publishRunnerStatus({
-        mode: "running",
-        gateReason: "gate=open",
-        pendingSuccessBuffer: pendingSuccessItems.length,
-        pendingErrorBuffer: pendingErrors.length,
-      });
-      const completion = await waitForOpsRunCompletion({
-        queueEvents,
-        queueName: IMAGE_QUEUE_NAME,
-        expectedJobs: queuedJobs.length,
-        timeoutMs: Math.max(1, options.waitTimeoutSeconds) * 1000,
-        onProgress: ({
-          completed,
-          failed,
-          expected,
-          processedItems,
-          failedItems,
-          completedJobIds,
-          failedJobIds,
-        }) => {
-          report.completed_jobs = completed;
-          report.failed_jobs = failed;
-
-          for (const jobId of completedJobIds) {
-            seenCompletedJobIds.add(jobId);
-          }
-          for (const jobId of failedJobIds) {
-            seenFailedJobIds.add(jobId);
-          }
-
-          // Use whichever is higher so live telemetry does not regress between flushes.
-          report.processed_items = Math.max(
-            flushedProcessedItems,
-            processedItems,
-          );
-          report.failed_items = Math.max(flushedFailedItems, failedItems);
-
-          const finalized = completed + failed;
-          const line = formatModeProgressLine({
-            mode: "desktop-bullmq",
-            completed: finalized,
-            total: expected,
-            startedAtMs,
-            text:
-              `jobs_completed=${completed} jobs_failed=${failed} ` +
-              `operation_images_processed=${report.processed_items}/${report.claimed_count} ` +
-              `items_failed=${report.failed_items}`,
-          });
-          progress.progress(`queue ${line}`);
-          void publishRunnerStatus({
-            mode: "running",
-            gateReason: "gate=open",
-            pendingSuccessBuffer: pendingSuccessItems.length,
-            pendingErrorBuffer: pendingErrors.length,
-          }).catch((error: unknown) => {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            progress.warn(`status_publish_failed message=${message}`);
-          });
-        },
-      });
-
-      progress.phase("collecting results and applying writeback");
-
-      for (const jobId of completion.completedJobIds) {
-        seenCompletedJobIds.add(jobId);
-      }
-      for (const jobId of completion.failedJobIds) {
-        seenFailedJobIds.add(jobId);
-      }
-
-      await enqueueHarvestCycle("finalize", false);
-      await enqueueHarvestCycle("final-pass", true);
-
-      report.processed_items = flushedProcessedItems;
-      report.failed_items = flushedFailedItems;
-      await publishRunnerStatus({
-        mode: "done",
-        gateReason: "gate=open",
-        pendingSuccessBuffer: pendingSuccessItems.length,
-        pendingErrorBuffer: pendingErrors.length,
-      });
-    } finally {
-      if (periodicFlushTimer) {
-        clearInterval(periodicFlushTimer);
+        break;
+      } finally {
+        if (periodicFlushTimer) {
+          clearInterval(periodicFlushTimer);
+        }
       }
     }
 
@@ -1045,7 +1221,6 @@ async function main(): Promise<void> {
   } finally {
     clearInterval(heartbeat);
     await closeWithTimeout("queue_runtime_close", queueRuntime.close());
-    await closeWithTimeout("control_connection_quit", controlConnection.quit());
     await closeWithTimeout("pool_end", pool.end());
   }
 }

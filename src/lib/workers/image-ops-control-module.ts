@@ -13,14 +13,17 @@ import {
   type ImageProcessingQueueJob,
 } from "../../workers/image-queue";
 import {
+  fetchFlyAppSnapshot,
   fetchFlyMachines,
   scaleFlyWorkers,
+  type FlyAppSnapshot,
   type FlyMachine,
 } from "./image-fly-ops";
 import {
   purgePendingImageQueueJobs,
   readImageQueueCounts,
   readImageQueuePausedState,
+  readImageQueueWorkersRunning,
   setImageQueuePaused,
   type ImageQueueCounts,
 } from "./image-queue-ops";
@@ -139,10 +142,13 @@ export type OpsUiSnapshot = {
   at: string;
   machines: FlyMachine[] | null;
   queue: ImageQueueCounts | null;
+  queuePaused?: boolean | null;
   db: OpsDbProgress;
   settings: RunnerControlSettings | null;
   infra: RunnerInfraSnapshot | null;
   status: RunnerStatusSnapshot | null;
+  redisIoAggregate?: OpsRedisIoAggregateStats;
+  redisIoInstances?: OpsRedisIoInstanceStats[];
   projections: OpsTrendProjection;
   errors: {
     fly?: string;
@@ -221,7 +227,8 @@ export type OpsRedisIoInstanceStats = {
 const OPS_TREND_HISTORY_MAX = 100;
 const OPS_TREND_PROJECTION_DEFAULT_LIMIT = 50;
 let lastTrendTimestampMs = 0;
-const OPS_REDIS_IO_INSTANCE_PREFIX = "image:runner:control:redis_io:instance";
+const OPS_REDIS_IO_INSTANCES_HASH_KEY =
+  "image:runner:control:redis_io:instances";
 const OPS_REDIS_IO_INSTANCE_TTL_SECONDS = 45;
 const OPS_REDIS_IO_PUBLISH_MIN_INTERVAL_MS = 5_000;
 const opsRedisIoInstanceId = `${process.pid}-${Date.now().toString(36)}`;
@@ -616,20 +623,16 @@ function redisReplyPayloadBytes(payload: unknown): number {
   return byteLen(String(payload));
 }
 
-function opsRedisIoInstanceKey(instanceId = opsRedisIoInstanceId): string {
-  return `${OPS_REDIS_IO_INSTANCE_PREFIX}:${instanceId}`;
-}
-
 function parseNumericField(
-  record: Record<string, string>,
+  record: Record<string, unknown>,
   key: string,
 ): number {
-  const value = Number(record[key] ?? "0");
+  const value = Number(String(record[key] ?? "0"));
   return Number.isFinite(value) ? value : 0;
 }
 
 function mapInstanceRecord(
-  record: Record<string, string>,
+  record: Record<string, unknown>,
 ): OpsRedisIoInstanceStats {
   return {
     instanceId: String(record.instance_id ?? "unknown"),
@@ -663,38 +666,29 @@ function maybePublishOpsRedisIoInstanceStats(): void {
   void (async () => {
     try {
       const local = readOpsRedisIoStats();
-      const key = opsRedisIoInstanceKey();
+      const updatedAtMs = Date.now();
+      const payload = JSON.stringify({
+        instance_id: opsRedisIoInstanceId,
+        pid: String(process.pid),
+        started_at: new Date(opsRedisIoCounter.startedAtMs).toISOString(),
+        updated_at: new Date(updatedAtMs).toISOString(),
+        window_seconds: String(local.windowSeconds),
+        redis_egress_bytes: String(local.redisEgressBytes),
+        redis_ingress_bytes: String(local.redisIngressBytes),
+        redis_ingress_reads: String(local.redisIngressReads),
+        redis_egress_writes: String(local.redisEgressWrites),
+        redis_egress_kbps: String(local.redisEgressKbps),
+        redis_ingress_kbps: String(local.redisIngressKbps),
+        redis_wire_kbps: String(local.redisWireKbps),
+      });
       await withControlRedis(undefined, async (connection) => {
         await connection
           .multi()
-          .hset(
-            key,
-            "instance_id",
-            opsRedisIoInstanceId,
-            "pid",
-            String(process.pid),
-            "started_at",
-            new Date(opsRedisIoCounter.startedAtMs).toISOString(),
-            "updated_at",
-            new Date().toISOString(),
-            "window_seconds",
-            String(local.windowSeconds),
-            "redis_egress_bytes",
-            String(local.redisEgressBytes),
-            "redis_ingress_bytes",
-            String(local.redisIngressBytes),
-            "redis_ingress_reads",
-            String(local.redisIngressReads),
-            "redis_egress_writes",
-            String(local.redisEgressWrites),
-            "redis_egress_kbps",
-            String(local.redisEgressKbps),
-            "redis_ingress_kbps",
-            String(local.redisIngressKbps),
-            "redis_wire_kbps",
-            String(local.redisWireKbps),
+          .hset(OPS_REDIS_IO_INSTANCES_HASH_KEY, opsRedisIoInstanceId, payload)
+          .expire(
+            OPS_REDIS_IO_INSTANCES_HASH_KEY,
+            OPS_REDIS_IO_INSTANCE_TTL_SECONDS,
           )
-          .expire(key, OPS_REDIS_IO_INSTANCE_TTL_SECONDS)
           .exec();
       });
       opsRedisIoLastPublishedAtMs = Date.now();
@@ -760,27 +754,58 @@ export async function readOpsRedisIoInstanceStats(
   redis?: IORedis,
 ): Promise<OpsRedisIoInstanceStats[]> {
   return withControlRedis(redis, async (connection) => {
-    const keys = await connection.keys(`${OPS_REDIS_IO_INSTANCE_PREFIX}:*`);
-    if (keys.length === 0) {
-      return [];
-    }
+    const requestBytes = redisCommandPayloadBytes([
+      "HGETALL",
+      OPS_REDIS_IO_INSTANCES_HASH_KEY,
+    ]);
+    const hashEntries = await connection.hgetall(
+      OPS_REDIS_IO_INSTANCES_HASH_KEY,
+    );
+    trackRedisReadIo(requestBytes, redisReplyPayloadBytes(hashEntries));
 
-    const pipeline = connection.pipeline();
-    for (const key of keys) {
-      pipeline.hgetall(key);
-    }
-    const rows = await pipeline.exec();
-    if (!rows) {
+    const entries = Object.entries(hashEntries);
+    if (entries.length === 0) {
       return [];
     }
 
     const instances: OpsRedisIoInstanceStats[] = [];
-    for (const row of rows) {
-      const payload = row?.[1];
-      if (!payload || Array.isArray(payload) || typeof payload !== "object") {
+    const staleBeforeIso = new Date(
+      Date.now() - OPS_REDIS_IO_INSTANCE_TTL_SECONDS * 1000,
+    ).toISOString();
+    const staleInstanceIds: string[] = [];
+    for (const [instanceId, rawPayload] of entries) {
+      if (!rawPayload) {
+        staleInstanceIds.push(instanceId);
         continue;
       }
-      instances.push(mapInstanceRecord(payload as Record<string, string>));
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(rawPayload);
+      } catch {
+        staleInstanceIds.push(instanceId);
+        continue;
+      }
+
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+        staleInstanceIds.push(instanceId);
+        continue;
+      }
+
+      const payload = parsed as Record<string, unknown>;
+      const updatedAt = String(payload.updated_at ?? "");
+      if (!updatedAt || updatedAt < staleBeforeIso) {
+        staleInstanceIds.push(instanceId);
+        continue;
+      }
+
+      instances.push(mapInstanceRecord(payload));
+    }
+
+    if (staleInstanceIds.length > 0) {
+      await connection.hdel(
+        OPS_REDIS_IO_INSTANCES_HASH_KEY,
+        ...staleInstanceIds,
+      );
     }
 
     instances.sort((left, right) => {
@@ -794,6 +819,12 @@ export async function readOpsRedisIoAggregateStats(
   redis?: IORedis,
 ): Promise<OpsRedisIoAggregateStats> {
   const instances = await readOpsRedisIoInstanceStats(redis);
+  return aggregateRedisIoInstances(instances);
+}
+
+function aggregateRedisIoInstances(
+  instances: OpsRedisIoInstanceStats[],
+): OpsRedisIoAggregateStats {
   const aggregate: OpsRedisIoAggregateStats = {
     sampledAt: new Date().toISOString(),
     activeInstances: instances.length,
@@ -1676,13 +1707,44 @@ export async function createOpsStateUpdatesSubscriber(): Promise<OpsStateUpdates
   };
 }
 
+export async function requestOpsStateRefresh(
+  source = "cli:manual-refresh-request",
+  redis?: IORedis,
+  input?: {
+    bypassThrottle?: boolean;
+  },
+): Promise<void> {
+  const minIntervalMs = input?.bypassThrottle
+    ? 0
+    : opsStateUpdatesMinIntervalMs();
+  await withControlRedis(redis, async (connection) => {
+    await publishOpsStateUpdate(
+      connection,
+      {
+        at: new Date().toISOString(),
+        source,
+        fields: ["refresh"],
+      },
+      {
+        minIntervalMs,
+      },
+    );
+  });
+}
+
 export async function createOpsUiStateWatcher(input: {
   appName: string;
   snapshotTimeoutMs?: number;
   minRefreshIntervalMs?: number;
   fallbackRefreshIntervalMs?: number;
+  skipInitialRefresh?: boolean;
+  hydrateOnInit?: boolean;
   profile?: OpsReactiveProfile;
   subscribeToSignals?: boolean;
+  trendProjectionLimit?: number;
+  trendSampleMode?: OpsTrendSampleMode;
+  trendSampleWindowMs?: number;
+  trendSampleMaxGapMs?: number;
 }): Promise<OpsUiStateWatcher> {
   const profile = input.profile ?? "cli";
   const profileDefaults =
@@ -1700,7 +1762,7 @@ export async function createOpsUiStateWatcher(input: {
 
   const snapshotTimeoutMs = Math.max(1000, input.snapshotTimeoutMs ?? 8000);
   const minRefreshIntervalMs = Math.max(
-    0,
+    1000,
     input.minRefreshIntervalMs ?? profileDefaults.minRefreshIntervalMs,
   );
   const fallbackRefreshIntervalMs = Math.max(
@@ -1710,6 +1772,26 @@ export async function createOpsUiStateWatcher(input: {
   );
   const subscribeToSignals =
     input.subscribeToSignals ?? profileDefaults.subscribeToSignals;
+  const skipInitialRefresh = input.skipInitialRefresh === true;
+  const hydrateOnInit = input.hydrateOnInit ?? true;
+  const trendProjectionLimit = Math.max(
+    1,
+    Math.min(
+      OPS_TREND_HISTORY_MAX,
+      input.trendProjectionLimit ?? OPS_TREND_PROJECTION_DEFAULT_LIMIT,
+    ),
+  );
+  const trendSampleMode = input.trendSampleMode ?? "raw";
+  const trendSampleWindowMs =
+    Number.isFinite(input.trendSampleWindowMs) &&
+    (input.trendSampleWindowMs || 0) > 0
+      ? Number(input.trendSampleWindowMs)
+      : undefined;
+  const trendSampleMaxGapMs =
+    Number.isFinite(input.trendSampleMaxGapMs) &&
+    (input.trendSampleMaxGapMs || 0) > 0
+      ? Number(input.trendSampleMaxGapMs)
+      : undefined;
 
   const subscriber = subscribeToSignals
     ? await createOpsStateUpdatesSubscriber().catch(() => null)
@@ -1725,25 +1807,10 @@ export async function createOpsUiStateWatcher(input: {
   if (queueEvents) {
     await queueEvents.waitUntilReady().catch(() => undefined);
   }
-  const trendRedis = createRedisConnection();
-  const signalTrendMetrics: OpsTrendMetricName[] = [
-    "queueBacklog",
-    "processedItems",
-    "failedItems",
-    "workersRunning",
-    "queueWaiting",
-    "queueActive",
-    "queueDelayed",
-    "queuePaused",
-    "queueCompleted",
-    "queueFailed",
-    "pendingSuccessBuffer",
-    "pendingErrorBuffer",
-    "flushBatchCount",
-  ];
+
   let snapshot: OpsUiSnapshot | null = null;
   let trendPoints: OpsTrendPoint[] = [];
-  let lastRefreshAtMs = 0;
+  let lastRefreshAtMs = Date.now();
   let refreshInFlight: Promise<OpsUiSnapshot> | null = null;
   let stateVersion = 0;
   let closed = false;
@@ -1776,6 +1843,172 @@ export async function createOpsUiStateWatcher(input: {
     stateWaiters.clear();
   };
 
+  const projectTrend = (): OpsTrendProjection =>
+    deriveOpsTrendProjectionFromPointsSampled({
+      points: trendPoints,
+      limit: trendProjectionLimit,
+      sampleMode: trendSampleMode,
+      sampleMaxGapMs: trendSampleMaxGapMs,
+      sampleAnchorAtMs: trendSampleWindowMs ? Date.now() : undefined,
+      sampleWindowMs: trendSampleWindowMs,
+    });
+
+  const appendTrendPointFromSnapshot = (nextSnapshot: OpsUiSnapshot): void => {
+    const queueBacklog =
+      nextSnapshot.queue?.backlog ?? nextSnapshot.status?.queueBacklog;
+    const processedItems =
+      nextSnapshot.status?.processedItems ?? nextSnapshot.db?.processed;
+    const failedItems =
+      nextSnapshot.status?.failedItems ?? nextSnapshot.queue?.failed;
+    const workersRunning =
+      nextSnapshot.infra?.workersRunning ?? nextSnapshot.status?.workersRunning;
+
+    if (
+      queueBacklog === undefined ||
+      processedItems === undefined ||
+      failedItems === undefined ||
+      workersRunning === undefined
+    ) {
+      return;
+    }
+
+    const inferredAtMs = Date.parse(
+      nextSnapshot.status?.updatedAt ||
+        nextSnapshot.infra?.updatedAt ||
+        nextSnapshot.at,
+    );
+    const atMs = Number.isFinite(inferredAtMs) ? inferredAtMs : Date.now();
+    const lastAtMs = trendPoints[trendPoints.length - 1]?.atMs ?? 0;
+    if (atMs <= lastAtMs) {
+      return;
+    }
+
+    trendPoints.push({
+      atMs,
+      queueBacklog,
+      processedItems,
+      failedItems,
+      workersRunning,
+    });
+
+    if (trendPoints.length > OPS_TREND_HISTORY_MAX) {
+      trendPoints = trendPoints.slice(
+        trendPoints.length - OPS_TREND_HISTORY_MAX,
+      );
+    }
+  };
+
+  const hydrateFromStateStore = async (): Promise<OpsUiSnapshot> => {
+    const nowIso = new Date().toISOString();
+    const nextSnapshot: OpsUiSnapshot = {
+      at: nowIso,
+      machines: snapshot?.machines ?? null,
+      queue: snapshot?.queue ?? null,
+      queuePaused: snapshot?.queuePaused ?? null,
+      db: snapshot?.db ?? null,
+      settings: snapshot?.settings ?? null,
+      infra: snapshot?.infra ?? null,
+      status: snapshot?.status ?? null,
+      redisIoAggregate: snapshot?.redisIoAggregate,
+      redisIoInstances: snapshot?.redisIoInstances,
+      projections: snapshot?.projections ?? deriveOpsTrendProjection([]),
+      errors: {},
+    };
+
+    const [
+      control,
+      queue,
+      db,
+      liveWorkers,
+      trendProjection,
+      queuePaused,
+      redisIoInstances,
+    ] = await Promise.allSettled([
+      withTimeout("control", snapshotTimeoutMs, readOpsControlSnapshot()),
+      withTimeout("queue", snapshotTimeoutMs, readOpsQueueSnapshot()),
+      withTimeout("db", snapshotTimeoutMs, readOpsDbProgress()),
+      withTimeout(
+        "liveWorkers",
+        snapshotTimeoutMs,
+        readOpsLiveWorkersRunning(),
+      ),
+      withTimeout(
+        "trend",
+        snapshotTimeoutMs,
+        readOpsTrendProjectionSampled({
+          limit: trendProjectionLimit,
+          sampleMode: trendSampleMode,
+          sampleMaxGapMs: trendSampleMaxGapMs,
+          sampleAnchorAtMs: trendSampleWindowMs ? Date.now() : undefined,
+          sampleWindowMs: trendSampleWindowMs,
+        }),
+      ),
+      withTimeout("queuePaused", snapshotTimeoutMs, readOpsQueuePausedState()),
+      withTimeout(
+        "redisIoInstances",
+        snapshotTimeoutMs,
+        readOpsRedisIoInstanceStats(),
+      ),
+    ]);
+
+    if (control.status === "fulfilled") {
+      nextSnapshot.settings = control.value.settings;
+      nextSnapshot.infra = control.value.infra;
+      nextSnapshot.status = control.value.status;
+    } else {
+      nextSnapshot.errors.control = shortError(control.reason);
+    }
+
+    if (queue.status === "fulfilled") {
+      nextSnapshot.queue = queue.value;
+    } else {
+      nextSnapshot.errors.queue = shortError(queue.reason);
+      nextSnapshot.queue =
+        nextSnapshot.queue ?? queueCountsFromStatus(nextSnapshot.status);
+    }
+
+    if (db.status === "fulfilled") {
+      nextSnapshot.db = db.value;
+    } else {
+      nextSnapshot.errors.db = shortError(db.reason);
+    }
+
+    if (liveWorkers.status === "fulfilled") {
+      const normalized = applyLiveWorkersToControlSnapshot({
+        infra: nextSnapshot.infra,
+        status: nextSnapshot.status,
+        liveWorkers: liveWorkers.value,
+      });
+      nextSnapshot.infra = normalized.infra;
+      nextSnapshot.status = normalized.status;
+    }
+
+    if (trendProjection.status === "fulfilled") {
+      nextSnapshot.projections = trendProjection.value;
+    }
+
+    if (queuePaused.status === "fulfilled") {
+      nextSnapshot.queuePaused = queuePaused.value;
+    }
+
+    if (redisIoInstances.status === "fulfilled") {
+      nextSnapshot.redisIoInstances = redisIoInstances.value;
+      nextSnapshot.redisIoAggregate = aggregateRedisIoInstances(
+        redisIoInstances.value,
+      );
+    }
+
+    appendTrendPointFromSnapshot(nextSnapshot);
+    snapshot = {
+      ...nextSnapshot,
+      projections:
+        trendPoints.length > 0 ? projectTrend() : nextSnapshot.projections,
+    };
+    lastRefreshAtMs = Date.now();
+    notifyState();
+    return snapshot;
+  };
+
   const refresh = async (force: boolean): Promise<OpsUiSnapshot> => {
     if (closed) {
       throw new Error("state watcher closed");
@@ -1788,141 +2021,24 @@ export async function createOpsUiStateWatcher(input: {
       return refreshInFlight;
     }
 
-    refreshInFlight = readOpsUiSnapshot(input.appName, snapshotTimeoutMs)
+    refreshInFlight = readOpsUiSnapshot(input.appName, snapshotTimeoutMs, {
+      includeTrendProjection: false,
+    })
       .then((nextSnapshot) => {
-        snapshot = nextSnapshot;
+        appendTrendPointFromSnapshot(nextSnapshot);
+        snapshot = {
+          ...nextSnapshot,
+          projections:
+            trendPoints.length > 0 ? projectTrend() : nextSnapshot.projections,
+        };
         lastRefreshAtMs = Date.now();
         notifyState();
-        return nextSnapshot;
+        return snapshot;
       })
       .finally(() => {
         refreshInFlight = null;
       });
     return refreshInFlight;
-  };
-
-  const applySignalTrendRefresh = async (): Promise<boolean> => {
-    if (closed || !snapshot) {
-      return false;
-    }
-
-    const latest = await readOpsRunnerTrendLatest({
-      metricNames: signalTrendMetrics,
-      redis: trendRedis,
-    });
-
-    const queueBacklog = latest.queueBacklog;
-    const processedItems = latest.processedItems;
-    const failedItems = latest.failedItems;
-    const workersRunning = latest.workersRunning;
-    const queueWaiting = latest.queueWaiting;
-    const queueActive = latest.queueActive;
-    const queueDelayed = latest.queueDelayed;
-    const queuePaused = latest.queuePaused;
-    const queueCompleted = latest.queueCompleted;
-    const queueFailed = latest.queueFailed;
-    const pendingSuccessBuffer = latest.pendingSuccessBuffer;
-    const pendingErrorBuffer = latest.pendingErrorBuffer;
-    const flushBatchCount = latest.flushBatchCount;
-    if (
-      !queueBacklog ||
-      !processedItems ||
-      !failedItems ||
-      !workersRunning ||
-      !queueWaiting ||
-      !queueActive ||
-      !queueDelayed ||
-      !queuePaused ||
-      !queueCompleted ||
-      !queueFailed ||
-      !pendingSuccessBuffer ||
-      !pendingErrorBuffer ||
-      !flushBatchCount
-    ) {
-      return false;
-    }
-
-    const atMs = Math.max(
-      queueBacklog.atMs,
-      processedItems.atMs,
-      failedItems.atMs,
-      workersRunning.atMs,
-    );
-    const lastAtMs = trendPoints[trendPoints.length - 1]?.atMs ?? 0;
-    if (atMs <= lastAtMs) {
-      return false;
-    }
-
-    trendPoints.push({
-      atMs,
-      queueBacklog: queueBacklog.value,
-      processedItems: processedItems.value,
-      failedItems: failedItems.value,
-      workersRunning: workersRunning.value,
-    });
-    if (trendPoints.length > OPS_TREND_HISTORY_MAX) {
-      trendPoints = trendPoints.slice(
-        trendPoints.length - OPS_TREND_HISTORY_MAX,
-      );
-    }
-
-    const nextUpdatedAt = new Date().toISOString();
-    const nextQueue = snapshot.queue
-      ? {
-          ...snapshot.queue,
-          waiting: queueWaiting.value,
-          active: queueActive.value,
-          delayed: queueDelayed.value,
-          paused: queuePaused.value,
-          completed: queueCompleted.value,
-          failed: queueFailed.value,
-          backlog:
-            queueWaiting.value +
-            queueActive.value +
-            queueDelayed.value +
-            queuePaused.value,
-        }
-      : snapshot.queue;
-
-    const nextStatus = snapshot.status
-      ? {
-          ...snapshot.status,
-          workersRunning: workersRunning.value,
-          processedItems: processedItems.value,
-          failedItems: failedItems.value,
-          queueWaiting: queueWaiting.value,
-          queueActive: queueActive.value,
-          queueCompleted: queueCompleted.value,
-          queueFailed: queueFailed.value,
-          queueDelayed: queueDelayed.value,
-          queuePaused: queuePaused.value,
-          queueBacklog: queueBacklog.value,
-          pendingSuccessBuffer: pendingSuccessBuffer.value,
-          pendingErrorBuffer: pendingErrorBuffer.value,
-          flushBatchCount: flushBatchCount.value,
-          updatedAt: nextUpdatedAt,
-        }
-      : snapshot.status;
-
-    const nextInfra = snapshot.infra
-      ? {
-          ...snapshot.infra,
-          workersRunning: workersRunning.value,
-          updatedAt: nextUpdatedAt,
-        }
-      : snapshot.infra;
-
-    snapshot = {
-      ...snapshot,
-      at: nextUpdatedAt,
-      queue: nextQueue,
-      status: nextStatus,
-      infra: nextInfra,
-      projections: deriveOpsTrendProjection(trendPoints),
-    };
-    lastRefreshAtMs = Date.now();
-    notifyState();
-    return true;
   };
 
   const sleep = async (ms: number): Promise<void> => {
@@ -1947,10 +2063,7 @@ export async function createOpsUiStateWatcher(input: {
           }
 
           if (signal === "message") {
-            const updated = await applySignalTrendRefresh();
-            if (!updated) {
-              await refresh(false);
-            }
+            await refresh(false);
             touchedState = true;
           }
         }
@@ -1976,15 +2089,10 @@ export async function createOpsUiStateWatcher(input: {
     });
   };
 
-  await refresh(true);
-  trendPoints = await readOpsTrendHistory(OPS_TREND_HISTORY_MAX, trendRedis)
-    .then((rows) => rows.slice(-OPS_TREND_HISTORY_MAX))
-    .catch(() => []);
-  if (snapshot && trendPoints.length > 0) {
-    snapshot = {
-      ...snapshot,
-      projections: deriveOpsTrendProjection(trendPoints),
-    };
+  if (!skipInitialRefresh) {
+    await refresh(true);
+  } else if (hydrateOnInit) {
+    await hydrateFromStateStore().catch(() => undefined);
   }
   startWatcherLoop();
 
@@ -2048,7 +2156,6 @@ export async function createOpsUiStateWatcher(input: {
       if (queueEventsConnection) {
         await queueEventsConnection.quit().catch(() => undefined);
       }
-      await trendRedis.quit().catch(() => undefined);
       if (loopInFlight) {
         await loopInFlight;
       }
@@ -2087,6 +2194,13 @@ export async function createOpsQueueRuntime(input?: {
       await queueConnection.quit().catch(() => undefined);
     },
   };
+}
+
+export async function readOpsQueueJobById(
+  queue: Queue<ImageProcessingQueueJob>,
+  jobId: string,
+): Promise<Job<ImageProcessingQueueJob> | null> {
+  return Job.fromId(queue, jobId);
 }
 
 export async function waitForOpsRunCompletion(input: {
@@ -2357,6 +2471,74 @@ export async function readOpsControlSnapshot(redis?: IORedis): Promise<{
   });
 }
 
+function queueCountsFromStatus(
+  status: RunnerStatusSnapshot | null,
+): ImageQueueCounts | null {
+  if (!status) {
+    return null;
+  }
+
+  const waiting = Math.max(0, Number(status.queueWaiting) || 0);
+  const active = Math.max(0, Number(status.queueActive) || 0);
+  const completed = Math.max(0, Number(status.queueCompleted) || 0);
+  const failed = Math.max(0, Number(status.queueFailed) || 0);
+  const delayed = Math.max(0, Number(status.queueDelayed) || 0);
+  const paused = Math.max(0, Number(status.queuePaused) || 0);
+  const backlog = Math.max(
+    0,
+    Number(status.queueBacklog) || waiting + active + delayed + paused,
+  );
+
+  return {
+    waiting,
+    active,
+    completed,
+    failed,
+    delayed,
+    paused,
+    backlog,
+  };
+}
+
+function applyLiveWorkersToControlSnapshot(input: {
+  infra: RunnerInfraSnapshot | null;
+  status: RunnerStatusSnapshot | null;
+  liveWorkers: number;
+}): {
+  infra: RunnerInfraSnapshot | null;
+  status: RunnerStatusSnapshot | null;
+} {
+  const liveWorkers = Math.max(0, Math.floor(input.liveWorkers));
+  if (liveWorkers <= 0) {
+    return {
+      infra: input.infra,
+      status: input.status,
+    };
+  }
+
+  const infraWorkers = Math.max(0, Number(input.infra?.workersRunning) || 0);
+  const statusWorkers = Math.max(0, Number(input.status?.workersRunning) || 0);
+  const workersRunning = Math.max(liveWorkers, infraWorkers, statusWorkers);
+
+  const infra: RunnerInfraSnapshot = {
+    workersRunning,
+    source: input.infra?.source || "image-ops-module:bullmq-workers",
+    updatedAt: input.infra?.updatedAt || new Date().toISOString(),
+  };
+  const status = input.status
+    ? {
+        ...input.status,
+        workersRunning,
+      }
+    : null;
+
+  return { infra, status };
+}
+
+export async function readOpsLiveWorkersRunning(): Promise<number> {
+  return readImageQueueWorkersRunning();
+}
+
 export async function readOpsSharedState(
   redis?: IORedis,
 ): Promise<OpsSharedState> {
@@ -2492,7 +2674,11 @@ export async function readOpsDbProgress(): Promise<OpsDbProgress> {
 export async function readOpsUiSnapshot(
   appName: string,
   timeoutMs = 8000,
+  input?: {
+    includeTrendProjection?: boolean;
+  },
 ): Promise<OpsUiSnapshot> {
+  const includeTrendProjection = input?.includeTrendProjection ?? true;
   const projectionLimit = OPS_TREND_PROJECTION_DEFAULT_LIMIT;
   const projectionAnchorAtMs = Date.now();
   const projectionWindowMs = projectionLimit * 1000;
@@ -2501,10 +2687,13 @@ export async function readOpsUiSnapshot(
     at: new Date().toISOString(),
     machines: null,
     queue: null,
+    queuePaused: null,
     db: null,
     settings: null,
     infra: null,
     status: null,
+    redisIoAggregate: undefined,
+    redisIoInstances: undefined,
     projections: deriveOpsTrendProjection([]),
     errors: {},
   };
@@ -2521,35 +2710,79 @@ export async function readOpsUiSnapshot(
     snapshot.errors.fly = shortError(error);
   }
 
-  const [shared, trendProjection] = await Promise.allSettled([
-    withTimeout("shared", timeoutMs, readOpsSharedState()),
-    withTimeout(
-      "trend",
-      timeoutMs,
-      readOpsTrendProjectionSampled({
-        limit: projectionLimit,
-        sampleMode: "interpolated",
-        sampleAnchorAtMs: projectionAnchorAtMs,
-        sampleWindowMs: projectionWindowMs,
-      }),
-    ),
+  const [
+    control,
+    queue,
+    db,
+    liveWorkers,
+    trendProjection,
+    queuePaused,
+    redisIoInstances,
+  ] = await Promise.allSettled([
+    withTimeout("control", timeoutMs, readOpsControlSnapshot()),
+    withTimeout("queue", timeoutMs, readOpsQueueSnapshot()),
+    withTimeout("db", timeoutMs, readOpsDbProgress()),
+    withTimeout("liveWorkers", timeoutMs, readOpsLiveWorkersRunning()),
+    includeTrendProjection
+      ? withTimeout(
+          "trend",
+          timeoutMs,
+          readOpsTrendProjectionSampled({
+            limit: projectionLimit,
+            sampleMode: "interpolated",
+            sampleAnchorAtMs: projectionAnchorAtMs,
+            sampleWindowMs: projectionWindowMs,
+          }),
+        )
+      : Promise.resolve<OpsTrendProjection>(deriveOpsTrendProjection([])),
+    withTimeout("queuePaused", timeoutMs, readOpsQueuePausedState()),
+    withTimeout("redisIoInstances", timeoutMs, readOpsRedisIoInstanceStats()),
   ]);
 
-  if (shared.status === "fulfilled") {
-    snapshot.queue = shared.value.queue;
-    snapshot.db = shared.value.db;
-    snapshot.settings = shared.value.settings;
-    snapshot.infra = shared.value.infra;
-    snapshot.status = shared.value.status;
+  if (control.status === "fulfilled") {
+    snapshot.settings = control.value.settings;
+    snapshot.infra = control.value.infra;
+    snapshot.status = control.value.status;
   } else {
-    const message = shortError(shared.reason);
-    snapshot.errors.queue = message;
-    snapshot.errors.db = message;
-    snapshot.errors.control = message;
+    snapshot.errors.control = shortError(control.reason);
+  }
+
+  if (queue.status === "fulfilled") {
+    snapshot.queue = queue.value;
+  } else {
+    snapshot.errors.queue = shortError(queue.reason);
+    snapshot.queue = queueCountsFromStatus(snapshot.status);
+  }
+
+  if (db.status === "fulfilled") {
+    snapshot.db = db.value;
+  } else {
+    snapshot.errors.db = shortError(db.reason);
+  }
+
+  if (liveWorkers.status === "fulfilled") {
+    const normalized = applyLiveWorkersToControlSnapshot({
+      infra: snapshot.infra,
+      status: snapshot.status,
+      liveWorkers: liveWorkers.value,
+    });
+    snapshot.infra = normalized.infra;
+    snapshot.status = normalized.status;
   }
 
   if (trendProjection.status === "fulfilled") {
     snapshot.projections = trendProjection.value;
+  }
+
+  if (queuePaused.status === "fulfilled") {
+    snapshot.queuePaused = queuePaused.value;
+  }
+
+  if (redisIoInstances.status === "fulfilled") {
+    snapshot.redisIoInstances = redisIoInstances.value;
+    snapshot.redisIoAggregate = aggregateRedisIoInstances(
+      redisIoInstances.value,
+    );
   }
 
   await writeOpsUiTrendMetrics(snapshot);
@@ -2568,6 +2801,12 @@ export async function readOpsFlyMachines(
   appName: string,
 ): Promise<FlyMachine[]> {
   return fetchFlyMachines(appName);
+}
+
+export async function readOpsFlyAppSnapshot(
+  appName: string,
+): Promise<FlyAppSnapshot> {
+  return fetchFlyAppSnapshot(appName);
 }
 
 export async function refreshOpsInfraFromFly(
@@ -3015,6 +3254,118 @@ export async function readOpsTrendProjectionSampled(input?: {
   const workerValues = sampleTrendRows(
     workerRows,
     "interpolated",
+    limit,
+    sampleMaxGapMs,
+    {
+      anchorAtMs: sampleAnchorAtMs,
+      windowMs: sampleWindowMs,
+    },
+  );
+
+  const sampledPoints: OpsTrendPoint[] = atMsSeries.map((atMs, index) => ({
+    atMs,
+    queueBacklog: queueValues[index] || 0,
+    processedItems: processedValues[index] || 0,
+    failedItems: failedValues[index] || 0,
+    workersRunning: workerValues[index] || 0,
+  }));
+
+  return deriveOpsTrendProjection(sampledPoints);
+}
+
+function deriveOpsTrendProjectionFromPointsSampled(input: {
+  points: OpsTrendPoint[];
+  limit?: number;
+  sampleMode?: OpsTrendSampleMode;
+  sampleMaxGapMs?: number;
+  sampleAnchorAtMs?: number;
+  sampleWindowMs?: number;
+}): OpsTrendProjection {
+  const limit = Math.max(
+    1,
+    Math.min(
+      OPS_TREND_HISTORY_MAX,
+      input.limit ?? OPS_TREND_PROJECTION_DEFAULT_LIMIT,
+    ),
+  );
+  const sampleMode = input.sampleMode ?? "raw";
+  const sampleMaxGapMs = input.sampleMaxGapMs;
+  const sampleAnchorAtMs = input.sampleAnchorAtMs;
+  const sampleWindowMs = input.sampleWindowMs;
+  const points = input.points.slice(-OPS_TREND_HISTORY_MAX);
+
+  if (sampleMode === "raw" || points.length === 0) {
+    return deriveOpsTrendProjection(points.slice(-limit));
+  }
+
+  const queueRows = points.map((point) => ({
+    atMs: point.atMs,
+    value: point.queueBacklog,
+  }));
+  const processedRows = points.map((point) => ({
+    atMs: point.atMs,
+    value: point.processedItems,
+  }));
+  const failedRows = points.map((point) => ({
+    atMs: point.atMs,
+    value: point.failedItems,
+  }));
+  const workerRows = points.map((point) => ({
+    atMs: point.atMs,
+    value: point.workersRunning,
+  }));
+
+  const useAnchoredWindow =
+    Number.isFinite(sampleAnchorAtMs) &&
+    Number.isFinite(sampleWindowMs) &&
+    (sampleWindowMs || 0) > 0;
+  const startAtMs = useAnchoredWindow
+    ? Number(sampleAnchorAtMs) - Number(sampleWindowMs)
+    : points[0].atMs;
+  const endAtMs = useAnchoredWindow
+    ? Number(sampleAnchorAtMs)
+    : points[points.length - 1].atMs;
+  const atMsSeries =
+    limit === 1 || endAtMs <= startAtMs
+      ? Array.from({ length: limit }, () => endAtMs)
+      : Array.from({ length: limit }, (_, index) => {
+          const ratio = index / (limit - 1);
+          return Math.round(startAtMs + (endAtMs - startAtMs) * ratio);
+        });
+
+  const queueValues = sampleTrendRows(
+    queueRows,
+    sampleMode,
+    limit,
+    sampleMaxGapMs,
+    {
+      anchorAtMs: sampleAnchorAtMs,
+      windowMs: sampleWindowMs,
+    },
+  );
+  const processedValues = sampleTrendRows(
+    processedRows,
+    sampleMode,
+    limit,
+    sampleMaxGapMs,
+    {
+      anchorAtMs: sampleAnchorAtMs,
+      windowMs: sampleWindowMs,
+    },
+  );
+  const failedValues = sampleTrendRows(
+    failedRows,
+    sampleMode,
+    limit,
+    sampleMaxGapMs,
+    {
+      anchorAtMs: sampleAnchorAtMs,
+      windowMs: sampleWindowMs,
+    },
+  );
+  const workerValues = sampleTrendRows(
+    workerRows,
+    sampleMode,
     limit,
     sampleMaxGapMs,
     {
