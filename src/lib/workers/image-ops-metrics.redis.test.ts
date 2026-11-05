@@ -167,6 +167,11 @@ const EXPECTED_UI_METRIC_NAMES = [
   "dbPending",
   "dbTotal",
   "dbProgressPct",
+  "redisWireKbpsAggregate",
+  "redisIngressKbpsAggregate",
+  "redisEgressKbpsAggregate",
+  "redisIngressReadsAggregate",
+  "redisEgressWritesAggregate",
   "rxLatencyAggregate",
   "txLatencyAggregate",
 ] as const;

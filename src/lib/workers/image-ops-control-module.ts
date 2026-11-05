@@ -1,5 +1,6 @@
 import { Job, Queue, QueueEvents } from "bullmq";
 import type IORedis from "ioredis";
+import Redis, { type Command } from "ioredis";
 import { Pool } from "pg";
 
 import type {
@@ -276,6 +277,18 @@ export type OpsSnapshotTrendMetricDescriptor = {
   getValue: (snapshot: OpsUiSnapshot) => number;
 };
 
+export type OpsMetricSample = {
+  key: string;
+  value: number;
+  atMs?: number;
+};
+
+export type OpsSampleCollectorKey = "db" | "fly" | "redis" | "bullmq";
+
+export type OpsSampleCollectorIntervalsMs = Partial<
+  Record<OpsSampleCollectorKey, number>
+>;
+
 export type OpsSnapshotTrendSeriesMap = Record<string, number[]>;
 export type OpsSnapshotTrendRow = {
   atMs: number;
@@ -372,6 +385,27 @@ const OPS_REDIS_IO_INSTANCES_HASH_KEY =
 const OPS_REDIS_IO_INSTANCE_TTL_SECONDS = 45;
 const OPS_REDIS_IO_PUBLISH_MIN_INTERVAL_MS = 5_000;
 const OPS_METRIC_OWNER_REFRESH_MIN_INTERVAL_MS = 5_000;
+const OPS_SAMPLE_FLUSH_INTERVAL_MS_DEFAULT = 1_000;
+const OPS_PIPELINE_TRACE_MAX_CHARS = 1200;
+
+type OpsStagedMetricSample = {
+  key: string;
+  value: number;
+  atMs: number;
+};
+
+const opsStagedMetricSamples: OpsStagedMetricSample[] = [];
+let opsSampleFlushTimer: ReturnType<typeof setInterval> | null = null;
+let opsSampleFlushInFlight = false;
+
+function opsSampleFlushIntervalMs(): number {
+  const raw = process.env.IMAGE_OPS_SAMPLE_FLUSH_INTERVAL_MS;
+  const parsed = Number.parseInt(String(raw || "").trim(), 10);
+  if (!Number.isFinite(parsed)) {
+    return OPS_SAMPLE_FLUSH_INTERVAL_MS_DEFAULT;
+  }
+  return Math.max(1000, Math.min(60_000, parsed));
+}
 
 function inferOpsRedisIoProcessRole(): OpsReactiveProfile {
   const envRole = String(process.env.IMAGE_OPS_PROFILE || "")
@@ -397,6 +431,7 @@ function inferOpsRedisIoProcessRole(): OpsReactiveProfile {
 
 const opsRedisIoProcessRole = inferOpsRedisIoProcessRole();
 const opsRedisIoInstanceId = `${opsRedisIoProcessRole}:${process.pid}-${Date.now().toString(36)}`;
+const opsRedisAutoIoTrackingEnabled = true;
 let opsRedisIoPublishInFlight = false;
 let opsRedisIoLastPublishedAtMs = 0;
 const opsRedisIoCounter = {
@@ -732,6 +767,14 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
       getValue: (snapshot) => snapshot.redisIoAggregate?.redisIngressReads ?? 0,
     },
     {
+      name: "redisEgressWritesAggregate",
+      key: imageMetricTrendKey(
+        IMAGE_GROUP_INFRA,
+        "redis_egress_writes_aggregate",
+      ),
+      getValue: (snapshot) => snapshot.redisIoAggregate?.redisEgressWrites ?? 0,
+    },
+    {
       name: "rxLatencyAggregate",
       key: imageMetricTrendKey(IMAGE_GROUP_INFRA, "rx_latency_aggregate"),
       getValue: (snapshot) => snapshot.redisIoAggregate?.rxLatencyMs ?? 0,
@@ -742,6 +785,101 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
       getValue: (snapshot) => snapshot.redisIoAggregate?.txLatencyMs ?? 0,
     },
   ];
+
+const OPS_SNAPSHOT_METRIC_KEYS = {
+  machinesTotal: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "machinesTotal",
+  )!.key,
+  workersRunningLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "workersRunningLive",
+  )!.key,
+  queueWaitingLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "queueWaitingLive",
+  )!.key,
+  queueActiveLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "queueActiveLive",
+  )!.key,
+  queueDelayedLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "queueDelayedLive",
+  )!.key,
+  queuePausedLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "queuePausedLive",
+  )!.key,
+  queueCompletedLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "queueCompletedLive",
+  )!.key,
+  queueFailedLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "queueFailedLive",
+  )!.key,
+  queueBacklogLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "queueBacklogLive",
+  )!.key,
+  statusProcessedItems: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "statusProcessedItems",
+  )!.key,
+  statusFailedItems: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "statusFailedItems",
+  )!.key,
+  statusCompletedJobs: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "statusCompletedJobs",
+  )!.key,
+  statusFailedJobs: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "statusFailedJobs",
+  )!.key,
+  statusPendingSuccessBuffer: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "statusPendingSuccessBuffer",
+  )!.key,
+  statusPendingErrorBuffer: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "statusPendingErrorBuffer",
+  )!.key,
+  statusFlushBatchCount: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "statusFlushBatchCount",
+  )!.key,
+  dbProcessed: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "dbProcessed",
+  )!.key,
+  dbPending: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "dbPending",
+  )!.key,
+  dbTotal: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "dbTotal",
+  )!.key,
+  dbProgressPct: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "dbProgressPct",
+  )!.key,
+  redisWireKbpsAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "redisWireKbpsAggregate",
+  )!.key,
+  redisIngressKbpsAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "redisIngressKbpsAggregate",
+  )!.key,
+  redisEgressKbpsAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "redisEgressKbpsAggregate",
+  )!.key,
+  redisIngressReadsAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "redisIngressReadsAggregate",
+  )!.key,
+  redisEgressWritesAggregate: imageMetricTrendKey(
+    IMAGE_GROUP_INFRA,
+    "redis_egress_writes_aggregate",
+  ),
+  rxLatencyAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "rxLatencyAggregate",
+  )!.key,
+  txLatencyAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === "txLatencyAggregate",
+  )!.key,
+} as const;
+
+const OPS_COLLECTOR_DEFAULT_INTERVALS_MS: Record<
+  OpsSampleCollectorKey,
+  number
+> = {
+  db: 60_000,
+  fly: 15_000,
+  redis: 15_000,
+  bullmq: 15_000,
+};
 
 const OPS_TREND_METRIC_KEYS = {
   queueBacklog: OPS_TREND_METRIC_REGISTRY.find(
@@ -1512,7 +1650,11 @@ function trackRedisReadIo(
   requestBytes: number,
   responseBytes: number,
   latencyMs?: number,
+  source: "manual" | "auto" = "manual",
 ): void {
+  if (opsRedisAutoIoTrackingEnabled && source !== "auto") {
+    return;
+  }
   trackRedisEgressBytes(requestBytes);
   trackRedisIngressBytes(responseBytes);
   opsRedisIoCounter.reads += 1;
@@ -1528,7 +1670,11 @@ function trackRedisWriteIo(
   requestBytes: number,
   responseBytes: number,
   latencyMs?: number,
+  source: "manual" | "auto" = "manual",
 ): void {
+  if (opsRedisAutoIoTrackingEnabled && source !== "auto") {
+    return;
+  }
   trackRedisEgressBytes(requestBytes);
   trackRedisIngressBytes(responseBytes);
   opsRedisIoCounter.writes += 1;
@@ -1542,6 +1688,61 @@ function trackRedisWriteIo(
 
 function byteLen(value: string): number {
   return Buffer.byteLength(value, "utf8");
+}
+
+function isOpsRedisPipelineTraceEnabled(): boolean {
+  const raw = String(process.env.IMAGE_OPS_REDIS_PIPELINE_TRACE || "")
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
+function summarizeTracePayload(value: unknown): string {
+  let text = "";
+  if (typeof value === "string") {
+    text = value;
+  } else {
+    try {
+      text = JSON.stringify(value);
+    } catch {
+      text = String(value);
+    }
+  }
+  if (text.length <= OPS_PIPELINE_TRACE_MAX_CHARS) {
+    return text;
+  }
+  return `${text.slice(0, OPS_PIPELINE_TRACE_MAX_CHARS)}...`;
+}
+
+function traceOpsRedisPipeline(input: {
+  phase: string;
+  commands: string[][];
+  rawResults: Array<[unknown, unknown]> | null;
+  elapsedMs: number;
+}): void {
+  if (!isOpsRedisPipelineTraceEnabled()) {
+    return;
+  }
+
+  const resultCount = Array.isArray(input.rawResults)
+    ? input.rawResults.length
+    : 0;
+  process.stdout.write(
+    `[ops-redis-pipeline] phase=${input.phase} elapsed_ms=${input.elapsedMs} command_count=${input.commands.length} result_count=${resultCount}\n`,
+  );
+
+  for (let index = 0; index < input.commands.length; index += 1) {
+    const command = input.commands[index] || [];
+    const result = input.rawResults?.[index];
+    const errorPayload = result?.[0] ?? null;
+    const replyPayload = result?.[1] ?? null;
+    process.stdout.write(
+      `[ops-redis-pipeline] cmd[${index}] ${command.join(" ")}\n`,
+    );
+    process.stdout.write(
+      `[ops-redis-pipeline] res[${index}] error=${summarizeTracePayload(errorPayload)} reply=${summarizeTracePayload(replyPayload)}\n`,
+    );
+  }
 }
 
 function redisCommandPayloadBytes(parts: Array<string | number>): number {
@@ -1576,6 +1777,91 @@ function redisReplyPayloadBytes(payload: unknown): number {
   }
   return byteLen(String(payload));
 }
+
+function isLikelyRedisReadCommand(commandNameRaw: string): boolean {
+  const commandName = commandNameRaw.toUpperCase();
+  if (
+    commandName === "GET" ||
+    commandName === "MGET" ||
+    commandName === "HGET" ||
+    commandName === "HGETALL" ||
+    commandName === "HMGET" ||
+    commandName === "ZRANGE" ||
+    commandName === "ZREVRANGE" ||
+    commandName === "ZREVRANGEBYSCORE" ||
+    commandName === "ZCARD" ||
+    commandName === "SCARD" ||
+    commandName === "LLEN" ||
+    commandName === "XLEN" ||
+    commandName === "XREAD" ||
+    commandName === "XREADGROUP" ||
+    commandName === "SMEMBERS" ||
+    commandName === "LRANGE" ||
+    commandName === "INFO" ||
+    commandName === "PTTL" ||
+    commandName === "TTL" ||
+    commandName === "PING"
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function installOpsRedisAutoIoTracking(): void {
+  if (!opsRedisAutoIoTrackingEnabled) {
+    return;
+  }
+
+  const marker = Symbol.for("ops.redis.auto-io.installed");
+  const redisPrototype = Redis.prototype as Redis.prototype & {
+    [key: symbol]: boolean;
+    sendCommand: (command: Command, stream?: unknown) => Promise<unknown>;
+  };
+
+  if (redisPrototype[marker]) {
+    return;
+  }
+
+  const originalSendCommand = redisPrototype.sendCommand;
+  redisPrototype.sendCommand = function patchedSendCommand(
+    this: Redis,
+    command: Command,
+    stream?: unknown,
+  ): Promise<unknown> {
+    const commandName = String(command?.name || "unknown").toUpperCase();
+    const args = Array.isArray(command?.args) ? command.args : [];
+    const requestBytes = redisCommandPayloadBytes([
+      commandName,
+      ...args.map((value) => String(value)),
+    ]);
+    const startedAtMs = Date.now();
+    return originalSendCommand
+      .call(this, command, stream)
+      .then((reply) => {
+        const responseBytes = redisReplyPayloadBytes(reply);
+        const latencyMs = Math.max(0, Date.now() - startedAtMs);
+        if (isLikelyRedisReadCommand(commandName)) {
+          trackRedisReadIo(requestBytes, responseBytes, latencyMs, "auto");
+        } else {
+          trackRedisWriteIo(requestBytes, responseBytes, latencyMs, "auto");
+        }
+        return reply;
+      })
+      .catch((error: unknown) => {
+        const latencyMs = Math.max(0, Date.now() - startedAtMs);
+        if (isLikelyRedisReadCommand(commandName)) {
+          trackRedisReadIo(requestBytes, 0, latencyMs, "auto");
+        } else {
+          trackRedisWriteIo(requestBytes, 0, latencyMs, "auto");
+        }
+        throw error;
+      });
+  };
+
+  redisPrototype[marker] = true;
+}
+
+installOpsRedisAutoIoTracking();
 
 function parseNumericField(
   record: Record<string, unknown>,
@@ -2002,17 +2288,15 @@ function aggregateRedisIoInstances(
   aggregate.redisIngressKbps = Number(aggregate.redisIngressKbps.toFixed(3));
   aggregate.redisWireKbps = Number(aggregate.redisWireKbps.toFixed(3));
   aggregate.rxLatencyMs = Number(
-    (
-      aggregate.redisIngressReads > 0
-        ? weightedRxLatencyMs / aggregate.redisIngressReads
-        : 0
+    (aggregate.redisIngressReads > 0
+      ? weightedRxLatencyMs / aggregate.redisIngressReads
+      : 0
     ).toFixed(3),
   );
   aggregate.txLatencyMs = Number(
-    (
-      aggregate.redisEgressWrites > 0
-        ? weightedTxLatencyMs / aggregate.redisEgressWrites
-        : 0
+    (aggregate.redisEgressWrites > 0
+      ? weightedTxLatencyMs / aggregate.redisEgressWrites
+      : 0
     ).toFixed(3),
   );
   return aggregate;
@@ -2122,34 +2406,276 @@ function parseTrendMetricValue(member: string): number | null {
   return parsed ? Number(parsed.value) : null;
 }
 
-async function appendTrendMetric(
+function normalizeSampleValue(value: number): number {
+  return Number.isFinite(value) ? Number(value) : 0;
+}
+
+function buildTrendSamplesFromRunnerStatus(
+  status: RunnerStatusSnapshot,
+): OpsMetricSample[] {
+  return OPS_TREND_METRIC_REGISTRY.map((metric) => ({
+    key: metric.key,
+    value: normalizeSampleValue(metric.getValue(status)),
+  }));
+}
+
+function buildTrendSamplesFromUiSnapshot(
+  snapshot: OpsUiSnapshot,
+): OpsMetricSample[] {
+  return OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map((metric) => ({
+    key: metric.key,
+    value: normalizeSampleValue(metric.getValue(snapshot)),
+  }));
+}
+
+function resolveCollectorIntervalsMs(
+  input?: OpsSampleCollectorIntervalsMs,
+): Record<OpsSampleCollectorKey, number> {
+  return {
+    db: Math.max(1000, input?.db ?? OPS_COLLECTOR_DEFAULT_INTERVALS_MS.db),
+    fly: Math.max(1000, input?.fly ?? OPS_COLLECTOR_DEFAULT_INTERVALS_MS.fly),
+    redis: Math.max(
+      1000,
+      input?.redis ?? OPS_COLLECTOR_DEFAULT_INTERVALS_MS.redis,
+    ),
+    bullmq: Math.max(
+      1000,
+      input?.bullmq ?? OPS_COLLECTOR_DEFAULT_INTERVALS_MS.bullmq,
+    ),
+  };
+}
+
+function isEventDrivenCollector(collector: OpsSampleCollectorKey): boolean {
+  return collector === "redis" || collector === "bullmq";
+}
+
+async function collectDbMetricSamples(): Promise<OpsMetricSample[]> {
+  const db = await readOpsDbProgress();
+  if (!db) {
+    return [];
+  }
+  return [
+    { key: OPS_SNAPSHOT_METRIC_KEYS.dbProcessed, value: db.processed },
+    { key: OPS_SNAPSHOT_METRIC_KEYS.dbPending, value: db.pending },
+    { key: OPS_SNAPSHOT_METRIC_KEYS.dbTotal, value: db.total },
+    { key: OPS_SNAPSHOT_METRIC_KEYS.dbProgressPct, value: db.pct },
+  ];
+}
+
+async function collectFlyMetricSamples(
+  appName: string,
+): Promise<OpsMetricSample[]> {
+  const machines = await fetchFlyMachines(appName);
+  const workersRunning = machines.filter(
+    (machine) => String(machine.state || "").toLowerCase() === "started",
+  ).length;
+  return [
+    { key: OPS_SNAPSHOT_METRIC_KEYS.machinesTotal, value: machines.length },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.workersRunningLive,
+      value: workersRunning,
+    },
+  ];
+}
+
+async function collectRedisMetricSamples(
+  redis?: IORedis,
+): Promise<OpsMetricSample[]> {
+  const instances = await readOpsRedisIoInstanceStats(redis);
+  const aggregate = aggregateRedisIoInstances(instances);
+  return [
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.redisWireKbpsAggregate,
+      value: aggregate.redisWireKbps,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.redisIngressKbpsAggregate,
+      value: aggregate.redisIngressKbps,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.redisEgressKbpsAggregate,
+      value: aggregate.redisEgressKbps,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.redisIngressReadsAggregate,
+      value: aggregate.redisIngressReads,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.redisEgressWritesAggregate,
+      value: aggregate.redisEgressWrites,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.rxLatencyAggregate,
+      value: aggregate.rxLatencyMs,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.txLatencyAggregate,
+      value: aggregate.txLatencyMs,
+    },
+  ];
+}
+
+async function collectBullmqMetricSamples(): Promise<OpsMetricSample[]> {
+  const [queue, control] = await Promise.all([
+    readOpsQueueSnapshot(),
+    readOpsControlSnapshot(),
+  ]);
+  const status = control.status;
+  return [
+    { key: OPS_SNAPSHOT_METRIC_KEYS.queueWaitingLive, value: queue.waiting },
+    { key: OPS_SNAPSHOT_METRIC_KEYS.queueActiveLive, value: queue.active },
+    { key: OPS_SNAPSHOT_METRIC_KEYS.queueDelayedLive, value: queue.delayed },
+    { key: OPS_SNAPSHOT_METRIC_KEYS.queuePausedLive, value: queue.paused },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.queueCompletedLive,
+      value: queue.completed,
+    },
+    { key: OPS_SNAPSHOT_METRIC_KEYS.queueFailedLive, value: queue.failed },
+    { key: OPS_SNAPSHOT_METRIC_KEYS.queueBacklogLive, value: queue.backlog },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.statusProcessedItems,
+      value: status?.processedItems ?? 0,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.statusFailedItems,
+      value: status?.failedItems ?? 0,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.statusCompletedJobs,
+      value: status?.completedJobs ?? 0,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.statusFailedJobs,
+      value: status?.failedJobs ?? 0,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.statusPendingSuccessBuffer,
+      value: status?.pendingSuccessBuffer ?? 0,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.statusPendingErrorBuffer,
+      value: status?.pendingErrorBuffer ?? 0,
+    },
+    {
+      key: OPS_SNAPSHOT_METRIC_KEYS.statusFlushBatchCount,
+      value: status?.flushBatchCount ?? 0,
+    },
+  ];
+}
+
+async function collectOpsMetricSamplesByCollector(input: {
+  collector: OpsSampleCollectorKey;
+  appName: string;
+  redis?: IORedis;
+}): Promise<OpsMetricSample[]> {
+  if (input.collector === "db") {
+    return collectDbMetricSamples();
+  }
+  if (input.collector === "fly") {
+    return collectFlyMetricSamples(input.appName);
+  }
+  if (input.collector === "bullmq") {
+    return collectBullmqMetricSamples();
+  }
+  return collectRedisMetricSamples(input.redis);
+}
+
+export async function runOpsCollectorsAndIngestSamples(input: {
+  appName: string;
+  collectors?: OpsSampleCollectorKey[];
+  atMs?: number;
+  redis?: IORedis;
+}): Promise<{ collector: OpsSampleCollectorKey; sampleCount: number }[]> {
+  const collectors =
+    input.collectors && input.collectors.length > 0
+      ? input.collectors
+      : (["db", "fly", "redis", "bullmq"] as OpsSampleCollectorKey[]);
+
+  const settled = await Promise.allSettled(
+    collectors.map(async (collector) => {
+      const samples = await collectOpsMetricSamplesByCollector({
+        collector,
+        appName: input.appName,
+        redis: input.redis,
+      });
+      return { collector, samples };
+    }),
+  );
+
+  const merged: OpsMetricSample[] = [];
+  const summary: Array<{
+    collector: OpsSampleCollectorKey;
+    sampleCount: number;
+  }> = [];
+  for (const entry of settled) {
+    if (entry.status !== "fulfilled") {
+      continue;
+    }
+    merged.push(...entry.value.samples);
+    summary.push({
+      collector: entry.value.collector,
+      sampleCount: entry.value.samples.length,
+    });
+  }
+
+  if (merged.length > 0) {
+    await ingestOpsMetricSamples({
+      samples: merged,
+      atMs: input.atMs,
+      redis: input.redis,
+    });
+  }
+
+  return summary;
+}
+
+async function appendTrendMetricBatch(
   connection: IORedis,
-  key: string,
-  atMs: number,
-  value: number,
+  input: {
+    samples: OpsMetricSample[];
+    atMs?: number;
+  },
 ): Promise<void> {
-  const pruneBeforeMs = Math.max(0, atMs - OPS_TREND_REDIS_RETENTION_MS);
+  const samples = input.samples.filter((sample) => sample.key);
+  if (samples.length === 0) {
+    return;
+  }
+
+  const sharedAtMs = input.atMs ?? nextTrendTimestampMs();
   const pipeline = connection.pipeline();
-  pipeline.zadd(key, atMs, encodeTrendMetricMember(value, atMs));
-  pipeline.zremrangebyscore(key, "0", String(pruneBeforeMs));
-  const startedAtMs = Date.now();
-  const result = await pipeline.exec();
-  const requestBytes =
-    redisCommandPayloadBytes([
+  let requestBytes = 0;
+
+  for (const sample of samples) {
+    const atMs = Number.isFinite(sample.atMs)
+      ? Number(sample.atMs)
+      : sharedAtMs;
+    const value = normalizeSampleValue(sample.value);
+    const pruneBeforeMs = Math.max(0, atMs - OPS_TREND_REDIS_RETENTION_MS);
+    const member = encodeTrendMetricMember(value, atMs);
+
+    pipeline.zadd(sample.key, atMs, member);
+    pipeline.zremrangebyscore(sample.key, "0", String(pruneBeforeMs));
+
+    requestBytes += redisCommandPayloadBytes([
       "ZADD",
-      key,
+      sample.key,
       String(atMs),
-      encodeTrendMetricMember(value, atMs),
-    ]) +
-    redisCommandPayloadBytes([
+      member,
+    ]);
+    requestBytes += redisCommandPayloadBytes([
       "ZREMRANGEBYSCORE",
-      key,
+      sample.key,
       "0",
       String(pruneBeforeMs),
     ]);
+  }
+
+  const startedAtMs = Date.now();
+  const result = await pipeline.exec();
   const responseBytes = Array.isArray(result)
     ? result.reduce((sum, row) => sum + redisReplyPayloadBytes(row?.[1]), 0)
     : 0;
+
   trackRedisWriteIo(
     requestBytes,
     responseBytes,
@@ -2157,17 +2683,132 @@ async function appendTrendMetric(
   );
 }
 
+async function flushOpsStagedMetricSamples(input?: {
+  redis?: IORedis;
+}): Promise<number> {
+  if (opsSampleFlushInFlight || opsStagedMetricSamples.length === 0) {
+    return 0;
+  }
+
+  opsSampleFlushInFlight = true;
+  const pending = opsStagedMetricSamples.splice(
+    0,
+    opsStagedMetricSamples.length,
+  );
+
+  try {
+    await withControlRedis(input?.redis, async (connection) => {
+      await appendTrendMetricBatch(connection, {
+        samples: pending,
+      });
+    });
+    return pending.length;
+  } catch (error) {
+    opsStagedMetricSamples.unshift(...pending);
+    throw error;
+  } finally {
+    opsSampleFlushInFlight = false;
+  }
+}
+
+function ensureOpsSampleFlushLoop(): void {
+  if (opsSampleFlushTimer) {
+    return;
+  }
+
+  opsSampleFlushTimer = setInterval(() => {
+    void flushOpsStagedMetricSamples().catch(() => undefined);
+  }, opsSampleFlushIntervalMs());
+}
+
+function stageOpsMetricSamples(input: {
+  samples: OpsMetricSample[];
+  atMs?: number;
+}): number {
+  const sharedAtMs =
+    Number.isFinite(input.atMs) && (input.atMs || 0) > 0
+      ? Number(input.atMs)
+      : Date.now();
+
+  let stagedCount = 0;
+  for (const sample of input.samples) {
+    if (!sample.key) {
+      continue;
+    }
+    const atMs =
+      Number.isFinite(sample.atMs) && (sample.atMs || 0) > 0
+        ? Number(sample.atMs)
+        : sharedAtMs;
+    opsStagedMetricSamples.push({
+      key: sample.key,
+      value: normalizeSampleValue(sample.value),
+      atMs,
+    });
+    stagedCount += 1;
+  }
+
+  if (stagedCount > 0) {
+    ensureOpsSampleFlushLoop();
+  }
+
+  return stagedCount;
+}
+
+export async function ingestOpsMetricSamples(input: {
+  samples: OpsMetricSample[];
+  atMs?: number;
+  redis?: IORedis;
+  flushNow?: boolean;
+}): Promise<void> {
+  const stagedCount = stageOpsMetricSamples({
+    samples: input.samples,
+    atMs: input.atMs,
+  });
+
+  if (stagedCount <= 0) {
+    return;
+  }
+
+  if (input.flushNow) {
+    await flushOpsStagedMetricSamples({ redis: input.redis });
+  }
+}
+
+export async function ingestOpsExternalSamples(input: {
+  samples: OpsMetricSample[];
+  atMs?: number;
+  redis?: IORedis;
+  flushNow?: boolean;
+}): Promise<void> {
+  await ingestOpsMetricSamples(input);
+}
+
 async function readTrendMetricLatestBatch<TName extends string>(
   connection: IORedis,
   descriptors: Array<{ name: TName; key: string }>,
 ): Promise<Array<{ name: TName; row: TrendMetricRow | null }>> {
   const pipeline = connection.pipeline();
+  const pipelineCommands: string[][] = [];
   for (const descriptor of descriptors) {
+    pipelineCommands.push([
+      "ZREVRANGE",
+      descriptor.key,
+      "0",
+      "0",
+      "WITHSCORES",
+    ]);
     pipeline.zrevrange(descriptor.key, 0, 0, "WITHSCORES");
   }
 
   const startedAtMs = Date.now();
   const rawResults = await pipeline.exec();
+  const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+  traceOpsRedisPipeline({
+    phase: "trend-latest-batch",
+    commands: pipelineCommands,
+    rawResults,
+    elapsedMs,
+  });
   if (!rawResults) {
     trackRedisReadIo(
       descriptors.reduce(
@@ -2183,7 +2824,7 @@ async function readTrendMetricLatestBatch<TName extends string>(
         0,
       ),
       0,
-      Math.max(0, Date.now() - startedAtMs),
+      elapsedMs,
     );
     return descriptors.map((descriptor) => ({
       name: descriptor.name,
@@ -2207,7 +2848,7 @@ async function readTrendMetricLatestBatch<TName extends string>(
     rawResults.reduce((sum, result) => {
       return sum + redisReplyPayloadBytes(result?.[1]);
     }, 0),
-    Math.max(0, Date.now() - startedAtMs),
+    elapsedMs,
   );
 
   return descriptors.map((descriptor, index) => {
@@ -2275,12 +2916,27 @@ async function readTrendMetricRowsBatch<TName extends string>(
   limit: number,
 ): Promise<Array<{ name: TName; rows: TrendMetricRow[] }>> {
   const pipeline = connection.pipeline();
+  const pipelineCommands: string[][] = [];
   for (const descriptor of descriptors) {
+    pipelineCommands.push([
+      "ZRANGE",
+      descriptor.key,
+      String(-limit),
+      "-1",
+      "WITHSCORES",
+    ]);
     pipeline.zrange(descriptor.key, -limit, -1, "WITHSCORES");
   }
 
   const startedAtMs = Date.now();
   const rawResults = await pipeline.exec();
+  const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+  traceOpsRedisPipeline({
+    phase: "trend-rows-batch",
+    commands: pipelineCommands,
+    rawResults,
+    elapsedMs,
+  });
   if (!rawResults) {
     trackRedisReadIo(
       descriptors.reduce(
@@ -2296,7 +2952,7 @@ async function readTrendMetricRowsBatch<TName extends string>(
         0,
       ),
       0,
-      Math.max(0, Date.now() - startedAtMs),
+      elapsedMs,
     );
     return descriptors.map((descriptor) => ({
       name: descriptor.name,
@@ -2328,7 +2984,7 @@ async function readTrendMetricRowsBatch<TName extends string>(
       0,
     ),
     totalBytes,
-    Math.max(0, Date.now() - startedAtMs),
+    elapsedMs,
   );
 
   return descriptors.map((descriptor, index) => {
@@ -2488,15 +3144,11 @@ export async function writeOpsSnapshotTrendMetrics(
   snapshot: OpsUiSnapshot,
   redis?: IORedis,
 ): Promise<void> {
-  await withControlRedis(redis, async (connection) => {
-    const atMs = nextTrendTimestampMs();
-    await Promise.all(
-      OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map((metric) => {
-        const value = metric.getValue(snapshot);
-        const normalized = Number.isFinite(value) ? Number(value) : 0;
-        return appendTrendMetric(connection, metric.key, atMs, normalized);
-      }),
-    );
+  await ingestOpsMetricSamples({
+    redis,
+    atMs: nextTrendTimestampMs(),
+    samples: buildTrendSamplesFromUiSnapshot(snapshot),
+    flushNow: Boolean(redis),
   });
 }
 
@@ -2924,12 +3576,17 @@ export async function createOpsUiStateWatcher(input: {
   fallbackRefreshIntervalMs?: number;
   skipInitialRefresh?: boolean;
   hydrateOnInit?: boolean;
+  waitForQueueEventsReadyOnInit?: boolean;
+  seedCollectorsOnInit?: boolean;
   profile?: OpsReactiveProfile;
   subscribeToSignals?: boolean;
   trendProjectionLimit?: number;
   trendSampleMode?: OpsTrendSampleMode;
   trendSampleWindowMs?: number;
   trendSampleMaxGapMs?: number;
+  enableCollectors?: boolean;
+  collectorIntervalsMs?: OpsSampleCollectorIntervalsMs;
+  collectors?: OpsSampleCollectorKey[];
 }): Promise<OpsUiStateWatcher> {
   const profile = input.profile ?? "cli";
   const profileDefaults =
@@ -2940,8 +3597,8 @@ export async function createOpsUiStateWatcher(input: {
           subscribeToSignals: false,
         }
       : {
-          minRefreshIntervalMs: 1000,
-          fallbackRefreshIntervalMs: 5000,
+          minRefreshIntervalMs: 5000,
+          fallbackRefreshIntervalMs: 15000,
           subscribeToSignals: true,
         };
 
@@ -2959,6 +3616,9 @@ export async function createOpsUiStateWatcher(input: {
     input.subscribeToSignals ?? profileDefaults.subscribeToSignals;
   const skipInitialRefresh = input.skipInitialRefresh === true;
   const hydrateOnInit = input.hydrateOnInit ?? true;
+  const waitForQueueEventsReadyOnInit =
+    input.waitForQueueEventsReadyOnInit ?? true;
+  const seedCollectorsOnInit = input.seedCollectorsOnInit ?? true;
   const trendProjectionLimit = Math.max(
     1,
     Math.min(
@@ -2977,6 +3637,14 @@ export async function createOpsUiStateWatcher(input: {
     (input.trendSampleMaxGapMs || 0) > 0
       ? Number(input.trendSampleMaxGapMs)
       : undefined;
+  const collectorsEnabled = input.enableCollectors ?? true;
+  const collectorIntervalsMs = resolveCollectorIntervalsMs(
+    input.collectorIntervalsMs,
+  );
+  const configuredCollectors: OpsSampleCollectorKey[] =
+    input.collectors && input.collectors.length > 0
+      ? input.collectors
+      : ["db", "fly", "redis", "bullmq"];
 
   const subscriber = subscribeToSignals
     ? await createOpsStateUpdatesSubscriber().catch(() => null)
@@ -2990,7 +3658,11 @@ export async function createOpsUiStateWatcher(input: {
       })
     : null;
   if (queueEvents) {
-    await queueEvents.waitUntilReady().catch(() => undefined);
+    if (waitForQueueEventsReadyOnInit) {
+      await queueEvents.waitUntilReady().catch(() => undefined);
+    } else {
+      void queueEvents.waitUntilReady().catch(() => undefined);
+    }
   }
 
   let snapshot: OpsUiSnapshot | null = null;
@@ -3010,6 +3682,8 @@ export async function createOpsUiStateWatcher(input: {
   let lastPerformanceRollupRefreshAtMs = 0;
   let metricOwnershipCache: OpsMetricSystemOwnership | null = null;
   let lastMetricOwnershipRefreshAtMs = 0;
+  const collectorLastRunAtMs: Partial<Record<OpsSampleCollectorKey, number>> =
+    {};
   const stateWaiters = new Set<() => void>();
   const listeners = new Set<() => void>();
 
@@ -3031,6 +3705,52 @@ export async function createOpsUiStateWatcher(input: {
     metricOwnershipCache = ownership;
     lastMetricOwnershipRefreshAtMs = nowMs;
     return ownership;
+  };
+
+  const runDueCollectors = async (runInput?: {
+    force?: boolean;
+    nowMs?: number;
+    eventDriven?: boolean;
+  }): Promise<void> => {
+    if (!collectorsEnabled || configuredCollectors.length === 0) {
+      return;
+    }
+
+    const nowMs = runInput?.nowMs ?? Date.now();
+    const ownership = await readMetricOwnership(nowMs);
+    if (!ownership.isOwner) {
+      return;
+    }
+
+    const dueCollectors = configuredCollectors.filter((collector) => {
+      if (runInput?.force) {
+        return true;
+      }
+      const eventDriven = isEventDrivenCollector(collector);
+      if (runInput?.eventDriven === true) {
+        return eventDriven;
+      }
+      if (eventDriven) {
+        return false;
+      }
+      const lastAt = collectorLastRunAtMs[collector] ?? 0;
+      const intervalMs = collectorIntervalsMs[collector];
+      return nowMs - lastAt >= intervalMs;
+    });
+
+    if (dueCollectors.length === 0) {
+      return;
+    }
+
+    await runOpsCollectorsAndIngestSamples({
+      appName: input.appName,
+      collectors: dueCollectors,
+      atMs: nextTrendTimestampMs(),
+    }).catch(() => undefined);
+
+    for (const collector of dueCollectors) {
+      collectorLastRunAtMs[collector] = nowMs;
+    }
   };
 
   const readRecent15mWindow = async (
@@ -3443,6 +4163,8 @@ export async function createOpsUiStateWatcher(input: {
       while (!closed) {
         let touchedState = false;
 
+        await runDueCollectors({ nowMs: Date.now() });
+
         if (subscriber) {
           const signal = await subscriber.waitForUpdate(500);
           if (closed) {
@@ -3450,6 +4172,7 @@ export async function createOpsUiStateWatcher(input: {
           }
 
           if (signal === "message") {
+            await runDueCollectors({ nowMs: Date.now(), eventDriven: true });
             await refresh(false);
             touchedState = true;
           }
@@ -3457,6 +4180,7 @@ export async function createOpsUiStateWatcher(input: {
 
         if (queueSignalPending) {
           queueSignalPending = false;
+          await runDueCollectors({ nowMs: Date.now(), eventDriven: true });
           await refresh(false);
           touchedState = true;
         }
@@ -3480,6 +4204,9 @@ export async function createOpsUiStateWatcher(input: {
     await refresh(true);
   } else if (hydrateOnInit) {
     await hydrateFromStateStore().catch(() => undefined);
+  }
+  if (seedCollectorsOnInit) {
+    await runDueCollectors({ force: true, nowMs: Date.now() });
   }
   startWatcherLoop();
 
@@ -4811,17 +5538,12 @@ export async function writeOpsRunnerStatus(
 ): Promise<void> {
   await withControlRedis(redis, async (connection) => {
     await writeRunnerStatus(connection, status);
-    const atMs = nextTrendTimestampMs();
-    await Promise.all(
-      OPS_TREND_METRIC_REGISTRY.map((metric) =>
-        appendTrendMetric(
-          connection,
-          metric.key,
-          atMs,
-          metric.getValue(status),
-        ),
-      ),
-    );
+    await ingestOpsMetricSamples({
+      redis: connection,
+      atMs: nextTrendTimestampMs(),
+      samples: buildTrendSamplesFromRunnerStatus(status),
+      flushNow: Boolean(redis),
+    });
     await publishOpsStateUpdate(
       connection,
       {

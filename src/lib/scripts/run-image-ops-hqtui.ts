@@ -8,15 +8,21 @@ import {
 import {
   clearOpsQueueIfPaused,
   createOpsUiStateWatcher,
+  OPS_SNAPSHOT_TREND_METRIC_REGISTRY,
+  OPS_TREND_METRIC_REGISTRY,
   OPS_UI_METRIC_LABELS,
   pauseOpsSystemFlow,
   readOpsRedisIoStats,
   readOpsRedisPreflight,
+  readOpsRedisServerIoStats,
+  readOpsRunnerTrendLatest,
   readOpsSnapshotTrendLatest,
   readOpsSnapshotTrendSeries,
   readOpsTrendProjectionSampled,
   resetOpsRedisIoStats,
   resumeOpsSystemFlow,
+  runOpsCollectorsAndIngestSamples,
+  runOpsOneShotPipeline,
   scaleOpsWorkers,
   setOpsDesiredModeWithQueueAction,
   updateOpsControlSettings,
@@ -24,9 +30,10 @@ import {
   type OpsRedisIoAggregateStats,
   type OpsRedisIoInstanceStats,
   type OpsRedisIoStats,
+  type OpsRedisServerIoStats,
+  type OpsSampleCollectorKey,
   type OpsTrendProjection,
   type OpsUiSnapshot,
-  type OpsUiStateWatcher,
 } from "../workers/image-ops-control-module";
 import {
   deriveOpsTelemetry,
@@ -52,6 +59,10 @@ const LONG_TREND_INTERPOLATION_MAX_GAP_MS = 120_000;
 const LONG_IPS_DISPLAY_WIDTH_FACTOR = 3;
 const LONG_IPS_DISPLAY_POINT_MAX = 240;
 const LIVE_SLICE_MAX_AGE_MS = 5_000;
+const STARTUP_REDIS_PREFLIGHT_TIMEOUT_MS = 8_000;
+const STARTUP_REDIS_PREFLIGHT_MAX_ATTEMPTS = 3;
+const STARTUP_REDIS_PREFLIGHT_RETRY_DELAY_MS = 600;
+const STARTUP_PIPELINE_TIMEOUT_MS = 10_000;
 const UI_LABELS = OPS_UI_METRIC_LABELS;
 
 type QueueCounts = ImageQueueCounts;
@@ -61,7 +72,9 @@ type DashboardSnapshot = {
   at: OpsUiSnapshot["at"];
   machines: OpsUiSnapshot["machines"];
   queue: QueueCounts | null;
+  recentJobs15m: OpsUiSnapshot["recentJobs15m"];
   recentJobs24h: OpsUiSnapshot["recentJobs24h"];
+  performanceRollups: OpsUiSnapshot["performanceRollups"];
   queuePaused: boolean | null;
   db: OpsUiSnapshot["db"];
   settings: RunnerControlSettings | null;
@@ -98,7 +111,12 @@ type State = {
   valuePromptInput: TextEditState;
   notice: string;
   noticePinnedUntilMs: number;
-  activeScreen: "summary" | "infra" | "processing" | "queuejobs";
+  activeScreen:
+    | "summary"
+    | "infra"
+    | "processing"
+    | "queuejobs"
+    | "observability";
   historyBacklog: number[];
   historyProcessed: number[];
   historyFailures: number[];
@@ -139,6 +157,12 @@ type State = {
   redisIo: OpsRedisIoStats;
   redisIoAggregate: OpsRedisIoAggregateStats;
   redisIoInstances: OpsRedisIoInstanceStats[];
+  snapshotTrendLatestByName: Record<string, number | null>;
+  snapshotTrendLatestAtMsByName: Record<string, number | null>;
+  runnerTrendLatestByName: Record<string, number | null>;
+  runnerTrendLatestAtMsByName: Record<string, number | null>;
+  collectorBootLatencyMs: Partial<Record<OpsSampleCollectorKey, number>>;
+  collectorBootSamples: Partial<Record<OpsSampleCollectorKey, number>>;
 };
 
 type MenuItem = {
@@ -158,16 +182,13 @@ type ValuePromptAction =
   | "setMaxClaimCycle"
   | "rawCommand";
 
-const SCREEN_ORDER: Array<"summary" | "infra" | "processing" | "queuejobs"> = [
-  "summary",
-  "infra",
-  "processing",
-  "queuejobs",
-];
+const SCREEN_ORDER: Array<
+  "summary" | "infra" | "processing" | "queuejobs" | "observability"
+> = ["summary", "infra", "processing", "queuejobs", "observability"];
 
 function nextScreen(
-  screen: "summary" | "infra" | "processing" | "queuejobs",
-): "summary" | "infra" | "processing" | "queuejobs" {
+  screen: "summary" | "infra" | "processing" | "queuejobs" | "observability",
+): "summary" | "infra" | "processing" | "queuejobs" | "observability" {
   const index = SCREEN_ORDER.indexOf(screen);
   const safeIndex = index < 0 ? 0 : index;
   const nextIndex = (safeIndex + 1) % SCREEN_ORDER.length;
@@ -577,31 +598,6 @@ function resampleSeriesToCount(values: number[], count: number): number[] {
   });
 }
 
-function emptyProjection(): OpsTrendProjection {
-  return {
-    sampleCount: 0,
-    latestAtMs: null,
-    queueBacklogTrendRaw: [],
-    queueBacklogTrendSmoothed: [],
-    processedItemsTrend: [],
-    failedItemsTrend: [],
-    ipsRaw: [],
-    ipsSmoothed: [],
-    backlogDeltaRaw: [],
-    backlogDeltaSmoothed: [],
-    headline: {
-      ipsNow: 0,
-      ipsSmoothedNow: 0,
-      ipsAvg30: 0,
-      ipmAvg30: 0,
-      backlogDeltaNow: 0,
-      backlogDeltaSmoothedNow: 0,
-      drainPerSecSmoothed: 0,
-      fillPerSecSmoothed: 0,
-    },
-  };
-}
-
 async function updateRunnerSettings(
   updater: (current: RunnerControlSettings) => RunnerControlSettings,
 ): Promise<RunnerControlSettings> {
@@ -636,12 +632,308 @@ function shouldUseMachineNotice(state: State): boolean {
   return Date.now() >= state.noticePinnedUntilMs;
 }
 
+function shortBootError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, Math.max(1, ms));
+  });
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const redisSelection = configureRedisTarget(args.redisTarget);
   const initialIntervalMs = Math.max(1000, args.intervalSeconds * 1000);
   const initialTrendWindowMs = DEFAULT_TREND_WINDOW_MINUTES * 60 * 1000;
-  const redisPreflight = await readOpsRedisPreflight();
+  const bootStartedAtNs = process.hrtime.bigint();
+  const useBootColors = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+  const color = {
+    green: "\u001b[32m",
+    red: "\u001b[31m",
+    yellow: "\u001b[33m",
+    dim: "\u001b[2m",
+    reset: "\u001b[0m",
+  };
+  const colorize = (text: string, ansi: string): string =>
+    useBootColors ? `${ansi}${text}${color.reset}` : text;
+  let bootLastLogAtNs = bootStartedAtNs;
+  const formatBootDeltaMs = (ms: number): string => {
+    if (!Number.isFinite(ms) || ms < 0) {
+      return "  n/a";
+    }
+    if (ms < 1) {
+      return "  <1";
+    }
+    return String(Math.round(ms)).padStart(4, " ");
+  };
+  const formatIoDelta = (
+    before: OpsRedisIoStats,
+    after: OpsRedisIoStats,
+  ): string => {
+    const deltaReads = Math.max(
+      0,
+      after.redisIngressReads - before.redisIngressReads,
+    );
+    const deltaWrites = Math.max(
+      0,
+      after.redisEgressWrites - before.redisEgressWrites,
+    );
+    const deltaIngressBytes = Math.max(
+      0,
+      after.redisIngressBytes - before.redisIngressBytes,
+    );
+    const deltaEgressBytes = Math.max(
+      0,
+      after.redisEgressBytes - before.redisEgressBytes,
+    );
+    return `reads=${deltaReads} writes=${deltaWrites} ingress_bytes=${deltaIngressBytes} egress_bytes=${deltaEgressBytes}`;
+  };
+  const formatServerIoDelta = (
+    before: OpsRedisServerIoStats | null,
+    after: OpsRedisServerIoStats | null,
+  ): string => {
+    if (!before || !after) {
+      return "server_io=unavailable";
+    }
+    const deltaIn = Math.max(
+      0,
+      after.serverNetInputBytes - before.serverNetInputBytes,
+    );
+    const deltaOut = Math.max(
+      0,
+      after.serverNetOutputBytes - before.serverNetOutputBytes,
+    );
+    const deltaCommands = Math.max(
+      0,
+      after.serverTotalCommandsProcessed - before.serverTotalCommandsProcessed,
+    );
+    return `server_in_bytes=${deltaIn} server_out_bytes=${deltaOut} server_commands=${deltaCommands}`;
+  };
+  const bootLog = (step: string, status: "pending" | "ok" | "fail") => {
+    const nowNs = process.hrtime.bigint();
+    const elapsedMs = Number(nowNs - bootStartedAtNs) / 1_000_000;
+    const latencyMs = Number(nowNs - bootLastLogAtNs) / 1_000_000;
+    bootLastLogAtNs = nowNs;
+    const marker =
+      status === "ok"
+        ? colorize("✅", color.green)
+        : status === "fail"
+          ? colorize("❌", color.red)
+          : colorize("⏳", color.yellow);
+    const latencyLabel = colorize(
+      `(+${formatBootDeltaMs(latencyMs)}ms)`,
+      color.dim,
+    );
+    const elapsedLabel = colorize(
+      `(${formatBootDeltaMs(elapsedMs).padStart(6, " ")}ms)`,
+      color.dim,
+    );
+    process.stdout.write(`${marker} ${latencyLabel} ${elapsedLabel} ${step}\n`);
+  };
+
+  bootLog(
+    `start image-ops hqtui app=${args.appName} redis_target=${redisSelection.target}`,
+    "pending",
+  );
+
+  let redisPreflightError: unknown = null;
+  let redisPreflight: Awaited<ReturnType<typeof readOpsRedisPreflight>> | null =
+    null;
+  for (
+    let attempt = 1;
+    attempt <= STARTUP_REDIS_PREFLIGHT_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    bootLog(
+      `verify redis connectivity attempt ${attempt}/${STARTUP_REDIS_PREFLIGHT_MAX_ATTEMPTS}`,
+      "pending",
+    );
+    try {
+      redisPreflight = await readOpsRedisPreflight({
+        timeoutMs: STARTUP_REDIS_PREFLIGHT_TIMEOUT_MS,
+      });
+      bootLog(
+        `redis ready endpoint=${redisPreflight.endpoint} auth=${redisPreflight.authMode}`,
+        "ok",
+      );
+      break;
+    } catch (error) {
+      redisPreflightError = error;
+      bootLog(`redis check failed: ${shortBootError(error)}`, "fail");
+      if (attempt < STARTUP_REDIS_PREFLIGHT_MAX_ATTEMPTS) {
+        await sleepMs(STARTUP_REDIS_PREFLIGHT_RETRY_DELAY_MS);
+      }
+    }
+  }
+  if (!redisPreflight) {
+    throw new Error(
+      `startup aborted: redis preflight failed after ${STARTUP_REDIS_PREFLIGHT_MAX_ATTEMPTS} attempts (${shortBootError(redisPreflightError)})`,
+    );
+  }
+
+  bootLog("probe metric role", "pending");
+  const startupProbe = await runOpsOneShotPipeline({
+    appName: args.appName,
+    timeoutMs: STARTUP_PIPELINE_TIMEOUT_MS,
+    includeFly: false,
+    includeTrendProjection: false,
+    includeRecentJobs15m: false,
+    includeRecentJobs24h: false,
+    includePerformanceRollups: false,
+    reconcileBullmqStatus: false,
+  });
+  const metricRole = startupProbe.snapshot.metricSystem?.role || "master";
+  bootLog(`metric role=${metricRole}`, "ok");
+
+  const startupCollectors: OpsSampleCollectorKey[] = [
+    "db",
+    "fly",
+    "redis",
+    "bullmq",
+  ];
+  const collectorBootLatencyMs: Partial<Record<OpsSampleCollectorKey, number>> =
+    {};
+  const collectorBootSamples: Partial<Record<OpsSampleCollectorKey, number>> =
+    {};
+  let startupPipeline = startupProbe;
+  if (metricRole === "master") {
+    bootLog("resample collectors (parallel)", "pending");
+    const collectorBatchStartedAtMs = Date.now();
+    await Promise.all(
+      startupCollectors.map(async (collector) => {
+        const collectorStartedAtMs = Date.now();
+        bootLog(`collector ${collector}: start`, "pending");
+        const summary = await runOpsCollectorsAndIngestSamples({
+          appName: args.appName,
+          collectors: [collector],
+        }).catch(() => []);
+        const elapsedMs = Date.now() - collectorStartedAtMs;
+        const entry = summary.find((item) => item.collector === collector);
+        if (!entry) {
+          collectorBootLatencyMs[collector] = elapsedMs;
+          collectorBootSamples[collector] = 0;
+          bootLog(
+            `collector ${collector}: no samples (elapsed ${elapsedMs}ms)`,
+            "fail",
+          );
+          return;
+        }
+        collectorBootLatencyMs[collector] = elapsedMs;
+        collectorBootSamples[collector] = entry.sampleCount;
+        bootLog(
+          `collector ${collector}: samples=${entry.sampleCount} elapsed=${elapsedMs}ms`,
+          "ok",
+        );
+      }),
+    );
+    const collectorBatchElapsedMs = Date.now() - collectorBatchStartedAtMs;
+    const collectorLatencies = startupCollectors
+      .map((collector) => ({
+        collector,
+        latencyMs: collectorBootLatencyMs[collector] ?? 0,
+        samples: collectorBootSamples[collector] ?? 0,
+      }))
+      .sort((a, b) => b.latencyMs - a.latencyMs);
+    const slowestCollector = collectorLatencies[0];
+    const totalCollectorLatencyMs = collectorLatencies.reduce(
+      (sum, entry) => sum + entry.latencyMs,
+      0,
+    );
+    bootLog(
+      `collector summary wall=${collectorBatchElapsedMs}ms cumulative=${totalCollectorLatencyMs}ms slowest=${slowestCollector?.collector || "n/a"}:${slowestCollector?.latencyMs || 0}ms`,
+      "ok",
+    );
+
+    bootLog("state refresh kickoff now (no delay timer)", "pending");
+    bootLog(
+      "force post-processing slice build + state pipeline refresh",
+      "pending",
+    );
+    const startupRefreshIoBefore = readOpsRedisIoStats();
+    const startupRefreshServerIoBefore =
+      await readOpsRedisServerIoStats().catch(() => null);
+    const startupRefreshStartedAtMs = Date.now();
+    startupPipeline = await runOpsOneShotPipeline({
+      appName: args.appName,
+      timeoutMs: STARTUP_PIPELINE_TIMEOUT_MS,
+      includeFly: false,
+      includeTrendProjection: true,
+      includeRecentJobs15m: true,
+      includeRecentJobs24h: true,
+      includePerformanceRollups: true,
+      reconcileBullmqStatus: true,
+    });
+    const startupRefreshElapsedMs = Date.now() - startupRefreshStartedAtMs;
+    const startupRefreshIoAfter = readOpsRedisIoStats();
+    const startupRefreshServerIoAfter = await readOpsRedisServerIoStats().catch(
+      () => null,
+    );
+    bootLog(
+      `state pipeline refreshed backlog=${startupPipeline.snapshot.queue?.backlog ?? 0} status_reconciled=${startupPipeline.statusReconciled} elapsed=${startupRefreshElapsedMs}ms ${formatIoDelta(startupRefreshIoBefore, startupRefreshIoAfter)} ${formatServerIoDelta(startupRefreshServerIoBefore, startupRefreshServerIoAfter)}`,
+      "ok",
+    );
+  } else {
+    bootLog("standby role: skipping collector + slice generation", "ok");
+    bootLog("state refresh kickoff now (no delay timer)", "pending");
+    bootLog("standby state refresh", "pending");
+    const startupRefreshIoBefore = readOpsRedisIoStats();
+    const startupRefreshServerIoBefore =
+      await readOpsRedisServerIoStats().catch(() => null);
+    const startupRefreshStartedAtMs = Date.now();
+    startupPipeline = await runOpsOneShotPipeline({
+      appName: args.appName,
+      timeoutMs: STARTUP_PIPELINE_TIMEOUT_MS,
+      includeFly: false,
+      includeTrendProjection: true,
+      includeRecentJobs15m: true,
+      includeRecentJobs24h: true,
+      includePerformanceRollups: true,
+      reconcileBullmqStatus: false,
+    });
+    const startupRefreshElapsedMs = Date.now() - startupRefreshStartedAtMs;
+    const startupRefreshIoAfter = readOpsRedisIoStats();
+    const startupRefreshServerIoAfter = await readOpsRedisServerIoStats().catch(
+      () => null,
+    );
+    bootLog(
+      `standby refresh complete backlog=${startupPipeline.snapshot.queue?.backlog ?? 0} elapsed=${startupRefreshElapsedMs}ms ${formatIoDelta(startupRefreshIoBefore, startupRefreshIoAfter)} ${formatServerIoDelta(startupRefreshServerIoBefore, startupRefreshServerIoAfter)}`,
+      "ok",
+    );
+  }
+
+  bootLog("watcher init kickoff now (no delay timer)", "pending");
+  bootLog("connect watcher", "pending");
+  const watcherInitIoBefore = readOpsRedisIoStats();
+  const watcherInitServerIoBefore = await readOpsRedisServerIoStats().catch(
+    () => null,
+  );
+  const watcherInitStartedAtMs = Date.now();
+  const uiStateWatcher = await createOpsUiStateWatcher({
+    appName: args.appName,
+    profile: "cli",
+    snapshotTimeoutMs: STARTUP_SNAPSHOT_TIMEOUT_MS,
+    minRefreshIntervalMs: 1000,
+    skipInitialRefresh: true,
+    hydrateOnInit: false,
+    waitForQueueEventsReadyOnInit: false,
+    seedCollectorsOnInit: false,
+    trendProjectionLimit: trendPointLimitForWindow(initialTrendWindowMs),
+    trendSampleMode: "interpolated",
+    trendSampleWindowMs: initialTrendWindowMs,
+    trendSampleMaxGapMs: Math.max(1000, initialIntervalMs * 3),
+  });
+  const watcherInitElapsedMs = Date.now() - watcherInitStartedAtMs;
+  const watcherInitIoAfter = readOpsRedisIoStats();
+  const watcherInitServerIoAfter = await readOpsRedisServerIoStats().catch(
+    () => null,
+  );
+  bootLog(
+    `watcher seeded and ready elapsed=${watcherInitElapsedMs}ms ${formatIoDelta(watcherInitIoBefore, watcherInitIoAfter)} ${formatServerIoDelta(watcherInitServerIoBefore, watcherInitServerIoAfter)}`,
+    "ok",
+  );
+  bootLog("opening GUI", "ok");
 
   const state: State = {
     appName: args.appName,
@@ -665,7 +957,7 @@ async function main(): Promise<void> {
     valuePromptHint: "",
     valuePromptAction: null,
     valuePromptInput: textState(),
-    notice: `redis target=${redisSelection.target} preflight ok endpoint=${redisPreflight.endpoint} auth=${redisPreflight.authMode}`,
+    notice: `ready redis target=${redisSelection.target} endpoint=${redisPreflight.endpoint} auth=${redisPreflight.authMode}`,
     noticePinnedUntilMs: 0,
     activeScreen: "summary",
     historyBacklog: [],
@@ -705,18 +997,22 @@ async function main(): Promise<void> {
     queueGloballyPaused: null,
     machine: initialOpsMachineState(),
     snapshot: {
-      at: new Date().toISOString(),
-      machines: null,
-      queue: null,
-      queuePaused: null,
-      db: null,
-      settings: null,
-      infra: null,
-      status: null,
-      redisIoAggregate: undefined,
-      redisIoInstances: undefined,
-      projections: emptyProjection(),
-      errors: {},
+      at: startupPipeline.snapshot.at,
+      machines: startupPipeline.snapshot.machines,
+      queue: startupPipeline.snapshot.queue,
+      recentJobs15m: startupPipeline.snapshot.recentJobs15m,
+      recentJobs24h: startupPipeline.snapshot.recentJobs24h,
+      performanceRollups: startupPipeline.snapshot.performanceRollups,
+      queuePaused: startupPipeline.snapshot.queuePaused ?? null,
+      db: startupPipeline.snapshot.db,
+      settings: startupPipeline.snapshot.settings,
+      infra: startupPipeline.snapshot.infra,
+      status: startupPipeline.snapshot.status,
+      metricSystem: startupPipeline.snapshot.metricSystem,
+      redisIoAggregate: startupPipeline.snapshot.redisIoAggregate,
+      redisIoInstances: startupPipeline.snapshot.redisIoInstances,
+      projections: startupPipeline.snapshot.projections,
+      errors: startupPipeline.snapshot.errors,
     },
     redisIo: {
       redisEgressBytes: 0,
@@ -735,20 +1031,37 @@ async function main(): Promise<void> {
       lastWriteAt: null,
     },
     redisIoAggregate: {
-      sampledAt: new Date().toISOString(),
-      activeInstances: 0,
-      redisEgressBytes: 0,
-      redisIngressBytes: 0,
-      redisIngressReads: 0,
-      redisEgressWrites: 0,
-      redisEgressKbps: 0,
-      redisIngressKbps: 0,
-      redisWireKbps: 0,
-      rxLatencyMs: 0,
-      txLatencyMs: 0,
+      sampledAt:
+        startupPipeline.snapshot.redisIoAggregate?.sampledAt ||
+        new Date().toISOString(),
+      activeInstances:
+        startupPipeline.snapshot.redisIoAggregate?.activeInstances ?? 0,
+      redisEgressBytes:
+        startupPipeline.snapshot.redisIoAggregate?.redisEgressBytes ?? 0,
+      redisIngressBytes:
+        startupPipeline.snapshot.redisIoAggregate?.redisIngressBytes ?? 0,
+      redisIngressReads:
+        startupPipeline.snapshot.redisIoAggregate?.redisIngressReads ?? 0,
+      redisEgressWrites:
+        startupPipeline.snapshot.redisIoAggregate?.redisEgressWrites ?? 0,
+      redisEgressKbps:
+        startupPipeline.snapshot.redisIoAggregate?.redisEgressKbps ?? 0,
+      redisIngressKbps:
+        startupPipeline.snapshot.redisIoAggregate?.redisIngressKbps ?? 0,
+      redisWireKbps:
+        startupPipeline.snapshot.redisIoAggregate?.redisWireKbps ?? 0,
+      rxLatencyMs: startupPipeline.snapshot.redisIoAggregate?.rxLatencyMs ?? 0,
+      txLatencyMs: startupPipeline.snapshot.redisIoAggregate?.txLatencyMs ?? 0,
     },
-    redisIoInstances: [],
+    redisIoInstances: startupPipeline.snapshot.redisIoInstances ?? [],
+    snapshotTrendLatestByName: {},
+    snapshotTrendLatestAtMsByName: {},
+    runnerTrendLatestByName: {},
+    runnerTrendLatestAtMsByName: {},
+    collectorBootLatencyMs,
+    collectorBootSamples,
   };
+  state.queueGloballyPaused = startupPipeline.snapshot.queuePaused ?? null;
 
   const app = await createApp({
     alwaysRender: false,
@@ -803,17 +1116,12 @@ async function main(): Promise<void> {
   };
   process.on("SIGINT", onSigint);
 
-  let uiStateWatcher: OpsUiStateWatcher | null = null;
-
   const refresh = async (): Promise<void> => {
     if (state.polling || !state.running) {
       return;
     }
     state.polling = true;
     try {
-      if (!uiStateWatcher) {
-        return;
-      }
       const snapshot = uiStateWatcher.getSnapshot();
       if (!snapshot) {
         return;
@@ -823,7 +1131,10 @@ async function main(): Promise<void> {
         ...snapshot,
         machines: snapshot.machines ?? previous.machines,
         queue: snapshot.queue ?? previous.queue,
+        recentJobs15m: snapshot.recentJobs15m ?? previous.recentJobs15m,
         recentJobs24h: snapshot.recentJobs24h ?? previous.recentJobs24h,
+        performanceRollups:
+          snapshot.performanceRollups ?? previous.performanceRollups,
         queuePaused: snapshot.queuePaused ?? previous.queuePaused,
         db: snapshot.db ?? previous.db,
         settings: snapshot.settings ?? previous.settings,
@@ -1087,14 +1398,40 @@ async function main(): Promise<void> {
           historyMax,
         );
       }
-      const redisTrendMetricNames = [
-        "redisWireKbpsAggregate",
-        "redisIngressKbpsAggregate",
-        "redisEgressKbpsAggregate",
-      ] as const;
-      const redisTrendLatest = await readOpsSnapshotTrendLatest({
-        metricNames: [...redisTrendMetricNames],
-      });
+      const snapshotTrendLatest = await readOpsSnapshotTrendLatest();
+      state.snapshotTrendLatestByName = Object.fromEntries(
+        Object.entries(snapshotTrendLatest).map(([name, row]) => [
+          name,
+          row?.value ?? null,
+        ]),
+      );
+      state.snapshotTrendLatestAtMsByName = Object.fromEntries(
+        Object.entries(snapshotTrendLatest).map(([name, row]) => [
+          name,
+          row?.atMs ?? null,
+        ]),
+      );
+      const runnerTrendLatest = await readOpsRunnerTrendLatest();
+      state.runnerTrendLatestByName = Object.fromEntries(
+        Object.entries(runnerTrendLatest).map(([name, row]) => [
+          name,
+          row?.value ?? null,
+        ]),
+      );
+      state.runnerTrendLatestAtMsByName = Object.fromEntries(
+        Object.entries(runnerTrendLatest).map(([name, row]) => [
+          name,
+          row?.atMs ?? null,
+        ]),
+      );
+      const redisTrendLatest = {
+        redisWireKbpsAggregate:
+          snapshotTrendLatest.redisWireKbpsAggregate ?? null,
+        redisIngressKbpsAggregate:
+          snapshotTrendLatest.redisIngressKbpsAggregate ?? null,
+        redisEgressKbpsAggregate:
+          snapshotTrendLatest.redisEgressKbpsAggregate ?? null,
+      };
       const redisLatestAtMs = Math.max(
         0,
         redisTrendLatest.redisWireKbpsAggregate?.atMs ?? 0,
@@ -1896,6 +2233,13 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (event.key === "5") {
+      state.activeScreen = "observability";
+      state.notice = "screen=observability";
+      app.invalidate();
+      return;
+    }
+
     if (event.key === "tab") {
       state.activeScreen = nextScreen(state.activeScreen);
       state.notice = `screen=${state.activeScreen}`;
@@ -2109,6 +2453,7 @@ async function main(): Promise<void> {
         : state.queueGloballyPaused
           ? "resume-system"
           : "pause-system";
+    const moduleRole = snapshot.metricSystem?.role || "unknown";
 
     if (state.activeScreen === "summary") {
       ui.grid(
@@ -2135,6 +2480,16 @@ async function main(): Promise<void> {
                     : state.queueGloballyPaused
                       ? theme.danger
                       : theme.success,
+              },
+              {
+                label: "module_role",
+                value: moduleRole,
+                color:
+                  moduleRole === "master"
+                    ? theme.success
+                    : moduleRole === "standby"
+                      ? theme.warning
+                      : theme.warning,
               },
               { label: "p_hotkey_action", value: pauseHotkeyActionLabel },
               {
@@ -3278,6 +3633,624 @@ async function main(): Promise<void> {
       );
     }
 
+    if (state.activeScreen === "observability") {
+      const formatMetricValue = (
+        key: string,
+        value: unknown,
+        input?: { preserveSign?: boolean },
+      ): string => {
+        if (value === null || value === undefined) {
+          return "n/a";
+        }
+        if (typeof value === "string") {
+          return value;
+        }
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          return String(value);
+        }
+
+        if (
+          key === "ips" ||
+          key === "ipm" ||
+          key === "secPerImage" ||
+          key.endsWith("Pct")
+        ) {
+          return formatRate(value, 2);
+        }
+
+        const next = input?.preserveSign ? value : Math.max(0, value);
+        return String(Math.round(next));
+      };
+
+      const formatTrackedValue = (value: unknown): string => {
+        if (value === undefined) {
+          return "undefined";
+        }
+        if (value === null) {
+          return "null";
+        }
+        if (typeof value === "boolean") {
+          return value ? "true" : "false";
+        }
+        return String(value);
+      };
+
+      const toSnakeReferenceName = (name: string): string => {
+        const snake = String(name)
+          .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+          .replace(/[^a-zA-Z0-9]+/g, "_")
+          .toLowerCase();
+        return snake.replace(/_live$/, "");
+      };
+
+      const snapshotMetricRows = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map(
+        (metric) => {
+          const latestValue = state.snapshotTrendLatestByName[metric.name];
+          const fallbackValue = metric.getValue(snapshot);
+          return {
+            label: toSnakeReferenceName(metric.name),
+            value: formatMetricValue(metric.name, latestValue ?? fallbackValue),
+          };
+        },
+      );
+
+      const runnerMetricRows = OPS_TREND_METRIC_REGISTRY.map((metric) => {
+        const latestValue = state.runnerTrendLatestByName[metric.name];
+        const fallbackValue = status ? metric.getValue(status) : null;
+        return {
+          label: toSnakeReferenceName(metric.name),
+          value: formatMetricValue(metric.name, latestValue ?? fallbackValue, {
+            preserveSign: true,
+          }),
+        };
+      });
+
+      const metricRowsByLabel = new Map<string, string>();
+      for (const row of [...snapshotMetricRows, ...runnerMetricRows]) {
+        metricRowsByLabel.set(row.label, row.value);
+      }
+      const liveMetricRows = Array.from(metricRowsByLabel.entries()).map(
+        ([label, value]) => ({ label, value }),
+      );
+
+      const trackedRows: Array<{ label: string; value: string }> = [
+        {
+          label: "module_role",
+          value: snapshot.metricSystem?.role || "unknown",
+        },
+        {
+          label: "queue_flow",
+          value:
+            state.queueGloballyPaused === null
+              ? "unknown"
+              : state.queueGloballyPaused
+                ? "paused"
+                : "running",
+        },
+        {
+          label: "errors_total",
+          value: String(Object.keys(snapshot.errors).length),
+        },
+        { label: "error_fly", value: formatTrackedValue(snapshot.errors.fly) },
+        {
+          label: "error_queue",
+          value: formatTrackedValue(snapshot.errors.queue),
+        },
+        { label: "error_db", value: formatTrackedValue(snapshot.errors.db) },
+        {
+          label: "error_control",
+          value: formatTrackedValue(snapshot.errors.control),
+        },
+      ];
+
+      const settingsRows: Array<{ label: string; value: string }> = [
+        {
+          label: "settings_desired_mode",
+          value: formatTrackedValue(snapshot.settings?.desiredMode),
+        },
+        {
+          label: "settings_enqueue_enabled",
+          value: formatTrackedValue(snapshot.settings?.enqueueEnabled),
+        },
+        {
+          label: "settings_require_workers_for_enqueue",
+          value: formatTrackedValue(
+            snapshot.settings?.requireWorkersForEnqueue,
+          ),
+        },
+        {
+          label: "settings_min_workers_to_enqueue",
+          value: formatTrackedValue(snapshot.settings?.minWorkersToEnqueue),
+        },
+        {
+          label: "settings_max_queue_backlog",
+          value: formatTrackedValue(snapshot.settings?.maxQueueBacklog),
+        },
+        {
+          label: "settings_refill_low_watermark",
+          value: formatTrackedValue(snapshot.settings?.refillLowWatermark),
+        },
+        {
+          label: "settings_refill_target_backlog",
+          value: formatTrackedValue(snapshot.settings?.refillTargetBacklog),
+        },
+        {
+          label: "settings_max_claim_per_cycle",
+          value: formatTrackedValue(snapshot.settings?.maxClaimPerCycle),
+        },
+        {
+          label: "settings_flush_interval_ms",
+          value: formatTrackedValue(snapshot.settings?.flushIntervalMs),
+        },
+        {
+          label: "settings_harvest_enabled",
+          value: formatTrackedValue(snapshot.settings?.harvestEnabled),
+        },
+      ];
+
+      const statusRows: Array<{ label: string; value: string }> = [
+        {
+          label: "status_operation_id",
+          value: formatTrackedValue(status?.operationId),
+        },
+        { label: "status_mode", value: formatTrackedValue(status?.mode) },
+        {
+          label: "status_desired_mode",
+          value: formatTrackedValue(status?.desiredMode),
+        },
+        {
+          label: "status_gate_reason",
+          value: formatTrackedValue(status?.gateReason),
+        },
+        {
+          label: "status_workers_running",
+          value: formatTrackedValue(status?.workersRunning),
+        },
+        {
+          label: "status_claimed_count",
+          value: formatTrackedValue(status?.claimedCount),
+        },
+        {
+          label: "status_queued_count",
+          value: formatTrackedValue(status?.queuedCount),
+        },
+        {
+          label: "status_completed_jobs",
+          value: formatTrackedValue(status?.completedJobs),
+        },
+        {
+          label: "status_failed_jobs",
+          value: formatTrackedValue(status?.failedJobs),
+        },
+        {
+          label: "status_processed_items",
+          value: formatTrackedValue(status?.processedItems),
+        },
+        {
+          label: "status_failed_items",
+          value: formatTrackedValue(status?.failedItems),
+        },
+        {
+          label: "status_queue_waiting",
+          value: formatTrackedValue(status?.queueWaiting),
+        },
+        {
+          label: "status_queue_active",
+          value: formatTrackedValue(status?.queueActive),
+        },
+        {
+          label: "status_queue_completed",
+          value: formatTrackedValue(status?.queueCompleted),
+        },
+        {
+          label: "status_queue_failed",
+          value: formatTrackedValue(status?.queueFailed),
+        },
+        {
+          label: "status_queue_delayed",
+          value: formatTrackedValue(status?.queueDelayed),
+        },
+        {
+          label: "status_queue_paused",
+          value: formatTrackedValue(status?.queuePaused),
+        },
+        {
+          label: "status_queue_backlog",
+          value: formatTrackedValue(status?.queueBacklog),
+        },
+        {
+          label: "status_last_flush_at",
+          value: formatTrackedValue(status?.lastFlushAt),
+        },
+        {
+          label: "status_flush_batch_count",
+          value: formatTrackedValue(status?.flushBatchCount),
+        },
+        {
+          label: "status_pending_success_buffer",
+          value: formatTrackedValue(status?.pendingSuccessBuffer),
+        },
+        {
+          label: "status_pending_error_buffer",
+          value: formatTrackedValue(status?.pendingErrorBuffer),
+        },
+        {
+          label: "status_throughput_images_per_minute",
+          value: formatTrackedValue(status?.throughputImagesPerMinute),
+        },
+        {
+          label: "status_avg_fetch_ms",
+          value: formatTrackedValue(status?.avgFetchMs),
+        },
+        {
+          label: "status_avg_transform_ms",
+          value: formatTrackedValue(status?.avgTransformMs),
+        },
+        {
+          label: "status_avg_upload_ms",
+          value: formatTrackedValue(status?.avgUploadMs),
+        },
+        {
+          label: "status_avg_end_to_end_ms",
+          value: formatTrackedValue(status?.avgEndToEndMs),
+        },
+        {
+          label: "status_updated_at",
+          value: formatTrackedValue(status?.updatedAt),
+        },
+      ];
+
+      const infraRows: Array<{ label: string; value: string }> = [
+        {
+          label: "infra_workers_running",
+          value: formatTrackedValue(snapshot.infra?.workersRunning),
+        },
+        {
+          label: "infra_source",
+          value: formatTrackedValue(snapshot.infra?.source),
+        },
+        {
+          label: "infra_updated_at",
+          value: formatTrackedValue(snapshot.infra?.updatedAt),
+        },
+      ];
+
+      const queueRows: Array<{ label: string; value: string }> = [
+        {
+          label: "queue_waiting",
+          value: formatTrackedValue(snapshot.queue?.waiting),
+        },
+        {
+          label: "queue_active",
+          value: formatTrackedValue(snapshot.queue?.active),
+        },
+        {
+          label: "queue_completed",
+          value: formatTrackedValue(snapshot.queue?.completed),
+        },
+        {
+          label: "queue_failed",
+          value: formatTrackedValue(snapshot.queue?.failed),
+        },
+        {
+          label: "queue_delayed",
+          value: formatTrackedValue(snapshot.queue?.delayed),
+        },
+        {
+          label: "queue_paused",
+          value: formatTrackedValue(snapshot.queue?.paused),
+        },
+        {
+          label: "queue_backlog",
+          value: formatTrackedValue(snapshot.queue?.backlog),
+        },
+      ];
+
+      const dbRows: Array<{ label: string; value: string }> = [
+        {
+          label: "db_processed",
+          value: formatTrackedValue(snapshot.db?.processed),
+        },
+        {
+          label: "db_pending",
+          value: formatTrackedValue(snapshot.db?.pending),
+        },
+        { label: "db_failed", value: formatTrackedValue(snapshot.db?.failed) },
+        { label: "db_total", value: formatTrackedValue(snapshot.db?.total) },
+        { label: "db_pct", value: formatTrackedValue(snapshot.db?.pct) },
+      ];
+
+      const metricSystemRows: Array<{ label: string; value: string }> = [
+        {
+          label: "metric_system_role",
+          value: formatTrackedValue(snapshot.metricSystem?.role),
+        },
+        {
+          label: "metric_system_self_role",
+          value: formatTrackedValue(snapshot.metricSystem?.selfRole),
+        },
+        {
+          label: "metric_system_owner_role",
+          value: formatTrackedValue(snapshot.metricSystem?.ownerRole),
+        },
+        {
+          label: "metric_system_self_instance_id",
+          value: formatTrackedValue(snapshot.metricSystem?.selfInstanceId),
+        },
+        {
+          label: "metric_system_owner_instance_id",
+          value: formatTrackedValue(snapshot.metricSystem?.ownerInstanceId),
+        },
+        {
+          label: "metric_system_active_instances",
+          value: formatTrackedValue(snapshot.metricSystem?.activeInstances),
+        },
+      ];
+
+      const redisRows: Array<{ label: string; value: string }> = [
+        {
+          label: "redis_aggregate_active_instances",
+          value: formatTrackedValue(state.redisIoAggregate.activeInstances),
+        },
+        {
+          label: "redis_aggregate_egress_bytes",
+          value: formatTrackedValue(state.redisIoAggregate.redisEgressBytes),
+        },
+        {
+          label: "redis_aggregate_ingress_bytes",
+          value: formatTrackedValue(state.redisIoAggregate.redisIngressBytes),
+        },
+        {
+          label: "redis_aggregate_ingress_reads",
+          value: formatTrackedValue(state.redisIoAggregate.redisIngressReads),
+        },
+        {
+          label: "redis_aggregate_egress_writes",
+          value: formatTrackedValue(state.redisIoAggregate.redisEgressWrites),
+        },
+        {
+          label: "redis_aggregate_egress_kbps",
+          value: formatTrackedValue(state.redisIoAggregate.redisEgressKbps),
+        },
+        {
+          label: "redis_aggregate_ingress_kbps",
+          value: formatTrackedValue(state.redisIoAggregate.redisIngressKbps),
+        },
+        {
+          label: "redis_aggregate_wire_kbps",
+          value: formatTrackedValue(state.redisIoAggregate.redisWireKbps),
+        },
+        {
+          label: "redis_aggregate_rx_latency_ms",
+          value: formatTrackedValue(state.redisIoAggregate.rxLatencyMs),
+        },
+        {
+          label: "redis_aggregate_tx_latency_ms",
+          value: formatTrackedValue(state.redisIoAggregate.txLatencyMs),
+        },
+        {
+          label: "redis_local_egress_bytes",
+          value: formatTrackedValue(state.redisIo.redisEgressBytes),
+        },
+        {
+          label: "redis_local_ingress_bytes",
+          value: formatTrackedValue(state.redisIo.redisIngressBytes),
+        },
+        {
+          label: "redis_local_wire_bytes",
+          value: formatTrackedValue(state.redisIo.redisWireBytes),
+        },
+        {
+          label: "redis_local_ingress_reads",
+          value: formatTrackedValue(state.redisIo.redisIngressReads),
+        },
+        {
+          label: "redis_local_egress_writes",
+          value: formatTrackedValue(state.redisIo.redisEgressWrites),
+        },
+        {
+          label: "redis_local_window_seconds",
+          value: formatTrackedValue(state.redisIo.windowSeconds),
+        },
+        {
+          label: "redis_local_egress_kbps",
+          value: formatTrackedValue(state.redisIo.redisEgressKbps),
+        },
+        {
+          label: "redis_local_ingress_kbps",
+          value: formatTrackedValue(state.redisIo.redisIngressKbps),
+        },
+        {
+          label: "redis_local_wire_kbps",
+          value: formatTrackedValue(state.redisIo.redisWireKbps),
+        },
+        {
+          label: "redis_local_ingress_kb_per_read",
+          value: formatTrackedValue(state.redisIo.redisIngressKbPerRead),
+        },
+        {
+          label: "redis_local_rx_latency_ms",
+          value: formatTrackedValue(state.redisIo.rxLatencyMs),
+        },
+        {
+          label: "redis_local_tx_latency_ms",
+          value: formatTrackedValue(state.redisIo.txLatencyMs),
+        },
+      ];
+
+      const collectorRows: Array<{ label: string; value: string }> = [
+        {
+          label: "collector_db_samples",
+          value: formatTrackedValue(state.collectorBootSamples.db),
+        },
+        {
+          label: "collector_fly_samples",
+          value: formatTrackedValue(state.collectorBootSamples.fly),
+        },
+        {
+          label: "collector_redis_samples",
+          value: formatTrackedValue(state.collectorBootSamples.redis),
+        },
+        {
+          label: "collector_bullmq_samples",
+          value: formatTrackedValue(state.collectorBootSamples.bullmq),
+        },
+      ];
+
+      const groupOrder = [
+        "images",
+        "queue_jobs",
+        "infra_redis",
+        "database",
+        "settings",
+        "variables",
+      ] as const;
+
+      const groupTitles: Record<(typeof groupOrder)[number], string> = {
+        images: "Images",
+        queue_jobs: "Queue & Jobs",
+        infra_redis: "Infra & Redis",
+        database: "Database",
+        settings: "Settings",
+        variables: "Variables",
+      };
+
+      const groupedRows: Record<
+        (typeof groupOrder)[number],
+        Array<{ label: string; value: string }>
+      > = {
+        images: [],
+        queue_jobs: [],
+        infra_redis: [],
+        database: [],
+        settings: [],
+        variables: [],
+      };
+
+      const pushGroupRows = (
+        group: (typeof groupOrder)[number],
+        rows: Array<{ label: string; value: string }>,
+      ): void => {
+        groupedRows[group].push(...rows);
+      };
+
+      const classifyMetricGroup = (
+        label: string,
+      ): (typeof groupOrder)[number] => {
+        if (
+          label.includes("fetch") ||
+          label.includes("transform") ||
+          label.includes("upload") ||
+          label.includes("processed") ||
+          label.includes("failed_items") ||
+          label.includes("throughput") ||
+          label.includes("ips") ||
+          label.includes("ipm")
+        ) {
+          return "images";
+        }
+        if (
+          label.includes("queue") ||
+          label.includes("job") ||
+          label.includes("backlog") ||
+          label.includes("flush") ||
+          label.includes("pending_")
+        ) {
+          return "queue_jobs";
+        }
+        if (label.includes("db")) {
+          return "database";
+        }
+        if (
+          label.includes("redis") ||
+          label.includes("worker") ||
+          label.includes("machine") ||
+          label.includes("infra") ||
+          label.includes("latency")
+        ) {
+          return "infra_redis";
+        }
+        return "variables";
+      };
+
+      pushGroupRows("variables", trackedRows);
+      pushGroupRows("settings", settingsRows);
+      pushGroupRows("variables", statusRows);
+      pushGroupRows("infra_redis", infraRows);
+      pushGroupRows("queue_jobs", queueRows);
+      pushGroupRows("database", dbRows);
+      pushGroupRows("infra_redis", metricSystemRows);
+      pushGroupRows("infra_redis", redisRows);
+      pushGroupRows("infra_redis", collectorRows);
+      for (const row of liveMetricRows) {
+        pushGroupRows(classifyMetricGroup(row.label), [row]);
+      }
+
+      for (const group of groupOrder) {
+        groupedRows[group].sort((left, right) =>
+          left.label.localeCompare(right.label),
+        );
+      }
+
+      const catalogSummaryRows: Array<{ label: string; value: string }> = [
+        {
+          label: "catalog_total",
+          value: String(
+            groupOrder.reduce(
+              (sum, group) => sum + groupedRows[group].length,
+              0,
+            ),
+          ),
+        },
+        { label: "catalog_live_metrics", value: String(liveMetricRows.length) },
+        { label: "catalog_images", value: String(groupedRows.images.length) },
+        {
+          label: "catalog_queue_jobs",
+          value: String(groupedRows.queue_jobs.length),
+        },
+        {
+          label: "catalog_infra_redis",
+          value: String(groupedRows.infra_redis.length),
+        },
+        {
+          label: "catalog_database",
+          value: String(groupedRows.database.length),
+        },
+        {
+          label: "catalog_settings",
+          value: String(groupedRows.settings.length),
+        },
+        {
+          label: "catalog_variables",
+          value: String(groupedRows.variables.length),
+        },
+      ];
+
+      ui.grid(
+        { columns: ["1fr", "1fr"], rows: [10, 10, 10], gap: 1 },
+        (grid) => {
+          grid.panel({ title: groupTitles.images }, (panel) => {
+            panel.keyValues(groupedRows.images);
+          });
+          grid.panel({ title: groupTitles.queue_jobs }, (panel) => {
+            panel.keyValues(groupedRows.queue_jobs);
+          });
+          grid.panel({ title: groupTitles.infra_redis }, (panel) => {
+            panel.keyValues(groupedRows.infra_redis);
+          });
+          grid.panel({ title: groupTitles.database }, (panel) => {
+            panel.keyValues(groupedRows.database);
+          });
+          grid.panel({ title: groupTitles.settings }, (panel) => {
+            panel.keyValues(groupedRows.settings);
+          });
+          grid.panel({ title: groupTitles.variables }, (panel) => {
+            panel.keyValues([...groupedRows.variables, ...catalogSummaryRows]);
+          });
+        },
+      );
+    }
+
     if (state.showCommandPalette) {
       const items = commandMenuItems(
         state.commandMenu,
@@ -3532,7 +4505,9 @@ async function main(): Promise<void> {
           modal.text(
             "Keys: q quit, h toggle help, r refresh, +/- poll speed, tab next screen",
           );
-          modal.text("Keys: 1 summary, 2 infra, 3 processing, 4 queue & jobs");
+          modal.text(
+            "Keys: 1 summary, 2 infra, 3 processing, 4 queue & jobs, 5 observability",
+          );
           modal.text(
             "Use : command menu for pause/resume/clear queue, flush interval, harvest toggle, and chart timing",
           );
@@ -3564,7 +4539,7 @@ async function main(): Promise<void> {
         { key: "r", label: "Refresh" },
         { key: "p", label: "Pause/Resume" },
         { key: "f", label: "Set Flush" },
-        { key: "1..4", label: "Screens" },
+        { key: "1..5", label: "Screens" },
         { key: ":", label: "Command" },
       ],
       right: [
@@ -3585,30 +4560,6 @@ async function main(): Promise<void> {
   app.invalidate();
   void refresh();
 
-  state.notice = "connecting to module watcher...";
-  app.invalidate();
-  void (async () => {
-    uiStateWatcher = await createOpsUiStateWatcher({
-      appName: state.appName,
-      profile: "cli",
-      snapshotTimeoutMs: STARTUP_SNAPSHOT_TIMEOUT_MS,
-      minRefreshIntervalMs: 1000,
-      skipInitialRefresh: true,
-      trendProjectionLimit: trendPointLimitForWindow(state.trendWindowMs),
-      trendSampleMode: "interpolated",
-      trendSampleWindowMs: state.trendWindowMs,
-      trendSampleMaxGapMs: Math.max(1000, state.intervalMs * 3),
-    }).catch(() => null);
-    if (!state.running) {
-      return;
-    }
-    state.notice = uiStateWatcher
-      ? "reactive watcher connected"
-      : "watcher unavailable; state feed offline";
-    wakeRefreshLoop();
-    app.invalidate();
-  })();
-
   void (async () => {
     let needsRefresh = true;
     while (state.running) {
@@ -3619,24 +4570,8 @@ async function main(): Promise<void> {
       if (!state.running) {
         break;
       }
-      if (uiStateWatcher) {
-        const signal = await uiStateWatcher.waitForState(state.intervalMs);
-        needsRefresh = signal === "state";
-      } else {
-        await new Promise<void>((resolve) => {
-          pollDelayResolve = () => {
-            pollDelayResolve = null;
-            resolve();
-          };
-          pollDelayTimer = setTimeout(() => {
-            pollDelayTimer = null;
-            const done = pollDelayResolve;
-            pollDelayResolve = null;
-            done?.();
-          }, state.intervalMs);
-        });
-        needsRefresh = true;
-      }
+      const signal = await uiStateWatcher.waitForState(state.intervalMs);
+      needsRefresh = signal === "state";
     }
   })();
 
@@ -3645,9 +4580,7 @@ async function main(): Promise<void> {
 
   process.off("SIGINT", onSigint);
 
-  if (uiStateWatcher) {
-    await uiStateWatcher.close();
-  }
+  await uiStateWatcher.close();
 
   if (explicitQuitRequested) {
     process.exit(0);
