@@ -19,6 +19,7 @@ export type ImageQueueRecentJobWindow = {
   windowMs: number;
   windowStartAt: string;
   sampledAt: string;
+  latestDataAt?: string | null;
   completedJobs: number;
   failedJobs: number;
   processedItems: number;

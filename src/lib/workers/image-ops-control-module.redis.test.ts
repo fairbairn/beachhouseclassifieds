@@ -91,6 +91,8 @@ const RUNNER_TREND_KEYS = OPS_TREND_METRIC_REGISTRY.map((metric) => metric.key);
 const UI_TREND_KEYS = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map(
   (metric) => metric.key,
 );
+const IMAGE_OPS_REDIS_IO_INSTANCES_HASH_KEY =
+  "image:runner:control:redis_io:instances";
 const RUNNER_TREND_LATEST_KEYS = RUNNER_TREND_KEYS.map(
   (key) => `${key}:latest`,
 );
@@ -461,6 +463,7 @@ describeRedis("image-ops-control-module redis integration", () => {
       IMAGE_RUNNER_SETTINGS_KEY,
       IMAGE_RUNNER_INFRA_KEY,
       IMAGE_RUNNER_STATUS_KEY,
+      IMAGE_OPS_REDIS_IO_INSTANCES_HASH_KEY,
       ...ALL_TREND_KEYS,
     );
 
@@ -860,6 +863,88 @@ describeRedis("image-ops-control-module redis integration", () => {
     expect(
       Number.isFinite(uiSnapshot.projections.headline.backlogDeltaSmoothedNow),
     ).toBe(true);
+  });
+
+  it("ui snapshot includes metric ownership snapshot with coherent role fields", async () => {
+    const uiSnapshot = await readOpsUiSnapshot("local-test-app", 1000, {
+      includeFly: false,
+      includeTrendProjection: false,
+      includeRecentJobs15m: false,
+      includeRecentJobs24h: false,
+      includePerformanceRollups: false,
+    });
+
+    expect(uiSnapshot.metricSystem).toBeDefined();
+    expect(uiSnapshot.metricSystem?.selfInstanceId).toBeTruthy();
+    expect(uiSnapshot.metricSystem?.ownerInstanceId).toBeTruthy();
+    expect(uiSnapshot.metricSystem?.activeInstances).toBeGreaterThanOrEqual(1);
+    expect(uiSnapshot.metricSystem?.role).toMatch(/^(master|standby)$/);
+
+    const ownerIsSelf =
+      uiSnapshot.metricSystem?.ownerInstanceId ===
+      uiSnapshot.metricSystem?.selfInstanceId;
+    expect(uiSnapshot.metricSystem?.role).toBe(
+      ownerIsSelf ? "master" : "standby",
+    );
+  });
+
+  it("metric ownership prefers cli instance when cli and runner-lite are both active", async () => {
+    const nowIso = new Date().toISOString();
+    const cliInstanceId = "cli:test-owner";
+    const runnerInstanceId = "runner-lite:test-peer";
+
+    await redis.hset(
+      IMAGE_OPS_REDIS_IO_INSTANCES_HASH_KEY,
+      cliInstanceId,
+      JSON.stringify({
+        instance_id: cliInstanceId,
+        pid: "2001",
+        started_at: nowIso,
+        updated_at: nowIso,
+        window_seconds: "5",
+        redis_egress_bytes: "0",
+        redis_ingress_bytes: "0",
+        redis_ingress_reads: "0",
+        redis_egress_writes: "0",
+        redis_egress_kbps: "0",
+        redis_ingress_kbps: "0",
+        redis_wire_kbps: "0",
+      }),
+      runnerInstanceId,
+      JSON.stringify({
+        instance_id: runnerInstanceId,
+        pid: "2002",
+        started_at: nowIso,
+        updated_at: nowIso,
+        window_seconds: "5",
+        redis_egress_bytes: "0",
+        redis_ingress_bytes: "0",
+        redis_ingress_reads: "0",
+        redis_egress_writes: "0",
+        redis_egress_kbps: "0",
+        redis_ingress_kbps: "0",
+        redis_wire_kbps: "0",
+      }),
+    );
+
+    const uiSnapshot = await readOpsUiSnapshot("local-test-app", 1000, {
+      includeFly: false,
+      includeTrendProjection: false,
+      includeRecentJobs15m: false,
+      includeRecentJobs24h: false,
+      includePerformanceRollups: false,
+    });
+
+    expect(uiSnapshot.metricSystem?.ownerInstanceId).toBe(cliInstanceId);
+    expect(uiSnapshot.metricSystem?.ownerRole).toBe("cli");
+    expect(uiSnapshot.metricSystem?.activeInstances).toBeGreaterThanOrEqual(2);
+
+    const ownerIsSelf =
+      uiSnapshot.metricSystem?.ownerInstanceId ===
+      uiSnapshot.metricSystem?.selfInstanceId;
+    expect(uiSnapshot.metricSystem?.role).toBe(
+      ownerIsSelf ? "master" : "standby",
+    );
   });
 
   it("ui snapshot writes trend data for every ui metric key", async () => {

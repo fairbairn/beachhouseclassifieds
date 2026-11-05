@@ -24,12 +24,10 @@ import {
   createOpsQueueRuntime,
   enqueueOpsImageJobsForOperation,
   readOpsControlSnapshot,
-  readOpsDbProgress,
   readOpsLiveWorkersRunning,
   readOpsQueueJobById,
   readOpsQueuePausedState,
   readOpsQueueSnapshot,
-  requestOpsStateRefresh,
   waitForOpsRunCompletion,
   writeOpsRunnerStatus,
 } from "../workers/image-ops-control-module";
@@ -41,9 +39,11 @@ import {
 
 const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
 const DEFAULT_FETCH_RETRY_COUNT = 2;
+const DEFAULT_FLY_WORKER_APP = "beachhouseclassifieds-image-worker";
 
 type RunnerOptions = {
   redisTarget: RedisTarget;
+  appName: string;
   targetCount: number | null;
   fetchTimeoutMs: number;
   fetchRetryCount: number;
@@ -91,14 +91,6 @@ type CycleFeedback = {
   failedItems: number;
   durationSec: number;
 };
-
-type SystemProgressSnapshot = {
-  processed: number;
-  pending: number;
-  failed: number;
-  total: number;
-  pct: number;
-} | null;
 
 function parsePositiveInt(
   rawValue: string | undefined,
@@ -514,7 +506,7 @@ function formatModeProgressLine(input: {
 function usage(): string {
   return [
     "Usage:",
-    "  npm run workers:image:desktop -- [--redis-target local|cloud] [--dry-run-cloud true]",
+    "  npm run workers:image:desktop -- [--redis-target local|cloud] [--app <flyApp>] [--dry-run-cloud true]",
     "",
     "Behavior:",
     "  Runner defaults to intelligent autopilot: it derives claim size from live queue pressure,",
@@ -522,6 +514,7 @@ function usage(): string {
     "",
     "Optional overrides:",
     "  --redis-target local|cloud  Redis target selector (default local; cloud uses FLY_REDIS)",
+    "  --app <flyApp>               Fly worker app name for cloud infra refresh (default beachhouseclassifieds-image-worker)",
     "  --target-count <n>            Optional hard cap on claims for this run",
     "  --fetch-timeout-ms <n>        Source fetch timeout (default 8000)",
     "  --fetch-retry-count <n>       Source fetch retries (default 2)",
@@ -584,6 +577,7 @@ function parseArgs(argv: string[]): RunnerOptions {
 
   return {
     redisTarget,
+    appName: values.get("app")?.trim() || DEFAULT_FLY_WORKER_APP,
     targetCount: parseOptionalPositiveInt(values.get("target-count")),
     fetchTimeoutMs: parsePositiveInt(
       values.get("fetch-timeout-ms"),
@@ -874,10 +868,6 @@ async function main(): Promise<void> {
       ? inferredWorkersRunning
       : 0;
 
-  await requestOpsStateRefresh("runner:startup-initial-cache-load").catch(
-    () => undefined,
-  );
-
   const publishRunnerStatus = async (params: {
     mode: RunnerStatusSnapshot["mode"];
     gateReason: string;
@@ -1018,9 +1008,6 @@ async function main(): Promise<void> {
   progress.phase("runner startup telemetry warmup");
   const startupSamples: StartupProbeSample[] = [];
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await requestOpsStateRefresh(
-      `runner:startup-warmup:${String(attempt + 1)}`,
-    ).catch(() => undefined);
     const startupGateState = await computeGateState();
     startupSamples.push({
       gateReason: startupGateState.gateReason,
@@ -1054,9 +1041,6 @@ async function main(): Promise<void> {
     `startup_gate_inputs paused_live=${gateInputs.pausedStateLive} snapshot_queue_paused=${gateInputs.snapshotQueuePaused} queue_paused_count=${gateInputs.queuePausedCount} desired_mode=${gateInputs.desiredMode} enqueue_enabled=${gateInputs.enqueueEnabled} require_workers_for_enqueue=${gateInputs.requireWorkersForEnqueue} min_workers_to_enqueue=${gateInputs.minWorkersToEnqueue} workers_infra=${gateInputs.workersFromInfraSnapshot} workers_live=${gateInputs.workersFromLiveRead} workers_effective=${gateInputs.workersEffective} queue_backlog=${gateInputs.queueBacklog}`,
   );
   await publishRunnerStatus({ mode: "idle", gateReason });
-  await requestOpsStateRefresh("runner:startup-status-published").catch(
-    () => undefined,
-  );
 
   const gatePollMs = Math.max(3000, options.heartbeatSeconds * 1000);
   while (gateReason !== "gate=open") {
@@ -1084,11 +1068,11 @@ async function main(): Promise<void> {
     () => {
       const finalized = report.completed_jobs + report.failed_jobs;
       const total = Math.max(report.queued_count, report.claimed_count);
-      void Promise.all([readQueueSnapshot(), refreshSystemProgress()])
-        .then(([snapshot, system]) => {
-          const systemToken = system
-            ? `${system.processed}/${system.total}`
-            : "n/a";
+      void Promise.allSettled([readQueueSnapshot()])
+        .then((results) => {
+          const queueResult = results[0];
+          const snapshot =
+            queueResult.status === "fulfilled" ? queueResult.value : null;
           const line = formatModeProgressLine({
             mode: "desktop-bullmq",
             completed: finalized,
@@ -1096,13 +1080,17 @@ async function main(): Promise<void> {
             startedAtMs,
             text:
               `op_images_processed=${report.processed_items}/${report.claimed_count} ` +
-              `system_images_processed=${systemToken} ` +
+              `system_images_processed=n/a ` +
               `jobs_completed=${report.completed_jobs} jobs_failed=${report.failed_jobs} ` +
               `items_failed=${report.failed_items}`,
           });
-          progress.progress(
-            `heartbeat ${line} live_queue_backlog=${snapshot.backlog}`,
-          );
+          if (snapshot) {
+            progress.progress(
+              `heartbeat ${line} live_queue_backlog=${snapshot.backlog}`,
+            );
+          } else {
+            progress.progress(`heartbeat ${line} live_queue_backlog=n/a`);
+          }
           void publishRunnerStatus({
             mode: "running",
             gateReason: "gate=open",
@@ -1115,18 +1103,7 @@ async function main(): Promise<void> {
           });
         })
         .catch(() => {
-          const line = formatModeProgressLine({
-            mode: "desktop-bullmq",
-            completed: finalized,
-            total,
-            startedAtMs,
-            text:
-              `op_images_processed=${report.processed_items}/${report.claimed_count} ` +
-              `system_images_processed=n/a ` +
-              `jobs_completed=${report.completed_jobs} jobs_failed=${report.failed_jobs} ` +
-              `items_failed=${report.failed_items}`,
-          });
-          progress.progress(`heartbeat ${line}`);
+          // Promise.allSettled should prevent this path in normal operation.
         });
     },
     Math.max(5, options.heartbeatSeconds) * 1000,
@@ -1136,25 +1113,6 @@ async function main(): Promise<void> {
   const idleSleepMs = Math.max(3000, options.heartbeatSeconds * 1000);
   let autonomousTargetPrevious: number | null = null;
   let lastCycleFeedback: CycleFeedback | null = null;
-  let latestSystemProgress: SystemProgressSnapshot =
-    await readOpsDbProgress().catch(() => null);
-  let lastSystemProgressRefreshAtMs = Date.now();
-
-  const refreshSystemProgress = async (
-    force = false,
-  ): Promise<SystemProgressSnapshot> => {
-    const nowMs = Date.now();
-    if (!force && nowMs - lastSystemProgressRefreshAtMs < 15_000) {
-      return latestSystemProgress;
-    }
-
-    const snapshot = await readOpsDbProgress().catch(
-      () => latestSystemProgress,
-    );
-    latestSystemProgress = snapshot;
-    lastSystemProgressRefreshAtMs = nowMs;
-    return latestSystemProgress;
-  };
 
   try {
     while (true) {
@@ -1323,6 +1281,8 @@ async function main(): Promise<void> {
       const pendingErrors: ImageProcessingTaskError[] = [];
       let flushedProcessedItems = 0;
       let flushedFailedItems = 0;
+      const cycleCompletedBase = report.completed_jobs;
+      const cycleFailedBase = report.failed_jobs;
       let flushedWithheldItems = 0;
 
       async function flushPendingWrites(reason: string): Promise<void> {
@@ -1565,9 +1525,8 @@ async function main(): Promise<void> {
                 report.failed_items = Math.max(flushedFailedItems, failedItems);
 
                 const finalized = completed + failed;
-                const systemToken = latestSystemProgress
-                  ? `${latestSystemProgress.processed}/${latestSystemProgress.total}`
-                  : "n/a";
+                const completedTotal = cycleCompletedBase + completed;
+                const failedTotal = cycleFailedBase + failed;
                 const line = formatModeProgressLine({
                   mode: "desktop-bullmq",
                   completed: finalized,
@@ -1576,10 +1535,12 @@ async function main(): Promise<void> {
                   text:
                     `jobs_completed=${completed} jobs_failed=${failed} ` +
                     `op_images_processed=${report.processed_items}/${report.claimed_count} ` +
-                    `system_images_processed=${systemToken} ` +
+                    `system_images_processed=n/a ` +
                     `items_failed=${report.failed_items}`,
                 });
                 progress.progress(`queue ${line}`);
+                report.completed_jobs = completedTotal;
+                report.failed_jobs = failedTotal;
                 void publishRunnerStatus({
                   mode: "running",
                   gateReason: "gate=open",
@@ -1673,7 +1634,6 @@ async function main(): Promise<void> {
 
         report.processed_items = flushedProcessedItems;
         report.failed_items = flushedFailedItems;
-        await refreshSystemProgress(true);
         lastCycleFeedback = {
           claimedCount: claimedItems.length,
           processedItems: Math.max(

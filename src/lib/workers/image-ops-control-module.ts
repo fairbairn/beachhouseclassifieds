@@ -10,6 +10,8 @@ import {
   IMAGE_QUEUE_NAME,
   createImageQueue,
   createRedisConnection,
+  formatRedisEndpointForLogs,
+  resolveRedisUrl,
   type ImageProcessingQueueJob,
 } from "../../workers/image-queue";
 import {
@@ -35,6 +37,7 @@ import {
   imageMetricSliceHashKey,
   imageMetricSliceWindowField,
   imageMetricTrendKey,
+  imageRawJobTrendMetricKey,
   parseImageTrendPoint,
 } from "./image-metrics-redis-keys";
 import {
@@ -76,6 +79,30 @@ export type DesiredModeActionResult = {
   settings: RunnerControlSettings;
   purged: boolean;
   purge: QueuePurgeResult | null;
+};
+
+export const OPS_UI_METRIC_LABELS = {
+  queue: {
+    pending: "pending",
+    active: "active",
+    completed: "completed",
+    failed: "failed",
+  },
+  image: {
+    processed: "processed",
+    failed: "failed",
+    ips: "ips",
+    ipm: "ipm",
+    avgFetchMs: "avg_fetch_ms",
+    avgTransformMs: "avg_transform_ms",
+    avgUploadMs: "avg_upload_ms",
+    avgElapsedMs: "avg_elapsed_ms",
+  },
+} as const;
+
+export type OpsRedisPreflight = {
+  endpoint: string;
+  authMode: "present" | "missing" | "unknown";
 };
 
 export type OpsSharedState = {
@@ -144,6 +171,17 @@ export type OpsUiStateWatcher = {
 
 export type OpsReactiveProfile = "cli" | "runner-lite";
 
+export type OpsMetricOwnerRole = OpsReactiveProfile | "unknown";
+
+export type OpsMetricSystemSnapshot = {
+  selfInstanceId: string;
+  selfRole: OpsMetricOwnerRole;
+  ownerInstanceId: string | null;
+  ownerRole: OpsMetricOwnerRole;
+  activeInstances: number;
+  role: "master" | "standby";
+};
+
 export type OpsQueueRuntime = {
   queue: Queue<ImageProcessingQueueJob>;
   queueEvents: QueueEvents | null;
@@ -175,6 +213,7 @@ export type OpsUiSnapshot = {
   settings: RunnerControlSettings | null;
   infra: RunnerInfraSnapshot | null;
   status: RunnerStatusSnapshot | null;
+  metricSystem?: OpsMetricSystemSnapshot;
   redisIoAggregate?: OpsRedisIoAggregateStats;
   redisIoInstances?: OpsRedisIoInstanceStats[];
   projections: OpsTrendProjection;
@@ -187,7 +226,7 @@ export type OpsUiSnapshot = {
 };
 
 export type OpsPerformanceRollup = {
-  windowId: "15s" | "1m" | "15m" | "24h" | "deep";
+  windowId: "15s" | "1m" | "15m" | "60m" | "24h" | "deep";
   windowMs: number;
   completedJobs: number;
   failedJobs: number;
@@ -226,6 +265,7 @@ export type OpsPerformanceRollupSet = {
   rollup15s: OpsPerformanceRollup;
   rollup1m: OpsPerformanceRollup;
   rollup15m: OpsPerformanceRollup;
+  rollup60m: OpsPerformanceRollup;
   rollup24h: OpsPerformanceRollup;
   rollupDeep: OpsPerformanceRollup;
 };
@@ -261,6 +301,8 @@ export type OpsRedisIoStats = {
   redisIngressKbps: number;
   redisWireKbps: number;
   redisIngressKbPerRead: number;
+  rxLatencyMs: number;
+  txLatencyMs: number;
   lastReadAt: string | null;
   lastWriteAt: string | null;
 };
@@ -285,6 +327,8 @@ export type OpsRedisIoAggregateStats = {
   redisEgressKbps: number;
   redisIngressKbps: number;
   redisWireKbps: number;
+  rxLatencyMs: number;
+  txLatencyMs: number;
 };
 
 export type OpsRedisIoInstanceStats = {
@@ -300,6 +344,8 @@ export type OpsRedisIoInstanceStats = {
   redisEgressKbps: number;
   redisIngressKbps: number;
   redisWireKbps: number;
+  rxLatencyMs: number;
+  txLatencyMs: number;
 };
 
 const OPS_TREND_HISTORY_MAX = 1000;
@@ -312,18 +358,45 @@ const OPS_LIVE_STATUS_PUBLISH_MIN_INTERVAL_MS = 2_000;
 const OPS_15S_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["15s"];
 const OPS_1M_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["1m"];
 const OPS_BULLMQ_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["15m"];
+const OPS_60M_METRICS_WINDOW_MS = 60 * 60 * 1000;
 const OPS_DAILY_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["24h"];
 const OPS_DEEP_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS.deep;
 const OPS_RECENT_15M_REFRESH_MIN_INTERVAL_MS = 5_000;
 const OPS_RECENT_24H_REFRESH_MIN_INTERVAL_MS = 60_000;
 const OPS_PERFORMANCE_ROLLUP_REFRESH_MIN_INTERVAL_MS = 5_000;
+const OPS_LIVE_SLICE_TTL_MS = 15_000;
 const OPS_PERFORMANCE_ROLLUP_HASH_KEY = IMAGE_PERF_ROLLUPS_HASH_KEY;
 let lastTrendTimestampMs = 0;
 const OPS_REDIS_IO_INSTANCES_HASH_KEY =
   "image:runner:control:redis_io:instances";
 const OPS_REDIS_IO_INSTANCE_TTL_SECONDS = 45;
 const OPS_REDIS_IO_PUBLISH_MIN_INTERVAL_MS = 5_000;
-const opsRedisIoInstanceId = `${process.pid}-${Date.now().toString(36)}`;
+const OPS_METRIC_OWNER_REFRESH_MIN_INTERVAL_MS = 5_000;
+
+function inferOpsRedisIoProcessRole(): OpsReactiveProfile {
+  const envRole = String(process.env.IMAGE_OPS_PROFILE || "")
+    .trim()
+    .toLowerCase();
+  if (envRole === "cli") {
+    return "cli";
+  }
+  if (envRole === "runner-lite") {
+    return "runner-lite";
+  }
+
+  const argv = process.argv.join(" ").toLowerCase();
+  if (argv.includes("run-image-ops") || argv.includes("hqtui")) {
+    return "cli";
+  }
+  if (argv.includes("run-image-processing-bullmq")) {
+    return "runner-lite";
+  }
+
+  return "runner-lite";
+}
+
+const opsRedisIoProcessRole = inferOpsRedisIoProcessRole();
+const opsRedisIoInstanceId = `${opsRedisIoProcessRole}:${process.pid}-${Date.now().toString(36)}`;
 let opsRedisIoPublishInFlight = false;
 let opsRedisIoLastPublishedAtMs = 0;
 const opsRedisIoCounter = {
@@ -331,6 +404,10 @@ const opsRedisIoCounter = {
   ingressBytes: 0,
   reads: 0,
   writes: 0,
+  rxLatencyMsTotal: 0,
+  txLatencyMsTotal: 0,
+  rxLatencySamples: 0,
+  txLatencySamples: 0,
   startedAtMs: Date.now(),
   lastReadAtMs: 0,
   lastWriteAtMs: 0,
@@ -654,6 +731,16 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
       ),
       getValue: (snapshot) => snapshot.redisIoAggregate?.redisIngressReads ?? 0,
     },
+    {
+      name: "rxLatencyAggregate",
+      key: imageMetricTrendKey(IMAGE_GROUP_INFRA, "rx_latency_aggregate"),
+      getValue: (snapshot) => snapshot.redisIoAggregate?.rxLatencyMs ?? 0,
+    },
+    {
+      name: "txLatencyAggregate",
+      key: imageMetricTrendKey(IMAGE_GROUP_INFRA, "tx_latency_aggregate"),
+      getValue: (snapshot) => snapshot.redisIoAggregate?.txLatencyMs ?? 0,
+    },
   ];
 
 const OPS_TREND_METRIC_KEYS = {
@@ -688,6 +775,55 @@ function shortError(error: unknown): string {
   return String(error);
 }
 
+function parseRedisAuthMode(
+  redisUrl: string,
+): "present" | "missing" | "unknown" {
+  try {
+    const parsed = new URL(redisUrl);
+    return parsed.username || parsed.password ? "present" : "missing";
+  } catch {
+    return "unknown";
+  }
+}
+
+export async function readOpsRedisPreflight(input?: {
+  timeoutMs?: number;
+}): Promise<OpsRedisPreflight> {
+  const redisUrl = resolveRedisUrl();
+  const endpoint = formatRedisEndpointForLogs(redisUrl);
+  const authMode = parseRedisAuthMode(redisUrl);
+  const timeoutMs = Math.max(1000, input?.timeoutMs ?? 4000);
+
+  const connection = createRedisConnection();
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    await Promise.race([
+      connection.ping(),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`redis preflight timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+    return { endpoint, authMode };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const authHint =
+      message.toUpperCase().includes("NOAUTH") || authMode !== "present"
+        ? "If using a local proxy to Upstash, include credentials in REDIS_URL, e.g. redis://:PASSWORD@127.0.0.1:16379/0"
+        : "Check proxy health, network reachability, and Redis credentials.";
+    throw new Error(
+      `Redis preflight failed endpoint=${endpoint} auth=${authMode} reason=${message}. ${authHint}`,
+    );
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    await connection.quit().catch(() => undefined);
+  }
+}
+
 function parseNonNegativeNumber(value: unknown): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
@@ -697,7 +833,7 @@ function parseNonNegativeNumber(value: unknown): number {
 }
 
 function buildPerformanceRollupFromWindow(
-  windowId: "15s" | "1m" | "15m" | "24h" | "deep",
+  windowId: "15s" | "1m" | "15m" | "60m" | "24h" | "deep",
   windowMs: number,
   window: ImageQueueRecentJobWindow | null,
   computedAtIso: string,
@@ -815,6 +951,7 @@ function parsePerformanceRollupField(
       parsed.windowId !== "15s" &&
       parsed.windowId !== "1m" &&
       parsed.windowId !== "15m" &&
+      parsed.windowId !== "60m" &&
       parsed.windowId !== "24h" &&
       parsed.windowId !== "deep"
     ) {
@@ -906,10 +1043,26 @@ async function writeOpsPerformanceRollupSet(
   redis?: IORedis,
 ): Promise<void> {
   await withControlRedis(redis, async (connection) => {
+    const liveSliceField = imageMetricSliceWindowField("15s");
+    const latestLiveRows = await connection.zrevrange(
+      imageRawJobTrendMetricKey("processed_items"),
+      0,
+      0,
+      "WITHSCORES",
+    );
+    const latestLiveAtMs =
+      Array.isArray(latestLiveRows) && latestLiveRows.length >= 2
+        ? Number(latestLiveRows[1])
+        : NaN;
+    const liveIsFresh =
+      Number.isFinite(latestLiveAtMs) &&
+      Date.now() - latestLiveAtMs <= OPS_LIVE_SLICE_TTL_MS;
+
     await connection.hset(OPS_PERFORMANCE_ROLLUP_HASH_KEY, {
       rollup_15s: JSON.stringify(rollups.rollup15s),
       rollup_1m: JSON.stringify(rollups.rollup1m),
       rollup_15m: JSON.stringify(rollups.rollup15m),
+      rollup_60m: JSON.stringify(rollups.rollup60m),
       rollup_24h: JSON.stringify(rollups.rollup24h),
       rollup_deep: JSON.stringify(rollups.rollupDeep),
       updated_at: new Date().toISOString(),
@@ -917,12 +1070,13 @@ async function writeOpsPerformanceRollupSet(
 
     const perMetricFieldsByKey = new Map<string, Record<string, string>>();
     const rollupByWindowId: Record<
-      "15s" | "1m" | "15m" | "24h" | "deep",
+      "15s" | "1m" | "15m" | "60m" | "24h" | "deep",
       OpsPerformanceRollup
     > = {
       "15s": rollups.rollup15s,
       "1m": rollups.rollup1m,
       "15m": rollups.rollup15m,
+      "60m": rollups.rollup60m,
       "24h": rollups.rollup24h,
       deep: rollups.rollupDeep,
     };
@@ -1191,7 +1345,7 @@ async function writeOpsPerformanceRollupSet(
         for (const metricSlug of family.metricSlugs) {
           const key = imageMetricSliceHashKey(metricSlug, family.groupCodeword);
           const existing = perMetricFieldsByKey.get(key) || {};
-          const metricValue =
+          let metricValue =
             metricValues[metricSlug] ||
             toSlicePoint({
               low: 0,
@@ -1200,6 +1354,17 @@ async function writeOpsPerformanceRollupSet(
               latest: 0,
               timestamp: window.rollup.computedAt,
             });
+
+          if (window.field === liveSliceField && !liveIsFresh) {
+            metricValue = toSlicePoint({
+              low: 0,
+              high: 0,
+              average: 0,
+              latest: 0,
+              timestamp: window.rollup.computedAt,
+            });
+          }
+
           existing[window.field] = encodeImageSliceWindowPayload(metricValue);
           perMetricFieldsByKey.set(key, existing);
         }
@@ -1226,15 +1391,24 @@ async function readOpsPerformanceRollupSet(
     const rollup15s = parsePerformanceRollupField(values.rollup_15s);
     const rollup1m = parsePerformanceRollupField(values.rollup_1m);
     const rollup15m = parsePerformanceRollupField(values.rollup_15m);
+    const rollup60m = parsePerformanceRollupField(values.rollup_60m);
     const rollup24h = parsePerformanceRollupField(values.rollup_24h);
     const rollupDeep = parsePerformanceRollupField(values.rollup_deep);
-    if (!rollup15s || !rollup1m || !rollup15m || !rollup24h || !rollupDeep) {
+    if (
+      !rollup15s ||
+      !rollup1m ||
+      !rollup15m ||
+      !rollup60m ||
+      !rollup24h ||
+      !rollupDeep
+    ) {
       return null;
     }
     return {
       rollup15s,
       rollup1m,
       rollup15m,
+      rollup60m,
       rollup24h,
       rollupDeep,
     };
@@ -1246,6 +1420,7 @@ async function buildOpsPerformanceRollupSetFromWindows(): Promise<{
   window15s: ImageQueueRecentJobWindow | null;
   window1m: ImageQueueRecentJobWindow | null;
   window15m: ImageQueueRecentJobWindow | null;
+  window60m: ImageQueueRecentJobWindow | null;
   window24h: ImageQueueRecentJobWindow | null;
   windowDeep: ImageQueueRecentJobWindow | null;
 }> {
@@ -1254,6 +1429,7 @@ async function buildOpsPerformanceRollupSetFromWindows(): Promise<{
       OPS_15S_METRICS_WINDOW_MS,
       OPS_1M_METRICS_WINDOW_MS,
       OPS_BULLMQ_METRICS_WINDOW_MS,
+      OPS_60M_METRICS_WINDOW_MS,
       OPS_DAILY_METRICS_WINDOW_MS,
     ],
     deepSampleLimit: 1000,
@@ -1264,6 +1440,7 @@ async function buildOpsPerformanceRollupSetFromWindows(): Promise<{
   const window15s = windows[String(OPS_15S_METRICS_WINDOW_MS)] || null;
   const window1m = windows[String(OPS_1M_METRICS_WINDOW_MS)] || null;
   const window15m = windows[String(OPS_BULLMQ_METRICS_WINDOW_MS)] || null;
+  const window60m = windows[String(OPS_60M_METRICS_WINDOW_MS)] || null;
   const window24h = windows[String(OPS_DAILY_METRICS_WINDOW_MS)] || null;
   const windowDeep = rollupSource?.deepWindow || null;
   const deepWindowMs = Math.max(
@@ -1290,6 +1467,12 @@ async function buildOpsPerformanceRollupSetFromWindows(): Promise<{
       window15m,
       computedAtIso,
     ),
+    rollup60m: buildPerformanceRollupFromWindow(
+      "60m",
+      OPS_60M_METRICS_WINDOW_MS,
+      window60m,
+      computedAtIso,
+    ),
     rollup24h: buildPerformanceRollupFromWindow(
       "24h",
       OPS_DAILY_METRICS_WINDOW_MS,
@@ -1309,6 +1492,7 @@ async function buildOpsPerformanceRollupSetFromWindows(): Promise<{
     window15s,
     window1m,
     window15m,
+    window60m,
     window24h,
     windowDeep,
   };
@@ -1324,18 +1508,34 @@ function trackRedisEgressBytes(bytes: number): void {
   opsRedisIoCounter.egressBytes += Math.floor(normalizedBytes);
 }
 
-function trackRedisReadIo(requestBytes: number, responseBytes: number): void {
+function trackRedisReadIo(
+  requestBytes: number,
+  responseBytes: number,
+  latencyMs?: number,
+): void {
   trackRedisEgressBytes(requestBytes);
   trackRedisIngressBytes(responseBytes);
   opsRedisIoCounter.reads += 1;
+  if (Number.isFinite(latencyMs) && (latencyMs || 0) >= 0) {
+    opsRedisIoCounter.rxLatencyMsTotal += Number(latencyMs);
+    opsRedisIoCounter.rxLatencySamples += 1;
+  }
   opsRedisIoCounter.lastReadAtMs = Date.now();
   maybePublishOpsRedisIoInstanceStats();
 }
 
-function trackRedisWriteIo(requestBytes: number, responseBytes: number): void {
+function trackRedisWriteIo(
+  requestBytes: number,
+  responseBytes: number,
+  latencyMs?: number,
+): void {
   trackRedisEgressBytes(requestBytes);
   trackRedisIngressBytes(responseBytes);
   opsRedisIoCounter.writes += 1;
+  if (Number.isFinite(latencyMs) && (latencyMs || 0) >= 0) {
+    opsRedisIoCounter.txLatencyMsTotal += Number(latencyMs);
+    opsRedisIoCounter.txLatencySamples += 1;
+  }
   opsRedisIoCounter.lastWriteAtMs = Date.now();
   maybePublishOpsRedisIoInstanceStats();
 }
@@ -1401,7 +1601,142 @@ function mapInstanceRecord(
     redisEgressKbps: parseNumericField(record, "redis_egress_kbps"),
     redisIngressKbps: parseNumericField(record, "redis_ingress_kbps"),
     redisWireKbps: parseNumericField(record, "redis_wire_kbps"),
+    rxLatencyMs: parseNumericField(record, "rx_latency_ms"),
+    txLatencyMs: parseNumericField(record, "tx_latency_ms"),
   };
+}
+
+type OpsMetricSystemOwnership = {
+  selfInstanceId: string;
+  ownerInstanceId: string | null;
+  ownerRole: OpsMetricOwnerRole;
+  activeInstances: number;
+  isOwner: boolean;
+};
+
+function parseOpsMetricOwnerRoleFromInstanceId(
+  instanceId: string,
+): OpsMetricOwnerRole {
+  if (instanceId.startsWith("cli:")) {
+    return "cli";
+  }
+  if (instanceId.startsWith("runner-lite:")) {
+    return "runner-lite";
+  }
+  return "unknown";
+}
+
+function parseIsoToMs(value: string): number {
+  const atMs = Date.parse(value);
+  return Number.isFinite(atMs) ? atMs : 0;
+}
+
+function metricOwnerRoleWeight(role: OpsMetricOwnerRole): number {
+  if (role === "cli") {
+    return 0;
+  }
+  if (role === "runner-lite") {
+    return 1;
+  }
+  return 2;
+}
+
+function resolveOpsMetricSystemOwnership(
+  instances: OpsRedisIoInstanceStats[],
+): OpsMetricSystemOwnership {
+  const deduped = new Map<string, OpsRedisIoInstanceStats>();
+  for (const instance of instances) {
+    if (!instance.instanceId) {
+      continue;
+    }
+    deduped.set(instance.instanceId, instance);
+  }
+
+  if (!deduped.has(opsRedisIoInstanceId)) {
+    deduped.set(opsRedisIoInstanceId, {
+      instanceId: opsRedisIoInstanceId,
+      pid: process.pid,
+      startedAt: new Date(opsRedisIoCounter.startedAtMs).toISOString(),
+      updatedAt: new Date().toISOString(),
+      windowSeconds: 1,
+      redisEgressBytes: 0,
+      redisIngressBytes: 0,
+      redisIngressReads: 0,
+      redisEgressWrites: 0,
+      redisEgressKbps: 0,
+      redisIngressKbps: 0,
+      redisWireKbps: 0,
+      rxLatencyMs: 0,
+      txLatencyMs: 0,
+    });
+  }
+
+  const candidates = Array.from(deduped.values());
+  candidates.sort((left, right) => {
+    const roleDelta =
+      metricOwnerRoleWeight(
+        parseOpsMetricOwnerRoleFromInstanceId(left.instanceId),
+      ) -
+      metricOwnerRoleWeight(
+        parseOpsMetricOwnerRoleFromInstanceId(right.instanceId),
+      );
+    if (roleDelta !== 0) {
+      return roleDelta;
+    }
+
+    const startedDelta =
+      parseIsoToMs(left.startedAt) - parseIsoToMs(right.startedAt);
+    if (startedDelta !== 0) {
+      return startedDelta;
+    }
+
+    return left.instanceId.localeCompare(right.instanceId);
+  });
+
+  const owner = candidates[0] || null;
+  const ownerInstanceId = owner?.instanceId || null;
+  const ownerRole = owner
+    ? parseOpsMetricOwnerRoleFromInstanceId(owner.instanceId)
+    : "unknown";
+
+  return {
+    selfInstanceId: opsRedisIoInstanceId,
+    ownerInstanceId,
+    ownerRole,
+    activeInstances: candidates.length,
+    isOwner:
+      ownerInstanceId === null || ownerInstanceId === opsRedisIoInstanceId,
+  };
+}
+
+function defaultOpsMetricSystemOwnership(): OpsMetricSystemOwnership {
+  return {
+    selfInstanceId: opsRedisIoInstanceId,
+    ownerInstanceId: opsRedisIoInstanceId,
+    ownerRole: parseOpsMetricOwnerRoleFromInstanceId(opsRedisIoInstanceId),
+    activeInstances: 1,
+    isOwner: true,
+  };
+}
+
+function toOpsMetricSystemSnapshot(
+  ownership: OpsMetricSystemOwnership,
+): OpsMetricSystemSnapshot {
+  return {
+    selfInstanceId: ownership.selfInstanceId,
+    selfRole: parseOpsMetricOwnerRoleFromInstanceId(ownership.selfInstanceId),
+    ownerInstanceId: ownership.ownerInstanceId,
+    ownerRole: ownership.ownerRole,
+    activeInstances: ownership.activeInstances,
+    role: ownership.isOwner ? "master" : "standby",
+  };
+}
+
+async function readOpsMetricSystemOwnership(
+  redis?: IORedis,
+): Promise<OpsMetricSystemOwnership> {
+  const instances = await readOpsRedisIoInstanceStats(redis).catch(() => []);
+  return resolveOpsMetricSystemOwnership(instances);
 }
 
 function maybePublishOpsRedisIoInstanceStats(): void {
@@ -1434,9 +1769,12 @@ function maybePublishOpsRedisIoInstanceStats(): void {
         redis_egress_kbps: String(local.redisEgressKbps),
         redis_ingress_kbps: String(local.redisIngressKbps),
         redis_wire_kbps: String(local.redisWireKbps),
+        rx_latency_ms: String(local.rxLatencyMs),
+        tx_latency_ms: String(local.txLatencyMs),
       });
       await withControlRedis(undefined, async (connection) => {
-        await connection
+        const startedAtMs = Date.now();
+        const writeResult = await connection
           .multi()
           .hset(OPS_REDIS_IO_INSTANCES_HASH_KEY, opsRedisIoInstanceId, payload)
           .expire(
@@ -1444,6 +1782,29 @@ function maybePublishOpsRedisIoInstanceStats(): void {
             OPS_REDIS_IO_INSTANCE_TTL_SECONDS,
           )
           .exec();
+        const requestBytes =
+          redisCommandPayloadBytes([
+            "HSET",
+            OPS_REDIS_IO_INSTANCES_HASH_KEY,
+            opsRedisIoInstanceId,
+            payload,
+          ]) +
+          redisCommandPayloadBytes([
+            "EXPIRE",
+            OPS_REDIS_IO_INSTANCES_HASH_KEY,
+            String(OPS_REDIS_IO_INSTANCE_TTL_SECONDS),
+          ]);
+        const responseBytes = Array.isArray(writeResult)
+          ? writeResult.reduce(
+              (sum, row) => sum + redisReplyPayloadBytes(row?.[1]),
+              0,
+            )
+          : 0;
+        trackRedisWriteIo(
+          requestBytes,
+          responseBytes,
+          Math.max(0, Date.now() - startedAtMs),
+        );
       });
       opsRedisIoLastPublishedAtMs = Date.now();
     } catch {
@@ -1470,6 +1831,14 @@ export function readOpsRedisIoStats(): OpsRedisIoStats {
     opsRedisIoCounter.reads > 0
       ? opsRedisIoCounter.ingressBytes / 1024 / opsRedisIoCounter.reads
       : 0;
+  const rxLatencyMs =
+    opsRedisIoCounter.rxLatencySamples > 0
+      ? opsRedisIoCounter.rxLatencyMsTotal / opsRedisIoCounter.rxLatencySamples
+      : 0;
+  const txLatencyMs =
+    opsRedisIoCounter.txLatencySamples > 0
+      ? opsRedisIoCounter.txLatencyMsTotal / opsRedisIoCounter.txLatencySamples
+      : 0;
   return {
     redisEgressBytes: opsRedisIoCounter.egressBytes,
     redisIngressBytes: opsRedisIoCounter.ingressBytes,
@@ -1482,6 +1851,8 @@ export function readOpsRedisIoStats(): OpsRedisIoStats {
     redisIngressKbps: Number(ingressKbps.toFixed(3)),
     redisWireKbps: Number(wireKbps.toFixed(3)),
     redisIngressKbPerRead: Number(kbPerRead.toFixed(3)),
+    rxLatencyMs: Number(rxLatencyMs.toFixed(3)),
+    txLatencyMs: Number(txLatencyMs.toFixed(3)),
     lastReadAt:
       opsRedisIoCounter.lastReadAtMs > 0
         ? new Date(opsRedisIoCounter.lastReadAtMs).toISOString()
@@ -1498,6 +1869,10 @@ export function resetOpsRedisIoStats(): void {
   opsRedisIoCounter.ingressBytes = 0;
   opsRedisIoCounter.reads = 0;
   opsRedisIoCounter.writes = 0;
+  opsRedisIoCounter.rxLatencyMsTotal = 0;
+  opsRedisIoCounter.txLatencyMsTotal = 0;
+  opsRedisIoCounter.rxLatencySamples = 0;
+  opsRedisIoCounter.txLatencySamples = 0;
   opsRedisIoCounter.startedAtMs = Date.now();
   opsRedisIoCounter.lastReadAtMs = 0;
   opsRedisIoCounter.lastWriteAtMs = 0;
@@ -1512,10 +1887,15 @@ export async function readOpsRedisIoInstanceStats(
       "HGETALL",
       OPS_REDIS_IO_INSTANCES_HASH_KEY,
     ]);
+    const readStartedAtMs = Date.now();
     const hashEntries = await connection.hgetall(
       OPS_REDIS_IO_INSTANCES_HASH_KEY,
     );
-    trackRedisReadIo(requestBytes, redisReplyPayloadBytes(hashEntries));
+    trackRedisReadIo(
+      requestBytes,
+      redisReplyPayloadBytes(hashEntries),
+      Math.max(0, Date.now() - readStartedAtMs),
+    );
 
     const entries = Object.entries(hashEntries);
     if (entries.length === 0) {
@@ -1556,9 +1936,19 @@ export async function readOpsRedisIoInstanceStats(
     }
 
     if (staleInstanceIds.length > 0) {
-      await connection.hdel(
+      const hdelStartedAtMs = Date.now();
+      const hdelRemoved = await connection.hdel(
         OPS_REDIS_IO_INSTANCES_HASH_KEY,
         ...staleInstanceIds,
+      );
+      trackRedisWriteIo(
+        redisCommandPayloadBytes([
+          "HDEL",
+          OPS_REDIS_IO_INSTANCES_HASH_KEY,
+          ...staleInstanceIds,
+        ]),
+        redisReplyPayloadBytes(hdelRemoved),
+        Math.max(0, Date.now() - hdelStartedAtMs),
       );
     }
 
@@ -1589,7 +1979,12 @@ function aggregateRedisIoInstances(
     redisEgressKbps: 0,
     redisIngressKbps: 0,
     redisWireKbps: 0,
+    rxLatencyMs: 0,
+    txLatencyMs: 0,
   };
+
+  let weightedRxLatencyMs = 0;
+  let weightedTxLatencyMs = 0;
 
   for (const instance of instances) {
     aggregate.redisEgressBytes += instance.redisEgressBytes;
@@ -1599,11 +1994,27 @@ function aggregateRedisIoInstances(
     aggregate.redisEgressKbps += instance.redisEgressKbps;
     aggregate.redisIngressKbps += instance.redisIngressKbps;
     aggregate.redisWireKbps += instance.redisWireKbps;
+    weightedRxLatencyMs += instance.rxLatencyMs * instance.redisIngressReads;
+    weightedTxLatencyMs += instance.txLatencyMs * instance.redisEgressWrites;
   }
 
   aggregate.redisEgressKbps = Number(aggregate.redisEgressKbps.toFixed(3));
   aggregate.redisIngressKbps = Number(aggregate.redisIngressKbps.toFixed(3));
   aggregate.redisWireKbps = Number(aggregate.redisWireKbps.toFixed(3));
+  aggregate.rxLatencyMs = Number(
+    (
+      aggregate.redisIngressReads > 0
+        ? weightedRxLatencyMs / aggregate.redisIngressReads
+        : 0
+    ).toFixed(3),
+  );
+  aggregate.txLatencyMs = Number(
+    (
+      aggregate.redisEgressWrites > 0
+        ? weightedTxLatencyMs / aggregate.redisEgressWrites
+        : 0
+    ).toFixed(3),
+  );
   return aggregate;
 }
 
@@ -1721,6 +2132,7 @@ async function appendTrendMetric(
   const pipeline = connection.pipeline();
   pipeline.zadd(key, atMs, encodeTrendMetricMember(value, atMs));
   pipeline.zremrangebyscore(key, "0", String(pruneBeforeMs));
+  const startedAtMs = Date.now();
   const result = await pipeline.exec();
   const requestBytes =
     redisCommandPayloadBytes([
@@ -1738,7 +2150,11 @@ async function appendTrendMetric(
   const responseBytes = Array.isArray(result)
     ? result.reduce((sum, row) => sum + redisReplyPayloadBytes(row?.[1]), 0)
     : 0;
-  trackRedisWriteIo(requestBytes, responseBytes);
+  trackRedisWriteIo(
+    requestBytes,
+    responseBytes,
+    Math.max(0, Date.now() - startedAtMs),
+  );
 }
 
 async function readTrendMetricLatestBatch<TName extends string>(
@@ -1750,6 +2166,7 @@ async function readTrendMetricLatestBatch<TName extends string>(
     pipeline.zrevrange(descriptor.key, 0, 0, "WITHSCORES");
   }
 
+  const startedAtMs = Date.now();
   const rawResults = await pipeline.exec();
   if (!rawResults) {
     trackRedisReadIo(
@@ -1766,6 +2183,7 @@ async function readTrendMetricLatestBatch<TName extends string>(
         0,
       ),
       0,
+      Math.max(0, Date.now() - startedAtMs),
     );
     return descriptors.map((descriptor) => ({
       name: descriptor.name,
@@ -1789,6 +2207,7 @@ async function readTrendMetricLatestBatch<TName extends string>(
     rawResults.reduce((sum, result) => {
       return sum + redisReplyPayloadBytes(result?.[1]);
     }, 0),
+    Math.max(0, Date.now() - startedAtMs),
   );
 
   return descriptors.map((descriptor, index) => {
@@ -1860,6 +2279,7 @@ async function readTrendMetricRowsBatch<TName extends string>(
     pipeline.zrange(descriptor.key, -limit, -1, "WITHSCORES");
   }
 
+  const startedAtMs = Date.now();
   const rawResults = await pipeline.exec();
   if (!rawResults) {
     trackRedisReadIo(
@@ -1876,6 +2296,7 @@ async function readTrendMetricRowsBatch<TName extends string>(
         0,
       ),
       0,
+      Math.max(0, Date.now() - startedAtMs),
     );
     return descriptors.map((descriptor) => ({
       name: descriptor.name,
@@ -1907,6 +2328,7 @@ async function readTrendMetricRowsBatch<TName extends string>(
       0,
     ),
     totalBytes,
+    Math.max(0, Date.now() - startedAtMs),
   );
 
   return descriptors.map((descriptor, index) => {
@@ -2586,8 +3008,30 @@ export async function createOpsUiStateWatcher(input: {
   let lastRecent24hReadAtMs = 0;
   let performanceRollupsCache: OpsPerformanceRollupSet | null = null;
   let lastPerformanceRollupRefreshAtMs = 0;
+  let metricOwnershipCache: OpsMetricSystemOwnership | null = null;
+  let lastMetricOwnershipRefreshAtMs = 0;
   const stateWaiters = new Set<() => void>();
   const listeners = new Set<() => void>();
+
+  const readMetricOwnership = async (
+    nowMs: number,
+  ): Promise<OpsMetricSystemOwnership> => {
+    if (
+      metricOwnershipCache &&
+      nowMs - lastMetricOwnershipRefreshAtMs <
+        OPS_METRIC_OWNER_REFRESH_MIN_INTERVAL_MS
+    ) {
+      return metricOwnershipCache;
+    }
+
+    const ownership = await readOpsMetricSystemOwnership().catch(() =>
+      defaultOpsMetricSystemOwnership(),
+    );
+
+    metricOwnershipCache = ownership;
+    lastMetricOwnershipRefreshAtMs = nowMs;
+    return ownership;
+  };
 
   const readRecent15mWindow = async (
     nowMs: number,
@@ -2632,6 +3076,16 @@ export async function createOpsUiStateWatcher(input: {
       nowMs - lastPerformanceRollupRefreshAtMs <
         OPS_PERFORMANCE_ROLLUP_REFRESH_MIN_INTERVAL_MS
     ) {
+      return performanceRollupsCache;
+    }
+
+    const ownership = await readMetricOwnership(nowMs);
+    if (!ownership.isOwner) {
+      const stored = await readOpsPerformanceRollupSet().catch(() => null);
+      if (stored) {
+        performanceRollupsCache = stored;
+        lastPerformanceRollupRefreshAtMs = nowMs;
+      }
       return performanceRollupsCache;
     }
 
@@ -2767,6 +3221,7 @@ export async function createOpsUiStateWatcher(input: {
       settings: snapshot?.settings ?? null,
       infra: snapshot?.infra ?? null,
       status: snapshot?.status ?? null,
+      metricSystem: snapshot?.metricSystem,
       redisIoAggregate: snapshot?.redisIoAggregate,
       redisIoInstances: snapshot?.redisIoInstances,
       projections: snapshot?.projections ?? deriveOpsTrendProjection([]),
@@ -2866,8 +3321,11 @@ export async function createOpsUiStateWatcher(input: {
     snapshot.recentJobs15m = await readRecent15mWindow(nowMs);
     await readRecent24hWindow(nowMs);
     snapshot.recentJobs24h = recent24hWindowCache;
+    const ownership = await readMetricOwnership(nowMs);
+    snapshot.metricSystem = toOpsMetricSystemSnapshot(ownership);
     const recentWindow15m = snapshot.recentJobs15m;
     if (
+      ownership.isOwner &&
       shouldReconcileBullmqStatus({
         status: snapshot.status,
         queue: snapshot.queue,
@@ -2907,7 +3365,11 @@ export async function createOpsUiStateWatcher(input: {
 
     await seedTrendPointsFromRedis();
 
+    const nowMs = Date.now();
+    const ownership = await readMetricOwnership(nowMs);
+
     refreshInFlight = readOpsUiSnapshot(input.appName, snapshotTimeoutMs, {
+      includeFly: ownership.isOwner,
       includeTrendProjection: false,
       includeRecentJobs15m: false,
       includeRecentJobs24h: false,
@@ -2928,13 +3390,13 @@ export async function createOpsUiStateWatcher(input: {
             snapshot?.performanceRollups ??
             null,
         };
-        const nowMs = Date.now();
         next.performanceRollups = await refreshPerformanceRollups(nowMs);
         next.recentJobs15m = await readRecent15mWindow(nowMs);
         await readRecent24hWindow(nowMs);
         next.recentJobs24h = recent24hWindowCache;
         const recentWindow15m = next.recentJobs15m;
         if (
+          ownership.isOwner &&
           shouldReconcileBullmqStatus({
             status: next.status,
             queue: next.queue,
@@ -3782,7 +4244,15 @@ export async function readOpsUiSnapshot(
     awaitPerformanceRollupWrite?: boolean;
   },
 ): Promise<OpsUiSnapshot> {
-  const includeFly = input?.includeFly ?? true;
+  const redisIoInstancesSnapshot = await readOpsRedisIoInstanceStats().catch(
+    () => null,
+  );
+  const ownership = redisIoInstancesSnapshot
+    ? resolveOpsMetricSystemOwnership(redisIoInstancesSnapshot)
+    : defaultOpsMetricSystemOwnership();
+  const metricWritesEnabled = ownership.isOwner;
+
+  const includeFly = (input?.includeFly ?? true) && metricWritesEnabled;
   const includeTrendProjection = input?.includeTrendProjection ?? true;
   const includeRecentJobs15m = input?.includeRecentJobs15m ?? true;
   const includeRecentJobs24h = input?.includeRecentJobs24h ?? true;
@@ -3805,6 +4275,7 @@ export async function readOpsUiSnapshot(
     settings: null,
     infra: null,
     status: null,
+    metricSystem: toOpsMetricSystemSnapshot(ownership),
     redisIoAggregate: undefined,
     redisIoInstances: undefined,
     projections: deriveOpsTrendProjection([]),
@@ -3834,9 +4305,7 @@ export async function readOpsUiSnapshot(
     recentJobs24h,
     recentJobs15m,
     performanceRollupsStored,
-    performanceRollupsComputed,
     queuePaused,
-    redisIoInstances,
   ] = await Promise.allSettled([
     withTimeout("control", timeoutMs, readOpsControlSnapshot()),
     withTimeout("queue", timeoutMs, readOpsQueueSnapshot()),
@@ -3875,20 +4344,7 @@ export async function readOpsUiSnapshot(
           readOpsPerformanceRollupSet(),
         )
       : Promise.resolve<OpsPerformanceRollupSet | null>(null),
-    includePerformanceRollups
-      ? withTimeout(
-          "performanceRollupsComputed",
-          timeoutMs,
-          buildOpsPerformanceRollupSetFromWindows(),
-        )
-      : Promise.resolve<{
-          rollups: OpsPerformanceRollupSet;
-          window15m: ImageQueueRecentJobWindow | null;
-          window24h: ImageQueueRecentJobWindow | null;
-          windowDeep: ImageQueueRecentJobWindow | null;
-        } | null>(null),
     withTimeout("queuePaused", timeoutMs, readOpsQueuePausedState()),
-    withTimeout("redisIoInstances", timeoutMs, readOpsRedisIoInstanceStats()),
   ]);
 
   if (control.status === "fulfilled") {
@@ -3938,26 +4394,29 @@ export async function readOpsUiSnapshot(
     snapshot.performanceRollups = performanceRollupsStored.value || null;
   }
 
-  if (
-    performanceRollupsComputed.status === "fulfilled" &&
-    performanceRollupsComputed.value
-  ) {
-    const computed = performanceRollupsComputed.value;
-    snapshot.performanceRollups = computed.rollups;
-    if (!snapshot.recentJobs15m) {
-      snapshot.recentJobs15m = computed.window15m;
-    }
-    if (!snapshot.recentJobs24h) {
-      snapshot.recentJobs24h = computed.window24h;
-    }
-    if (awaitPerformanceRollupWrite) {
-      await writeOpsPerformanceRollupSet(computed.rollups).catch(
-        () => undefined,
-      );
-    } else {
-      void writeOpsPerformanceRollupSet(computed.rollups).catch(
-        () => undefined,
-      );
+  if (includePerformanceRollups && metricWritesEnabled) {
+    const computed = await withTimeout(
+      "performanceRollupsComputed",
+      timeoutMs,
+      buildOpsPerformanceRollupSetFromWindows(),
+    ).catch(() => null);
+    if (computed) {
+      snapshot.performanceRollups = computed.rollups;
+      if (!snapshot.recentJobs15m) {
+        snapshot.recentJobs15m = computed.window15m;
+      }
+      if (!snapshot.recentJobs24h) {
+        snapshot.recentJobs24h = computed.window24h;
+      }
+      if (awaitPerformanceRollupWrite) {
+        await writeOpsPerformanceRollupSet(computed.rollups).catch(
+          () => undefined,
+        );
+      } else {
+        void writeOpsPerformanceRollupSet(computed.rollups).catch(
+          () => undefined,
+        );
+      }
     }
   }
 
@@ -3965,14 +4424,16 @@ export async function readOpsUiSnapshot(
     snapshot.queuePaused = queuePaused.value;
   }
 
-  if (redisIoInstances.status === "fulfilled") {
-    snapshot.redisIoInstances = redisIoInstances.value;
+  if (redisIoInstancesSnapshot) {
+    snapshot.redisIoInstances = redisIoInstancesSnapshot;
     snapshot.redisIoAggregate = aggregateRedisIoInstances(
-      redisIoInstances.value,
+      redisIoInstancesSnapshot,
     );
   }
 
-  await writeOpsSnapshotTrendMetrics(snapshot);
+  if (metricWritesEnabled) {
+    await writeOpsSnapshotTrendMetrics(snapshot);
+  }
 
   return snapshot;
 }

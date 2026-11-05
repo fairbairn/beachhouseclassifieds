@@ -788,74 +788,235 @@ export async function readImageJobMetricRollupWindows(input: {
     const completedKey = queue.toKey("completed");
     const failedKey = queue.toKey("failed");
 
+    type TimedSample = { atMs: number; value: number };
+    const parseTimedSamples = (rows: unknown[]): TimedSample[] => {
+      const samples: TimedSample[] = [];
+      for (let index = 0; index + 1 < rows.length; index += 2) {
+        const member = String(rows[index] ?? "");
+        const atMs = Number(rows[index + 1]);
+        if (!member || !Number.isFinite(atMs)) {
+          continue;
+        }
+        let value = Number(member);
+        if (!Number.isFinite(value)) {
+          const decoded = parseImageTrendPoint(member);
+          value = Number(decoded?.value);
+        }
+        if (!Number.isFinite(value) || value < 0) {
+          continue;
+        }
+        samples.push({ atMs: Math.floor(atMs), value });
+      }
+      return samples;
+    };
+
+    const summarizeTimedSamplesSince = (
+      samples: TimedSample[],
+      windowStartMs: number,
+    ): MetricStats => {
+      let count = 0;
+      let sum = 0;
+      let low = Number.POSITIVE_INFINITY;
+      let high = Number.NEGATIVE_INFINITY;
+      for (const sample of samples) {
+        if (sample.atMs < windowStartMs) {
+          continue;
+        }
+        count += 1;
+        sum += sample.value;
+        low = Math.min(low, sample.value);
+        high = Math.max(high, sample.value);
+      }
+      if (count <= 0) {
+        return { count: 0, sum: 0, low: 0, high: 0, avg: 0 };
+      }
+      return { count, sum, low, high, avg: sum / count };
+    };
+
+    const countTimestampsSince = (
+      timestampsAsc: number[],
+      windowStartMs: number,
+    ): number => {
+      let left = 0;
+      let right = timestampsAsc.length;
+      while (left < right) {
+        const middle = Math.floor((left + right) / 2);
+        if ((timestampsAsc[middle] ?? 0) < windowStartMs) {
+          left = middle + 1;
+        } else {
+          right = middle;
+        }
+      }
+      return timestampsAsc.length - left;
+    };
+
+    let preloadSucceeded = false;
+    const preloadedSamplesByMetric = new Map<
+      ImageJobMetricName,
+      TimedSample[]
+    >();
+    let failedAtMsAsc: number[] = [];
+
+    try {
+      const preloadPipeline = connection.pipeline();
+      for (const metric of METRIC_NAMES) {
+        preloadPipeline.zrange(metricTrendKey(metric), 0, -1, "WITHSCORES");
+      }
+      preloadPipeline.zrange(failedKey, 0, -1, "WITHSCORES");
+
+      const preloadRows = await preloadPipeline.exec();
+      if (
+        Array.isArray(preloadRows) &&
+        preloadRows.length === METRIC_NAMES.length + 1
+      ) {
+        for (let index = 0; index < METRIC_NAMES.length; index += 1) {
+          const metric = METRIC_NAMES[index];
+          const row = preloadRows[index];
+          const raw =
+            row && row[0] === null && Array.isArray(row[1]) ? row[1] : [];
+          preloadedSamplesByMetric.set(metric, parseTimedSamples(raw));
+        }
+
+        const failedRow = preloadRows[METRIC_NAMES.length];
+        const failedRaw =
+          failedRow && failedRow[0] === null && Array.isArray(failedRow[1])
+            ? failedRow[1]
+            : [];
+        failedAtMsAsc = toCompletedRows(failedRaw, false).map(
+          (row) => row.finishedAtMs,
+        );
+        preloadSucceeded = true;
+      }
+    } catch {
+      preloadSucceeded = false;
+      preloadedSamplesByMetric.clear();
+      failedAtMsAsc = [];
+    }
+
     const windows: Record<string, ImageQueueRecentJobWindow> = {};
     for (const windowMs of normalizedWindows) {
       const windowStartMs = nowMs - windowMs;
-      const [
-        completedJobsMetric,
-        failedRaw,
-        fetch,
-        transform,
-        upload,
-        endToEnd,
-        elapsed,
-        sourceBytes,
-        transformedBytes,
-        processedItems,
-        failedItems,
-      ] = await Promise.all([
-        readMetricStatsForWindow({
-          connection,
-          metric: "completed_jobs",
+      let completedJobsMetric: MetricStats;
+      let failedRaw: number;
+      let fetch: MetricStats;
+      let transform: MetricStats;
+      let upload: MetricStats;
+      let endToEnd: MetricStats;
+      let elapsed: MetricStats;
+      let sourceBytes: MetricStats;
+      let transformedBytes: MetricStats;
+      let processedItems: MetricStats;
+      let failedItems: MetricStats;
+
+      if (preloadSucceeded) {
+        completedJobsMetric = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("completed_jobs") || [],
           windowStartMs,
-        }),
-        connection.zcount(failedKey, String(windowStartMs), "+inf"),
-        readMetricStatsForWindow({
-          connection,
-          metric: "fetch_ms",
+        );
+        failedRaw = countTimestampsSince(failedAtMsAsc, windowStartMs);
+        fetch = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("fetch_ms") || [],
           windowStartMs,
-        }),
-        readMetricStatsForWindow({
-          connection,
-          metric: "transform_ms",
+        );
+        transform = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("transform_ms") || [],
           windowStartMs,
-        }),
-        readMetricStatsForWindow({
-          connection,
-          metric: "upload_ms",
+        );
+        upload = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("upload_ms") || [],
           windowStartMs,
-        }),
-        readMetricStatsForWindow({
-          connection,
-          metric: "end_to_end_ms",
+        );
+        endToEnd = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("end_to_end_ms") || [],
           windowStartMs,
-        }),
-        readMetricStatsForWindow({
-          connection,
-          metric: "elapsed_ms",
+        );
+        elapsed = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("elapsed_ms") || [],
           windowStartMs,
-        }),
-        readMetricStatsForWindow({
-          connection,
-          metric: "source_bytes",
+        );
+        sourceBytes = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("source_bytes") || [],
           windowStartMs,
-        }),
-        readMetricStatsForWindow({
-          connection,
-          metric: "transformed_bytes",
+        );
+        transformedBytes = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("transformed_bytes") || [],
           windowStartMs,
-        }),
-        readMetricStatsForWindow({
-          connection,
-          metric: "processed_items",
+        );
+        processedItems = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("processed_items") || [],
           windowStartMs,
-        }),
-        readMetricStatsForWindow({
-          connection,
-          metric: "failed_items",
+        );
+        failedItems = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("failed_items") || [],
           windowStartMs,
-        }),
-      ]);
+        );
+      } else {
+        [
+          completedJobsMetric,
+          failedRaw,
+          fetch,
+          transform,
+          upload,
+          endToEnd,
+          elapsed,
+          sourceBytes,
+          transformedBytes,
+          processedItems,
+          failedItems,
+        ] = await Promise.all([
+          readMetricStatsForWindow({
+            connection,
+            metric: "completed_jobs",
+            windowStartMs,
+          }),
+          connection.zcount(failedKey, String(windowStartMs), "+inf"),
+          readMetricStatsForWindow({
+            connection,
+            metric: "fetch_ms",
+            windowStartMs,
+          }),
+          readMetricStatsForWindow({
+            connection,
+            metric: "transform_ms",
+            windowStartMs,
+          }),
+          readMetricStatsForWindow({
+            connection,
+            metric: "upload_ms",
+            windowStartMs,
+          }),
+          readMetricStatsForWindow({
+            connection,
+            metric: "end_to_end_ms",
+            windowStartMs,
+          }),
+          readMetricStatsForWindow({
+            connection,
+            metric: "elapsed_ms",
+            windowStartMs,
+          }),
+          readMetricStatsForWindow({
+            connection,
+            metric: "source_bytes",
+            windowStartMs,
+          }),
+          readMetricStatsForWindow({
+            connection,
+            metric: "transformed_bytes",
+            windowStartMs,
+          }),
+          readMetricStatsForWindow({
+            connection,
+            metric: "processed_items",
+            windowStartMs,
+          }),
+          readMetricStatsForWindow({
+            connection,
+            metric: "failed_items",
+            windowStartMs,
+          }),
+        ]);
+      }
 
       windows[String(windowMs)] = buildWindowFromMetricStats({
         nowMs,
@@ -875,105 +1036,174 @@ export async function readImageJobMetricRollupWindows(input: {
       });
     }
 
-    const deepRows = await connection.zrevrangebyscore(
-      completedKey,
-      "+inf",
-      "-inf",
-      "WITHSCORES",
-      "LIMIT",
-      "0",
-      String(deepSampleLimit),
-    );
-    const deepCompletedRows = toCompletedRows(
-      Array.isArray(deepRows) ? deepRows : [],
-      true,
-    );
-
     let deepWindow: ImageQueueRecentJobWindow | null = null;
-    if (deepCompletedRows.length > 0) {
-      const deepOldestAtMs = deepCompletedRows[0].finishedAtMs;
-      const [
-        deepFailedRaw,
-        completedJobsMetric,
-        fetch,
-        transform,
-        upload,
-        endToEnd,
-        elapsed,
-        sourceBytes,
-        transformedBytes,
-        processedItems,
-        failedItems,
-      ] = await Promise.all([
-        connection.zcount(failedKey, String(deepOldestAtMs), "+inf"),
-        readMetricStatsForDeep({
-          connection,
-          metric: "completed_jobs",
-          sampleLimit: deepSampleLimit,
-        }),
-        readMetricStatsForDeep({
-          connection,
-          metric: "fetch_ms",
-          sampleLimit: deepSampleLimit,
-        }),
-        readMetricStatsForDeep({
-          connection,
-          metric: "transform_ms",
-          sampleLimit: deepSampleLimit,
-        }),
-        readMetricStatsForDeep({
-          connection,
-          metric: "upload_ms",
-          sampleLimit: deepSampleLimit,
-        }),
-        readMetricStatsForDeep({
-          connection,
-          metric: "end_to_end_ms",
-          sampleLimit: deepSampleLimit,
-        }),
-        readMetricStatsForDeep({
-          connection,
-          metric: "elapsed_ms",
-          sampleLimit: deepSampleLimit,
-        }),
-        readMetricStatsForDeep({
-          connection,
-          metric: "source_bytes",
-          sampleLimit: deepSampleLimit,
-        }),
-        readMetricStatsForDeep({
-          connection,
-          metric: "transformed_bytes",
-          sampleLimit: deepSampleLimit,
-        }),
-        readMetricStatsForDeep({
-          connection,
-          metric: "processed_items",
-          sampleLimit: deepSampleLimit,
-        }),
-        readMetricStatsForDeep({
-          connection,
-          metric: "failed_items",
-          sampleLimit: deepSampleLimit,
-        }),
-      ]);
+    if (preloadSucceeded) {
+      const deepCompletedSamples =
+        preloadedSamplesByMetric.get("completed_jobs") || [];
+      const deepOldestAtMs = deepCompletedSamples[0]?.atMs ?? null;
+      if (deepOldestAtMs !== null && Number.isFinite(deepOldestAtMs)) {
+        const completedJobsMetric = summarizeTimedSamplesSince(
+          deepCompletedSamples,
+          deepOldestAtMs,
+        );
+        const fetch = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("fetch_ms") || [],
+          deepOldestAtMs,
+        );
+        const transform = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("transform_ms") || [],
+          deepOldestAtMs,
+        );
+        const upload = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("upload_ms") || [],
+          deepOldestAtMs,
+        );
+        const endToEnd = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("end_to_end_ms") || [],
+          deepOldestAtMs,
+        );
+        const elapsed = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("elapsed_ms") || [],
+          deepOldestAtMs,
+        );
+        const sourceBytes = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("source_bytes") || [],
+          deepOldestAtMs,
+        );
+        const transformedBytes = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("transformed_bytes") || [],
+          deepOldestAtMs,
+        );
+        const processedItems = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("processed_items") || [],
+          deepOldestAtMs,
+        );
+        const failedItems = summarizeTimedSamplesSince(
+          preloadedSamplesByMetric.get("failed_items") || [],
+          deepOldestAtMs,
+        );
+        const deepFailedRaw = countTimestampsSince(
+          failedAtMsAsc,
+          deepOldestAtMs,
+        );
 
-      deepWindow = buildWindowFromMetricStats({
-        nowMs,
-        windowMs: Math.max(1_000, nowMs - deepOldestAtMs),
-        windowStartMs: deepOldestAtMs,
-        completedJobs: Math.max(0, Math.round(completedJobsMetric.sum)),
-        failedJobs: Math.max(0, Number(deepFailedRaw) || 0),
-        fetch,
-        transform,
-        upload,
-        endToEnd,
-        elapsed,
-        sourceBytes,
-        transformedBytes,
-        processedItems,
-        failedItems,
-      });
+        deepWindow = buildWindowFromMetricStats({
+          nowMs,
+          windowMs: Math.max(1_000, nowMs - deepOldestAtMs),
+          windowStartMs: deepOldestAtMs,
+          completedJobs: Math.max(0, Math.round(completedJobsMetric.sum)),
+          failedJobs: Math.max(0, Number(deepFailedRaw) || 0),
+          fetch,
+          transform,
+          upload,
+          endToEnd,
+          elapsed,
+          sourceBytes,
+          transformedBytes,
+          processedItems,
+          failedItems,
+        });
+      }
+    } else {
+      const deepRows = await connection.zrevrangebyscore(
+        completedKey,
+        "+inf",
+        "-inf",
+        "WITHSCORES",
+        "LIMIT",
+        "0",
+        String(deepSampleLimit),
+      );
+      const deepCompletedRows = toCompletedRows(
+        Array.isArray(deepRows) ? deepRows : [],
+        true,
+      );
+
+      if (deepCompletedRows.length > 0) {
+        const deepOldestAtMs = deepCompletedRows[0].finishedAtMs;
+        const [
+          deepFailedRaw,
+          completedJobsMetric,
+          fetch,
+          transform,
+          upload,
+          endToEnd,
+          elapsed,
+          sourceBytes,
+          transformedBytes,
+          processedItems,
+          failedItems,
+        ] = await Promise.all([
+          connection.zcount(failedKey, String(deepOldestAtMs), "+inf"),
+          readMetricStatsForDeep({
+            connection,
+            metric: "completed_jobs",
+            sampleLimit: deepSampleLimit,
+          }),
+          readMetricStatsForDeep({
+            connection,
+            metric: "fetch_ms",
+            sampleLimit: deepSampleLimit,
+          }),
+          readMetricStatsForDeep({
+            connection,
+            metric: "transform_ms",
+            sampleLimit: deepSampleLimit,
+          }),
+          readMetricStatsForDeep({
+            connection,
+            metric: "upload_ms",
+            sampleLimit: deepSampleLimit,
+          }),
+          readMetricStatsForDeep({
+            connection,
+            metric: "end_to_end_ms",
+            sampleLimit: deepSampleLimit,
+          }),
+          readMetricStatsForDeep({
+            connection,
+            metric: "elapsed_ms",
+            sampleLimit: deepSampleLimit,
+          }),
+          readMetricStatsForDeep({
+            connection,
+            metric: "source_bytes",
+            sampleLimit: deepSampleLimit,
+          }),
+          readMetricStatsForDeep({
+            connection,
+            metric: "transformed_bytes",
+            sampleLimit: deepSampleLimit,
+          }),
+          readMetricStatsForDeep({
+            connection,
+            metric: "processed_items",
+            sampleLimit: deepSampleLimit,
+          }),
+          readMetricStatsForDeep({
+            connection,
+            metric: "failed_items",
+            sampleLimit: deepSampleLimit,
+          }),
+        ]);
+
+        deepWindow = buildWindowFromMetricStats({
+          nowMs,
+          windowMs: Math.max(1_000, nowMs - deepOldestAtMs),
+          windowStartMs: deepOldestAtMs,
+          completedJobs: Math.max(0, Math.round(completedJobsMetric.sum)),
+          failedJobs: Math.max(0, Number(deepFailedRaw) || 0),
+          fetch,
+          transform,
+          upload,
+          endToEnd,
+          elapsed,
+          sourceBytes,
+          transformedBytes,
+          processedItems,
+          failedItems,
+        });
+      }
     }
 
     return {

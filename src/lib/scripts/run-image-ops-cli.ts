@@ -13,11 +13,13 @@ import {
   clearOpsQueueIfPaused,
   createOpsUiStateWatcher,
   maybePurgeForDesiredMode,
+  OPS_UI_METRIC_LABELS,
   pauseOpsSystemFlow,
   readOpsControlSettings,
   readOpsControlSnapshot,
   readOpsFlyAppSnapshot,
   readOpsQueuePausedState,
+  readOpsQueueSnapshot,
   readOpsRedisIoStats,
   refreshOpsInfraFromFly,
   resetOpsRedisIoStats,
@@ -33,11 +35,6 @@ import {
 } from "../workers/image-ops-control-module";
 import { deriveOpsTelemetry } from "../workers/image-ops-state-machine";
 import {
-  purgePendingImageQueueJobs,
-  readImageQueueCounts,
-  type ImageQueueCounts,
-} from "../workers/image-queue-ops";
-import {
   type RunnerControlSettings,
   type RunnerDesiredMode,
   type RunnerInfraSnapshot,
@@ -46,6 +43,7 @@ import {
 
 const DEFAULT_APP = "beachhouseclassifieds-image-worker";
 const STARTUP_SNAPSHOT_TIMEOUT_MS = 1500;
+const UI_LABELS = OPS_UI_METRIC_LABELS;
 
 type Command =
   | "dashboard"
@@ -69,7 +67,7 @@ type ParsedArgs = {
   flags: Set<string>;
 };
 
-type QueueCounts = ImageQueueCounts;
+type QueueCounts = NonNullable<OpsUiSnapshot["queue"]>;
 
 type DashboardSample = {
   atMs: number;
@@ -341,7 +339,7 @@ function shortError(error: unknown): string {
 }
 
 async function fetchQueueCounts(): Promise<QueueCounts> {
-  return readImageQueueCounts();
+  return readOpsQueueSnapshot();
 }
 
 async function fetchControlSnapshot(): Promise<{
@@ -398,6 +396,8 @@ function emptyRedisAggregate(): OpsRedisIoAggregateStats {
     redisEgressKbps: 0,
     redisIngressKbps: 0,
     redisWireKbps: 0,
+    rxLatencyMs: 0,
+    txLatencyMs: 0,
   };
 }
 
@@ -427,15 +427,15 @@ function renderSnapshotDashboard(params: {
     ),
   );
   process.stdout.write(
-    `queue backlog=${snapshot.queue?.backlog ?? 0} waiting=${snapshot.queue?.waiting ?? 0} active=${snapshot.queue?.active ?? 0} delayed=${snapshot.queue?.delayed ?? 0} paused=${snapshot.queue?.paused ?? 0} queue_paused=${snapshot.queuePaused === null || snapshot.queuePaused === undefined ? "unknown" : String(snapshot.queuePaused)}\n`,
+    `queue backlog=${snapshot.queue?.backlog ?? 0} waiting=${snapshot.queue?.waiting ?? 0} ${UI_LABELS.queue.active}=${snapshot.queue?.active ?? 0} delayed=${snapshot.queue?.delayed ?? 0} paused=${snapshot.queue?.paused ?? 0} queue_paused=${snapshot.queuePaused === null || snapshot.queuePaused === undefined ? "unknown" : String(snapshot.queuePaused)}\n`,
   );
   const perf15m = deriveWindowPerformance(snapshot.recentJobs15m);
   const perf24h = deriveWindowPerformance(snapshot.recentJobs24h);
   process.stdout.write(
-    `perf_15m ipm=${formatMaybeNumber(perf15m?.ipm ?? null)} ips=${formatMaybeNumber(perf15m?.ips ?? null)} sec_per_image=${formatMaybeNumber(perf15m?.secPerImage ?? null)} jobs=${perf15m?.completedJobs ?? 0}/${perf15m?.failedJobs ?? 0} avg_fetch_ms=${perf15m?.avgFetchMs ?? 0} avg_transform_ms=${perf15m?.avgTransformMs ?? 0} avg_upload_ms=${perf15m?.avgUploadMs ?? 0} avg_end_to_end_ms=${perf15m?.avgEndToEndMs ?? 0}\n`,
+    `perf_15m ${UI_LABELS.image.ipm}=${formatMaybeNumber(perf15m?.ipm ?? null)} ${UI_LABELS.image.ips}=${formatMaybeNumber(perf15m?.ips ?? null)} sec_per_image=${formatMaybeNumber(perf15m?.secPerImage ?? null)} jobs=${perf15m?.completedJobs ?? 0}/${perf15m?.failedJobs ?? 0} ${UI_LABELS.image.avgFetchMs}=${perf15m?.avgFetchMs ?? 0} ${UI_LABELS.image.avgTransformMs}=${perf15m?.avgTransformMs ?? 0} ${UI_LABELS.image.avgUploadMs}=${perf15m?.avgUploadMs ?? 0} avg_end_to_end_ms=${perf15m?.avgEndToEndMs ?? 0}\n`,
   );
   process.stdout.write(
-    `perf_24h ipm=${formatMaybeNumber(perf24h?.ipm ?? null)} ips=${formatMaybeNumber(perf24h?.ips ?? null)} sec_per_image=${formatMaybeNumber(perf24h?.secPerImage ?? null)} jobs=${perf24h?.completedJobs ?? 0}/${perf24h?.failedJobs ?? 0} avg_fetch_ms=${perf24h?.avgFetchMs ?? 0} avg_transform_ms=${perf24h?.avgTransformMs ?? 0} avg_upload_ms=${perf24h?.avgUploadMs ?? 0} avg_end_to_end_ms=${perf24h?.avgEndToEndMs ?? 0}\n`,
+    `perf_24h ${UI_LABELS.image.ipm}=${formatMaybeNumber(perf24h?.ipm ?? null)} ${UI_LABELS.image.ips}=${formatMaybeNumber(perf24h?.ips ?? null)} sec_per_image=${formatMaybeNumber(perf24h?.secPerImage ?? null)} jobs=${perf24h?.completedJobs ?? 0}/${perf24h?.failedJobs ?? 0} ${UI_LABELS.image.avgFetchMs}=${perf24h?.avgFetchMs ?? 0} ${UI_LABELS.image.avgTransformMs}=${perf24h?.avgTransformMs ?? 0} ${UI_LABELS.image.avgUploadMs}=${perf24h?.avgUploadMs ?? 0} avg_end_to_end_ms=${perf24h?.avgEndToEndMs ?? 0}\n`,
   );
   process.stdout.write(
     `runner mode=${snapshot.status?.mode || "n/a"} desired_mode=${snapshot.settings?.desiredMode || "n/a"} gate=${telemetry.liveGate} workers_running=${telemetry.liveWorkersRunning}\n`,
@@ -444,7 +444,7 @@ function renderSnapshotDashboard(params: {
     `db processed=${snapshot.db?.processed ?? 0} pending=${snapshot.db?.pending ?? 0} total=${snapshot.db?.total ?? 0} progress_pct=${(snapshot.db?.pct ?? 0).toFixed(2)}\n`,
   );
   process.stdout.write(
-    `redis_io aggregate wire=${formatBitrateFromKbps(aggregate.redisWireKbps)} rx=${formatBitrateFromKbps(aggregate.redisIngressKbps)} tx=${formatBitrateFromKbps(aggregate.redisEgressKbps)} instances=${aggregate.activeInstances} reads=${aggregate.redisIngressReads} writes=${aggregate.redisEgressWrites}\n`,
+    `redis_io aggregate wire=${formatBitrateFromKbps(aggregate.redisWireKbps)} rx=${formatBitrateFromKbps(aggregate.redisIngressKbps)} tx=${formatBitrateFromKbps(aggregate.redisEgressKbps)} instances=${aggregate.activeInstances} reads=${aggregate.redisIngressReads} writes=${aggregate.redisEgressWrites} rx_latency=${aggregate.rxLatencyMs}ms tx_latency=${aggregate.txLatencyMs}ms\n`,
   );
 }
 
@@ -686,7 +686,7 @@ function renderTopLikeDashboard(params: {
   redisIoAggregate: OpsRedisIoAggregateStats;
 }): void {
   const { app, watch, ui, snapshot, redisIo, redisIoAggregate } = params;
-  const { intervalSeconds, samples } = ui;
+  const { intervalSeconds } = ui;
   const byState = new Map<string, number>();
   for (const machine of snapshot.machines || []) {
     const state = String(machine.state || "unknown").toLowerCase();
@@ -695,43 +695,11 @@ function renderTopLikeDashboard(params: {
 
   const status = snapshot.status;
   const projection = snapshot.projections;
-  const latest = samples[samples.length - 1] || null;
-  const previous = samples.length > 1 ? samples[samples.length - 2] : null;
+  const ratePerMin = projection.headline.ipmAvg30;
 
-  let fallbackRatePerMin = 0;
-  if (
-    latest &&
-    previous &&
-    latest.processedItems >= previous.processedItems &&
-    latest.atMs > previous.atMs
-  ) {
-    const deltaItems = latest.processedItems - previous.processedItems;
-    const deltaSeconds = (latest.atMs - previous.atMs) / 1000;
-    if (deltaSeconds > 0) {
-      fallbackRatePerMin = (deltaItems / deltaSeconds) * 60;
-    }
-  }
-
-  const ratePerMin =
-    projection.sampleCount > 0
-      ? projection.headline.ipmAvg30
-      : fallbackRatePerMin;
-
-  const backlogTrend = renderTrend(
-    projection.sampleCount > 0
-      ? projection.queueBacklogTrendSmoothed
-      : samples.map((sample) => sample.queueBacklog),
-  );
-  const processedTrend = renderTrend(
-    projection.sampleCount > 0
-      ? projection.processedItemsTrend
-      : samples.map((sample) => sample.processedItems),
-  );
-  const failedTrend = renderTrend(
-    projection.sampleCount > 0
-      ? projection.failedItemsTrend
-      : samples.map((sample) => sample.failedItems),
-  );
+  const backlogTrend = renderTrend(projection.queueBacklogTrendSmoothed);
+  const processedTrend = renderTrend(projection.processedItemsTrend);
+  const failedTrend = renderTrend(projection.failedItemsTrend);
 
   const machineStates = [...byState.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -747,8 +715,8 @@ function renderTopLikeDashboard(params: {
   );
   process.stdout.write(
     chalk.gray(
-      `redis_io aggregate: wire=${formatBitrateFromKbps(redisIoAggregate.redisWireKbps)} rx=${formatBitrateFromKbps(redisIoAggregate.redisIngressKbps)} tx=${formatBitrateFromKbps(redisIoAggregate.redisEgressKbps)} instances=${redisIoAggregate.activeInstances} reads=${redisIoAggregate.redisIngressReads} writes=${redisIoAggregate.redisEgressWrites}\n` +
-        `redis_io local: wire=${formatBitrateFromKbps(redisIo.redisWireKbps)} rx=${formatBitrateFromKbps(redisIo.redisIngressKbps)} tx=${formatBitrateFromKbps(redisIo.redisEgressKbps)} reads=${redisIo.redisIngressReads} writes=${redisIo.redisEgressWrites} last_read_at=${redisIo.lastReadAt || "-"}\n\n`,
+      `redis_io aggregate: wire=${formatBitrateFromKbps(redisIoAggregate.redisWireKbps)} rx=${formatBitrateFromKbps(redisIoAggregate.redisIngressKbps)} tx=${formatBitrateFromKbps(redisIoAggregate.redisEgressKbps)} instances=${redisIoAggregate.activeInstances} reads=${redisIoAggregate.redisIngressReads} writes=${redisIoAggregate.redisEgressWrites} rx_latency=${redisIoAggregate.rxLatencyMs}ms tx_latency=${redisIoAggregate.txLatencyMs}ms\n` +
+        `redis_io local: wire=${formatBitrateFromKbps(redisIo.redisWireKbps)} rx=${formatBitrateFromKbps(redisIo.redisIngressKbps)} tx=${formatBitrateFromKbps(redisIo.redisEgressKbps)} reads=${redisIo.redisIngressReads} writes=${redisIo.redisEgressWrites} rx_latency=${redisIo.rxLatencyMs}ms tx_latency=${redisIo.txLatencyMs}ms last_read_at=${redisIo.lastReadAt || "-"}\n\n`,
     ),
   );
 
@@ -797,10 +765,10 @@ function renderTopLikeDashboard(params: {
     );
   } else {
     process.stdout.write(
-      `queue waiting=${snapshot.queue.waiting} active=${snapshot.queue.active} delayed=${snapshot.queue.delayed} paused=${snapshot.queue.paused} backlog=${snapshot.queue.backlog}\n`,
+      `queue waiting=${snapshot.queue.waiting} ${UI_LABELS.queue.active}=${snapshot.queue.active} delayed=${snapshot.queue.delayed} paused=${snapshot.queue.paused} backlog=${snapshot.queue.backlog}\n`,
     );
     process.stdout.write(
-      `queue totals completed=${snapshot.queue.completed} failed=${snapshot.queue.failed}\n`,
+      `queue totals ${UI_LABELS.queue.completed}=${snapshot.queue.completed} ${UI_LABELS.queue.failed}=${snapshot.queue.failed}\n`,
     );
     process.stdout.write(`queue backlog trend  ${backlogTrend}\n`);
   }
@@ -818,10 +786,10 @@ function renderTopLikeDashboard(params: {
       `desired_mode=${status.desiredMode} gate_state=${gateState} workers_running=${status.workersRunning} gate_reason=${status.gateReason || "-"}\n`,
     );
     process.stdout.write(
-      `jobs completed=${status.completedJobs} failed=${status.failedJobs} queued=${status.queuedCount} claimed=${status.claimedCount}\n`,
+      `jobs ${UI_LABELS.queue.completed}=${status.completedJobs} ${UI_LABELS.queue.failed}=${status.failedJobs} queued=${status.queuedCount} claimed=${status.claimedCount}\n`,
     );
     process.stdout.write(
-      `items processed=${status.processedItems} failed=${status.failedItems} rate=${fixedOne(ratePerMin)} images/min smoothed=${fixedOne(projection.headline.ipsSmoothedNow * 60)} avg30=${fixedOne(projection.headline.ipmAvg30)}\n`,
+      `items ${UI_LABELS.image.processed}=${status.processedItems} ${UI_LABELS.image.failed}=${status.failedItems} rate=${fixedOne(ratePerMin)} images/min smoothed=${fixedOne(projection.headline.ipsSmoothedNow * 60)} avg30=${fixedOne(projection.headline.ipmAvg30)}\n`,
     );
     process.stdout.write(
       `buffers success=${status.pendingSuccessBuffer} error=${status.pendingErrorBuffer} flush_batches=${status.flushBatchCount} last_flush_at=${status.lastFlushAt || "-"}\n`,
@@ -1333,7 +1301,16 @@ async function purgePendingQueueJobs(): Promise<{
   remainingActive: number;
   remainingPaused: number;
 }> {
-  return purgePendingImageQueueJobs();
+  const purge = await maybePurgeForDesiredMode({ desiredMode: "stop" });
+  return (
+    purge || {
+      removed: 0,
+      remainingWaiting: 0,
+      remainingDelayed: 0,
+      remainingActive: 0,
+      remainingPaused: 0,
+    }
+  );
 }
 
 async function runDrainAndScaleDown(args: ParsedArgs): Promise<void> {
@@ -1521,9 +1498,9 @@ async function runControlSet(args: ParsedArgs): Promise<void> {
 
     await writeOpsControlSettings(next);
     if (desiredMode === "stop") {
-      const purge = await purgePendingQueueJobs();
+      const purge = await maybePurgeForDesiredMode({ desiredMode });
       process.stdout.write(
-        `${chalk.green("control settings updated")} desired_mode=${next.desiredMode} enqueue_enabled=${next.enqueueEnabled} require_workers_for_enqueue=${next.requireWorkersForEnqueue} min_workers_to_enqueue=${next.minWorkersToEnqueue} max_queue_backlog=${next.maxQueueBacklog} refill_low_watermark=${next.refillLowWatermark} refill_target_backlog=${next.refillTargetBacklog} max_claim_per_cycle=${next.maxClaimPerCycle} flush_interval_ms=${next.flushIntervalMs} harvest_enabled=${next.harvestEnabled} purged=${purge.removed} waiting=${purge.remainingWaiting} delayed=${purge.remainingDelayed} paused=${purge.remainingPaused} active=${purge.remainingActive}\n`,
+        `${chalk.green("control settings updated")} desired_mode=${next.desiredMode} enqueue_enabled=${next.enqueueEnabled} require_workers_for_enqueue=${next.requireWorkersForEnqueue} min_workers_to_enqueue=${next.minWorkersToEnqueue} max_queue_backlog=${next.maxQueueBacklog} refill_low_watermark=${next.refillLowWatermark} refill_target_backlog=${next.refillTargetBacklog} max_claim_per_cycle=${next.maxClaimPerCycle} flush_interval_ms=${next.flushIntervalMs} harvest_enabled=${next.harvestEnabled} purged=${purge?.removed ?? 0} waiting=${purge?.remainingWaiting ?? 0} delayed=${purge?.remainingDelayed ?? 0} paused=${purge?.remainingPaused ?? 0} active=${purge?.remainingActive ?? 0}\n`,
       );
       return;
     }

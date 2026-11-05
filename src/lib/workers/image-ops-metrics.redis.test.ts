@@ -167,6 +167,8 @@ const EXPECTED_UI_METRIC_NAMES = [
   "dbPending",
   "dbTotal",
   "dbProgressPct",
+  "rxLatencyAggregate",
+  "txLatencyAggregate",
 ] as const;
 
 type SeededMetricRow = {
