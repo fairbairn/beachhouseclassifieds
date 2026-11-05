@@ -75,6 +75,8 @@ function parseArgs(argv: string[]) {
   return {
     durationSeconds: parsePositiveInt(options.get("duration-seconds"), 60),
     tickMs: parsePositiveInt(options.get("tick-ms"), 1000),
+    injectBullmqSamples: parseBool(options.get("inject-bullmq-samples"), true),
+    bullmqSampleCount: parsePositiveInt(options.get("bullmq-sample-count"), 10),
     minBacklog: parseNonNegativeInt(options.get("min-backlog"), 5),
     maxBacklog: parseNonNegativeInt(options.get("max-backlog"), 80),
     workersMin: parseNonNegativeInt(options.get("workers-min"), 0),

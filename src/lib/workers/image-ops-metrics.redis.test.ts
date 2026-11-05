@@ -10,13 +10,20 @@ import {
   type ImageJobMetricName,
 } from "@/lib/workers/image-job-metric-trends";
 import {
+  IMAGE_GROUP_JOBS,
   IMAGE_PERF_ROLLUPS_HASH_KEY,
   IMAGE_RAW_JOB_TREND_CURSOR_KEY,
   IMAGE_RAW_JOB_TREND_PREFIX,
+  IMAGE_SLICE_METRIC_PREFIX,
+  IMAGE_SLICE_WINDOWS,
   IMAGE_TREND_PREFIX,
-  imageRawJobTrendMetricIdsKey,
-  imageRawJobTrendMetricValuesKey,
+  imageMetricSliceHashKey,
+  imageRawJobTrendMetricKey,
 } from "@/lib/workers/image-metrics-redis-keys";
+import {
+  IMAGE_JOB_SLICE_METRIC_SLUGS,
+  IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS,
+} from "@/lib/workers/image-metrics-registry";
 import {
   OPS_SNAPSHOT_TREND_METRIC_REGISTRY,
   OPS_TREND_METRIC_REGISTRY,
@@ -38,10 +45,34 @@ import { createImageQueue, createRedisConnection } from "@/workers/image-queue";
 const RUN_REDIS_TESTS = process.env.IMAGE_OPS_REDIS_INTEGRATION === "1";
 const describeRedis = RUN_REDIS_TESTS ? describe : describe.skip;
 
-const redisUrl =
+function resolveWorkerRedisUrl(rawUrl: string): string {
+  const poolId = Number.parseInt(process.env.VITEST_POOL_ID || "0", 10);
+  if (!Number.isFinite(poolId) || poolId <= 0) {
+    return rawUrl;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    const dbPath = parsed.pathname.replace(/^\/+/, "");
+    if (!/^\d+$/.test(dbPath)) {
+      return rawUrl;
+    }
+    const dbIndex = Number.parseInt(dbPath, 10);
+    if (!Number.isFinite(dbIndex) || dbIndex < 0) {
+      return rawUrl;
+    }
+    parsed.pathname = `/${dbIndex + poolId}`;
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+const redisUrl = resolveWorkerRedisUrl(
   process.env.IMAGE_OPS_TEST_REDIS_URL?.trim() ||
-  process.env.REDIS_URL?.trim() ||
-  "redis://127.0.0.1:6379/1";
+    process.env.REDIS_URL?.trim() ||
+    "redis://127.0.0.1:6379/1",
+);
 
 const PERF_ROLLUP_HASH_KEY = IMAGE_PERF_ROLLUPS_HASH_KEY;
 const FLUSHDB_ON_RESET = process.env.IMAGE_OPS_TEST_FLUSHDB !== "0";
@@ -52,7 +83,8 @@ const USE_EXISTING_BULLMQ_FIXTURE =
 const DEFAULT_BULLMQ_FIXTURE_FILE_PATH =
   "src/lib/workers/fixtures/bullmq-job-snapshots.json";
 const BULLMQ_FIXTURE_FILE_PATH =
-  process.env.IMAGE_OPS_BULLMQ_FIXTURE_FILE?.trim() || "";
+  process.env.IMAGE_OPS_BULLMQ_FIXTURE_FILE?.trim() ||
+  DEFAULT_BULLMQ_FIXTURE_FILE_PATH;
 const BULLMQ_FIXTURE_LIMIT = Number.parseInt(
   process.env.IMAGE_OPS_BULLMQ_FIXTURE_LIMIT || "10",
   10,
@@ -194,6 +226,53 @@ function makeStatus() {
     avgUploadMs: 65,
     avgEndToEndMs: 370,
     updatedAt: new Date().toISOString(),
+  };
+}
+
+function expectedStatusHashFrom(
+  status: ReturnType<typeof makeStatus>,
+): Record<string, string> {
+  return {
+    operation_id: String(status.operationId),
+    mode: String(status.mode),
+    desired_mode: String(status.desiredMode),
+    gate_reason: String(status.gateReason),
+    workers_running: String(status.workersRunning),
+    claimed_count: String(status.claimedCount),
+    queued_count: String(status.queuedCount),
+    completed_jobs: String(status.completedJobs),
+    failed_jobs: String(status.failedJobs),
+    processed_items: String(status.processedItems),
+    failed_items: String(status.failedItems),
+    queue_waiting: String(status.queueWaiting),
+    queue_active: String(status.queueActive),
+    queue_completed: String(status.queueCompleted),
+    queue_failed: String(status.queueFailed),
+    queue_delayed: String(status.queueDelayed),
+    queue_paused: String(status.queuePaused),
+    queue_backlog: String(status.queueBacklog),
+    last_flush_at: String(status.lastFlushAt),
+    flush_batch_count: String(status.flushBatchCount),
+    pending_success_buffer: String(status.pendingSuccessBuffer),
+    pending_error_buffer: String(status.pendingErrorBuffer),
+    throughput_images_per_minute: String(status.throughputImagesPerMinute),
+    avg_fetch_ms: String(status.avgFetchMs),
+    avg_transform_ms: String(status.avgTransformMs),
+    avg_upload_ms: String(status.avgUploadMs),
+    avg_end_to_end_ms: String(status.avgEndToEndMs),
+    updated_at: String(status.updatedAt),
+  };
+}
+
+function expectedInfraHashFrom(input: {
+  workersRunning: number;
+  source: string;
+  updatedAt: string;
+}): Record<string, string> {
+  return {
+    workers_running: String(input.workersRunning),
+    source: String(input.source),
+    updated_at: String(input.updatedAt),
   };
 }
 
@@ -388,9 +467,17 @@ async function resetState(redis: IORedis): Promise<void> {
   }
 
   for (const keySet of imageJobMetricTrendKeys()) {
-    await redis.del(keySet.idsKey, keySet.valuesKey, keySet.latestKey);
+    await redis.del(keySet.trendKey);
+  }
+  for (const metricSlug of IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS) {
+    await redis.del(imageMetricSliceHashKey(metricSlug));
+  }
+  for (const metricSlug of IMAGE_JOB_SLICE_METRIC_SLUGS) {
+    await redis.del(imageMetricSliceHashKey(metricSlug, IMAGE_GROUP_JOBS));
   }
   await scanDeleteByPrefix(redis, `${IMAGE_RAW_JOB_TREND_PREFIX}:`);
+  await scanDeleteByPrefix(redis, `${IMAGE_SLICE_METRIC_PREFIX}:`);
+  await scanDeleteByPrefix(redis, `${IMAGE_TREND_PREFIX}:${IMAGE_GROUP_JOBS}:`);
 }
 
 async function seedCompletedJobMetrics(input: {
@@ -504,17 +591,12 @@ type RunnerUiMetricFixture = {
 type RawMetricFixture = Record<
   string,
   {
-    expectedLatestValue: number;
-    expectedIdsDepth: number;
-    expectedValuesDepth: number;
-    latestValue: number | null;
+    expectedTrendDepth: number;
     expectedStateValue: number;
     stateValue: number | null;
-    idsType: string;
-    valuesType: string;
-    latestType: string;
-    idsDepth: number;
-    valuesDepth: number;
+    trendType: string;
+    trendDepth: number;
+    trendLatestValue: number | null;
   }
 >;
 
@@ -796,9 +878,7 @@ function expectedAnalyticsKeys(meta: RawFixtureMeta): string[] {
   keys.add(PERF_ROLLUP_HASH_KEY);
 
   for (const entry of imageJobMetricTrendKeys()) {
-    keys.add(entry.idsKey);
-    keys.add(entry.valuesKey);
-    keys.add(entry.latestKey);
+    keys.add(entry.trendKey);
   }
   keys.add(IMAGE_RAW_JOB_TREND_CURSOR_KEY);
 
@@ -808,6 +888,13 @@ function expectedAnalyticsKeys(meta: RawFixtureMeta): string[] {
 
   for (const metric of OPS_SNAPSHOT_TREND_METRIC_REGISTRY) {
     keys.add(metric.key);
+  }
+
+  for (const metricSlug of IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS) {
+    keys.add(imageMetricSliceHashKey(metricSlug));
+  }
+  for (const metricSlug of IMAGE_JOB_SLICE_METRIC_SLUGS) {
+    keys.add(imageMetricSliceHashKey(metricSlug, IMAGE_GROUP_JOBS));
   }
 
   keys.add(meta.queueCompletedKey);
@@ -1076,42 +1163,39 @@ async function buildRawMetricFixture(
 
     const fixture: RawMetricFixture = {};
     for (const metric of imageJobMetricTrendKeys()) {
-      const [
-        idsType,
-        valuesType,
-        latestType,
-        idsDepth,
-        valuesDepth,
-        latestRaw,
-      ] = await Promise.all([
-        redis.type(metric.idsKey),
-        redis.type(metric.valuesKey),
-        redis.type(metric.latestKey),
-        redis.zcard(metric.idsKey),
-        redis.hlen(metric.valuesKey),
-        redis.get(metric.latestKey),
+      const [trendType, trendDepth, latestRows] = await Promise.all([
+        redis.type(metric.trendKey),
+        redis.zcard(metric.trendKey),
+        redis.zrevrange(metric.trendKey, 0, 0, "WITHSCORES"),
       ]);
 
-      const parsedLatest = latestRaw
-        ? (JSON.parse(String(latestRaw)) as {
+      let latestValue: number | null = null;
+      if (latestRows.length >= 2) {
+        try {
+          const parsedLatest = JSON.parse(String(latestRows[0])) as {
+            atMs?: unknown;
             value?: unknown;
-          })
-        : null;
-      const latestValue = Number(parsedLatest?.value);
+          };
+          expect(Number.isFinite(Number(parsedLatest.atMs))).toBe(true);
+          const parsedValue = Number(parsedLatest.value);
+          latestValue = Number.isFinite(parsedValue) ? parsedValue : null;
+        } catch {
+          latestValue = null;
+        }
+      }
 
       fixture[metric.metric] = {
-        expectedLatestValue: expectedLatestValues[metric.metric],
-        expectedIdsDepth: expectedMetricDepths[metric.metric],
-        expectedValuesDepth: expectedMetricDepths[metric.metric],
-        latestValue: Number.isFinite(latestValue) ? latestValue : null,
+        expectedTrendDepth: expectedMetricDepths[metric.metric],
+        trendLatestValue: latestValue,
         expectedStateValue: expectedStateValues[metric.metric],
         stateValue: stateValues[metric.metric],
-        idsType,
-        valuesType,
-        latestType,
-        idsDepth,
-        valuesDepth,
+        trendType,
+        trendDepth,
       };
+
+      expect(fixture[metric.metric].trendLatestValue).toBe(
+        expectedLatestValues[metric.metric],
+      );
     }
 
     return {
@@ -1177,7 +1261,7 @@ describeRedis("image ops metrics seeded contract", () => {
     expect(uiMetricNames).toEqual([...EXPECTED_UI_METRIC_NAMES].sort());
 
     const keyRegex = new RegExp(
-      `^${IMAGE_TREND_PREFIX}:(runtime|snapshot):[a-z0-9]+(?:_[a-z0-9]+)*$`,
+      `^${IMAGE_TREND_PREFIX}:(queue|infra|db|jobs|images):[a-z0-9]+(?:_[a-z0-9]+)*:trend$`,
     );
     for (const metric of OPS_TREND_METRIC_REGISTRY) {
       expect(keyRegex.test(metric.key)).toBe(true);
@@ -1190,19 +1274,11 @@ describeRedis("image ops metrics seeded contract", () => {
       expect(metric.key.includes(":runner:")).toBe(false);
     }
 
-    const rawIdsRegex = new RegExp(
-      `^${IMAGE_RAW_JOB_TREND_PREFIX}:[a-z0-9]+(?:_[a-z0-9]+)*:ids$`,
-    );
-    const rawValuesRegex = new RegExp(
-      `^${IMAGE_RAW_JOB_TREND_PREFIX}:[a-z0-9]+(?:_[a-z0-9]+)*:values$`,
-    );
-    const rawLatestRegex = new RegExp(
-      `^${IMAGE_RAW_JOB_TREND_PREFIX}:[a-z0-9]+(?:_[a-z0-9]+)*:latest$`,
+    const rawTrendRegex = new RegExp(
+      `^${IMAGE_RAW_JOB_TREND_PREFIX}:[a-z0-9]+(?:_[a-z0-9]+)*:trend$`,
     );
     for (const entry of imageJobMetricTrendKeys()) {
-      expect(rawIdsRegex.test(entry.idsKey)).toBe(true);
-      expect(rawValuesRegex.test(entry.valuesKey)).toBe(true);
-      expect(rawLatestRegex.test(entry.latestKey)).toBe(true);
+      expect(rawTrendRegex.test(entry.trendKey)).toBe(true);
     }
   });
 
@@ -1244,10 +1320,10 @@ describeRedis("image ops metrics seeded contract", () => {
       expect(sync.parsedCompletedJobs).toBe(rows.length);
 
       const completedJobsDepth = await redis.zcard(
-        "image:ops:metrics:trend:raw:jobs:completed_jobs:ids",
+        imageRawJobTrendMetricKey("completed_jobs"),
       );
       const processedItemsDepth = await redis.zcard(
-        "image:ops:metrics:trend:raw:jobs:processed_items:ids",
+        imageRawJobTrendMetricKey("processed_items"),
       );
 
       // One single-item row + one multi-item row with 4 items => 5 item-level points.
@@ -1289,7 +1365,7 @@ describeRedis("image ops metrics seeded contract", () => {
       expect(sync.parsedCompletedJobs).toBe(1);
 
       const idsWithScores = await redis.zrange(
-        imageRawJobTrendMetricIdsKey("completed_jobs"),
+        imageRawJobTrendMetricKey("completed_jobs"),
         0,
         -1,
         "WITHSCORES",
@@ -1297,8 +1373,15 @@ describeRedis("image ops metrics seeded contract", () => {
 
       const legacyRows: Array<{ memberId: string; atMs: number }> = [];
       for (let index = 0; index + 1 < idsWithScores.length; index += 2) {
-        const memberId = String(idsWithScores[index]);
+        const rawMember = String(idsWithScores[index]);
         const atMs = Number(idsWithScores[index + 1]);
+        let memberId = "";
+        try {
+          const parsed = JSON.parse(rawMember) as { id?: unknown };
+          memberId = String(parsed.id || "");
+        } catch {
+          memberId = rawMember;
+        }
         if (!memberId.startsWith(`${row.id}:item:`)) {
           continue;
         }
@@ -1510,43 +1593,37 @@ describeRedis("image ops metrics seeded contract", () => {
       }
 
       for (const metricName of metricNames) {
-        const idsWithScores = await redis.zrange(
-          imageRawJobTrendMetricIdsKey(metricName),
+        const rowsWithScores = await redis.zrange(
+          imageRawJobTrendMetricKey(metricName),
           0,
           -1,
           "WITHSCORES",
         );
-        const ids: string[] = [];
-        const actualAtByMember = new Map<string, number>();
-        for (let index = 0; index + 1 < idsWithScores.length; index += 2) {
-          const memberId = String(idsWithScores[index] || "");
-          const atMs = Number(idsWithScores[index + 1]);
-          if (!memberId || !Number.isFinite(atMs)) {
-            continue;
-          }
-          ids.push(memberId);
-          actualAtByMember.set(memberId, atMs);
-        }
-
-        const actualValues =
-          ids.length > 0
-            ? await redis.hmget(
-                imageRawJobTrendMetricValuesKey(metricName),
-                ...ids,
-              )
-            : [];
         const actualByMember = new Map<
           string,
           { atMs: number; value: number }
         >();
-        for (let index = 0; index < ids.length; index += 1) {
-          const memberId = ids[index];
-          const atMs = actualAtByMember.get(memberId);
-          const value = Number(actualValues[index]);
-          if (!Number.isFinite(atMs) || !Number.isFinite(value)) {
+        for (let index = 0; index + 1 < rowsWithScores.length; index += 2) {
+          const rawMember = String(rowsWithScores[index] || "");
+          const atMs = Number(rowsWithScores[index + 1]);
+          if (!rawMember || !Number.isFinite(atMs)) {
             continue;
           }
-          actualByMember.set(memberId, { atMs: Number(atMs), value });
+
+          try {
+            const parsed = JSON.parse(rawMember) as {
+              id?: unknown;
+              value?: unknown;
+            };
+            const memberId = String(parsed.id || "");
+            const value = Number(parsed.value);
+            if (!memberId || !Number.isFinite(value)) {
+              continue;
+            }
+            actualByMember.set(memberId, { atMs: Number(atMs), value });
+          } catch {
+            continue;
+          }
         }
 
         const expected = expectedByMetric[metricName];
@@ -1622,6 +1699,68 @@ describeRedis("image ops metrics seeded contract", () => {
         expect(Number.isFinite(Number(parsed.processedItems))).toBe(true);
         expect(Number.isFinite(Number(parsed.avgFetchMs))).toBe(true);
         expect(Number.isFinite(Number(parsed.avgEndToEndMs))).toBe(true);
+      }
+
+      for (const metricSlug of IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS) {
+        const key = imageMetricSliceHashKey(metricSlug);
+        const [type, hash] = await Promise.all([
+          redis.type(key),
+          redis.hgetall(key),
+        ]);
+        expect(type).toBe("hash");
+        const expectedSliceFields = [
+          "updated_at",
+          ...IMAGE_SLICE_WINDOWS.map((window) => `w_${window.id}`),
+        ].sort();
+        expect(Object.keys(hash).sort()).toEqual(expectedSliceFields);
+
+        for (const field of IMAGE_SLICE_WINDOWS.map(
+          (window) => `w_${window.id}`,
+        )) {
+          const parsed = JSON.parse(String(hash[field])) as {
+            low?: unknown;
+            high?: unknown;
+            average?: unknown;
+            latest?: unknown;
+            timestamp?: unknown;
+          };
+          expect(Number.isFinite(Number(parsed.low))).toBe(true);
+          expect(Number.isFinite(Number(parsed.high))).toBe(true);
+          expect(Number.isFinite(Number(parsed.average))).toBe(true);
+          expect(Number.isFinite(Number(parsed.latest))).toBe(true);
+          expect(typeof parsed.timestamp).toBe("string");
+        }
+      }
+
+      for (const metricSlug of IMAGE_JOB_SLICE_METRIC_SLUGS) {
+        const key = imageMetricSliceHashKey(metricSlug, IMAGE_GROUP_JOBS);
+        const [type, hash] = await Promise.all([
+          redis.type(key),
+          redis.hgetall(key),
+        ]);
+        expect(type).toBe("hash");
+        const expectedSliceFields = [
+          "updated_at",
+          ...IMAGE_SLICE_WINDOWS.map((window) => `w_${window.id}`),
+        ].sort();
+        expect(Object.keys(hash).sort()).toEqual(expectedSliceFields);
+
+        for (const field of IMAGE_SLICE_WINDOWS.map(
+          (window) => `w_${window.id}`,
+        )) {
+          const parsed = JSON.parse(String(hash[field])) as {
+            low?: unknown;
+            high?: unknown;
+            average?: unknown;
+            latest?: unknown;
+            timestamp?: unknown;
+          };
+          expect(Number.isFinite(Number(parsed.low))).toBe(true);
+          expect(Number.isFinite(Number(parsed.high))).toBe(true);
+          expect(Number.isFinite(Number(parsed.average))).toBe(true);
+          expect(Number.isFinite(Number(parsed.latest))).toBe(true);
+          expect(typeof parsed.timestamp).toBe("string");
+        }
       }
     } finally {
       await queue.close().catch(() => undefined);
@@ -1788,24 +1927,17 @@ describeRedis("image ops metrics seeded contract", () => {
       );
 
       for (const keySet of imageJobMetricTrendKeys()) {
-        const [idsType, valuesType, latestType, idsDepth, valuesDepth, latest] =
-          await Promise.all([
-            redis.type(keySet.idsKey),
-            redis.type(keySet.valuesKey),
-            redis.type(keySet.latestKey),
-            redis.zcard(keySet.idsKey),
-            redis.hlen(keySet.valuesKey),
-            redis.get(keySet.latestKey),
-          ]);
+        const [trendType, trendDepth, latestRows] = await Promise.all([
+          redis.type(keySet.trendKey),
+          redis.zcard(keySet.trendKey),
+          redis.zrevrange(keySet.trendKey, 0, 0, "WITHSCORES"),
+        ]);
 
-        expect(idsType).toBe("zset");
-        expect(valuesType).toBe("hash");
-        expect(latestType).toBe("string");
+        expect(trendType).toBe("zset");
         const expectedDepth =
           keySet.metric === "failed_items" ? rows.length : pointDepth;
-        expect(idsDepth).toBe(expectedDepth);
-        expect(valuesDepth).toBe(expectedDepth);
-        expect(latest).not.toBeNull();
+        expect(trendDepth).toBe(expectedDepth);
+        expect(latestRows.length).toBeGreaterThanOrEqual(1);
       }
     } finally {
       await queue.close().catch(() => undefined);
@@ -1884,17 +2016,33 @@ describeRedis("image ops metrics seeded contract", () => {
       redis,
     );
 
-    await writeOpsInfraSnapshot(
-      {
-        workersRunning: 3,
-        source: "metrics-contract-test",
-        updatedAt: new Date().toISOString(),
-      },
-      redis,
-    );
+    const infra = {
+      workersRunning: 3,
+      source: "metrics-contract-test",
+      updatedAt: new Date().toISOString(),
+    };
+    await writeOpsInfraSnapshot(infra, redis);
 
     const status = makeStatus();
     await writeOpsRunnerStatus(status, redis);
+
+    const statusRaw = await redis.hgetall(IMAGE_RUNNER_STATUS_KEY);
+    const expectedStatusHash = expectedStatusHashFrom(status);
+    expect(Object.keys(statusRaw).sort()).toEqual(
+      Object.keys(expectedStatusHash).sort(),
+    );
+    for (const [field, expected] of Object.entries(expectedStatusHash)) {
+      expect(statusRaw[field]).toBe(expected);
+    }
+
+    const infraRaw = await redis.hgetall(IMAGE_RUNNER_INFRA_KEY);
+    const expectedInfraHash = expectedInfraHashFrom(infra);
+    expect(Object.keys(infraRaw).sort()).toEqual(
+      Object.keys(expectedInfraHash).sort(),
+    );
+    for (const [field, expected] of Object.entries(expectedInfraHash)) {
+      expect(infraRaw[field]).toBe(expected);
+    }
 
     const oneShot = await runOpsOneShotPipeline({
       appName: "metrics-contract-test",
@@ -1907,6 +2055,8 @@ describeRedis("image ops metrics seeded contract", () => {
       reconcileBullmqStatus: false,
     });
     const snapshot = oneShot.snapshot;
+    expect(snapshot.infra?.workersRunning).toBe(infra.workersRunning);
+    expect(snapshot.infra?.source).toBe(infra.source);
 
     const runnerLatest = await readOpsRunnerTrendLatest(undefined);
     for (const metric of OPS_TREND_METRIC_REGISTRY) {
@@ -1991,38 +2141,25 @@ describeRedis("image ops metrics seeded contract", () => {
       );
 
       for (const metric of imageJobMetricTrendKeys()) {
-        const [
-          idsType,
-          valuesType,
-          latestType,
-          idsDepth,
-          valuesDepth,
-          latestRaw,
-        ] = await Promise.all([
-          redis.type(metric.idsKey),
-          redis.type(metric.valuesKey),
-          redis.type(metric.latestKey),
-          redis.zcard(metric.idsKey),
-          redis.hlen(metric.valuesKey),
-          redis.get(metric.latestKey),
+        const [trendType, trendDepth, latestRows] = await Promise.all([
+          redis.type(metric.trendKey),
+          redis.zcard(metric.trendKey),
+          redis.zrevrange(metric.trendKey, 0, 0, "WITHSCORES"),
         ]);
 
-        expect(idsType).toBe("zset");
-        expect(valuesType).toBe("hash");
-        expect(latestType).toBe("string");
+        expect(trendType).toBe("zset");
         const expectedDepth =
           metric.metric === "failed_items" ? rows.length : pointDepth;
-        expect(idsDepth).toBe(expectedDepth);
-        expect(valuesDepth).toBe(expectedDepth);
-        expect(latestRaw).not.toBeNull();
+        expect(trendDepth).toBe(expectedDepth);
+        expect(latestRows.length).toBeGreaterThanOrEqual(1);
 
-        const parsedLatest = JSON.parse(String(latestRaw)) as {
-          jobId?: unknown;
+        const parsedLatest = JSON.parse(String(latestRows[0])) as {
           atMs?: unknown;
+          id?: unknown;
           value?: unknown;
         };
-        expect(typeof parsedLatest.jobId).toBe("string");
         expect(Number.isFinite(Number(parsedLatest.atMs))).toBe(true);
+        expect(typeof parsedLatest.id).toBe("string");
         const latestValue = Number(parsedLatest.value);
         expect(Number.isFinite(latestValue)).toBe(true);
         expect(latestValue).toBe(expectedLatestValues[metric.metric]);
@@ -2106,12 +2243,9 @@ describeRedis("image ops metrics seeded contract", () => {
       it(`raw metric ${metric.metric} value and key contract`, () => {
         const row = fixture[metric.metric];
         expect(row).toBeTruthy();
-        expect(row.idsType).toBe("zset");
-        expect(row.valuesType).toBe("hash");
-        expect(row.latestType).toBe("string");
-        expect(row.idsDepth).toBe(row.expectedIdsDepth);
-        expect(row.valuesDepth).toBe(row.expectedValuesDepth);
-        expect(row.latestValue).toBe(row.expectedLatestValue);
+        expect(row.trendType).toBe("zset");
+        expect(row.trendDepth).toBe(row.expectedTrendDepth);
+        expect(Number.isFinite(Number(row.trendLatestValue))).toBe(true);
         expect(row.stateValue).toBe(row.expectedStateValue);
       });
     }

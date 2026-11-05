@@ -37,12 +37,9 @@ export type ImageMetricDefinition = {
   sliceEnabled: boolean;
 };
 
-export const IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS = [
-  "completed_jobs",
-  "failed_jobs",
+export const IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS = [
   "processed_items",
   "failed_items",
-  "sampled_completed_jobs",
   "fetch_latency_ms_low",
   "fetch_latency_ms_high",
   "fetch_latency_ms_avg",
@@ -70,8 +67,19 @@ export const IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS = [
   "sec_per_image",
 ] as const;
 
+export const IMAGE_JOB_SLICE_METRIC_SLUGS = [
+  "completed_jobs",
+  "failed_jobs",
+  "sampled_completed_jobs",
+] as const;
+
+// Back-compat export retained for existing imports. This now intentionally
+// includes only image-processing performance metrics.
+export const IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS =
+  IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS;
+
 export type ImagePerformanceSliceMetricSlug =
-  (typeof IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS)[number];
+  (typeof IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS)[number];
 
 export const IMAGE_METRIC_DEFAULT_WINDOWS = IMAGE_SLICE_WINDOWS.map(
   (window) => window.id,

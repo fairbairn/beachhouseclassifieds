@@ -6,9 +6,9 @@ import {
 } from "../../workers/image-queue";
 import {
   IMAGE_RAW_JOB_TREND_CURSOR_KEY,
-  imageRawJobTrendMetricIdsKey,
-  imageRawJobTrendMetricLatestKey,
-  imageRawJobTrendMetricValuesKey,
+  encodeImageTrendPoint,
+  imageRawJobTrendMetricKey,
+  parseImageTrendPoint,
 } from "./image-metrics-redis-keys";
 import type { ImageQueueRecentJobWindow } from "./image-queue-ops";
 
@@ -101,16 +101,8 @@ const METRIC_NAMES: ImageJobMetricName[] = [
   "failed_items",
 ];
 
-function metricIdsKey(metric: ImageJobMetricName): string {
-  return imageRawJobTrendMetricIdsKey(metric);
-}
-
-function metricValuesKey(metric: ImageJobMetricName): string {
-  return imageRawJobTrendMetricValuesKey(metric);
-}
-
-function metricLatestKey(metric: ImageJobMetricName): string {
-  return imageRawJobTrendMetricLatestKey(metric);
+function metricTrendKey(metric: ImageJobMetricName): string {
+  return imageRawJobTrendMetricKey(metric);
 }
 
 function parseNumber(value: unknown): number {
@@ -381,27 +373,25 @@ async function trimMetricDepth(input: {
   metric: ImageJobMetricName;
   depthLimit: number;
 }): Promise<void> {
-  const idsKey = metricIdsKey(input.metric);
-  const valuesKey = metricValuesKey(input.metric);
   const trimEnd = -(input.depthLimit + 1);
-  const staleIds = await input.connection.zrange(idsKey, 0, trimEnd);
-  if (!Array.isArray(staleIds) || staleIds.length === 0) {
-    return;
-  }
-
-  const pipeline = input.connection.pipeline();
-  pipeline.zrem(idsKey, ...staleIds);
-  pipeline.hdel(valuesKey, ...staleIds);
-  await pipeline.exec();
+  await input.connection.zremrangebyrank(
+    metricTrendKey(input.metric),
+    0,
+    trimEnd,
+  );
 }
 
-function parseValues(rawValues: Array<string | null>): number[] {
+function parseValues(rawValues: string[]): number[] {
   const values: number[] = [];
   for (const rawValue of rawValues) {
-    if (rawValue === null || rawValue === undefined) {
+    if (!rawValue) {
       continue;
     }
-    const parsed = Number(rawValue);
+    let parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) {
+      const decoded = parseImageTrendPoint(rawValue);
+      parsed = Number(decoded?.value);
+    }
     if (!Number.isFinite(parsed) || parsed < 0) {
       continue;
     }
@@ -444,19 +434,15 @@ async function readMetricStatsForWindow(input: {
   metric: ImageJobMetricName;
   windowStartMs: number;
 }): Promise<MetricStats> {
-  const ids = await input.connection.zrangebyscore(
-    metricIdsKey(input.metric),
+  const rows = await input.connection.zrangebyscore(
+    metricTrendKey(input.metric),
     String(input.windowStartMs),
     "+inf",
   );
-  if (!Array.isArray(ids) || ids.length === 0) {
+  if (!Array.isArray(rows) || rows.length === 0) {
     return summarizeValues([]);
   }
-  const rawValues = await input.connection.hmget(
-    metricValuesKey(input.metric),
-    ...ids,
-  );
-  return summarizeValues(parseValues(rawValues));
+  return summarizeValues(parseValues(rows));
 }
 
 async function readMetricStatsForDeep(input: {
@@ -464,19 +450,15 @@ async function readMetricStatsForDeep(input: {
   metric: ImageJobMetricName;
   sampleLimit: number;
 }): Promise<MetricStats> {
-  const ids = await input.connection.zrevrange(
-    metricIdsKey(input.metric),
+  const rows = await input.connection.zrevrange(
+    metricTrendKey(input.metric),
     0,
     Math.max(0, input.sampleLimit - 1),
   );
-  if (!Array.isArray(ids) || ids.length === 0) {
+  if (!Array.isArray(rows) || rows.length === 0) {
     return summarizeValues([]);
   }
-  const rawValues = await input.connection.hmget(
-    metricValuesKey(input.metric),
-    ...ids,
-  );
-  return summarizeValues(parseValues(rawValues));
+  return summarizeValues(parseValues(rows));
 }
 
 function buildWindowFromMetricStats(input: {
@@ -550,7 +532,7 @@ export async function syncImageJobMetricTrends(input?: {
     const cursorBeforeMs =
       Number(await connection.get(IMAGE_RAW_JOB_TREND_CURSOR_KEY)) || 0;
     const completedJobsDepth = await connection.zcard(
-      metricIdsKey("completed_jobs"),
+      metricTrendKey("completed_jobs"),
     );
     const shouldBootstrapMissingMetric = completedJobsDepth <= 0;
     const completedRowsForSync = await readCompletedRowsForSync({
@@ -584,7 +566,7 @@ export async function syncImageJobMetricTrends(input?: {
     let parsedCompletedJobs = 0;
     let countMismatchedItemCounts = 0;
     let insertedMetricPoints = 0;
-    const commandKinds: Array<"zadd" | "hset" | "set"> = [];
+    const commandKinds: Array<"zadd"> = [];
     const writeMetricPoint = (input: {
       metric: ImageJobMetricName;
       memberId: string;
@@ -596,27 +578,16 @@ export async function syncImageJobMetricTrends(input?: {
       }
 
       writePipeline.zadd(
-        metricIdsKey(input.metric),
+        metricTrendKey(input.metric),
         "NX",
         input.atMs,
-        input.memberId,
-      );
-      commandKinds.push("zadd");
-      writePipeline.hset(
-        metricValuesKey(input.metric),
-        input.memberId,
-        String(input.value),
-      );
-      commandKinds.push("hset");
-      writePipeline.set(
-        metricLatestKey(input.metric),
-        JSON.stringify({
-          jobId: input.memberId,
+        encodeImageTrendPoint({
           atMs: input.atMs,
+          id: input.memberId,
           value: input.value,
         }),
       );
-      commandKinds.push("set");
+      commandKinds.push("zadd");
     };
 
     for (let index = 0; index < completedRows.length; index += 1) {
@@ -1019,14 +990,10 @@ export async function readImageJobMetricRollupWindows(input: {
 
 export function imageJobMetricTrendKeys(): Array<{
   metric: ImageJobMetricName;
-  idsKey: string;
-  valuesKey: string;
-  latestKey: string;
+  trendKey: string;
 }> {
   return METRIC_NAMES.map((metric) => ({
     metric,
-    idsKey: metricIdsKey(metric),
-    valuesKey: metricValuesKey(metric),
-    latestKey: metricLatestKey(metric),
+    trendKey: metricTrendKey(metric),
   }));
 }

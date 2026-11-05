@@ -38,10 +38,34 @@ const RUN_REDIS_TESTS = process.env.IMAGE_OPS_REDIS_INTEGRATION === "1";
 const describeRedis = RUN_REDIS_TESTS ? describe : describe.skip;
 const VERBOSE_ASSERTIONS = process.env.IMAGE_OPS_ASSERTION_LOG === "1";
 
-const redisUrl =
+function resolveWorkerRedisUrl(rawUrl: string): string {
+  const poolId = Number.parseInt(process.env.VITEST_POOL_ID || "0", 10);
+  if (!Number.isFinite(poolId) || poolId <= 0) {
+    return rawUrl;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    const dbPath = parsed.pathname.replace(/^\/+/, "");
+    if (!/^\d+$/.test(dbPath)) {
+      return rawUrl;
+    }
+    const dbIndex = Number.parseInt(dbPath, 10);
+    if (!Number.isFinite(dbIndex) || dbIndex < 0) {
+      return rawUrl;
+    }
+    parsed.pathname = `/${dbIndex + poolId}`;
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+const redisUrl = resolveWorkerRedisUrl(
   process.env.IMAGE_OPS_TEST_REDIS_URL?.trim() ||
-  process.env.REDIS_URL?.trim() ||
-  DEFAULT_LOCAL_REDIS_URL;
+    process.env.REDIS_URL?.trim() ||
+    DEFAULT_LOCAL_REDIS_URL,
+);
 
 function assertLoopbackRedisUrl(rawUrl: string): void {
   let parsed: URL;
@@ -101,6 +125,11 @@ const STATUS_HASH_FIELDS = [
   "flush_batch_count",
   "pending_success_buffer",
   "pending_error_buffer",
+  "throughput_images_per_minute",
+  "avg_fetch_ms",
+  "avg_transform_ms",
+  "avg_upload_ms",
+  "avg_end_to_end_ms",
   "updated_at",
 ] as const;
 
@@ -181,6 +210,11 @@ function makeStatus(
     flushBatchCount: 0,
     pendingSuccessBuffer: 0,
     pendingErrorBuffer: 0,
+    throughputImagesPerMinute: 0,
+    avgFetchMs: 0,
+    avgTransformMs: 0,
+    avgUploadMs: 0,
+    avgEndToEndMs: 0,
     updatedAt: new Date().toISOString(),
     ...overrides,
   };
@@ -828,7 +862,7 @@ describeRedis("image-ops-control-module redis integration", () => {
     ).toBe(true);
   });
 
-  it("ui snapshot writes trend data for every ui metric key with depth cap", async () => {
+  it("ui snapshot writes trend data for every ui metric key", async () => {
     await writeOpsControlSettings(
       {
         desiredMode: "run",
@@ -946,7 +980,7 @@ describeRedis("image-ops-control-module redis integration", () => {
       UI_TREND_KEYS.map((key) => redis.zcard(key)),
     );
     for (const depth of uiTrendDepths) {
-      expect(depth).toBe(100);
+      expect(depth).toBe(125);
     }
   });
 
@@ -1287,7 +1321,7 @@ describeRedis("image-ops-control-module redis integration", () => {
     );
   });
 
-  it("persists trend in per-metric sorted sets with capped depth", async () => {
+  it("persists trend in per-metric sorted sets", async () => {
     for (let index = 1; index <= 150; index += 1) {
       await writeOpsRunnerStatus(
         makeStatus({
@@ -1306,24 +1340,24 @@ describeRedis("image-ops-control-module redis integration", () => {
     }
 
     const history = await readOpsTrendHistory(200, redis);
-    expect(history.length).toBe(100);
-    expect(history[0]?.processedItems).toBe(51);
-    expect(history[99]?.processedItems).toBe(150);
+    expect(history.length).toBe(150);
+    expect(history[0]?.processedItems).toBe(1);
+    expect(history[149]?.processedItems).toBe(150);
 
     const trendDepths = await Promise.all(
       RUNNER_TREND_KEYS.map((key) => redis.zcard(key)),
     );
     for (const depth of trendDepths) {
-      expect(depth).toBe(100);
+      expect(depth).toBe(150);
     }
 
     const projection = await readOpsTrendProjection(200, redis);
-    expect(projection.sampleCount).toBe(100);
-    expect(projection.queueBacklogTrendRaw.length).toBe(100);
-    expect(projection.processedItemsTrend.length).toBe(100);
-    expect(projection.failedItemsTrend.length).toBe(100);
-    expect(projection.ipsRaw.length).toBe(100);
-    expect(projection.backlogDeltaRaw.length).toBe(100);
+    expect(projection.sampleCount).toBe(150);
+    expect(projection.queueBacklogTrendRaw.length).toBe(150);
+    expect(projection.processedItemsTrend.length).toBe(150);
+    expect(projection.failedItemsTrend.length).toBe(150);
+    expect(projection.ipsRaw.length).toBe(150);
+    expect(projection.backlogDeltaRaw.length).toBe(150);
   });
 
   it("maintains aligned per-metric trend sequences and projection dimensions", async () => {
@@ -1381,7 +1415,7 @@ describeRedis("image-ops-control-module redis integration", () => {
   });
 
   it.each(OPS_TREND_METRIC_REGISTRY)(
-    "trend key uses timestamp-sorted depth-capped history for $name",
+    "trend key uses timestamp-sorted history for $name",
     async ({ key, getValue }) => {
       let latestStatus = makeStatus();
       for (let index = 1; index <= 150; index += 1) {
@@ -1409,7 +1443,7 @@ describeRedis("image-ops-control-module redis integration", () => {
       }
 
       const depth = await redis.zcard(key);
-      expect(depth).toBe(100);
+      expect(depth).toBe(150);
 
       const latest = await redis.zrevrange(key, 0, 0, "WITHSCORES");
       expect(latest.length).toBe(2);

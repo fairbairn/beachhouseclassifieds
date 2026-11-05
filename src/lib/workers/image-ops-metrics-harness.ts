@@ -257,7 +257,7 @@ async function resetHarnessState(redis: IORedis): Promise<void> {
   }
 
   for (const keySet of imageJobMetricTrendKeys()) {
-    await redis.del(keySet.idsKey, keySet.valuesKey, keySet.latestKey);
+    await redis.del(keySet.trendKey);
   }
   await scanDeleteByPrefix(redis, `${IMAGE_RAW_JOB_TREND_PREFIX}:`);
 }

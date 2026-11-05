@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  appendOpsBullmqSample,
   createOpsQueueRuntime,
   listOpsPendingJobsForOperation,
   readOpsControlSettings,
@@ -13,6 +14,8 @@ import {
 export type ImageOpsDataSimulatorOptions = {
   durationSeconds: number;
   tickMs: number;
+  injectBullmqSamples: boolean;
+  bullmqSampleCount: number;
   minBacklog: number;
   maxBacklog: number;
   workersMin: number;
@@ -35,6 +38,8 @@ export type ImageOpsDataSimulatorResult = {
 const DEFAULT_OPTIONS: ImageOpsDataSimulatorOptions = {
   durationSeconds: 60,
   tickMs: 1000,
+  injectBullmqSamples: true,
+  bullmqSampleCount: 10,
   minBacklog: 5,
   maxBacklog: 80,
   workersMin: 0,
@@ -99,6 +104,63 @@ function resolveGateReason(
   return "gate=stop";
 }
 
+async function seedBullmqSampleCompletedJobs(input: {
+  operationId: string;
+  sampleCount: number;
+}): Promise<void> {
+  const count = Math.max(0, Math.floor(input.sampleCount));
+  if (count <= 0) {
+    return;
+  }
+
+  for (let index = 0; index < count; index += 1) {
+    const nowMs = Date.now() - (count - index) * 900;
+    const itemCount = 1 + (index % 3);
+    const fetchMs = 120 + (index % 5) * 14;
+    const transformMs = 75 + (index % 4) * 10;
+    const uploadMs = 52 + (index % 4) * 8;
+    const failedCount = index % 9 === 0 ? 1 : 0;
+
+    await appendOpsBullmqSample({
+      operationId: input.operationId,
+      sampleId: `seeded:${String(index + 1).padStart(3, "0")}`,
+      atMs: nowMs,
+      processedCount: itemCount,
+      failedCount,
+      avgFetchMs: fetchMs,
+      avgTransformMs: transformMs,
+      avgUploadMs: uploadMs,
+    });
+  }
+}
+
+async function appendBullmqSampleFromTick(input: {
+  operationId: string;
+  tick: number;
+  completedDelta: number;
+  failedDelta: number;
+  avgFetchMs: number;
+  avgTransformMs: number;
+  avgUploadMs: number;
+}): Promise<void> {
+  const completedCount = Math.max(0, Math.floor(input.completedDelta));
+  const failedCount = Math.max(0, Math.floor(input.failedDelta));
+  if (completedCount <= 0 && failedCount <= 0) {
+    return;
+  }
+
+  await appendOpsBullmqSample({
+    operationId: input.operationId,
+    sampleId: `tick:${String(input.tick).padStart(6, "0")}`,
+    atMs: Date.now(),
+    processedCount: completedCount,
+    failedCount,
+    avgFetchMs: input.avgFetchMs,
+    avgTransformMs: input.avgTransformMs,
+    avgUploadMs: input.avgUploadMs,
+  });
+}
+
 export async function runImageOpsDataSimulator(
   overrides?: Partial<ImageOpsDataSimulatorOptions>,
 ): Promise<ImageOpsDataSimulatorResult> {
@@ -109,6 +171,7 @@ export async function runImageOpsDataSimulator(
 
   const durationSeconds = clamp(options.durationSeconds, 1, 86_400);
   const tickMs = clamp(options.tickMs, 250, 10_000);
+  const bullmqSampleCount = clamp(options.bullmqSampleCount, 0, 200);
   const minBacklog = clamp(options.minBacklog, 0, 100_000);
   const maxBacklog = clamp(options.maxBacklog, minBacklog, 100_000);
   const workersMin = clamp(options.workersMin, 0, 100);
@@ -151,6 +214,8 @@ export async function runImageOpsDataSimulator(
           operationId,
           totalTicks,
           tickMs,
+          injectBullmqSamples: options.injectBullmqSamples,
+          bullmqSampleCount,
           minBacklog,
           maxBacklog,
           workersMin,
@@ -166,6 +231,13 @@ export async function runImageOpsDataSimulator(
   }
 
   try {
+    if (options.injectBullmqSamples && bullmqSampleCount > 0) {
+      await seedBullmqSampleCompletedJobs({
+        operationId,
+        sampleCount: bullmqSampleCount,
+      });
+    }
+
     for (let tick = 0; tick < totalTicks; tick += 1) {
       const settings = await readOpsControlSettings();
       const desiredMode = settings.desiredMode;
@@ -258,6 +330,28 @@ export async function runImageOpsDataSimulator(
       failedItems += failedDelta;
       completedJobs = processedItems;
       failedJobs = failedItems;
+
+      const avgFetchMs = Math.max(
+        10,
+        Math.round(
+          85 + 190 * wave(tick + 1, 21) * (1 + boundedNoise(noisePct)),
+        ),
+      );
+      const avgTransformMs = Math.max(
+        8,
+        Math.round(
+          40 + 140 * wave(tick + 5, 19) * (1 + boundedNoise(noisePct)),
+        ),
+      );
+      const avgUploadMs = Math.max(
+        6,
+        Math.round(30 + 90 * wave(tick + 9, 17) * (1 + boundedNoise(noisePct))),
+      );
+      const avgEndToEndMs = avgFetchMs + avgTransformMs + avgUploadMs;
+      const throughputImagesPerMinute = Math.max(
+        0,
+        Number((throughputPerSecond * 60).toFixed(2)),
+      );
       simulatedQueueCompleted += completedDelta;
       simulatedQueueFailed += failedDelta;
 
@@ -315,8 +409,25 @@ export async function runImageOpsDataSimulator(
           0,
           Math.round(simulatedQueueActive * 0.08 * wave(tick + 7, 12)),
         ),
+        throughputImagesPerMinute,
+        avgFetchMs,
+        avgTransformMs,
+        avgUploadMs,
+        avgEndToEndMs,
         updatedAt: new Date().toISOString(),
       });
+
+      if (options.injectBullmqSamples) {
+        await appendBullmqSampleFromTick({
+          operationId,
+          tick: tick + 1,
+          completedDelta,
+          failedDelta,
+          avgFetchMs,
+          avgTransformMs,
+          avgUploadMs,
+        });
+      }
 
       if (
         verbose &&
@@ -333,6 +444,11 @@ export async function runImageOpsDataSimulator(
               totalTicks,
               desiredMode,
               workersRunning,
+              throughputImagesPerMinute,
+              avgFetchMs,
+              avgTransformMs,
+              avgUploadMs,
+              avgEndToEndMs,
               targetBacklog,
               queueBacklog: simulatedQueueBacklog,
               processedItems,

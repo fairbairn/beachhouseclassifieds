@@ -13,6 +13,9 @@ import {
   createOpsUiStateWatcher,
   pauseOpsSystemFlow,
   readOpsRedisIoStats,
+  readOpsSnapshotTrendLatest,
+  readOpsSnapshotTrendSeries,
+  readOpsTrendProjectionSampled,
   resetOpsRedisIoStats,
   resumeOpsSystemFlow,
   scaleOpsWorkers,
@@ -40,6 +43,13 @@ import {
 
 const DEFAULT_APP = "beachhouseclassifieds-image-worker";
 const STARTUP_SNAPSHOT_TIMEOUT_MS = 1500;
+const DEFAULT_TREND_WINDOW_MINUTES = 5;
+const TREND_GRAPH_BUCKET_MS = 5000;
+const REDIS_TREND_DISPLAY_SAMPLES_MIN = 240;
+const TREND_AXIS_HEADROOM_MULTIPLIER = 1.15;
+const TREND_AXIS_DECAY_PER_REFRESH = 0.998;
+const TREND_AXIS_WINDOW_1H_MS = 60 * 60 * 1000;
+const TREND_AXIS_WINDOW_1H_REFRESH_MS = 15_000;
 
 type QueueCounts = ImageQueueCounts;
 type ChartTimingMode = "ordinal" | "interpolated";
@@ -64,7 +74,7 @@ type State = {
   appName: string;
   uiClockAt: string;
   intervalMs: number;
-  trendSamples: number;
+  trendWindowMs: number;
   running: boolean;
   polling: boolean;
   chartTimingMode: ChartTimingMode;
@@ -84,7 +94,7 @@ type State = {
   valuePromptInput: TextEditState;
   notice: string;
   noticePinnedUntilMs: number;
-  activeScreen: "summary" | "queues" | "workers" | "redis";
+  activeScreen: "summary" | "infra" | "queues" | "workers" | "redis";
   historyBacklog: number[];
   historyProcessed: number[];
   historyFailures: number[];
@@ -103,6 +113,15 @@ type State = {
   historyRedisKbps: number[];
   historyRedisReadsPerSec: number[];
   historyRedisAggregateKbps: number[];
+  historyRedisAggregateRxKbps: number[];
+  historyRedisAggregateTxKbps: number[];
+  processingTrendHourMax: number;
+  queueTrendHourMax: number;
+  lastTrendAxisWindowRefreshAtMs: number;
+  processingTrendLogicalMax: number;
+  queueTrendLogicalMax: number;
+  compositeTrendLogicalMax: number;
+  redisTrendLogicalMax: number;
   lastSampleAtMs: number | null;
   lastRedisSampleAtMs: number | null;
   lastRedisIngressBytes: number | null;
@@ -136,18 +155,14 @@ type ValuePromptAction =
   | "setMaxClaimCycle"
   | "rawCommand";
 
-const SCREEN_ORDER: Array<"summary" | "queues" | "workers" | "redis"> = [
-  "summary",
-  "queues",
-  "workers",
-  "redis",
-];
+const SCREEN_ORDER: Array<"summary" | "infra"> = ["summary", "infra"];
 
 function nextScreen(
-  screen: "summary" | "queues" | "workers" | "redis",
-): "summary" | "queues" | "workers" | "redis" {
+  screen: "summary" | "infra" | "queues" | "workers" | "redis",
+): "summary" | "infra" {
   const index = SCREEN_ORDER.indexOf(screen);
-  const nextIndex = (index + 1) % SCREEN_ORDER.length;
+  const safeIndex = index < 0 ? 0 : index;
+  const nextIndex = (safeIndex + 1) % SCREEN_ORDER.length;
   return SCREEN_ORDER[nextIndex];
 }
 
@@ -341,11 +356,6 @@ function commandMenuItems(
       label: "Reset Redis I/O stats",
       hint: "clear kbps/read counters",
     },
-    {
-      id: "action:toggle-chart-timing",
-      label: "Toggle chart timing",
-      hint: "ordinal / interpolated",
-    },
     { id: "action:refresh", label: "Refresh now", hint: "pull live state" },
     { id: "action:help", label: "Show help", hint: "keyboard + commands" },
     { id: "action:quit", label: "Quit", hint: "exit dashboard" },
@@ -363,7 +373,6 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 function parseArgs(argv: string[]): {
   appName: string;
   intervalSeconds: number;
-  trendSamples: number;
   chartTimingMode: ChartTimingMode;
   redisTarget: RedisTarget;
 } {
@@ -383,9 +392,7 @@ function parseArgs(argv: string[]): {
 
   const chartTimingRaw = options.get("chart-timing")?.trim().toLowerCase();
   const chartTimingMode: ChartTimingMode =
-    chartTimingRaw === "interpolated" || chartTimingRaw === "timebucket"
-      ? "interpolated"
-      : "ordinal";
+    chartTimingRaw === "ordinal" ? "ordinal" : "interpolated";
   const redisTargetRaw = options.get("redis-target")?.trim().toLowerCase();
   const redisTarget: RedisTarget =
     !redisTargetRaw || redisTargetRaw === "local"
@@ -401,11 +408,6 @@ function parseArgs(argv: string[]): {
   return {
     appName: options.get("app")?.trim() || DEFAULT_APP,
     intervalSeconds: parsePositiveInt(options.get("interval-seconds"), 5),
-    trendSamples: clamp(
-      parsePositiveInt(options.get("trend-samples"), 100),
-      10,
-      100,
-    ),
     chartTimingMode,
     redisTarget,
   };
@@ -415,20 +417,51 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function trendPointLimitForWindow(trendWindowMs: number): number {
+  const safeWindowMs = Math.max(60_000, trendWindowMs);
+  return clamp(Math.round(safeWindowMs / TREND_GRAPH_BUCKET_MS), 60, 1000);
+}
+
+function quantizedTrendAnchorAtMs(input: {
+  nowMs: number;
+  windowMs: number;
+  sampleCount: number;
+}): number {
+  const safeNowMs = Math.max(0, Number(input.nowMs) || 0);
+  const safeWindowMs = Math.max(1, Number(input.windowMs) || 1);
+  const safeSampleCount = Math.max(2, Number(input.sampleCount) || 2);
+  const bucketMs = Math.max(
+    1000,
+    Math.round(safeWindowMs / (safeSampleCount - 1)),
+  );
+  return Math.floor(safeNowMs / bucketMs) * bucketMs;
+}
+
+function seriesMax(values: number[]): number {
+  if (values.length <= 0) {
+    return 0;
+  }
+  return Math.max(0, ...values);
+}
+
+function nextLogicalAxisMax(previousMax: number, observedMax: number): number {
+  const observedWithHeadroom = Math.max(
+    1,
+    observedMax * TREND_AXIS_HEADROOM_MULTIPLIER,
+  );
+  if (!Number.isFinite(previousMax) || previousMax <= 0) {
+    return observedWithHeadroom;
+  }
+  const decayed = Math.max(1, previousMax * TREND_AXIS_DECAY_PER_REFRESH);
+  return Math.max(decayed, observedWithHeadroom);
+}
+
 function pushHistory(values: number[], next: number, max = 120): number[] {
   values.push(next);
   if (values.length > max) {
     values.splice(0, values.length - max);
   }
   return values;
-}
-
-function average(values: number[]): number {
-  if (values.length === 0) {
-    return 0;
-  }
-  const total = values.reduce((sum, value) => sum + value, 0);
-  return total / values.length;
 }
 
 function formatBitrateFromKbps(kbps: number): string {
@@ -483,6 +516,18 @@ function tail(values: number[], count: number): number[] {
     return values;
   }
   return values.slice(values.length - count);
+}
+
+function normalizeTrendSeries(values: number[], count: number): number[] {
+  const width = Math.max(1, count);
+  const trimmed = tail(values, width);
+  if (trimmed.length >= width) {
+    return trimmed;
+  }
+  return [
+    ...Array.from({ length: width - trimmed.length }, () => 0),
+    ...trimmed,
+  ];
 }
 
 function emptyProjection(): OpsTrendProjection {
@@ -597,14 +642,14 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const redisSelection = configureRedisTarget(args.redisTarget);
   const initialIntervalMs = Math.max(1000, args.intervalSeconds * 1000);
-  const initialTrendWindowMs = args.trendSamples * initialIntervalMs;
+  const initialTrendWindowMs = DEFAULT_TREND_WINDOW_MINUTES * 60 * 1000;
   const redisPreflight = await preflightRedisForGui();
 
   const state: State = {
     appName: args.appName,
     uiClockAt: formatLocalClockAt(),
     intervalMs: initialIntervalMs,
-    trendSamples: args.trendSamples,
+    trendWindowMs: initialTrendWindowMs,
     running: true,
     polling: false,
     chartTimingMode: args.chartTimingMode,
@@ -643,6 +688,15 @@ async function main(): Promise<void> {
     historyRedisKbps: [],
     historyRedisReadsPerSec: [],
     historyRedisAggregateKbps: [],
+    historyRedisAggregateRxKbps: [],
+    historyRedisAggregateTxKbps: [],
+    processingTrendHourMax: 1,
+    queueTrendHourMax: 1,
+    lastTrendAxisWindowRefreshAtMs: 0,
+    processingTrendLogicalMax: 1,
+    queueTrendLogicalMax: 1,
+    compositeTrendLogicalMax: 1,
+    redisTrendLogicalMax: 1,
     lastSampleAtMs: null,
     lastRedisSampleAtMs: null,
     lastRedisIngressBytes: null,
@@ -781,7 +835,15 @@ async function main(): Promise<void> {
         projections: snapshot.projections,
       };
       state.snapshot = merged;
-      const historyMax = Math.max(10, state.trendSamples);
+      const historyMax = trendPointLimitForWindow(state.trendWindowMs);
+      state.compositeTrendLogicalMax = nextLogicalAxisMax(
+        state.compositeTrendLogicalMax,
+        Math.max(
+          seriesMax(merged.projections.processedItemsTrend),
+          seriesMax(merged.projections.failedItemsTrend),
+          seriesMax(merged.projections.queueBacklogTrendSmoothed),
+        ),
+      );
 
       if (
         state.historyBacklog.length === 0 &&
@@ -810,6 +872,49 @@ async function main(): Promise<void> {
       state.lastRunnerMode = runnerModeNow;
 
       const nowMs = Date.now();
+      if (
+        nowMs - state.lastTrendAxisWindowRefreshAtMs >=
+          TREND_AXIS_WINDOW_1H_REFRESH_MS ||
+        state.processingTrendHourMax <= 1 ||
+        state.queueTrendHourMax <= 1
+      ) {
+        const oneHourProjection = await readOpsTrendProjectionSampled({
+          limit: trendPointLimitForWindow(TREND_AXIS_WINDOW_1H_MS),
+          sampleMode: "interpolated",
+          sampleMaxGapMs: Math.max(1000, state.intervalMs * 3),
+          sampleAnchorAtMs: nowMs,
+          sampleWindowMs: TREND_AXIS_WINDOW_1H_MS,
+        }).catch(() => null);
+        if (oneHourProjection) {
+          state.processingTrendHourMax = Math.max(
+            1,
+            seriesMax(oneHourProjection.ipsSmoothed),
+          );
+          state.queueTrendHourMax = Math.max(
+            1,
+            seriesMax(oneHourProjection.queueBacklogTrendSmoothed),
+          );
+          state.lastTrendAxisWindowRefreshAtMs = nowMs;
+        }
+      }
+
+      const processingObservedMax = Math.max(
+        seriesMax(merged.projections.ipsSmoothed),
+        state.processingTrendHourMax,
+      );
+      const queueObservedMax = Math.max(
+        seriesMax(merged.projections.queueBacklogTrendSmoothed),
+        state.queueTrendHourMax,
+      );
+      state.processingTrendLogicalMax = Math.max(
+        1,
+        processingObservedMax * TREND_AXIS_HEADROOM_MULTIPLIER,
+      );
+      state.queueTrendLogicalMax = Math.max(
+        1,
+        queueObservedMax * TREND_AXIS_HEADROOM_MULTIPLIER,
+      );
+
       const currentBacklog = merged.queue?.backlog ?? 0;
       const currentProcessed =
         merged.status?.processedItems ?? merged.db?.processed ?? 0;
@@ -967,10 +1072,81 @@ async function main(): Promise<void> {
           historyMax,
         );
       }
-      pushHistory(
-        state.historyRedisAggregateKbps,
-        state.redisIoAggregate.redisWireKbps,
-        historyMax,
+      const redisTrendMetricNames = [
+        "redisWireKbpsAggregate",
+        "redisIngressKbpsAggregate",
+        "redisEgressKbpsAggregate",
+      ] as const;
+      const redisTrendLatest = await readOpsSnapshotTrendLatest({
+        metricNames: [...redisTrendMetricNames],
+      });
+      const redisLatestAtMs = Math.max(
+        0,
+        redisTrendLatest.redisWireKbpsAggregate?.atMs ?? 0,
+        redisTrendLatest.redisIngressKbpsAggregate?.atMs ?? 0,
+        redisTrendLatest.redisEgressKbpsAggregate?.atMs ?? 0,
+      );
+
+      const redisTrendSeries = await readOpsSnapshotTrendSeries({
+        metricNames: [
+          "redisWireKbpsAggregate",
+          "redisIngressKbpsAggregate",
+          "redisEgressKbpsAggregate",
+        ],
+        limit:
+          state.chartTimingMode === "ordinal"
+            ? historyMax
+            : Math.max(historyMax, REDIS_TREND_DISPLAY_SAMPLES_MIN),
+        sampleMode:
+          state.chartTimingMode === "ordinal" ? "raw" : "interpolated",
+        sampleMaxGapMs: Math.max(1000, state.intervalMs * 3),
+        sampleAnchorAtMs: quantizedTrendAnchorAtMs({
+          nowMs: redisLatestAtMs > 0 ? redisLatestAtMs : nowMs,
+          windowMs: state.trendWindowMs,
+          sampleCount:
+            state.chartTimingMode === "ordinal"
+              ? historyMax
+              : Math.max(historyMax, REDIS_TREND_DISPLAY_SAMPLES_MIN),
+        }),
+        sampleWindowMs: state.trendWindowMs,
+      });
+      state.historyRedisAggregateKbps = [
+        ...((redisTrendSeries.redisWireKbpsAggregate ?? []).slice(
+          -Math.max(
+            historyMax,
+            state.chartTimingMode === "ordinal"
+              ? historyMax
+              : REDIS_TREND_DISPLAY_SAMPLES_MIN,
+          ),
+        ) as number[]),
+      ];
+      state.historyRedisAggregateRxKbps = [
+        ...((redisTrendSeries.redisIngressKbpsAggregate ?? []).slice(
+          -Math.max(
+            historyMax,
+            state.chartTimingMode === "ordinal"
+              ? historyMax
+              : REDIS_TREND_DISPLAY_SAMPLES_MIN,
+          ),
+        ) as number[]),
+      ];
+      state.historyRedisAggregateTxKbps = [
+        ...((redisTrendSeries.redisEgressKbpsAggregate ?? []).slice(
+          -Math.max(
+            historyMax,
+            state.chartTimingMode === "ordinal"
+              ? historyMax
+              : REDIS_TREND_DISPLAY_SAMPLES_MIN,
+          ),
+        ) as number[]),
+      ];
+      state.redisTrendLogicalMax = nextLogicalAxisMax(
+        state.redisTrendLogicalMax,
+        Math.max(
+          seriesMax(state.historyRedisAggregateKbps),
+          seriesMax(state.historyRedisAggregateRxKbps),
+          seriesMax(state.historyRedisAggregateTxKbps),
+        ),
       );
 
       state.lastRedisSampleAtMs = nowMs;
@@ -1624,17 +1800,6 @@ async function main(): Promise<void> {
       return;
     }
 
-    if (item.id === "action:toggle-chart-timing") {
-      state.showCommandPalette = false;
-      state.chartTimingMode =
-        state.chartTimingMode === "ordinal" ? "interpolated" : "ordinal";
-      state.notice = `chart_timing=${state.chartTimingMode}`;
-      state.noticePinnedUntilMs = Date.now() + 2500;
-      app.invalidate();
-      await refresh();
-      return;
-    }
-
     if (item.id === "action:redis-io-reset") {
       state.showCommandPalette = false;
       resetOpsRedisIoStats();
@@ -1642,6 +1807,9 @@ async function main(): Promise<void> {
       state.historyRedisKbps = [];
       state.historyRedisReadsPerSec = [];
       state.historyRedisAggregateKbps = [];
+      state.historyRedisAggregateRxKbps = [];
+      state.historyRedisAggregateTxKbps = [];
+      state.redisTrendLogicalMax = 1;
       state.lastRedisSampleAtMs = null;
       state.lastRedisIngressBytes = null;
       state.lastRedisIngressReads = null;
@@ -1698,22 +1866,8 @@ async function main(): Promise<void> {
     }
 
     if (event.key === "2") {
-      state.activeScreen = "queues";
-      state.notice = "screen=queues";
-      app.invalidate();
-      return;
-    }
-
-    if (event.key === "3") {
-      state.activeScreen = "workers";
-      state.notice = "screen=workers";
-      app.invalidate();
-      return;
-    }
-
-    if (event.key === "4") {
-      state.activeScreen = "redis";
-      state.notice = "screen=redis";
+      state.activeScreen = "infra";
+      state.notice = "screen=infra";
       app.invalidate();
       return;
     }
@@ -1800,18 +1954,45 @@ async function main(): Promise<void> {
     const rollup15m = perfRollups?.rollup15m;
     const rollup24h = perfRollups?.rollup24h;
     const rollupDeep = perfRollups?.rollupDeep;
-    const moduleBacklogTrend =
-      projection.queueBacklogTrendSmoothed.length > 0
-        ? projection.queueBacklogTrendSmoothed
-        : state.historyBacklog;
-    const moduleIpsTrend =
-      projection.ipsSmoothed.length > 0
-        ? projection.ipsSmoothed
-        : state.historyIps;
-    const moduleBacklogDeltaTrend =
-      projection.backlogDeltaSmoothed.length > 0
-        ? projection.backlogDeltaSmoothed
-        : state.historyBacklogDeltaPerSec;
+    const trendPointLimit = trendPointLimitForWindow(state.trendWindowMs);
+    const moduleBacklogTrend = normalizeTrendSeries(
+      projection.queueBacklogTrendSmoothed,
+      trendPointLimit,
+    );
+    const compositeQueueSizeTrend = moduleBacklogTrend;
+    const compositeProcessedTrend = normalizeTrendSeries(
+      projection.processedItemsTrend,
+      trendPointLimit,
+    );
+    const compositeFailedTrend = normalizeTrendSeries(
+      projection.failedItemsTrend,
+      trendPointLimit,
+    );
+    const moduleIpsTrend = normalizeTrendSeries(
+      projection.ipsSmoothed,
+      trendPointLimit,
+    );
+    const moduleBacklogDeltaTrend = normalizeTrendSeries(
+      projection.backlogDeltaSmoothed,
+      trendPointLimit,
+    );
+    const processingTrendMax = Math.max(
+      1,
+      state.processingTrendLogicalMax,
+      seriesMax(moduleIpsTrend),
+    );
+    const queueTrendMax = Math.max(
+      1,
+      state.queueTrendLogicalMax,
+      seriesMax(moduleBacklogTrend),
+    );
+    const compositeTrendMax = Math.max(
+      1,
+      state.compositeTrendLogicalMax,
+      seriesMax(compositeProcessedTrend),
+      seriesMax(compositeFailedTrend),
+      seriesMax(compositeQueueSizeTrend),
+    );
     const historyIpsNow =
       state.historyIps.length > 0
         ? state.historyIps[state.historyIps.length - 1] || 0
@@ -1837,28 +2018,9 @@ async function main(): Promise<void> {
     );
     const ipmNow = ipsNow * 60;
     const secPerImageNow = ipsNow > 0 ? 1 / ipsNow : null;
-    const ipsAvg30 =
-      state.historyIps.length > 0
-        ? average(tail(state.historyIps, 30))
-        : Math.max(0, Number(rollup24h?.ips || 0));
-    const ipmAvg30 = ipsAvg30 * 60;
     const backlog = queue?.backlog ?? 0;
     const etaQueueEmptySeconds =
       backlog === 0 ? 0 : ipsNow > 0 ? backlog / ipsNow : null;
-    const backlogDeltaNow =
-      projection.sampleCount > 0
-        ? projection.headline.backlogDeltaSmoothedNow
-        : state.historyBacklogDeltaPerSec[
-            state.historyBacklogDeltaPerSec.length - 1
-          ] || 0;
-    const refillPerSec =
-      projection.sampleCount > 0
-        ? projection.headline.fillPerSecSmoothed
-        : Math.max(0, backlogDeltaNow);
-    const drainPerSec =
-      projection.sampleCount > 0
-        ? projection.headline.drainPerSecSmoothed
-        : Math.max(0, -backlogDeltaNow);
     const maxBacklog = Math.max(1, settings?.maxQueueBacklog ?? 1);
     const backlogFillRatio = clamp(backlog / maxBacklog, 0, 1);
     const queueWaiting = queue?.waiting ?? 0;
@@ -1875,6 +2037,13 @@ async function main(): Promise<void> {
       queueCompleted +
       queueFailed;
     const activeJobRatio = backlog > 0 ? queueActive / backlog : 0;
+    const ipsLive = Math.max(0, statusIpsNow || historyIpsNow || 0);
+    const ipsGaugeMax = Math.max(
+      1,
+      ipsLive,
+      ...(moduleIpsTrend.length > 0 ? moduleIpsTrend : [0]),
+    );
+    const ipsGaugeValue = clamp(ipsLive / ipsGaugeMax, 0, 1);
     const backlogDeltaSeries = state.historyBacklogDeltaPerSec;
     const backlogDeltaAbsMax =
       backlogDeltaSeries.length > 0
@@ -1905,9 +2074,13 @@ async function main(): Promise<void> {
 
     if (state.activeScreen === "summary") {
       ui.grid(
-        { columns: ["1fr", "1fr"], rows: [8, 10, 10, 10], gap: 1 },
+        {
+          columns: ["1fr", "1fr", "1fr", "1fr", "1fr", "1fr"],
+          rows: [8, 10, 10, 10],
+          gap: 1,
+        },
         (grid) => {
-          grid.panel({ title: "Heads Up" }, (panel) => {
+          grid.panel({ title: "Heads Up", colSpan: 2 }, (panel) => {
             panel.keyValues([
               { label: "app", value: state.appName },
               { label: "time", value: state.uiClockAt },
@@ -1935,19 +2108,19 @@ async function main(): Promise<void> {
                 value: formatRate(Number(rollup15s?.ipm || ipmNow), 2),
               },
               {
-                label: "ips_1m",
-                value: formatRate(Number(rollup1m?.ips || ipsNow), 2),
+                label: "processed_items_15s",
+                value: String(rollup15s?.processedItems ?? 0),
               },
               {
-                label: "ipm_1m",
-                value: formatRate(Number(rollup1m?.ipm || ipmNow), 2),
+                label: "failed_items_15s",
+                value: String(rollup15s?.failedItems ?? 0),
               },
               {
-                label: "sec_per_image",
+                label: "sec_per_image_15s",
                 value:
-                  (rollup1m?.secPerImage ?? secPerImageNow) === null
+                  (rollup15s?.secPerImage ?? secPerImageNow) === null
                     ? "n/a"
-                    : formatRate(rollup1m?.secPerImage ?? secPerImageNow, 2),
+                    : formatRate(rollup15s?.secPerImage ?? secPerImageNow, 2),
               },
               { label: "queue_pending", value: String(backlog) },
               { label: "queue_active", value: String(queueActive) },
@@ -2003,7 +2176,7 @@ async function main(): Promise<void> {
             ]);
           });
 
-          grid.panel({ title: "Infra Snapshot" }, (panel) => {
+          grid.panel({ title: "Infra Snapshot", colSpan: 2 }, (panel) => {
             panel.keyValues([
               {
                 label: "machines",
@@ -2033,46 +2206,120 @@ async function main(): Promise<void> {
             ]);
           });
 
-          grid.panel({ title: "Queue Backlog Trend", rowSpan: 1 }, (panel) => {
-            panel.graph({
-              values: moduleBacklogTrend,
-              min: 0,
-              axis: true,
-              color: theme.warning,
-            });
-          });
+          grid.panel(
+            { title: "Database Completeness", colSpan: 2 },
+            (panel) => {
+              panel.keyValues([
+                {
+                  label: "processed",
+                  value: String(snapshot.db?.processed ?? 0),
+                },
+                {
+                  label: "pending",
+                  value: String(snapshot.db?.pending ?? 0),
+                },
+                {
+                  label: "failed",
+                  value: String(snapshot.db?.failed ?? 0),
+                },
+                { label: "total", value: String(snapshot.db?.total ?? 0) },
+                {
+                  label: "progress",
+                  value: `${(snapshot.db?.pct ?? 0).toFixed(2)}%`,
+                },
+              ]);
+            },
+          );
 
           grid.panel(
-            { title: "Images Processed Trend", rowSpan: 1 },
+            { title: "Image Processing (15s)", colSpan: 2 },
+            (panel) => {
+              panel.keyValues([
+                {
+                  label: "processed_items",
+                  value: String(rollup15s?.processedItems ?? 0),
+                },
+                {
+                  label: "failed_items",
+                  value: String(rollup15s?.failedItems ?? 0),
+                },
+                {
+                  label: "ips",
+                  value: formatRate(Number(rollup15s?.ips ?? 0), 2),
+                },
+                {
+                  label: "ipm",
+                  value: formatRate(Number(rollup15s?.ipm ?? 0), 2),
+                },
+                {
+                  label: "avg_fetch_ms",
+                  value: String(rollup15s?.avgFetchMs ?? 0),
+                },
+                {
+                  label: "avg_transform_ms",
+                  value: String(rollup15s?.avgTransformMs ?? 0),
+                },
+                {
+                  label: "avg_upload_ms",
+                  value: String(rollup15s?.avgUploadMs ?? 0),
+                },
+              ]);
+            },
+          );
+
+          grid.panel(
+            {
+              title: `Processing Trend (0-${processingTrendMax.toFixed(1)})`,
+              colSpan: 2,
+            },
             (panel) => {
               panel.graph({
                 values: moduleIpsTrend.length > 0 ? moduleIpsTrend : [0],
                 min: 0,
-                axis: true,
+                max: processingTrendMax,
+                axis: false,
                 color: theme.success,
               });
             },
           );
 
-          grid.panel({ title: "Queue & Jobs Snapshot" }, (panel) => {
+          grid.panel({ title: "IPS Rate", colSpan: 2 }, (panel) => {
+            panel.gauge({
+              value: ipsGaugeValue,
+              label: `ips_live ${formatRate(ipsLive, 2)}`,
+            });
+          });
+
+          grid.panel({ title: "Queue & Jobs (15s)", colSpan: 2 }, (panel) => {
             panel.keyValues([
               { label: "mode", value: status?.mode || "none" },
               {
-                label: "runner_snapshot",
+                label: "runner_state",
                 value: runnerStatusIsStale ? "stale" : "fresh",
                 color: runnerStatusIsStale ? theme.warning : theme.success,
               },
               {
-                label: "desired_mode",
+                label: "desired",
                 value: status?.desiredMode || settings?.desiredMode || "n/a",
               },
-              { label: "pending", value: String(backlog) },
-              { label: "active_jobs", value: String(queueActive) },
+              { label: "pending_live", value: String(backlog) },
+              { label: "active_live", value: String(queueActive) },
               {
-                label: "completed_jobs",
-                value: String(status?.completedJobs ?? queueCompleted),
+                label: "jobs_done_15s",
+                value: String(rollup15s?.completedJobs ?? 0),
               },
-              { label: "failed_jobs", value: String(queueFailed) },
+              {
+                label: "jobs_fail_15s",
+                value: String(rollup15s?.failedJobs ?? 0),
+              },
+              {
+                label: "items_done_15s",
+                value: String(rollup15s?.processedItems ?? 0),
+              },
+              {
+                label: "items_fail_15s",
+                value: String(rollup15s?.failedItems ?? 0),
+              },
               { label: "op", value: status?.operationId || "none" },
               {
                 label: "flush_ms",
@@ -2092,90 +2339,80 @@ async function main(): Promise<void> {
             });
           });
 
-          grid.panel({ title: "Database Completeness" }, (panel) => {
-            panel.keyValues([
-              {
-                label: "processed",
-                value: String(snapshot.db?.processed ?? 0),
-              },
-              {
-                label: "pending",
-                value: String(snapshot.db?.pending ?? 0),
-              },
-              {
-                label: "failed",
-                value: String(snapshot.db?.failed ?? 0),
-              },
-              { label: "total", value: String(snapshot.db?.total ?? 0) },
-              {
-                label: "progress",
-                value: `${(snapshot.db?.pct ?? 0).toFixed(2)}%`,
-              },
-            ]);
-          });
+          grid.panel(
+            {
+              title: `Queue Trend (0-${queueTrendMax.toFixed(1)})`,
+              colSpan: 2,
+            },
+            (panel) => {
+              panel.graph({
+                values: moduleBacklogTrend,
+                min: 0,
+                max: queueTrendMax,
+                axis: false,
+                color: theme.warning,
+              });
+            },
+          );
 
-          grid.panel({ title: "Processing Performance" }, (panel) => {
-            panel.keyValues([
-              {
-                label: "ips_now",
-                value: formatRate(ipsNow, 2),
-              },
-              {
-                label: "ipm_now",
-                value: formatRate(ipmNow, 2),
-              },
-              {
-                label: "sec_per_image",
-                value:
-                  secPerImageNow === null
-                    ? "n/a"
-                    : formatRate(secPerImageNow, 2),
-              },
-              {
-                label: "eta_queue_empty",
-                value: formatDuration(etaQueueEmptySeconds),
-              },
-              { label: "ips_avg30", value: formatRate(ipsAvg30, 2) },
-              { label: "ipm_avg30", value: formatRate(ipmAvg30, 2) },
-              { label: "drain_q/s", value: drainPerSec.toFixed(2) },
-              { label: "fill_q/s", value: refillPerSec.toFixed(2) },
-              {
-                label: "avg_fetch_ms",
-                value: String(status?.avgFetchMs || rollup15m?.avgFetchMs || 0),
-              },
-              {
-                label: "avg_transform_ms",
-                value: String(
-                  status?.avgTransformMs || rollup15m?.avgTransformMs || 0,
-                ),
-              },
-              {
-                label: "avg_upload_ms",
-                value: String(
-                  status?.avgUploadMs || rollup15m?.avgUploadMs || 0,
-                ),
-              },
-              {
-                label: "avg_end_to_end_ms",
-                value: String(
-                  status?.avgEndToEndMs || rollup15m?.avgEndToEndMs || 0,
-                ),
-              },
-            ]);
-          });
-
-          grid.panel({ title: "Queue Size" }, (panel) => {
+          grid.panel({ title: "Queue Size", colSpan: 2 }, (panel) => {
             panel.gauge({
               value: backlogFillRatio,
-              label: `pending ${backlog}`,
-            });
-            panel.graph({
-              values: moduleBacklogTrend,
-              min: 0,
-              axis: true,
-              color: theme.warning,
+              label: `pending_live ${backlog}`,
             });
           });
+
+          grid.panel(
+            {
+              title: `Composite Trend (0-${compositeTrendMax.toFixed(1)})`,
+              colSpan: 6,
+            },
+            (panel) => {
+              panel.multiGraph(
+                [
+                  {
+                    values:
+                      compositeProcessedTrend.length > 0
+                        ? compositeProcessedTrend
+                        : [0],
+                    color: theme.success,
+                    label: "processed_items",
+                  },
+                  {
+                    values:
+                      compositeFailedTrend.length > 0
+                        ? compositeFailedTrend
+                        : [0],
+                    color: theme.danger,
+                    label: "failed_items",
+                  },
+                  {
+                    values:
+                      compositeQueueSizeTrend.length > 0
+                        ? compositeQueueSizeTrend
+                        : [0],
+                    color: theme.warning,
+                    label: "queue_size",
+                  },
+                ],
+                {
+                  min: 0,
+                  max: compositeTrendMax,
+                  axis: false,
+                  legend: false,
+                },
+              );
+              panel.statusBar({
+                items: [
+                  { label: "■ processed_items", color: theme.success },
+                  { label: "■ failed_items", color: theme.danger },
+                  { label: "■ queue_size", color: theme.warning },
+                ],
+                right: [{ label: `y:0-${compositeTrendMax.toFixed(1)}` }],
+                keyStyle: "plain",
+              });
+            },
+          );
         },
       );
     }
@@ -2500,15 +2737,130 @@ async function main(): Promise<void> {
       );
     }
 
-    if (state.activeScreen === "workers") {
-      const processedRateMax = Math.max(1, ...moduleIpsTrend);
+    if (state.activeScreen === "infra") {
       const queueBacklog =
         queueWaiting + queueActive + queueDelayed + queuePaused;
       const queuePendingShareRatio =
         totalJobsRetained > 0 ? queueBacklog / totalJobsRetained : 0;
-      const activeJobRatio = queueBacklog > 0 ? queueActive / queueBacklog : 0;
+      const aggregate = state.redisIoAggregate;
+      const instances = state.redisIoInstances;
+      const topInfluences = instances.slice(0, 10);
+      const influenceMeterMax = Math.max(
+        1,
+        aggregate.redisIngressKbps,
+        aggregate.redisEgressKbps,
+        ...topInfluences.map((instance) => instance.redisIngressKbps),
+        ...topInfluences.map((instance) => instance.redisEgressKbps),
+      );
+      const aggregateMax = Math.max(
+        1,
+        ...state.historyRedisAggregateKbps,
+        ...state.historyRedisAggregateRxKbps,
+        ...state.historyRedisAggregateTxKbps,
+        aggregate.redisWireKbps,
+        aggregate.redisIngressKbps,
+        aggregate.redisEgressKbps,
+      );
+      const redisTrendMax = Math.max(
+        1,
+        state.redisTrendLogicalMax,
+        aggregateMax,
+      );
+      const wireSamples = [
+        ...topInfluences.map((instance) =>
+          formatBitrateFromKbps(instance.redisWireKbps),
+        ),
+        "-",
+      ];
+      const rxSamples = [
+        ...topInfluences.map((instance) =>
+          formatBitrateFromKbps(instance.redisIngressKbps),
+        ),
+        formatBitrateFromKbps(aggregate.redisIngressKbps),
+      ];
+      const txSamples = [
+        ...topInfluences.map((instance) =>
+          formatBitrateFromKbps(instance.redisEgressKbps),
+        ),
+        formatBitrateFromKbps(aggregate.redisEgressKbps),
+      ];
+      const readsSamples = [
+        ...topInfluences.map((instance) => String(instance.redisIngressReads)),
+        String(aggregate.redisIngressReads),
+      ];
+      const writesSamples = [
+        ...topInfluences.map((instance) => String(instance.redisEgressWrites)),
+        String(aggregate.redisEgressWrites),
+      ];
+      const wireColWidth = Math.max(
+        ...wireSamples.map((value) => value.length),
+      );
+      const rxColWidth = Math.max(...rxSamples.map((value) => value.length));
+      const txColWidth = Math.max(...txSamples.map((value) => value.length));
+      const readsColWidth = Math.max(
+        ...readsSamples.map((value) => value.length),
+      );
+      const writesColWidth = Math.max(
+        ...writesSamples.map((value) => value.length),
+      );
+
+      const influenceRows: Array<{ label: string; value: string }> = [];
+      for (const instance of topInfluences) {
+        const wireValue = formatBitrateFromKbps(instance.redisWireKbps);
+        const rxValue = formatBitrateFromKbps(instance.redisIngressKbps);
+        const txValue = formatBitrateFromKbps(instance.redisEgressKbps);
+        const readsValue = String(instance.redisIngressReads);
+        const writesValue = String(instance.redisEgressWrites);
+        influenceRows.push({
+          label: `pid_${instance.pid}_${shortInstance(instance.instanceId)}`,
+          value:
+            `wire ${wireValue.padStart(wireColWidth)}  ` +
+            `rx ${rxValue.padStart(rxColWidth)}  ` +
+            `tx ${txValue.padStart(txColWidth)}  ` +
+            `r ${readsValue.padStart(readsColWidth)}  ` +
+            `w ${writesValue.padStart(writesColWidth)}`,
+        });
+      }
+
+      if (influenceRows.length === 0) {
+        influenceRows.push({
+          label: "influences",
+          value: "no active instance stats published yet",
+        });
+      }
+
+      influenceRows.push({
+        label: "totals",
+        value:
+          `wire ${"-".padStart(wireColWidth)}  ` +
+          `rx ${formatBitrateFromKbps(aggregate.redisIngressKbps).padStart(rxColWidth)}  ` +
+          `tx ${formatBitrateFromKbps(aggregate.redisEgressKbps).padStart(txColWidth)}  ` +
+          `r ${String(aggregate.redisIngressReads).padStart(readsColWidth)}  ` +
+          `w ${String(aggregate.redisEgressWrites).padStart(writesColWidth)}`,
+      });
+
+      const influenceMeterItems = topInfluences.flatMap((instance, index) => {
+        const meterSuffix = `${index + 1}_${shortInstance(instance.instanceId)}`;
+        return [
+          {
+            label: `rx_${meterSuffix}`,
+            value: instance.redisIngressKbps,
+            max: influenceMeterMax,
+            color: theme.info,
+            text: formatBitrateFromKbps(instance.redisIngressKbps),
+          },
+          {
+            label: `tx_${meterSuffix}`,
+            value: instance.redisEgressKbps,
+            max: influenceMeterMax,
+            color: theme.warning,
+            text: formatBitrateFromKbps(instance.redisEgressKbps),
+          },
+        ];
+      });
+
       ui.grid(
-        { columns: ["1fr", "1fr"], rows: [8, 12, 12], gap: 1 },
+        { columns: ["1fr", "1fr"], rows: [11, 10, 12], gap: 1 },
         (grid) => {
           grid.panel({ title: "Workers & Runner" }, (panel) => {
             panel.keyValues([
@@ -2578,172 +2930,6 @@ async function main(): Promise<void> {
             });
           });
 
-          grid.panel({ title: "Performance (Deep)" }, (panel) => {
-            panel.keyValues([
-              {
-                label: "ips_now",
-                value: formatRate(
-                  Math.max(ipsNow, Number(rollupDeep?.ips || 0)),
-                  2,
-                ),
-              },
-              {
-                label: "ipm_now",
-                value: formatRate(
-                  Math.max(ipmNow, Number(rollupDeep?.ipm || 0)),
-                  2,
-                ),
-              },
-              {
-                label: "sec_per_image",
-                value:
-                  secPerImageNow === null && !rollupDeep?.secPerImage
-                    ? "n/a"
-                    : formatRate(
-                        secPerImageNow ?? Number(rollupDeep?.secPerImage || 0),
-                        2,
-                      ),
-              },
-              {
-                label: "eta_queue_empty",
-                value: formatDuration(etaQueueEmptySeconds),
-              },
-              {
-                label: "ips_avg30",
-                value: formatRate(
-                  Math.max(ipsAvg30, Number(rollupDeep?.ips || 0)),
-                  2,
-                ),
-              },
-              {
-                label: "ipm_avg30",
-                value: formatRate(
-                  Math.max(ipmAvg30, Number(rollupDeep?.ipm || 0)),
-                  2,
-                ),
-              },
-              { label: "drain_q/s", value: drainPerSec.toFixed(2) },
-              { label: "fill_q/s", value: refillPerSec.toFixed(2) },
-              {
-                label: "avg_fetch_ms",
-                value: String(rollupDeep?.avgFetchMs ?? 0),
-              },
-              {
-                label: "avg_transform_ms",
-                value: String(rollupDeep?.avgTransformMs ?? 0),
-              },
-              {
-                label: "avg_upload_ms",
-                value: String(rollupDeep?.avgUploadMs ?? 0),
-              },
-              {
-                label: "avg_end_to_end_ms",
-                value: String(rollupDeep?.avgEndToEndMs ?? 0),
-              },
-            ]);
-          });
-
-          grid.panel({ title: "Images Processed" }, (panel) => {
-            panel.multiGraph(
-              [
-                {
-                  values: moduleIpsTrend,
-                  color: theme.success,
-                  label: "ips",
-                },
-              ],
-              {
-                min: 0,
-                max: processedRateMax,
-                axis: true,
-                legend: true,
-              },
-            );
-          });
-
-          grid.panel({ title: "Jobs (Deep)" }, (panel) => {
-            panel.keyValues([
-              {
-                label: "total_jobs_retained",
-                value: String(totalJobsRetained),
-              },
-              {
-                label: "active_jobs",
-                value: String(queueActive),
-              },
-              {
-                label: "completed_jobs",
-                value: String(rollupDeep?.completedJobs ?? queueCompleted),
-              },
-              {
-                label: "failed_jobs",
-                value: String(rollupDeep?.failedJobs ?? queueFailed),
-              },
-              {
-                label: "sampled_jobs",
-                value: String(rollupDeep?.sampledCompletedJobs ?? 0),
-              },
-              {
-                label: "pending_success",
-                value: String(status?.pendingSuccessBuffer ?? 0),
-              },
-              {
-                label: "pending_error",
-                value: String(status?.pendingErrorBuffer ?? 0),
-              },
-              {
-                label: "flush_batches",
-                value: String(status?.flushBatchCount ?? 0),
-              },
-              {
-                label: "last_flush",
-                value: status?.lastFlushAt || "-",
-              },
-              {
-                label: "op",
-                value: status?.operationId || "none",
-              },
-              {
-                label: "updated",
-                value: status?.updatedAt || "-",
-              },
-            ]);
-            panel.gauge({
-              value: activeJobRatio,
-              label: `active jobs ${queueActive}`,
-            });
-          });
-        },
-      );
-    }
-
-    if (state.activeScreen === "redis") {
-      const aggregate = state.redisIoAggregate;
-      const instances = state.redisIoInstances;
-      const aggregateMax = Math.max(
-        1,
-        ...state.historyRedisAggregateKbps,
-        aggregate.redisWireKbps,
-      );
-      const influenceRows = instances.slice(0, 10).map((instance) => ({
-        label: `pid_${instance.pid}_${shortInstance(instance.instanceId)}`,
-        value:
-          `wire=${formatBitrateFromKbps(instance.redisWireKbps)} ` +
-          `rx=${formatBitrateFromKbps(instance.redisIngressKbps)} ` +
-          `tx=${formatBitrateFromKbps(instance.redisEgressKbps)} ` +
-          `r=${instance.redisIngressReads} w=${instance.redisEgressWrites}`,
-      }));
-
-      if (influenceRows.length === 0) {
-        influenceRows.push({
-          label: "influences",
-          value: "no active instance stats published yet",
-        });
-      }
-
-      ui.grid(
-        { columns: ["1fr", "1fr"], rows: [8, 12, 12], gap: 1 },
-        (grid) => {
           grid.panel({ title: "Infra: Redis Aggregate" }, (panel) => {
             panel.keyValues([
               { label: "sampled_at", value: aggregate.sampledAt },
@@ -2786,47 +2972,80 @@ async function main(): Promise<void> {
             panel.keyValues(influenceRows);
           });
 
-          grid.panel({ title: "Infra: Redis Wire Trend" }, (panel) => {
-            panel.graph({
-              values: state.historyRedisAggregateKbps,
-              min: 0,
-              max: aggregateMax,
-              axis: true,
-              color: theme.info,
-            });
-          });
+          grid.panel(
+            {
+              title: `Infra: Redis Wire Trend (Kbps 0-${redisTrendMax.toFixed(1)})`,
+            },
+            (panel) => {
+              panel.multiGraph(
+                [
+                  {
+                    values:
+                      state.historyRedisAggregateKbps.length > 0
+                        ? state.historyRedisAggregateKbps
+                        : [0],
+                    color: theme.success,
+                    label: "total",
+                  },
+                  {
+                    values:
+                      state.historyRedisAggregateRxKbps.length > 0
+                        ? state.historyRedisAggregateRxKbps
+                        : [0],
+                    color: theme.info,
+                    label: "rx",
+                  },
+                  {
+                    values:
+                      state.historyRedisAggregateTxKbps.length > 0
+                        ? state.historyRedisAggregateTxKbps
+                        : [0],
+                    color: theme.warning,
+                    label: "tx",
+                  },
+                ],
+                {
+                  min: 0,
+                  max: redisTrendMax,
+                  axis: false,
+                  legend: false,
+                },
+              );
+              panel.statusBar({
+                items: [
+                  { label: "■ total", color: theme.success },
+                  { label: "■ rx", color: theme.info },
+                  { label: "■ tx", color: theme.warning },
+                ],
+                right: [{ label: `y:0-${redisTrendMax.toFixed(1)}` }],
+                keyStyle: "plain",
+              });
+            },
+          );
 
-          grid.panel({ title: "Infra: Local Module I/O" }, (panel) => {
-            panel.keyValues([
+          grid.panel({ title: "Infra: Redis Live Meters" }, (panel) => {
+            panel.meters(
+              [
+                ...influenceMeterItems,
+                {
+                  label: "rx_total",
+                  value: aggregate.redisIngressKbps,
+                  max: influenceMeterMax,
+                  color: theme.info,
+                  text: formatBitrateFromKbps(aggregate.redisIngressKbps),
+                },
+                {
+                  label: "tx_total",
+                  value: aggregate.redisEgressKbps,
+                  max: influenceMeterMax,
+                  color: theme.warning,
+                  text: formatBitrateFromKbps(aggregate.redisEgressKbps),
+                },
+              ],
               {
-                label: "local_wire",
-                value: formatBitrateFromKbps(state.redisIo.redisWireKbps),
+                style: "segmented",
               },
-              {
-                label: "local_rx",
-                value: formatBitrateFromKbps(state.redisIo.redisIngressKbps),
-              },
-              {
-                label: "local_tx",
-                value: formatBitrateFromKbps(state.redisIo.redisEgressKbps),
-              },
-              {
-                label: "local_reads",
-                value: String(state.redisIo.redisIngressReads),
-              },
-              {
-                label: "local_writes",
-                value: String(state.redisIo.redisEgressWrites),
-              },
-              {
-                label: "last_read",
-                value: state.redisIo.lastReadAt || "-",
-              },
-              {
-                label: "last_write",
-                value: state.redisIo.lastWriteAt || "-",
-              },
-            ]);
+            );
           });
         },
       );
@@ -3086,7 +3305,7 @@ async function main(): Promise<void> {
           modal.text(
             "Keys: q quit, h toggle help, r refresh, +/- poll speed, tab next screen",
           );
-          modal.text("Keys: 1 summary, 2 queues, 3 workers, 4 redis");
+          modal.text("Keys: 1 summary, 2 infra");
           modal.text(
             "Use : command menu for pause/resume/clear queue, flush interval, harvest toggle, and chart timing",
           );
@@ -3118,7 +3337,7 @@ async function main(): Promise<void> {
         { key: "r", label: "Refresh" },
         { key: "p", label: "Pause/Resume" },
         { key: "f", label: "Set Flush" },
-        { key: "1/2/3/4", label: "Screens" },
+        { key: "1/2", label: "Screens" },
         { key: ":", label: "Command" },
       ],
       right: [
@@ -3148,10 +3367,9 @@ async function main(): Promise<void> {
       snapshotTimeoutMs: STARTUP_SNAPSHOT_TIMEOUT_MS,
       minRefreshIntervalMs: 1000,
       skipInitialRefresh: true,
-      trendProjectionLimit: state.trendSamples,
-      trendSampleMode:
-        state.chartTimingMode === "interpolated" ? "interpolated" : "raw",
-      trendSampleWindowMs: initialTrendWindowMs,
+      trendProjectionLimit: trendPointLimitForWindow(state.trendWindowMs),
+      trendSampleMode: "interpolated",
+      trendSampleWindowMs: state.trendWindowMs,
       trendSampleMaxGapMs: Math.max(1000, state.intervalMs * 3),
     }).catch(() => null);
     if (!state.running) {
