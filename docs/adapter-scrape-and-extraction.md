@@ -91,10 +91,10 @@ After every fresh adapter rescrape, run scraper validators before any quote capt
 
 Required order:
 
-1. npm run pricing:validate:scrape-filenames -- --adapter-key <adapterKey>
-2. npm run pricing:validate:availability-status -- --adapter-key <adapterKey>
-3. npm run pricing:validate:media-gallery-count -- --adapter-key <adapterKey>
-4. npm run pricing:validate:rooms -- --adapter-key <adapterKey>
+1. npm run pricing:validate:scrape-filenames -- --adapter-key ADAPTER_KEY
+2. npm run pricing:validate:availability-status -- --adapter-key ADAPTER_KEY
+3. npm run pricing:validate:media-gallery-count -- --adapter-key ADAPTER_KEY
+4. npm run pricing:validate:rooms -- --adapter-key ADAPTER_KEY
 
 Operational rule:
 
@@ -106,8 +106,8 @@ Operational rule:
 
 Once the post-rescrape scraper validators are clean, run quote operations in this order:
 
-1. npm run pricing:quote:adapter -- --adapter-key <adapterKey> --all-listings --weeks 24 --continue-on-internal-error
-2. npm run pricing:validate:quotes -- --adapter-key <adapterKey>
+1. npm run pricing:quote:adapter -- --adapter-key ADAPTER_KEY --all-listings --weeks 24 --continue-on-internal-error
+2. npm run pricing:validate:quotes -- --adapter-key ADAPTER_KEY
 
 Operational rule:
 

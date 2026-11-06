@@ -253,7 +253,7 @@ Screen 5 now renders all namespaces below explicitly.
 
 1. Metric identity is the base metric name.
 2. Slice/window/stat are query dimensions, not alternate metric names.
-3. Per-instance Redis fields are labeled redis_instance_<index>_<field_name>.
+3. Per-instance Redis fields are labeled redis_instance_index_field_name.
 4. Screen 5 is live-value oriented and should avoid rollup-derived labels.
 
 ## Notes

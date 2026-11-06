@@ -1,5 +1,7 @@
 import "@/core/tooling/env/load-env-profile";
 import { createApp, type TextEditState } from "@profullstack/hqtui";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 import {
   configureRedisTarget,
@@ -16,6 +18,7 @@ import {
   readOpsRedisPreflight,
   readOpsRedisServerIoStats,
   resetOpsRedisIoStats,
+  resolveOpsTrendWindowSeries,
   resumeOpsSystemFlow,
   runOpsCollectorsAndIngestSamples,
   runOpsOneShotPipeline,
@@ -31,16 +34,12 @@ import {
   type OpsTrendProjection,
   type OpsUiSnapshot,
 } from "../workers/image-ops-control-module";
-import {
-  chartMaxFromSeries,
-  rollingSeriesForChart,
-  selectDisplaySeries,
-} from "../workers/image-ops-graph-series";
+import { selectDisplaySeries } from "../workers/image-ops-graph-series";
 import {
   createOpsMetricState,
   ingestTrendRows,
-  metricGraphDataFromState,
   metricPointCountFromState,
+  metricWindowStatsFromState,
   resetOpsMetricState,
   type OpsMetricState,
 } from "../workers/image-ops-shared-state";
@@ -50,42 +49,84 @@ import {
   reduceOpsMachine,
   type OpsMachineState,
 } from "../workers/image-ops-state-machine";
-import { type ImageQueueCounts } from "../workers/image-queue-ops";
-import {
-  type RunnerControlSettings,
-  type RunnerInfraSnapshot,
-  type RunnerStatusSnapshot,
+import type {
+  RunnerControlSettings,
+  RunnerInfraSnapshot,
+  RunnerStatusSnapshot,
 } from "../workers/image-runner-control";
 
 const DEFAULT_APP = "beachhouseclassifieds-image-worker";
-const STARTUP_SNAPSHOT_TIMEOUT_MS = 1500;
+type ChartTimingMode = "interpolated" | "ordinal";
 const DEFAULT_TREND_WINDOW_MINUTES = 5;
 const LONG_TREND_WINDOW_MINUTES = 15;
-const TREND_GRAPH_BUCKET_MS = 5000;
 const LONG_IPS_DISPLAY_WIDTH_FACTOR = 3;
-const LONG_IPS_DISPLAY_POINT_MAX = 240;
+const LONG_IPS_DISPLAY_POINT_MAX = 720;
+const TREND_GRAPH_BUCKET_MS = 5000;
 const QUEUE_24H_DISPLAY_POINT_MAX = 720;
 const QUEUE_TREND_DISPLAY_POINT_MAX = 240;
 const INFRA_REDIS_DISPLAY_POINT_MAX = 240;
-const LIVE_SLICE_MAX_AGE_MS = 5_000;
+const LIVE_SLICE_MAX_AGE_MS = 20_000;
+const METRIC_HISTORY_MAX_POINTS = 30_000;
 const STARTUP_REDIS_PREFLIGHT_TIMEOUT_MS = 8_000;
 const STARTUP_REDIS_PREFLIGHT_MAX_ATTEMPTS = 3;
 const STARTUP_REDIS_PREFLIGHT_RETRY_DELAY_MS = 600;
 const STARTUP_PIPELINE_TIMEOUT_MS = 10_000;
-const METRIC_HISTORY_MAX_POINTS = 30_000;
+const STARTUP_SNAPSHOT_TIMEOUT_MS = 10_000;
 const UI_LABELS = OPS_UI_METRIC_LABELS;
+const HQTUI_RUNTIME_LOG_PATH = resolve(
+  process.cwd(),
+  ".tmp/logs/image-ops-hqtui-runtime.log",
+);
 
-type QueueCounts = ImageQueueCounts;
-type ChartTimingMode = "ordinal" | "interpolated";
+function writeHqtuiRuntimeLog(event: string, details?: unknown): void {
+  try {
+    mkdirSync(dirname(HQTUI_RUNTIME_LOG_PATH), { recursive: true });
+    const payload = {
+      at: new Date().toISOString(),
+      pid: process.pid,
+      event,
+      details: details ?? null,
+    };
+    appendFileSync(HQTUI_RUNTIME_LOG_PATH, `${JSON.stringify(payload)}\n`, {
+      encoding: "utf8",
+    });
+  } catch {
+    // Best-effort logging only.
+  }
+}
+
+function serializeUnknownError(error: unknown): {
+  message: string;
+  stack?: string;
+  raw?: string;
+} {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  try {
+    return {
+      message: String(error),
+      raw: JSON.stringify(error),
+    };
+  } catch {
+    return {
+      message: String(error),
+    };
+  }
+}
 
 type DashboardSnapshot = {
   at: OpsUiSnapshot["at"];
   machines: OpsUiSnapshot["machines"];
-  queue: QueueCounts | null;
+  queue: OpsUiSnapshot["queue"];
   recentJobs15m: OpsUiSnapshot["recentJobs15m"];
   recentJobs24h: OpsUiSnapshot["recentJobs24h"];
   performanceRollups: OpsUiSnapshot["performanceRollups"];
-  queuePaused: boolean | null;
+  queuePaused: OpsUiSnapshot["queuePaused"];
   db: OpsUiSnapshot["db"];
   settings: RunnerControlSettings | null;
   infra: RunnerInfraSnapshot | null;
@@ -183,6 +224,8 @@ type State = {
   collectorBootLatencyMs: Partial<Record<OpsSampleCollectorKey, number>>;
   collectorBootSamples: Partial<Record<OpsSampleCollectorKey, number>>;
   metricReferenceErrors: string[];
+  lockedYAxisMaxByChart: Record<string, number>;
+  queueWindowAverages: QueueWindowAverages;
 };
 
 type MenuItem = {
@@ -201,6 +244,19 @@ type ValuePromptAction =
   | "setRefillTarget"
   | "setMaxClaimCycle"
   | "rawCommand";
+
+type QueueWindowSummary = {
+  pending: number;
+  active: number;
+};
+
+type QueueWindowAverages = {
+  w15s: QueueWindowSummary;
+  w1m: QueueWindowSummary;
+  w15m: QueueWindowSummary;
+  w60m: QueueWindowSummary;
+  w24h: QueueWindowSummary;
+};
 
 const SCREEN_ORDER: Array<
   "summary" | "infra" | "processing" | "queuejobs" | "observability"
@@ -481,15 +537,122 @@ function seriesMax(values: number[]): number {
   return Math.max(0, ...values);
 }
 
-function average(values: number[]): number {
-  if (values.length <= 0) {
-    return 0;
+function chartRangeForSeries(
+  values: number[],
+  input?: {
+    forceZeroMin?: boolean;
+    padRatio?: number;
+    minPad?: number;
+    minSpan?: number;
+  },
+): { min: number; max: number } {
+  const source = values.filter((value) => Number.isFinite(value));
+  if (source.length <= 0) {
+    return { min: 0, max: 1 };
   }
-  let total = 0;
-  for (const value of values) {
-    total += Number.isFinite(value) ? value : 0;
+
+  const low = Math.min(...source);
+  const high = Math.max(...source);
+  if (!Number.isFinite(low) || !Number.isFinite(high)) {
+    return { min: 0, max: 1 };
   }
-  return total / values.length;
+
+  const padRatio = Number.isFinite(input?.padRatio)
+    ? Number(input?.padRatio)
+    : 0.08;
+  const minPad = Number.isFinite(input?.minPad) ? Number(input?.minPad) : 1;
+  const minSpan = Number.isFinite(input?.minSpan) ? Number(input?.minSpan) : 5;
+
+  const span = Math.max(0, high - low);
+  const pad = Math.max(minPad, span * padRatio);
+
+  let rangeMin = low - pad;
+  const rangeMax = Math.max(1, high);
+
+  if ((input?.forceZeroMin ?? false) || low <= 0) {
+    rangeMin = 0;
+  }
+
+  if (rangeMax - rangeMin < minSpan) {
+    rangeMin = Math.max(0, rangeMax - minSpan);
+  }
+
+  return {
+    min: Math.max(0, rangeMin),
+    max: rangeMax,
+  };
+}
+
+function lockYAxisMaxFromSeries(input: {
+  state: State;
+  chartId: string;
+  plottedValues: number[];
+  minMax?: number;
+}): number {
+  const minMax = Math.max(1, input.minMax ?? 1);
+  const values = input.plottedValues.filter((value) => Number.isFinite(value));
+  const nextMax = Math.max(minMax, seriesMax(values));
+  const previousMax = input.state.lockedYAxisMaxByChart[input.chartId];
+
+  if (!Number.isFinite(previousMax) || previousMax <= 0) {
+    input.state.lockedYAxisMaxByChart[input.chartId] = nextMax;
+    return nextMax;
+  }
+
+  if (nextMax >= previousMax) {
+    input.state.lockedYAxisMaxByChart[input.chartId] = nextMax;
+    return nextMax;
+  }
+
+  const epsilon = Math.max(0.0001, previousMax * 0.001);
+  const previousHighStillVisible = values.some(
+    (value) => value >= previousMax - epsilon,
+  );
+  if (previousHighStillVisible) {
+    return previousMax;
+  }
+
+  input.state.lockedYAxisMaxByChart[input.chartId] = nextMax;
+  return nextMax;
+}
+
+function queueWindowSummaryFromState(input: {
+  metricState: OpsMetricState;
+  nowMs: number;
+  windowMs: number;
+}): QueueWindowSummary {
+  const waitingStats = metricWindowStatsFromState({
+    state: input.metricState,
+    metricId: "snapshot.queueWaitingLive",
+    nowMs: input.nowMs,
+    windowMs: input.windowMs,
+  });
+  const delayedStats = metricWindowStatsFromState({
+    state: input.metricState,
+    metricId: "snapshot.queueDelayedLive",
+    nowMs: input.nowMs,
+    windowMs: input.windowMs,
+  });
+  const pausedStats = metricWindowStatsFromState({
+    state: input.metricState,
+    metricId: "snapshot.queuePausedLive",
+    nowMs: input.nowMs,
+    windowMs: input.windowMs,
+  });
+  const activeStats = metricWindowStatsFromState({
+    state: input.metricState,
+    metricId: "snapshot.queueActiveLive",
+    nowMs: input.nowMs,
+    windowMs: input.windowMs,
+  });
+
+  return {
+    pending: Math.max(
+      0,
+      Math.round(waitingStats.avg + delayedStats.avg + pausedStats.avg),
+    ),
+    active: Math.max(0, Math.round(activeStats.avg)),
+  };
 }
 
 function pushHistory(values: number[], next: number, max = 120): number[] {
@@ -581,14 +744,21 @@ function isSampleFresh(input: {
   return input.nowMs - sampledAtMs <= Math.max(1, input.maxAgeMs);
 }
 
-function tail(values: number[], count: number): number[] {
-  if (values.length <= count) {
-    return values;
+function tail(
+  values: readonly number[] | null | undefined,
+  count: number,
+): number[] {
+  const source = Array.isArray(values) ? values : [];
+  if (source.length <= count) {
+    return [...source];
   }
-  return values.slice(values.length - count);
+  return source.slice(source.length - count);
 }
 
-function normalizeTrendSeries(values: number[], count: number): number[] {
+function normalizeTrendSeries(
+  values: readonly number[] | null | undefined,
+  count: number,
+): number[] {
   const width = Math.max(1, count);
   const trimmed = tail(values, width);
   if (trimmed.length >= width) {
@@ -600,31 +770,71 @@ function normalizeTrendSeries(values: number[], count: number): number[] {
   ];
 }
 
-function resampleSeriesToCount(values: number[], count: number): number[] {
-  const width = Math.max(1, Math.floor(count));
-  if (values.length <= 0) {
-    return Array.from({ length: width }, () => 0);
+function buildWindowHistorySeries(input: {
+  values: readonly number[] | null | undefined;
+  windowMs: number;
+  targetPoints: number;
+  padMissingCoverage?: boolean;
+  scale?: number;
+  endAtMs?: number;
+  stepMs?: number;
+}): number[] {
+  const expectedPoints = Math.max(1, trendPointLimitForWindow(input.windowMs));
+  const trimmed = tail(input.values, expectedPoints);
+  const base =
+    input.padMissingCoverage === false
+      ? trimmed
+      : normalizeTrendSeries(trimmed, expectedPoints);
+  const endAtMs = Number.isFinite(input.endAtMs)
+    ? Number(input.endAtMs)
+    : Date.now();
+  const stepMs = Math.max(1, Math.floor(input.stepMs ?? TREND_GRAPH_BUCKET_MS));
+  const startAtMs = endAtMs - (base.length - 1) * stepMs;
+  const rows = base.map((value, index) => ({
+    atMs: startAtMs + index * stepMs,
+    value,
+  }));
+  const bucketed = buildStableWindowSeriesFromRows({
+    rows,
+    nowMs: endAtMs,
+    windowMs: input.windowMs,
+    targetPoints: input.targetPoints,
+  });
+  const scale = Number.isFinite(input.scale) ? Number(input.scale) : 1;
+  if (scale === 1) {
+    return bucketed;
   }
-  if (values.length === 1) {
-    return Array.from({ length: width }, () => values[0] || 0);
-  }
-  if (values.length === width) {
-    return values;
-  }
+  return bucketed.map((value) => value * scale);
+}
 
-  const lastIndex = values.length - 1;
-  return Array.from({ length: width }, (_, index) => {
-    const ratio = width === 1 ? 0 : index / (width - 1);
-    const source = ratio * lastIndex;
-    const sourceLow = Math.floor(source);
-    const sourceHigh = Math.min(lastIndex, Math.ceil(source));
-    if (sourceHigh === sourceLow) {
-      return values[sourceLow] || 0;
+function buildStableWindowSeriesFromRows(input: {
+  rows: Array<{ atMs: number; value: number }> | null | undefined;
+  nowMs: number;
+  windowMs: number;
+  targetPoints: number;
+}): number[] {
+  const rows = Array.isArray(input.rows) ? input.rows : [];
+  let anchorNowMs = Number.isFinite(input.nowMs)
+    ? Number(input.nowMs)
+    : Date.now();
+  let latestRowAtMs = -1;
+  for (const row of rows) {
+    const atMs = Number(row.atMs);
+    if (Number.isFinite(atMs) && atMs > latestRowAtMs) {
+      latestRowAtMs = atMs;
     }
-    const low = values[sourceLow] || 0;
-    const high = values[sourceHigh] || 0;
-    const mix = source - sourceLow;
-    return low + (high - low) * mix;
+  }
+  if (latestRowAtMs > 0) {
+    anchorNowMs = latestRowAtMs;
+  }
+  return resolveOpsTrendWindowSeries({
+    trendRowsByMetric: {
+      __metric: rows,
+    },
+    metricName: "__metric",
+    nowMs: anchorNowMs,
+    windowMs: input.windowMs,
+    targetPoints: input.targetPoints,
   });
 }
 
@@ -673,6 +883,20 @@ async function sleepMs(ms: number): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  writeHqtuiRuntimeLog("main_start", {
+    argv: process.argv.slice(2),
+    cwd: process.cwd(),
+  });
+
+  const onUncaughtException = (error: unknown): void => {
+    writeHqtuiRuntimeLog("uncaught_exception", serializeUnknownError(error));
+  };
+  const onUnhandledRejection = (reason: unknown): void => {
+    writeHqtuiRuntimeLog("unhandled_rejection", serializeUnknownError(reason));
+  };
+  process.on("uncaughtException", onUncaughtException);
+  process.on("unhandledRejection", onUnhandledRejection);
+
   const args = parseArgs(process.argv.slice(2));
   const redisSelection = configureRedisTarget(args.redisTarget);
   const initialIntervalMs = Math.max(1000, args.intervalSeconds * 1000);
@@ -947,11 +1171,12 @@ async function main(): Promise<void> {
     minRefreshIntervalMs: Math.max(1000, initialIntervalMs),
     fallbackRefreshIntervalMs: initialIntervalMs,
     subscribeToSignals: true,
-    enableCollectors: false,
+    enableCollectors: true,
+    collectors: ["db", "fly", "redis", "bullmq"],
     skipInitialRefresh: true,
     hydrateOnInit: false,
     waitForQueueEventsReadyOnInit: false,
-    seedCollectorsOnInit: false,
+    seedCollectorsOnInit: true,
     trendProjectionLimit: trendPointLimitForWindow(24 * 60 * 60 * 1000),
     trendSampleMode: "interpolated",
     trendSampleWindowMs: 24 * 60 * 60 * 1000,
@@ -1097,12 +1322,50 @@ async function main(): Promise<void> {
     collectorBootLatencyMs,
     collectorBootSamples,
     metricReferenceErrors: [],
+    lockedYAxisMaxByChart: {},
+    queueWindowAverages: {
+      w15s: { pending: 0, active: 0 },
+      w1m: { pending: 0, active: 0 },
+      w15m: { pending: 0, active: 0 },
+      w60m: { pending: 0, active: 0 },
+      w24h: { pending: 0, active: 0 },
+    },
   };
   state.queueGloballyPaused = startupPipeline.snapshot.queuePaused ?? null;
   ingestTrendRows({
     state: state.metricState,
     trendRowsByMetric: state.snapshot.trendRowsByMetric,
   });
+  {
+    const nowMs = Date.now();
+    state.queueWindowAverages = {
+      w15s: queueWindowSummaryFromState({
+        metricState: state.metricState,
+        nowMs,
+        windowMs: 15 * 1000,
+      }),
+      w1m: queueWindowSummaryFromState({
+        metricState: state.metricState,
+        nowMs,
+        windowMs: 60 * 1000,
+      }),
+      w15m: queueWindowSummaryFromState({
+        metricState: state.metricState,
+        nowMs,
+        windowMs: 15 * 60 * 1000,
+      }),
+      w60m: queueWindowSummaryFromState({
+        metricState: state.metricState,
+        nowMs,
+        windowMs: 60 * 60 * 1000,
+      }),
+      w24h: queueWindowSummaryFromState({
+        metricState: state.metricState,
+        nowMs,
+        windowMs: 24 * 60 * 60 * 1000,
+      }),
+    };
+  }
 
   const app = await createApp({
     alwaysRender: false,
@@ -1114,6 +1377,10 @@ async function main(): Promise<void> {
   let explicitQuitRequested = false;
 
   app.on("exit", () => {
+    writeHqtuiRuntimeLog("app_exit", {
+      explicitQuitRequested,
+      running: state.running,
+    });
     state.running = false;
     if (explicitQuitRequested) {
       process.exit(0);
@@ -1133,13 +1400,16 @@ async function main(): Promise<void> {
       resolve();
     }
   };
-  const uiClockTimer = setInterval(() => {
-    if (!state.running) {
-      return;
-    }
-    state.uiClockAt = formatLocalClockAt();
-    app.invalidate();
-  }, 1000);
+  const uiClockTimer = setInterval(
+    () => {
+      if (!state.running) {
+        return;
+      }
+      state.uiClockAt = formatLocalClockAt();
+      app.invalidate();
+    },
+    Math.max(1000, state.intervalMs),
+  );
 
   const requestQuit = (): void => {
     if (!state.running) {
@@ -1222,6 +1492,33 @@ async function main(): Promise<void> {
         state: state.metricState,
         trendRowsByMetric: merged.trendRowsByMetric,
       });
+      state.queueWindowAverages = {
+        w15s: queueWindowSummaryFromState({
+          metricState: state.metricState,
+          nowMs,
+          windowMs: 15 * 1000,
+        }),
+        w1m: queueWindowSummaryFromState({
+          metricState: state.metricState,
+          nowMs,
+          windowMs: 60 * 1000,
+        }),
+        w15m: queueWindowSummaryFromState({
+          metricState: state.metricState,
+          nowMs,
+          windowMs: 15 * 60 * 1000,
+        }),
+        w60m: queueWindowSummaryFromState({
+          metricState: state.metricState,
+          nowMs,
+          windowMs: 60 * 60 * 1000,
+        }),
+        w24h: queueWindowSummaryFromState({
+          metricState: state.metricState,
+          nowMs,
+          windowMs: 24 * 60 * 60 * 1000,
+        }),
+      };
 
       const nextSnapshotTrendLatestByName: Record<string, number | null> = {};
       const nextSnapshotTrendLatestAtMsByName: Record<string, number | null> =
@@ -1321,6 +1618,24 @@ async function main(): Promise<void> {
         merged.status?.completedJobs ??
         merged.queue?.completed ??
         currentProcessed;
+      const statusIpsSample =
+        merged.status?.throughputImagesPerMinute !== undefined &&
+        merged.status?.throughputImagesPerMinute !== null
+          ? Number(merged.status.throughputImagesPerMinute) / 60
+          : null;
+      const rollupIpsSample = Number(
+        merged.performanceRollups?.rollup15s?.ips ?? 0,
+      );
+      const projectionIpsSample =
+        merged.projections.sampleCount > 0
+          ? Number(merged.projections.headline.ipsSmoothedNow || 0)
+          : 0;
+      const preferredIpsSample = Math.max(
+        0,
+        Number.isFinite(statusIpsSample ?? NaN)
+          ? Number(statusIpsSample)
+          : Math.max(rollupIpsSample, projectionIpsSample),
+      );
 
       pushHistory(state.historyBacklog, currentBacklog, historyMax);
       pushHistory(state.historyProcessed, currentProcessed, historyMax);
@@ -1339,7 +1654,8 @@ async function main(): Promise<void> {
           0,
           currentCompleted - (state.lastQueueCompleted ?? currentCompleted),
         );
-        const ipsNow = completedDelta / elapsedSeconds;
+        const ipsFromDelta = completedDelta / elapsedSeconds;
+        const ipsNow = Math.max(preferredIpsSample, ipsFromDelta);
         const backlogDeltaNow =
           (currentBacklog - state.lastBacklog) / elapsedSeconds;
         pushHistory(state.historyIps, Number(ipsNow.toFixed(3)), historyMax);
@@ -1349,7 +1665,11 @@ async function main(): Promise<void> {
           historyMax,
         );
       } else {
-        pushHistory(state.historyIps, 0, historyMax);
+        pushHistory(
+          state.historyIps,
+          Number(preferredIpsSample.toFixed(3)),
+          historyMax,
+        );
         pushHistory(state.historyBacklogDeltaPerSec, 0, historyMax);
       }
 
@@ -1813,6 +2133,14 @@ async function main(): Promise<void> {
       state.snapshotTrendLatestAtMsByName = {};
       state.runnerTrendLatestByName = {};
       state.runnerTrendLatestAtMsByName = {};
+      state.lockedYAxisMaxByChart = {};
+      state.queueWindowAverages = {
+        w15s: { pending: 0, active: 0 },
+        w1m: { pending: 0, active: 0 },
+        w15m: { pending: 0, active: 0 },
+        w60m: { pending: 0, active: 0 },
+        w24h: { pending: 0, active: 0 },
+      };
       state.notice = "trends reset";
       app.invalidate();
       return;
@@ -2332,52 +2660,108 @@ async function main(): Promise<void> {
     const rollup60m = perfRollups?.rollup60m;
     const rollup24h = perfRollups?.rollup24h;
     const trendPointLimit = trendPointLimitForWindow(state.trendWindowMs);
-    const nowMs = Date.now();
-    const queueTrendGraph = metricGraphDataFromState({
-      state: state.metricState,
-      metricId: "snapshot.queueBacklogLive",
+    const nowMs = state.lastSampleAtMs ?? Date.now();
+    const queueBacklogRows = snapshot.trendRowsByMetric?.queueBacklogLive ?? [];
+    const throughputRows =
+      snapshot.trendRowsByMetric?.statusThroughputImagesPerMinute ?? [];
+    const queueTrendMetricSeries = buildStableWindowSeriesFromRows({
+      rows: queueBacklogRows,
       nowMs,
       windowMs: state.trendWindowMs,
       targetPoints: trendPointLimit,
     });
+    const queueHistoryTrend = buildWindowHistorySeries({
+      values: state.historyBacklog,
+      windowMs: state.trendWindowMs,
+      targetPoints: trendPointLimit,
+      padMissingCoverage: true,
+      endAtMs: state.lastSampleAtMs ?? nowMs,
+      stepMs: state.intervalMs,
+    });
     const moduleBacklogTrend = selectDisplaySeries({
-      primary: queueTrendGraph.points,
+      primary: queueTrendMetricSeries,
       secondary: normalizeTrendSeries(
         projection.queueBacklogTrendSmoothed,
         trendPointLimit,
       ),
-      fallback: [Math.max(0, Number(queue?.backlog ?? status?.queueBacklog ?? 0))],
+      fallback:
+        queueHistoryTrend.length > 0
+          ? queueHistoryTrend
+          : [Math.max(0, Number(queue?.backlog ?? status?.queueBacklog ?? 0))],
       targetPoints: trendPointLimit,
       maxPoints: QUEUE_TREND_DISPLAY_POINT_MAX,
     });
-    const longWindowPointLimit = trendPointLimitForWindow(
-      LONG_TREND_WINDOW_MINUTES * 60 * 1000,
-    );
-    const sampledIpsLongRaw = tail(state.historyIpsLong, longWindowPointLimit);
-    const shortIpsRaw = tail(sampledIpsLongRaw, trendPointLimit);
     const longIpsDisplayLimit = clamp(
       trendPointLimit * LONG_IPS_DISPLAY_WIDTH_FACTOR,
       trendPointLimit,
       LONG_IPS_DISPLAY_POINT_MAX,
     );
-    const moduleIpsTrend =
-      shortIpsRaw.length > 0
-        ? resampleSeriesToCount(shortIpsRaw, trendPointLimit)
-        : normalizeTrendSeries(projection.ipsSmoothed, trendPointLimit);
-    const longIpsTrend =
-      sampledIpsLongRaw.length > 0
-        ? resampleSeriesToCount(sampledIpsLongRaw, longIpsDisplayLimit)
-        : moduleIpsTrend;
+    const ips5mMetricSeries = buildStableWindowSeriesFromRows({
+      rows: throughputRows,
+      nowMs,
+      windowMs: state.trendWindowMs,
+      targetPoints: trendPointLimit,
+    }).map((value) => Math.max(0, value / 60));
+    const ips5mHistorySeries = buildWindowHistorySeries({
+      values: state.historyIpsLong,
+      windowMs: state.trendWindowMs,
+      targetPoints: trendPointLimit,
+      padMissingCoverage: true,
+      endAtMs: state.lastSampleAtMs ?? nowMs,
+      stepMs: state.intervalMs,
+    });
+    const ips15mMetricSeries = buildStableWindowSeriesFromRows({
+      rows: throughputRows,
+      nowMs,
+      windowMs: LONG_TREND_WINDOW_MINUTES * 60 * 1000,
+      targetPoints: longIpsDisplayLimit,
+    }).map((value) => Math.max(0, value / 60));
+    const ips15mHistorySeries = buildWindowHistorySeries({
+      values: state.historyIpsLong,
+      windowMs: LONG_TREND_WINDOW_MINUTES * 60 * 1000,
+      targetPoints: longIpsDisplayLimit,
+      padMissingCoverage: true,
+      endAtMs: state.lastSampleAtMs ?? nowMs,
+      stepMs: state.intervalMs,
+    });
+    const moduleIpsTrend = selectDisplaySeries({
+      primary: ips5mMetricSeries,
+      secondary: ips5mHistorySeries,
+      fallback: [
+        Math.max(0, Number(status?.throughputImagesPerMinute || 0) / 60),
+      ],
+      targetPoints: trendPointLimit,
+      maxPoints: LONG_IPS_DISPLAY_POINT_MAX,
+    });
+    const longIpsTrend = selectDisplaySeries({
+      primary: ips15mMetricSeries,
+      secondary: ips15mHistorySeries,
+      fallback: moduleIpsTrend,
+      targetPoints: longIpsDisplayLimit,
+      maxPoints: LONG_IPS_DISPLAY_POINT_MAX,
+    });
     const trendWindowMinutes = Math.max(
       1,
       Math.round(state.trendWindowMs / 60000),
     );
-    const ipsTrendSharedMax = Math.max(
-      1,
-      seriesMax(moduleIpsTrend),
-      seriesMax(longIpsTrend),
-    );
-    const queueTrendMax = Math.max(1, seriesMax(moduleBacklogTrend));
+    const ipsTrendSharedMax = lockYAxisMaxFromSeries({
+      state,
+      chartId: "summary.ipsTrendShared",
+      plottedValues: [...moduleIpsTrend, ...longIpsTrend],
+      minMax: 1,
+    });
+    const queueTrendRange = chartRangeForSeries(moduleBacklogTrend, {
+      forceZeroMin: false,
+      minSpan: 5,
+      minPad: 1,
+      padRatio: 0.08,
+    });
+    const queueTrendMax = lockYAxisMaxFromSeries({
+      state,
+      chartId: "summary.queueTrend",
+      plottedValues: moduleBacklogTrend,
+      minMax: 1,
+    });
     const historyIpsNow =
       state.historyIps.length > 0
         ? state.historyIps[state.historyIps.length - 1] || 0
@@ -2432,7 +2816,33 @@ async function main(): Promise<void> {
       rollup1mIpsNow,
       rollup15mIpsNow,
     );
-    const ipmNow = ipsNow * 60;
+    const processed5m = Math.max(
+      0,
+      Number(status?.processedItems ?? rollup15s?.processedItems ?? 0),
+    );
+    const failed5m = Math.max(
+      0,
+      Number(status?.failedItems ?? rollup15s?.failedItems ?? 0),
+    );
+    const ips5m = Math.max(
+      0,
+      statusIpsNow,
+      rollup15sIpsNow,
+      projectionIpsNow,
+      historyIpsNow,
+    );
+    const ipm5m = Math.max(
+      0,
+      Number(status?.throughputImagesPerMinute ?? rollup15s?.ipm ?? ips5m * 60),
+    );
+    const completedJobs5m = Math.max(
+      0,
+      Number(status?.completedJobs ?? rollup15s?.completedJobs ?? 0),
+    );
+    const failedJobs5m = Math.max(
+      0,
+      Number(status?.failedJobs ?? rollup15s?.failedJobs ?? 0),
+    );
     const secPerImageNow = ipsNow > 0 ? 1 / ipsNow : null;
     const backlog = queue?.backlog ?? 0;
     const etaQueueEmptySeconds =
@@ -2516,19 +2926,19 @@ async function main(): Promise<void> {
               { label: "p_hotkey_action", value: pauseHotkeyActionLabel },
               {
                 label: UI_LABELS.image.ips,
-                value: formatRate(Number(rollup15s?.ips || ipsNow), 2),
+                value: formatRate(ips5m, 2),
               },
               {
                 label: UI_LABELS.image.ipm,
-                value: formatRate(Number(rollup15s?.ipm || ipmNow), 2),
+                value: formatRate(ipm5m, 2),
               },
               {
                 label: UI_LABELS.image.processed,
-                value: String(rollup15s?.processedItems ?? 0),
+                value: String(processed5m),
               },
               {
                 label: UI_LABELS.image.failed,
-                value: String(rollup15s?.failedItems ?? 0),
+                value: String(failed5m),
               },
               {
                 label: "sec_per_image_5m",
@@ -2668,19 +3078,19 @@ async function main(): Promise<void> {
               panel.keyValues([
                 {
                   label: UI_LABELS.image.processed,
-                  value: String(rollup15s?.processedItems ?? 0),
+                  value: String(processed5m),
                 },
                 {
                   label: UI_LABELS.image.failed,
-                  value: String(rollup15s?.failedItems ?? 0),
+                  value: String(failed5m),
                 },
                 {
                   label: UI_LABELS.image.ips,
-                  value: formatRate(Number(rollup15s?.ips ?? 0), 2),
+                  value: formatRate(ips5m, 2),
                 },
                 {
                   label: UI_LABELS.image.ipm,
-                  value: formatRate(Number(rollup15s?.ipm ?? 0), 2),
+                  value: formatRate(ipm5m, 2),
                 },
                 {
                   label: UI_LABELS.image.avgFetchMs,
@@ -2744,11 +3154,11 @@ async function main(): Promise<void> {
               { label: UI_LABELS.queue.active, value: String(queueActive) },
               {
                 label: UI_LABELS.queue.completed,
-                value: String(rollup15s?.completedJobs ?? 0),
+                value: String(completedJobs5m),
               },
               {
                 label: UI_LABELS.queue.failed,
-                value: String(rollup15s?.failedJobs ?? 0),
+                value: String(failedJobs5m),
               },
             ]);
             panel.gauge({
@@ -2759,13 +3169,13 @@ async function main(): Promise<void> {
 
           grid.panel(
             {
-              title: `Queue Trend (${trendWindowMinutes}m) (0-${queueTrendMax.toFixed(1)})`,
+              title: `Queue Trend (${trendWindowMinutes}m) (${queueTrendRange.min.toFixed(1)}-${queueTrendMax.toFixed(1)})`,
               colSpan: 2,
             },
             (panel) => {
               panel.graph({
                 values: moduleBacklogTrend,
-                min: 0,
+                min: queueTrendRange.min,
                 max: queueTrendMax,
                 axis: false,
                 color: theme.warning,
@@ -2834,7 +3244,7 @@ async function main(): Promise<void> {
                 color: theme.success,
               });
               panel.statusBar({
-                items: [{ label: "■ ips_smoothed", color: theme.success }],
+                items: [{ label: "■ ips", color: theme.success }],
                 right: [
                   { label: `ips_live ${formatRate(ipsLive, 2)}` },
                   { label: `y:0-${ipsTrendSharedMax.toFixed(1)}` },
@@ -2913,17 +3323,36 @@ async function main(): Promise<void> {
     }
 
     if (state.activeScreen === "processing") {
-      const ips60mSeries =
-        state.historyIps60m.length > 0 ? state.historyIps60m : moduleIpsTrend;
-      const ips24hSeries =
-        state.historyIps24h.length > 0 ? state.historyIps24h : longIpsTrend;
-      const ips60mAvg = average(ips60mSeries);
-      const ips24hAvg = average(ips24hSeries);
-      const ipsSectionMax = Math.max(
-        1,
-        seriesMax(ips60mSeries),
-        seriesMax(ips24hSeries),
+      const ips60mDisplayPoints = trendPointLimitForWindow(60 * 60 * 1000);
+      const ips24hDisplayPoints = clamp(
+        trendPointLimitForWindow(24 * 60 * 60 * 1000),
+        60,
+        LONG_IPS_DISPLAY_POINT_MAX,
       );
+      const ips60mSeries =
+        state.historyIps60m.length > 0
+          ? buildWindowHistorySeries({
+              values: state.historyIps60m,
+              windowMs: 60 * 60 * 1000,
+              targetPoints: ips60mDisplayPoints,
+              padMissingCoverage: true,
+            })
+          : moduleIpsTrend;
+      const ips24hSeries =
+        state.historyIps24h.length > 0
+          ? buildWindowHistorySeries({
+              values: state.historyIps24h,
+              windowMs: 24 * 60 * 60 * 1000,
+              targetPoints: ips24hDisplayPoints,
+              padMissingCoverage: true,
+            })
+          : longIpsTrend;
+      const ipsSectionMax = lockYAxisMaxFromSeries({
+        state,
+        chartId: "processing.ipsTrendShared",
+        plottedValues: [...ips60mSeries, ...ips24hSeries],
+        minMax: 1,
+      });
 
       const imageProcessingFields = (input: {
         ips: number;
@@ -3013,10 +3442,10 @@ async function main(): Promise<void> {
                   ipm: ipsLive * 60,
                   processedItems: status?.processedItems ?? null,
                   failedItems: status?.failedItems ?? null,
-                  avgFetchMs: rollup15s?.avgFetchMs ?? null,
-                  avgTransformMs: rollup15s?.avgTransformMs ?? null,
-                  avgUploadMs: rollup15s?.avgUploadMs ?? null,
-                  avgElapsedMs: rollup15s?.metricJobElapsedMsAvg ?? null,
+                  avgFetchMs: status?.avgFetchMs ?? null,
+                  avgTransformMs: status?.avgTransformMs ?? null,
+                  avgUploadMs: status?.avgUploadMs ?? null,
+                  avgElapsedMs: status?.avgEndToEndMs ?? null,
                 }),
               );
             },
@@ -3088,8 +3517,8 @@ async function main(): Promise<void> {
             (panel) => {
               panel.keyValues(
                 imageProcessingFields({
-                  ips: Number(rollup60m?.ips || ips60mAvg),
-                  ipm: Number(rollup60m?.ipm || ips60mAvg * 60),
+                  ips: Number(rollup60m?.ips || 0),
+                  ipm: Number(rollup60m?.ipm || 0),
                   processedItems: rollup60m?.processedItems ?? null,
                   failedItems: rollup60m?.failedItems ?? null,
                   avgFetchMs: rollup60m?.avgFetchMs ?? null,
@@ -3106,8 +3535,8 @@ async function main(): Promise<void> {
             (panel) => {
               panel.keyValues(
                 imageProcessingFields({
-                  ips: Number(rollup24h?.ips || ips24hAvg),
-                  ipm: Number(rollup24h?.ipm || ips24hAvg * 60),
+                  ips: Number(rollup24h?.ips || 0),
+                  ipm: Number(rollup24h?.ipm || 0),
                   processedItems: rollup24h?.processedItems ?? null,
                   failedItems: rollup24h?.failedItems ?? null,
                   avgFetchMs: rollup24h?.avgFetchMs ?? null,
@@ -3155,79 +3584,54 @@ async function main(): Promise<void> {
     }
 
     if (state.activeScreen === "queuejobs") {
-      const deltaSeries = (values: number[]): number[] => {
-        if (values.length < 2) {
-          return [];
-        }
-        const output: number[] = [];
-        for (let index = 1; index < values.length; index += 1) {
-          const previous = values[index - 1] || 0;
-          const next = values[index] || 0;
-          output.push(Math.max(0, next - previous));
-        }
-        return output;
-      };
-
-      const queueCompletedDeltaHistory = deltaSeries(
-        state.historyQueueCompleted,
-      );
-      const queueFailedDeltaHistory = deltaSeries(state.historyQueueFailed);
-      const queueActivityDeltaHistory = queueCompletedDeltaHistory.map(
-        (completed, index) => completed + (queueFailedDeltaHistory[index] || 0),
-      );
-
       const queue60mLimit = trendPointLimitForWindow(60 * 60 * 1000);
       const queue24hLimit = clamp(
         trendPointLimitForWindow(24 * 60 * 60 * 1000),
         60,
         QUEUE_24H_DISPLAY_POINT_MAX,
       );
-      const nowMs = Date.now();
-      const queueBacklogMetricId = "snapshot.queueBacklogLive";
-      const queue60mGraph = metricGraphDataFromState({
-        state: state.metricState,
-        metricId: queueBacklogMetricId,
+      const queueBacklogRows =
+        state.snapshot.trendRowsByMetric?.queueBacklogLive ?? [];
+      const queue60mMetricSeries = buildStableWindowSeriesFromRows({
+        rows: queueBacklogRows,
         nowMs,
         windowMs: 60 * 60 * 1000,
         targetPoints: queue60mLimit,
       });
-      const queue24hGraph = metricGraphDataFromState({
-        state: state.metricState,
-        metricId: queueBacklogMetricId,
+      const queue24hMetricSeries = buildStableWindowSeriesFromRows({
+        rows: queueBacklogRows,
         nowMs,
         windowMs: 24 * 60 * 60 * 1000,
         targetPoints: queue24hLimit,
       });
-      const queueActivity60mSeries = resampleSeriesToCount(
-        queueActivityDeltaHistory,
-        queue60mLimit,
-      );
-      const queueActivity24hSeries = resampleSeriesToCount(
-        queueActivityDeltaHistory,
-        queue24hLimit,
-      );
 
-      const queue60mSeries = selectDisplaySeries({
-        primary: queue60mGraph.points,
-        secondary: queueActivity60mSeries,
-        fallback: moduleBacklogTrend,
-        targetPoints: queue60mLimit,
-        maxPoints: QUEUE_TREND_DISPLAY_POINT_MAX,
+      const queue60mSeries = queue60mMetricSeries;
+      const queue24hSeries = queue24hMetricSeries;
+      const queue60mRange = chartRangeForSeries(queue60mSeries, {
+        forceZeroMin: true,
+        minSpan: 5,
+        minPad: 1,
+        padRatio: 0.08,
       });
-      const queue24hSeries = selectDisplaySeries({
-        primary: queue24hGraph.points,
-        secondary: queueActivity24hSeries,
-        fallback: moduleBacklogTrend,
-        targetPoints: queue24hLimit,
-        maxPoints: QUEUE_TREND_DISPLAY_POINT_MAX,
+      const queue60mMax = Math.max(1, seriesMax(queue60mSeries));
+      const queue24hRange = chartRangeForSeries(queue24hSeries, {
+        forceZeroMin: true,
+        minSpan: 5,
+        minPad: 1,
+        padRatio: 0.08,
       });
-      const queue60mSectionMax = Math.max(1, seriesMax(queue60mSeries));
-      const queue24hSectionMax = Math.max(1, seriesMax(queue24hSeries));
+      const queue24hMax = Math.max(1, seriesMax(queue24hSeries));
 
       const queueCompletedLive =
         snapshot.queue?.completed ?? status?.queueCompleted ?? 0;
       const queueFailedLive =
         snapshot.queue?.failed ?? status?.queueFailed ?? 0;
+
+      const queue15sSummary = state.queueWindowAverages.w15s;
+      const queue1mSummary = state.queueWindowAverages.w1m;
+      const queue15mSummary = state.queueWindowAverages.w15m;
+      const queue60mSummary = state.queueWindowAverages.w60m;
+      const queue24hSummary = state.queueWindowAverages.w24h;
 
       ui.grid(
         {
@@ -3258,9 +3662,12 @@ async function main(): Promise<void> {
             panel.keyValues([
               {
                 label: UI_LABELS.queue.pending,
-                value: String(queuePendingNonActive),
+                value: String(queue15sSummary.pending),
               },
-              { label: UI_LABELS.queue.active, value: String(queueActive) },
+              {
+                label: UI_LABELS.queue.active,
+                value: String(queue15sSummary.active),
+              },
               {
                 label: UI_LABELS.queue.completed,
                 value: String(rollup15s?.completedJobs ?? 0),
@@ -3276,9 +3683,12 @@ async function main(): Promise<void> {
             panel.keyValues([
               {
                 label: UI_LABELS.queue.pending,
-                value: String(queuePendingNonActive),
+                value: String(queue1mSummary.pending),
               },
-              { label: UI_LABELS.queue.active, value: String(queueActive) },
+              {
+                label: UI_LABELS.queue.active,
+                value: String(queue1mSummary.active),
+              },
               {
                 label: UI_LABELS.queue.completed,
                 value: String(rollup1m?.completedJobs ?? 0),
@@ -3294,9 +3704,12 @@ async function main(): Promise<void> {
             panel.keyValues([
               {
                 label: UI_LABELS.queue.pending,
-                value: String(queuePendingNonActive),
+                value: String(queue15mSummary.pending),
               },
-              { label: UI_LABELS.queue.active, value: String(queueActive) },
+              {
+                label: UI_LABELS.queue.active,
+                value: String(queue15mSummary.active),
+              },
               {
                 label: UI_LABELS.queue.completed,
                 value: String(rollup15m?.completedJobs ?? 0),
@@ -3312,9 +3725,12 @@ async function main(): Promise<void> {
             panel.keyValues([
               {
                 label: UI_LABELS.queue.pending,
-                value: String(queuePendingNonActive),
+                value: String(queue60mSummary.pending),
               },
-              { label: UI_LABELS.queue.active, value: String(queueActive) },
+              {
+                label: UI_LABELS.queue.active,
+                value: String(queue60mSummary.active),
+              },
               {
                 label: UI_LABELS.queue.completed,
                 value: String(rollup60m?.completedJobs ?? 0),
@@ -3330,9 +3746,12 @@ async function main(): Promise<void> {
             panel.keyValues([
               {
                 label: UI_LABELS.queue.pending,
-                value: String(queuePendingNonActive),
+                value: String(queue24hSummary.pending),
               },
-              { label: UI_LABELS.queue.active, value: String(queueActive) },
+              {
+                label: UI_LABELS.queue.active,
+                value: String(queue24hSummary.active),
+              },
               {
                 label: UI_LABELS.queue.completed,
                 value: String(rollup24h?.completedJobs ?? 0),
@@ -3353,14 +3772,14 @@ async function main(): Promise<void> {
 
           grid.panel(
             {
-              title: `Queue Trend 60m (0-${queue60mSectionMax.toFixed(1)})`,
+              title: `Queue Trend 60m (${queue60mRange.min.toFixed(1)}-${queue60mMax.toFixed(1)})`,
               colSpan: 3,
             },
             (panel) => {
               panel.graph({
                 values: queue60mSeries.length > 0 ? queue60mSeries : [0],
-                min: 0,
-                max: queue60mSectionMax,
+                min: queue60mRange.min,
+                max: queue60mMax,
                 axis: false,
                 color:
                   state.metricReferenceErrors.length > 0
@@ -3372,14 +3791,14 @@ async function main(): Promise<void> {
 
           grid.panel(
             {
-              title: `Queue Trend 24h (0-${queue24hSectionMax.toFixed(1)})`,
+              title: `Queue Trend 24h (${queue24hRange.min.toFixed(1)}-${queue24hMax.toFixed(1)})`,
               colSpan: 3,
             },
             (panel) => {
               panel.graph({
                 values: queue24hSeries.length > 0 ? queue24hSeries : [0],
-                min: 0,
-                max: queue24hSectionMax,
+                min: queue24hRange.min,
+                max: queue24hMax,
                 axis: false,
                 color:
                   state.metricReferenceErrors.length > 0
@@ -3415,49 +3834,61 @@ async function main(): Promise<void> {
         60,
         INFRA_REDIS_DISPLAY_POINT_MAX,
       );
-      const redisTotalSeries = rollingSeriesForChart({
+      const redisTotalSeries = buildWindowHistorySeries({
         values:
           state.historyRedisAggregateKbps.length > 0
             ? state.historyRedisAggregateKbps
             : [aggregate.redisWireKbps],
+        windowMs: state.trendWindowMs,
         targetPoints: redisTrendPointLimit,
-        maxPoints: INFRA_REDIS_DISPLAY_POINT_MAX,
-        fallbackValue: aggregate.redisWireKbps,
+        padMissingCoverage: true,
       });
-      const redisRxSeries = rollingSeriesForChart({
+      const redisRxSeries = buildWindowHistorySeries({
         values:
           state.historyRedisAggregateRxKbps.length > 0
             ? state.historyRedisAggregateRxKbps
             : [aggregate.redisIngressKbps],
+        windowMs: state.trendWindowMs,
         targetPoints: redisTrendPointLimit,
-        maxPoints: INFRA_REDIS_DISPLAY_POINT_MAX,
-        fallbackValue: aggregate.redisIngressKbps,
+        padMissingCoverage: true,
       });
-      const redisTxSeries = rollingSeriesForChart({
+      const redisTxSeries = buildWindowHistorySeries({
         values:
           state.historyRedisAggregateTxKbps.length > 0
             ? state.historyRedisAggregateTxKbps
             : [aggregate.redisEgressKbps],
+        windowMs: state.trendWindowMs,
         targetPoints: redisTrendPointLimit,
-        maxPoints: INFRA_REDIS_DISPLAY_POINT_MAX,
-        fallbackValue: aggregate.redisEgressKbps,
+        padMissingCoverage: true,
       });
-      const redisTrendMax = Math.max(
-        chartMaxFromSeries({
-          seriesList: [redisTotalSeries, redisRxSeries, redisTxSeries],
-          percentile: 0.98,
-          minMax: 1,
-        }),
-        Number(aggregate.redisWireKbps || 0),
-        Number(aggregate.redisIngressKbps || 0),
-        Number(aggregate.redisEgressKbps || 0),
+      const redisTrendRawMax = Math.max(
+        1,
+        ...redisTotalSeries,
+        ...redisRxSeries,
+        ...redisTxSeries,
       );
+      const redisTrendMax = lockYAxisMaxFromSeries({
+        state,
+        chartId: "infra.redisWireTrend",
+        plottedValues: [redisTrendRawMax],
+        minMax: 1,
+      });
       const workersTrendPointLimit = trendPointLimitForWindow(5 * 60 * 1000);
       const workersTrend =
         state.historyWorkersRunning.length > 0
-          ? tail(state.historyWorkersRunning, workersTrendPointLimit)
+          ? buildWindowHistorySeries({
+              values: state.historyWorkersRunning,
+              windowMs: 5 * 60 * 1000,
+              targetPoints: workersTrendPointLimit,
+              padMissingCoverage: true,
+            })
           : [Math.max(0, telemetry.liveWorkersRunning)];
-      const workersTrendMax = Math.max(1, ...workersTrend);
+      const workersTrendMax = lockYAxisMaxFromSeries({
+        state,
+        chartId: "infra.workersTrend",
+        plottedValues: workersTrend,
+        minMax: 1,
+      });
       const wireSamples = [
         ...topInfluences.map((instance) =>
           formatBitrateFromKbps(instance.redisWireKbps),
@@ -3843,19 +4274,16 @@ async function main(): Promise<void> {
       const liveMetricRows = [...snapshotMetricRows, ...runnerMetricRows];
 
       const rollup15m = snapshot.performanceRollups?.rollup15m;
-      const rollup60m = snapshot.performanceRollups?.rollup60m;
-      const rollup24h = snapshot.performanceRollups?.rollup24h;
 
-      const resolvedIps = rollup15m?.ips ?? null;
-      const resolvedIpm = rollup15m?.ipm ?? null;
-      const resolvedAvgFetchMs = rollup15m?.avgFetchMs ?? null;
-      const resolvedAvgTransformMs = rollup15m?.avgTransformMs ?? null;
-      const resolvedAvgUploadMs = rollup15m?.avgUploadMs ?? null;
-      const resolvedAvgEndToEndMs = rollup15m?.avgEndToEndMs ?? null;
-      const resolvedProcessedItems = rollup15m?.processedItems ?? null;
-      const resolvedFailedItems = rollup15m?.failedItems ?? null;
-      const resolvedCompletedJobs = rollup60m?.completedJobs ?? null;
-      const resolvedFailedJobs = rollup60m?.failedJobs ?? null;
+      const resolvedIps =
+        status?.throughputImagesPerMinute !== undefined &&
+        status?.throughputImagesPerMinute !== null
+          ? Number(status.throughputImagesPerMinute) / 60
+          : (rollup15m?.ips ?? null);
+      const resolvedIpm =
+        status?.throughputImagesPerMinute ?? rollup15m?.ipm ?? null;
+      const resolvedAvgEndToEndMs =
+        status?.avgEndToEndMs ?? rollup15m?.avgEndToEndMs ?? null;
 
       const queueBacklogMetricRefError = validateSnapshotMetricId(
         "snapshot.queueBacklogLive",
@@ -4440,103 +4868,6 @@ async function main(): Promise<void> {
         );
       }
 
-      const pinnedRows: Record<
-        (typeof groupOrder)[number],
-        Array<{ label: string; value: string }>
-      > = {
-        images: [
-          { label: "ips", value: formatMetricValue("ips", resolvedIps) },
-          { label: "ipm", value: formatMetricValue("ipm", resolvedIpm) },
-          {
-            label: "avg_fetch_ms",
-            value: formatTrackedValue(resolvedAvgFetchMs),
-          },
-          {
-            label: "avg_transform_ms",
-            value: formatTrackedValue(resolvedAvgTransformMs),
-          },
-          {
-            label: "avg_upload_ms",
-            value: formatTrackedValue(resolvedAvgUploadMs),
-          },
-          {
-            label: "avg_end_to_end_ms",
-            value: formatTrackedValue(resolvedAvgEndToEndMs),
-          },
-          {
-            label: "processed_items",
-            value: formatTrackedValue(resolvedProcessedItems),
-          },
-          {
-            label: "failed_items",
-            value: formatTrackedValue(resolvedFailedItems),
-          },
-        ],
-        queue_jobs: [
-          {
-            label: "completed_jobs",
-            value: formatTrackedValue(resolvedCompletedJobs),
-          },
-          {
-            label: "failed_jobs",
-            value: formatTrackedValue(resolvedFailedJobs),
-          },
-          {
-            label: "completed_jobs_24h",
-            value: formatTrackedValue(rollup24h?.completedJobs ?? 0),
-          },
-          {
-            label: "failed_jobs_24h",
-            value: formatTrackedValue(rollup24h?.failedJobs ?? 0),
-          },
-        ],
-        infra_redis: [
-          {
-            label: "redis_wire",
-            value: formatBitrateFromKbps(state.redisIoAggregate.redisWireKbps),
-          },
-          {
-            label: "redis_rx",
-            value: formatBitrateFromKbps(
-              state.redisIoAggregate.redisIngressKbps,
-            ),
-          },
-          {
-            label: "redis_tx",
-            value: formatBitrateFromKbps(
-              state.redisIoAggregate.redisEgressKbps,
-            ),
-          },
-          {
-            label: "redis_reads",
-            value: formatTrackedValue(state.redisIoAggregate.redisIngressReads),
-          },
-          {
-            label: "redis_writes",
-            value: formatTrackedValue(state.redisIoAggregate.redisEgressWrites),
-          },
-          {
-            label: "redis_rx_latency_ms",
-            value: formatTrackedValue(state.redisIoAggregate.rxLatencyMs),
-          },
-          {
-            label: "redis_tx_latency_ms",
-            value: formatTrackedValue(state.redisIoAggregate.txLatencyMs),
-          },
-          {
-            label: "redis_active_instances",
-            value: formatTrackedValue(state.redisIoAggregate.activeInstances),
-          },
-          {
-            label: "redis_sampled_at",
-            value: formatTrackedValue(state.redisIoAggregate.sampledAt),
-          },
-        ],
-        database: [],
-        settings: [],
-        variables: [],
-      };
-
       const groupedRowsForDisplay: Record<
         (typeof groupOrder)[number],
         Array<{ label: string; value: string }>
@@ -4552,14 +4883,6 @@ async function main(): Promise<void> {
       for (const group of groupOrder) {
         const seen = new Set<string>();
         const displayRows: Array<{ label: string; value: string }> = [];
-
-        for (const row of pinnedRows[group]) {
-          if (seen.has(row.label)) {
-            continue;
-          }
-          seen.add(row.label);
-          displayRows.push(row);
-        }
 
         for (const row of groupedRows[group]) {
           if (seen.has(row.label)) {
@@ -4963,19 +5286,31 @@ async function main(): Promise<void> {
   })();
 
   await app.start();
+  writeHqtuiRuntimeLog("app_start_returned", {
+    explicitQuitRequested,
+    running: state.running,
+  });
   clearInterval(uiClockTimer);
 
   process.off("SIGINT", onSigint);
+  process.off("uncaughtException", onUncaughtException);
+  process.off("unhandledRejection", onUnhandledRejection);
 
   await uiStateWatcher.close();
+  writeHqtuiRuntimeLog("watcher_closed", { explicitQuitRequested });
 
   if (explicitQuitRequested) {
+    writeHqtuiRuntimeLog("process_exit_0_explicit_quit");
     process.exit(0);
   }
+
+  writeHqtuiRuntimeLog("main_complete_without_explicit_quit");
 }
 
 main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
+  const serialized = serializeUnknownError(error);
+  const message = serialized.message;
+  writeHqtuiRuntimeLog("main_catch", serialized);
   process.stderr.write(`image ops hqtui failed: ${message}\n`);
   process.exit(1);
 });

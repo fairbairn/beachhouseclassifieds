@@ -24,6 +24,12 @@ Welcome to the docs site scaffold.
 - Use [Pricing and Conformance System Reference](./pricing-system-reference.md) as the hub for scrape, quote, cache, validation, and readiness workflows.
 - Use [CLI Runner Reference](./cli-runner-reference.md) for primary operational commands and their main flags.
 - Use [Image Ops Control Tower Notes](./image-ops-control-tower-notes.md) as the living interaction-first record for runner controls, HQTUI evolution, and open unknowns.
+- Use [Image Ops Observability System Reference](./image-ops-observability-system-reference.md) as the hub for module interface, metric registry, collector/slicing/timing flow, simulator coverage, and UI integration contracts.
+- Use [Image Ops Module Interface Reference](./image-ops-module-interface-reference.md) for the canonical module API surface used by CLI/HQTUI and automation callers.
+- Use [Image Ops Metric Registry and Catalog](./image-ops-metric-registry-and-catalog.md) for metric source-of-truth policy, runner/snapshot registries, and slice registry governance.
+- Use [Image Ops Sampling, Collectors, and Slices](./image-ops-sampling-collectors-and-slices.md) for ingestion flow, collector coverage model, refresh behavior, and windowed slice timing.
+- Use [Image Ops CLI and HQTUI Integration](./image-ops-cli-ui-integration.md) for caller-side state retrieval patterns and screen-level metric contract expectations.
+- Use [Image Ops Testing, Simulator, and Harnesses](./image-ops-testing-simulator-and-harnesses.md) for contract-test strategy, simulator registry coverage, and integration validation order.
 - Use [src/lib/scripts Catalog](./scripts-catalog.md) for full script inventory coverage, package alias mapping, and active/internal status tracking.
 - Use [Listings Operations and Exclusion Spec](./listings-operations-and-exclusion-spec.md) as the living operations contract for AI enrichment, sleeping arrangement processing, duplicate analysis, and keyco exclusion remap rules.
 - Use [Adapter Data Refresh Runbook](./adapter-data-refresh-runbook.md) for the standard end-to-end sequence to ingest listing/image/pricing updates, run enrichment + sleep repair, apply listing/image data, and backfill geocoding holes.

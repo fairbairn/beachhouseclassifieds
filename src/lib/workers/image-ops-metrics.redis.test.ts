@@ -102,79 +102,17 @@ const EXISTING_BULLMQ_FIXTURE_MIN_MULTI_ITEM = Number.parseInt(
   10,
 );
 
-const EXPECTED_RAW_METRIC_NAMES = [
-  "completed_jobs",
-  "fetch_ms",
-  "transform_ms",
-  "upload_ms",
-  "end_to_end_ms",
-  "elapsed_ms",
-  "source_bytes",
-  "transformed_bytes",
-  "processed_items",
-  "failed_items",
-] as const;
+const EXPECTED_RAW_METRIC_NAMES = imageJobMetricTrendKeys()
+  .map((entry) => entry.metric)
+  .sort((left, right) => left.localeCompare(right));
 
-const EXPECTED_RUNNER_METRIC_NAMES = [
-  "workersRunning",
-  "claimedCount",
-  "queuedCount",
-  "completedJobs",
-  "failedJobs",
-  "processedItems",
-  "failedItems",
-  "queueWaiting",
-  "queueActive",
-  "queueCompleted",
-  "queueFailed",
-  "queueDelayed",
-  "queuePaused",
-  "queueBacklog",
-  "flushBatchCount",
-  "pendingSuccessBuffer",
-  "pendingErrorBuffer",
-  "throughputImagesPerMinute",
-  "avgFetchMs",
-  "avgTransformMs",
-  "avgUploadMs",
-  "avgEndToEndMs",
-] as const;
+const EXPECTED_RUNNER_METRIC_NAMES = OPS_TREND_METRIC_REGISTRY.map(
+  (metric) => metric.name,
+).sort((left, right) => left.localeCompare(right));
 
-const EXPECTED_UI_METRIC_NAMES = [
-  "errorsCount",
-  "machinesTotal",
-  "workersRunningLive",
-  "queueWaitingLive",
-  "queueActiveLive",
-  "queueDelayedLive",
-  "queuePausedLive",
-  "queueCompletedLive",
-  "queueFailedLive",
-  "queueBacklogLive",
-  "statusProcessedItems",
-  "statusFailedItems",
-  "statusCompletedJobs",
-  "statusFailedJobs",
-  "statusPendingSuccessBuffer",
-  "statusPendingErrorBuffer",
-  "statusFlushBatchCount",
-  "settingsFlushIntervalMs",
-  "settingsMaxQueueBacklog",
-  "settingsRefillLowWatermark",
-  "settingsRefillTargetBacklog",
-  "settingsMaxClaimPerCycle",
-  "dbProcessed",
-  "dbPending",
-  "dbTotal",
-  "dbProgressPct",
-  "redisWireKbpsAggregate",
-  "redisIngressKbpsAggregate",
-  "redisEgressKbpsAggregate",
-  "redisIngressReadsAggregate",
-  "redisEgressWritesAggregate",
-  "rxLatencyAggregate",
-  "txLatencyAggregate",
-] as const;
+const EXPECTED_UI_METRIC_NAMES = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map(
+  (metric) => metric.name,
+).sort((left, right) => left.localeCompare(right));
 
 type SeededMetricRow = {
   id: string;
@@ -1282,17 +1220,17 @@ describeRedis("image ops metrics seeded contract", () => {
     const rawMetricNames = imageJobMetricTrendKeys()
       .map((entry) => entry.metric)
       .sort();
-    expect(rawMetricNames).toEqual([...EXPECTED_RAW_METRIC_NAMES].sort());
+    expect(rawMetricNames).toEqual(EXPECTED_RAW_METRIC_NAMES);
 
     const runnerMetricNames = OPS_TREND_METRIC_REGISTRY.map(
       (metric) => metric.name,
-    ).sort();
-    expect(runnerMetricNames).toEqual([...EXPECTED_RUNNER_METRIC_NAMES].sort());
+    ).sort((left, right) => left.localeCompare(right));
+    expect(runnerMetricNames).toEqual(EXPECTED_RUNNER_METRIC_NAMES);
 
     const uiMetricNames = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map(
       (metric) => metric.name,
-    ).sort();
-    expect(uiMetricNames).toEqual([...EXPECTED_UI_METRIC_NAMES].sort());
+    ).sort((left, right) => left.localeCompare(right));
+    expect(uiMetricNames).toEqual(EXPECTED_UI_METRIC_NAMES);
 
     const keyRegex = new RegExp(
       `^${IMAGE_TREND_PREFIX}:(queue|infra|db|jobs|images):[a-z0-9]+(?:_[a-z0-9]+)*:trend$`,

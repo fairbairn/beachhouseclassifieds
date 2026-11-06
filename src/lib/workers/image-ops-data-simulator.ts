@@ -171,9 +171,77 @@ function buildSyntheticSnapshotFromState(input: {
   status: RunnerStatusSnapshot;
   state: Awaited<ReturnType<typeof readOpsSharedState>>;
   queueBacklog: number;
+  tick: number;
 }): OpsUiSnapshot {
   const nowIso = new Date().toISOString();
-  const db = input.state.db;
+  const syntheticTotal =
+    input.state.db?.total ??
+    Math.max(5_000, input.status.processedItems + input.queueBacklog + 1_000);
+  const syntheticProcessed = clamp(
+    input.status.processedItems + Math.round(wave(input.tick + 4, 17) * 42),
+    0,
+    syntheticTotal,
+  );
+  const syntheticFailed = clamp(input.status.failedItems, 0, syntheticTotal);
+  const syntheticPending = Math.max(
+    0,
+    syntheticTotal - syntheticProcessed - syntheticFailed,
+  );
+  const syntheticPct =
+    syntheticTotal > 0
+      ? Number(((syntheticProcessed / syntheticTotal) * 100).toFixed(3))
+      : 0;
+
+  const redisReads = Math.max(
+    1,
+    Math.round(
+      18 + input.status.workersRunning * 7 + wave(input.tick + 2, 11) * 24,
+    ),
+  );
+  const redisWrites = Math.max(
+    1,
+    Math.round(
+      12 + input.status.workersRunning * 6 + wave(input.tick + 5, 13) * 19,
+    ),
+  );
+  const redisIngressKbps = Number(
+    (
+      8 +
+      input.status.workersRunning * 6 +
+      wave(input.tick + 1, 9) * 34
+    ).toFixed(2),
+  );
+  const redisEgressKbps = Number(
+    (
+      3 +
+      input.status.workersRunning * 3 +
+      wave(input.tick + 7, 15) * 15
+    ).toFixed(2),
+  );
+  const redisWireKbps = Number((redisIngressKbps + redisEgressKbps).toFixed(2));
+  const rxLatencyMs = Number(
+    (1.8 + wave(input.tick + 3, 10) * 8 + boundedNoise(0.08)).toFixed(3),
+  );
+  const txLatencyMs = Number(
+    (1.2 + wave(input.tick + 6, 12) * 5 + boundedNoise(0.06)).toFixed(3),
+  );
+
+  const transientErrorActive = input.tick % 19 === 9;
+
+  const db = {
+    processed: syntheticProcessed,
+    pending: syntheticPending,
+    failed: syntheticFailed,
+    total: syntheticTotal,
+    pct: syntheticPct,
+  };
+
+  const ipsNow = Number(
+    (input.status.throughputImagesPerMinute / 60).toFixed(3),
+  );
+  const backlogDeltaNow = Number(
+    (input.status.queueBacklog - input.status.queueWaiting).toFixed(3),
+  );
   return {
     at: nowIso,
     machines: null,
@@ -199,21 +267,21 @@ function buildSyntheticSnapshotFromState(input: {
       selfRole: "unknown",
       ownerInstanceId: "simulator",
       ownerRole: "unknown",
-      activeInstances: 1,
+      activeInstances: Math.max(1, input.status.workersRunning),
       role: "master",
     },
     redisIoAggregate: {
       sampledAt: nowIso,
-      activeInstances: 1,
-      redisIngressBytes: 0,
-      redisEgressBytes: 0,
-      redisIngressReads: 0,
-      redisEgressWrites: 0,
-      redisIngressKbps: 0,
-      redisEgressKbps: 0,
-      redisWireKbps: 0,
-      rxLatencyMs: 0,
-      txLatencyMs: 0,
+      activeInstances: Math.max(1, input.status.workersRunning),
+      redisIngressBytes: Math.round(redisIngressKbps * 125),
+      redisEgressBytes: Math.round(redisEgressKbps * 125),
+      redisIngressReads: redisReads,
+      redisEgressWrites: redisWrites,
+      redisIngressKbps,
+      redisEgressKbps,
+      redisWireKbps,
+      rxLatencyMs,
+      txLatencyMs,
     },
     redisIoInstances: [],
     trendRowsByMetric: {},
@@ -225,16 +293,16 @@ function buildSyntheticSnapshotFromState(input: {
       backlogDeltaSeries: [],
       backlogDeltaSmoothedSeries: [],
       headline: {
-        ipsNow: 0,
-        ipsSmoothedNow: 0,
-        ipsAvg30: 0,
-        ipmAvg30: 0,
-        backlogDeltaNow: 0,
-        backlogDeltaSmoothedNow: 0,
-        drainPerSecSmoothed: 0,
+        ipsNow,
+        ipsSmoothedNow: ipsNow,
+        ipsAvg30: ipsNow,
+        ipmAvg30: input.status.throughputImagesPerMinute,
+        backlogDeltaNow,
+        backlogDeltaSmoothedNow: backlogDeltaNow,
+        drainPerSecSmoothed: ipsNow,
       },
     },
-    errors: {},
+    errors: transientErrorActive ? { control: "simulated_transient" } : {},
   };
 }
 
@@ -430,8 +498,16 @@ export async function runImageOpsDataSimulator(
               Math.max(0, Math.round(throughputPerSecond * tickSeconds)),
               backlog,
             );
+      const failurePulse = wave(tick + 2, 7);
       const failedDelta =
-        workersRunning > 0 && desiredMode !== "stop" && tick % 11 === 0 ? 1 : 0;
+        workersRunning > 0 && desiredMode !== "stop"
+          ? Math.max(
+              0,
+              Math.round(
+                completedDelta * 0.05 * failurePulse + (tick % 4 === 0 ? 1 : 0),
+              ),
+            )
+          : 0;
 
       processedItems += completedDelta;
       failedItems += failedDelta;
@@ -533,6 +609,7 @@ export async function runImageOpsDataSimulator(
         status,
         state: refreshedState,
         queueBacklog: simulatedQueueBacklog,
+        tick,
       });
       await ingestSyntheticTickSamples({
         status,

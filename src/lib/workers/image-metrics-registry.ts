@@ -37,49 +37,68 @@ export type ImageMetricDefinition = {
   sliceEnabled: boolean;
 };
 
-export const IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS = [
-  "processed_items",
-  "failed_items",
-  "fetch_latency_ms_low",
-  "fetch_latency_ms_high",
-  "fetch_latency_ms_avg",
-  "processing_latency_ms_low",
-  "processing_latency_ms_high",
-  "processing_latency_ms_avg",
-  "storage_latency_ms_low",
-  "storage_latency_ms_high",
-  "storage_latency_ms_avg",
-  "job_elapsed_ms_low",
-  "job_elapsed_ms_high",
-  "job_elapsed_ms_avg",
-  "source_bytes_low",
-  "source_bytes_high",
-  "source_bytes_avg",
-  "transformed_bytes_low",
-  "transformed_bytes_high",
-  "transformed_bytes_avg",
-  "avg_fetch_ms",
-  "avg_transform_ms",
-  "avg_upload_ms",
-  "avg_end_to_end_ms",
-  "ips",
-  "ipm",
-  "sec_per_image",
-] as const;
+export type ImageMetricGroupCodeword = "images" | "jobs";
 
-export const IMAGE_JOB_SLICE_METRIC_SLUGS = [
-  "completed_jobs",
-  "failed_jobs",
-  "sampled_completed_jobs",
-] as const;
+export type ImageSliceMetricDefinition = {
+  group: ImageMetricGroupCodeword;
+  slug: string;
+};
+
+export const IMAGE_SLICE_METRIC_REGISTRY: readonly ImageSliceMetricDefinition[] =
+  [
+    { group: "jobs", slug: "completed_jobs" },
+    { group: "jobs", slug: "failed_jobs" },
+    { group: "jobs", slug: "sampled_completed_jobs" },
+    { group: "images", slug: "processed_items" },
+    { group: "images", slug: "failed_items" },
+    { group: "images", slug: "fetch_latency_ms_low" },
+    { group: "images", slug: "fetch_latency_ms_high" },
+    { group: "images", slug: "fetch_latency_ms_avg" },
+    { group: "images", slug: "processing_latency_ms_low" },
+    { group: "images", slug: "processing_latency_ms_high" },
+    { group: "images", slug: "processing_latency_ms_avg" },
+    { group: "images", slug: "storage_latency_ms_low" },
+    { group: "images", slug: "storage_latency_ms_high" },
+    { group: "images", slug: "storage_latency_ms_avg" },
+    { group: "images", slug: "job_elapsed_ms_low" },
+    { group: "images", slug: "job_elapsed_ms_high" },
+    { group: "images", slug: "job_elapsed_ms_avg" },
+    { group: "images", slug: "source_bytes_low" },
+    { group: "images", slug: "source_bytes_high" },
+    { group: "images", slug: "source_bytes_avg" },
+    { group: "images", slug: "transformed_bytes_low" },
+    { group: "images", slug: "transformed_bytes_high" },
+    { group: "images", slug: "transformed_bytes_avg" },
+    { group: "images", slug: "avg_fetch_ms" },
+    { group: "images", slug: "avg_transform_ms" },
+    { group: "images", slug: "avg_upload_ms" },
+    { group: "images", slug: "avg_end_to_end_ms" },
+    { group: "images", slug: "ips" },
+    { group: "images", slug: "ipm" },
+    { group: "images", slug: "sec_per_image" },
+  ] as const;
+
+export const IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS =
+  IMAGE_SLICE_METRIC_REGISTRY.filter((metric) => metric.group === "images").map(
+    (metric) => metric.slug,
+  );
+
+export const IMAGE_JOB_SLICE_METRIC_SLUGS = IMAGE_SLICE_METRIC_REGISTRY.filter(
+  (metric) => metric.group === "jobs",
+).map((metric) => metric.slug);
 
 // Back-compat export retained for existing imports. This now intentionally
 // includes only image-processing performance metrics.
 export const IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS =
   IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS;
 
-export type ImagePerformanceSliceMetricSlug =
-  (typeof IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS)[number];
+type ImageSliceMetricRegistryEntry =
+  (typeof IMAGE_SLICE_METRIC_REGISTRY)[number];
+
+export type ImagePerformanceSliceMetricSlug = Extract<
+  ImageSliceMetricRegistryEntry,
+  { group: "images" }
+>["slug"];
 
 export const IMAGE_METRIC_DEFAULT_WINDOWS = IMAGE_SLICE_WINDOWS.map(
   (window) => window.id,

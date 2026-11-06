@@ -55,6 +55,43 @@ export default defineConfig({
           { text: "Ready Roadmap", link: "/ready-roadmap" },
         ],
       },
+      {
+        text: "Image Ops",
+        items: [
+          {
+            text: "Observability System Reference",
+            link: "/image-ops-observability-system-reference",
+          },
+          {
+            text: "Module Interface Reference",
+            link: "/image-ops-module-interface-reference",
+          },
+          {
+            text: "Metric Registry and Catalog",
+            link: "/image-ops-metric-registry-and-catalog",
+          },
+          {
+            text: "Sampling, Collectors, and Slices",
+            link: "/image-ops-sampling-collectors-and-slices",
+          },
+          {
+            text: "CLI and HQTUI Integration",
+            link: "/image-ops-cli-ui-integration",
+          },
+          {
+            text: "Testing, Simulator, and Harnesses",
+            link: "/image-ops-testing-simulator-and-harnesses",
+          },
+          {
+            text: "Metrics Inventory",
+            link: "/image-ops-metrics-inventory",
+          },
+          {
+            text: "Control Tower Notes",
+            link: "/image-ops-control-tower-notes",
+          },
+        ],
+      },
     ],
     search: {
       provider: "local",

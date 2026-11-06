@@ -94,12 +94,82 @@ export const OPS_UI_METRIC_LABELS = {
     failed: "failed",
     ips: "ips",
     ipm: "ipm",
-    avgFetchMs: "avg_fetch_ms",
-    avgTransformMs: "avg_transform_ms",
-    avgUploadMs: "avg_upload_ms",
-    avgElapsedMs: "avg_elapsed_ms",
+    avgFetchMs: "fetch_ms",
+    avgTransformMs: "transform_ms",
+    avgUploadMs: "upload_ms",
+    avgElapsedMs: "elapsed_ms",
   },
 } as const;
+
+export type OpsTrendWindowSeriesInput = {
+  trendRowsByMetric: OpsUiSnapshot["trendRowsByMetric"] | null | undefined;
+  metricName: string;
+  nowMs: number;
+  windowMs: number;
+  targetPoints: number;
+  scale?: number;
+};
+
+export function resolveOpsTrendWindowSeries(
+  input: OpsTrendWindowSeriesInput,
+): number[] {
+  const targetPoints = Math.max(1, Math.floor(input.targetPoints));
+  const windowMs = Math.max(1000, Math.floor(input.windowMs));
+  const bucketMs = Math.max(1, Math.floor(windowMs / targetPoints));
+  const spanMs = bucketMs * Math.max(0, targetPoints - 1);
+  // Use a stable bucket-aligned grid so incremental sample timestamp shifts
+  // do not re-layout the full chart on every refresh.
+  const alignedEndMs = Math.floor(input.nowMs / bucketMs) * bucketMs;
+  const startMs = alignedEndMs - spanMs;
+  const rows = (input.trendRowsByMetric?.[input.metricName] ?? [])
+    .map((row) => ({ atMs: Number(row.atMs), value: Number(row.value) }))
+    .filter(
+      (row) =>
+        Number.isFinite(row.atMs) &&
+        Number.isFinite(row.value) &&
+        row.atMs >= startMs &&
+        row.atMs <= alignedEndMs,
+    );
+
+  const bucketLastValue: Array<number | null> = Array.from(
+    { length: targetPoints },
+    () => null,
+  );
+  const bucketLastAtMs: number[] = Array.from(
+    { length: targetPoints },
+    () => -1,
+  );
+
+  for (const row of rows) {
+    const bucketIndex = Math.min(
+      targetPoints - 1,
+      Math.max(0, Math.floor((row.atMs - startMs) / bucketMs)),
+    );
+    if (row.atMs >= bucketLastAtMs[bucketIndex]) {
+      bucketLastAtMs[bucketIndex] = row.atMs;
+      bucketLastValue[bucketIndex] = row.value;
+    }
+  }
+
+  const points: number[] = Array.from({ length: targetPoints }, () => 0);
+  const firstKnownIndex = bucketLastValue.findIndex((value) => value !== null);
+  if (firstKnownIndex >= 0) {
+    let carry = bucketLastValue[firstKnownIndex] || 0;
+    for (let index = 0; index < targetPoints; index += 1) {
+      const maybeValue = bucketLastValue[index];
+      if (maybeValue !== null) {
+        carry = maybeValue;
+      }
+      points[index] = carry;
+    }
+  }
+
+  const scale = Number.isFinite(input.scale) ? Number(input.scale) : 1;
+  if (scale === 1) {
+    return points.map((value) => Math.max(0, value));
+  }
+  return points.map((value) => Math.max(0, value * scale));
+}
 
 export type OpsRedisPreflight = {
   endpoint: string;
@@ -710,23 +780,31 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
       getValue: (snapshot) => snapshot.status?.flushBatchCount ?? 0,
     },
     {
+      name: "statusThroughputImagesPerMinute",
+      key: imageMetricTrendKey(
+        IMAGE_GROUP_IMAGES,
+        "status_throughput_images_per_minute",
+      ),
+      getValue: (snapshot) => snapshot.status?.throughputImagesPerMinute ?? 0,
+    },
+    {
       name: "avgFetchMs",
-      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "avg_fetch_ms"),
+      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "status_avg_fetch_ms"),
       getValue: (snapshot) => snapshot.status?.avgFetchMs ?? 0,
     },
     {
       name: "avgTransformMs",
-      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "avg_transform_ms"),
+      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "status_avg_transform_ms"),
       getValue: (snapshot) => snapshot.status?.avgTransformMs ?? 0,
     },
     {
       name: "avgUploadMs",
-      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "avg_upload_ms"),
+      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "status_avg_upload_ms"),
       getValue: (snapshot) => snapshot.status?.avgUploadMs ?? 0,
     },
     {
       name: "avgEndToEndMs",
-      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "avg_end_to_end_ms"),
+      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "status_avg_end_to_end_ms"),
       getValue: (snapshot) => snapshot.status?.avgEndToEndMs ?? 0,
     },
     {
@@ -831,91 +909,6 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
       getValue: (snapshot) => snapshot.redisIoAggregate?.txLatencyMs ?? 0,
     },
   ];
-
-const OPS_SNAPSHOT_METRIC_KEYS = {
-  machinesTotal: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "machinesTotal",
-  )!.key,
-  workersRunningLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "workersRunningLive",
-  )!.key,
-  queueWaitingLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "queueWaitingLive",
-  )!.key,
-  queueActiveLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "queueActiveLive",
-  )!.key,
-  queueDelayedLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "queueDelayedLive",
-  )!.key,
-  queuePausedLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "queuePausedLive",
-  )!.key,
-  queueCompletedLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "queueCompletedLive",
-  )!.key,
-  queueFailedLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "queueFailedLive",
-  )!.key,
-  queueBacklogLive: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "queueBacklogLive",
-  )!.key,
-  statusProcessedItems: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "statusProcessedItems",
-  )!.key,
-  statusFailedItems: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "statusFailedItems",
-  )!.key,
-  statusCompletedJobs: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "statusCompletedJobs",
-  )!.key,
-  statusFailedJobs: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "statusFailedJobs",
-  )!.key,
-  statusPendingSuccessBuffer: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "statusPendingSuccessBuffer",
-  )!.key,
-  statusPendingErrorBuffer: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "statusPendingErrorBuffer",
-  )!.key,
-  statusFlushBatchCount: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "statusFlushBatchCount",
-  )!.key,
-  dbProcessed: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "dbProcessed",
-  )!.key,
-  dbPending: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "dbPending",
-  )!.key,
-  dbTotal: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "dbTotal",
-  )!.key,
-  dbProgressPct: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "dbProgressPct",
-  )!.key,
-  redisWireKbpsAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "redisWireKbpsAggregate",
-  )!.key,
-  redisIngressKbpsAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "redisIngressKbpsAggregate",
-  )!.key,
-  redisEgressKbpsAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "redisEgressKbpsAggregate",
-  )!.key,
-  redisIngressReadsAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "redisIngressReadsAggregate",
-  )!.key,
-  redisEgressWritesAggregate: imageMetricTrendKey(
-    IMAGE_GROUP_INFRA,
-    "redis_egress_writes_aggregate",
-  ),
-  rxLatencyAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "rxLatencyAggregate",
-  )!.key,
-  txLatencyAggregate: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
-    (metric) => metric.name === "txLatencyAggregate",
-  )!.key,
-} as const;
 
 const OPS_COLLECTOR_DEFAULT_INTERVALS_MS: Record<
   OpsSampleCollectorKey,
@@ -3030,6 +3023,20 @@ function normalizeSampleValue(value: number): number {
   return Number.isFinite(value) ? Number(value) : 0;
 }
 
+const OPS_ALLOWED_METRIC_KEYS = new Set<string>([
+  ...OPS_TREND_METRIC_REGISTRY.map((metric) => metric.key),
+  ...OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map((metric) => metric.key),
+]);
+
+function assertOpsMetricKeyRegistered(metricKey: string): void {
+  if (OPS_ALLOWED_METRIC_KEYS.has(metricKey)) {
+    return;
+  }
+  throw new Error(
+    `Unregistered ops metric key: ${metricKey}. Add it to OPS_TREND_METRIC_REGISTRY or OPS_SNAPSHOT_TREND_METRIC_REGISTRY before ingesting samples.`,
+  );
+}
+
 function buildTrendSamplesFromRunnerStatus(
   status: RunnerStatusSnapshot,
 ): OpsMetricSample[] {
@@ -3041,12 +3048,79 @@ function buildTrendSamplesFromRunnerStatus(
 
 function buildTrendSamplesFromUiSnapshot(
   snapshot: OpsUiSnapshot,
+  descriptors: OpsSnapshotTrendMetricDescriptor[] = OPS_SNAPSHOT_TREND_METRIC_REGISTRY,
 ): OpsMetricSample[] {
-  return OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map((metric) => ({
+  return descriptors.map((metric) => ({
     key: metric.key,
     value: normalizeSampleValue(metric.getValue(snapshot)),
   }));
 }
+
+function inferSnapshotMetricCollectors(
+  metricName: string,
+): OpsSampleCollectorKey[] {
+  if (metricName === "errorsCount") {
+    return [];
+  }
+  if (metricName === "machinesTotal" || metricName === "workersRunningLive") {
+    return ["fly"];
+  }
+  if (metricName.startsWith("db")) {
+    return ["db"];
+  }
+  if (
+    metricName.includes("redis") ||
+    metricName === "rxLatencyAggregate" ||
+    metricName === "txLatencyAggregate"
+  ) {
+    return ["redis"];
+  }
+  return ["bullmq"];
+}
+
+function buildCollectorSnapshotSeed(
+  seed: Partial<OpsUiSnapshot>,
+): OpsUiSnapshot {
+  return {
+    at: new Date().toISOString(),
+    machines: null,
+    queue: null,
+    recentJobs15m: null,
+    recentJobs24h: null,
+    performanceRollups: null,
+    queuePaused: null,
+    db: null,
+    settings: null,
+    infra: null,
+    status: null,
+    metricSystem: undefined,
+    redisIoAggregate: undefined,
+    redisIoInstances: undefined,
+    trendRowsByMetric: undefined,
+    trendRowsLastAtMs: undefined,
+    projections: deriveOpsTrendProjection([]),
+    errors: {},
+    ...seed,
+  };
+}
+
+const OPS_SNAPSHOT_TREND_METRICS_BY_COLLECTOR: Record<
+  OpsSampleCollectorKey,
+  OpsSnapshotTrendMetricDescriptor[]
+> = {
+  db: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.filter((metric) =>
+    inferSnapshotMetricCollectors(metric.name).includes("db"),
+  ),
+  fly: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.filter((metric) =>
+    inferSnapshotMetricCollectors(metric.name).includes("fly"),
+  ),
+  redis: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.filter((metric) =>
+    inferSnapshotMetricCollectors(metric.name).includes("redis"),
+  ),
+  bullmq: OPS_SNAPSHOT_TREND_METRIC_REGISTRY.filter((metric) =>
+    inferSnapshotMetricCollectors(metric.name).includes("bullmq"),
+  ),
+};
 
 function resolveCollectorIntervalsMs(
   input?: OpsSampleCollectorIntervalsMs,
@@ -3074,12 +3148,10 @@ async function collectDbMetricSamples(): Promise<OpsMetricSample[]> {
   if (!db) {
     return [];
   }
-  return [
-    { key: OPS_SNAPSHOT_METRIC_KEYS.dbProcessed, value: db.processed },
-    { key: OPS_SNAPSHOT_METRIC_KEYS.dbPending, value: db.pending },
-    { key: OPS_SNAPSHOT_METRIC_KEYS.dbTotal, value: db.total },
-    { key: OPS_SNAPSHOT_METRIC_KEYS.dbProgressPct, value: db.pct },
-  ];
+  return buildTrendSamplesFromUiSnapshot(
+    buildCollectorSnapshotSeed({ db }),
+    OPS_SNAPSHOT_TREND_METRICS_BY_COLLECTOR.db,
+  );
 }
 
 async function collectFlyMetricSamples(
@@ -3089,13 +3161,17 @@ async function collectFlyMetricSamples(
   const workersRunning = machines.filter(
     (machine) => String(machine.state || "").toLowerCase() === "started",
   ).length;
-  return [
-    { key: OPS_SNAPSHOT_METRIC_KEYS.machinesTotal, value: machines.length },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.workersRunningLive,
-      value: workersRunning,
-    },
-  ];
+  return buildTrendSamplesFromUiSnapshot(
+    buildCollectorSnapshotSeed({
+      machines,
+      infra: {
+        workersRunning,
+        source: "image-ops-module:collector-fly",
+        updatedAt: new Date().toISOString(),
+      },
+    }),
+    OPS_SNAPSHOT_TREND_METRICS_BY_COLLECTOR.fly,
+  );
 }
 
 async function collectRedisMetricSamples(
@@ -3103,36 +3179,10 @@ async function collectRedisMetricSamples(
 ): Promise<OpsMetricSample[]> {
   const instances = await readOpsRedisIoInstanceStats(redis);
   const aggregate = aggregateRedisIoInstances(instances);
-  return [
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.redisWireKbpsAggregate,
-      value: aggregate.redisWireKbps,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.redisIngressKbpsAggregate,
-      value: aggregate.redisIngressKbps,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.redisEgressKbpsAggregate,
-      value: aggregate.redisEgressKbps,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.redisIngressReadsAggregate,
-      value: aggregate.redisIngressReads,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.redisEgressWritesAggregate,
-      value: aggregate.redisEgressWrites,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.rxLatencyAggregate,
-      value: aggregate.rxLatencyMs,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.txLatencyAggregate,
-      value: aggregate.txLatencyMs,
-    },
-  ];
+  return buildTrendSamplesFromUiSnapshot(
+    buildCollectorSnapshotSeed({ redisIoAggregate: aggregate }),
+    OPS_SNAPSHOT_TREND_METRICS_BY_COLLECTOR.redis,
+  );
 }
 
 async function collectBullmqMetricSamples(): Promise<OpsMetricSample[]> {
@@ -3141,46 +3191,15 @@ async function collectBullmqMetricSamples(): Promise<OpsMetricSample[]> {
     readOpsControlSnapshot(),
   ]);
   const status = control.status;
-  return [
-    { key: OPS_SNAPSHOT_METRIC_KEYS.queueWaitingLive, value: queue.waiting },
-    { key: OPS_SNAPSHOT_METRIC_KEYS.queueActiveLive, value: queue.active },
-    { key: OPS_SNAPSHOT_METRIC_KEYS.queueDelayedLive, value: queue.delayed },
-    { key: OPS_SNAPSHOT_METRIC_KEYS.queuePausedLive, value: queue.paused },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.queueCompletedLive,
-      value: queue.completed,
-    },
-    { key: OPS_SNAPSHOT_METRIC_KEYS.queueFailedLive, value: queue.failed },
-    { key: OPS_SNAPSHOT_METRIC_KEYS.queueBacklogLive, value: queue.backlog },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.statusProcessedItems,
-      value: status?.processedItems ?? 0,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.statusFailedItems,
-      value: status?.failedItems ?? 0,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.statusCompletedJobs,
-      value: status?.completedJobs ?? 0,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.statusFailedJobs,
-      value: status?.failedJobs ?? 0,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.statusPendingSuccessBuffer,
-      value: status?.pendingSuccessBuffer ?? 0,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.statusPendingErrorBuffer,
-      value: status?.pendingErrorBuffer ?? 0,
-    },
-    {
-      key: OPS_SNAPSHOT_METRIC_KEYS.statusFlushBatchCount,
-      value: status?.flushBatchCount ?? 0,
-    },
-  ];
+  return buildTrendSamplesFromUiSnapshot(
+    buildCollectorSnapshotSeed({
+      queue,
+      status,
+      settings: control.settings,
+      queuePaused: queue.paused > 0,
+    }),
+    OPS_SNAPSHOT_TREND_METRICS_BY_COLLECTOR.bullmq,
+  );
 }
 
 async function collectOpsMetricSamplesByCollector(input: {
@@ -3355,6 +3374,7 @@ function stageOpsMetricSamples(input: {
     if (!sample.key) {
       continue;
     }
+    assertOpsMetricKeyRegistered(sample.key);
     const atMs =
       Number.isFinite(sample.atMs) && (sample.atMs || 0) > 0
         ? Number(sample.atMs)
@@ -4708,154 +4728,26 @@ export async function createOpsUiStateWatcher(input: {
     ) {
       return performanceRollupsCache;
     }
+    const built = await runOpsPerformancePostProcessViaLua({
+      redis: refreshRedisConnection,
+    }).catch(() => null);
+    if (built?.rollups) {
+      performanceRollupsCache = built.rollups;
+      recent15mWindowCache = built.window15m;
+      recent24hWindowCache = built.window24h;
+      lastPerformanceRollupRefreshAtMs = nowMs;
+      return performanceRollupsCache;
+    }
 
-    const computeCounterDelta = (
-      metricName: string,
-      windowStartMs: number,
-    ): number => {
-      const rows = snapshotTrendRowsByMetric[metricName] ?? [];
-      if (rows.length <= 0) {
-        return 0;
-      }
-
-      const latest = rows[rows.length - 1];
-      if (!latest || latest.atMs < windowStartMs) {
-        return 0;
-      }
-
-      let baseline = rows[0]?.value ?? 0;
-      for (let index = rows.length - 1; index >= 0; index -= 1) {
-        const row = rows[index];
-        if (row.atMs < windowStartMs) {
-          baseline = row.value;
-          break;
-        }
-        baseline = row.value;
-      }
-
-      const delta = Number(latest.value || 0) - Number(baseline || 0);
-      return Number.isFinite(delta) && delta > 0 ? Math.round(delta) : 0;
-    };
-
-    const computeStats = (
-      metricName: string,
-      windowStartMs: number,
-    ): { low: number; high: number; avg: number; count: number } => {
-      const rows = snapshotTrendRowsByMetric[metricName] ?? [];
-      const values = rows
-        .filter((row) => row.atMs >= windowStartMs)
-        .map((row) => Number(row.value))
-        .filter((value) => Number.isFinite(value) && value >= 0);
-
-      if (values.length <= 0) {
-        return { low: 0, high: 0, avg: 0, count: 0 };
-      }
-
-      let low = values[0] ?? 0;
-      let high = values[0] ?? 0;
-      let sum = 0;
-      for (const value of values) {
-        low = Math.min(low, value);
-        high = Math.max(high, value);
-        sum += value;
-      }
-
-      return {
-        low,
-        high,
-        avg: sum / values.length,
-        count: values.length,
-      };
-    };
-
-    const buildRollup = (
-      windowId: "15s" | "1m" | "15m" | "60m" | "24h" | "deep",
-      windowMs: number,
-    ): OpsPerformanceRollup => {
-      const safeWindowMs = Math.max(1000, Math.floor(windowMs));
-      const windowStartMs = nowMs - safeWindowMs;
-      const sampledAt = new Date(nowMs).toISOString();
-
-      const completedJobs = computeCounterDelta(
-        "statusCompletedJobs",
-        windowStartMs,
-      );
-      const failedJobs = computeCounterDelta("statusFailedJobs", windowStartMs);
-      const processedItems = computeCounterDelta(
-        "statusProcessedItems",
-        windowStartMs,
-      );
-      const failedItems = computeCounterDelta(
-        "statusFailedItems",
-        windowStartMs,
-      );
-
-      const fetchStats = computeStats("avgFetchMs", windowStartMs);
-      const transformStats = computeStats("avgTransformMs", windowStartMs);
-      const uploadStats = computeStats("avgUploadMs", windowStartMs);
-      const elapsedStats = computeStats("avgEndToEndMs", windowStartMs);
-
-      const avgFetchMs = Math.round(fetchStats.avg);
-      const avgTransformMs = Math.round(transformStats.avg);
-      const avgUploadMs = Math.round(uploadStats.avg);
-      const avgEndToEndMs = Math.round(elapsedStats.avg);
-
-      const windowSeconds = Math.max(1, Math.floor(safeWindowMs / 1000));
-      const ipsFromWindow = processedItems / windowSeconds;
-      const ipsFromLatency = avgEndToEndMs > 0 ? 1000 / avgEndToEndMs : 0;
-      const ips = Math.max(0, ipsFromWindow, ipsFromLatency);
-
-      return {
-        windowId,
-        windowMs: safeWindowMs,
-        completedJobs,
-        failedJobs,
-        processedItems,
-        failedItems,
-        sampledCompletedJobs: Math.max(completedJobs, fetchStats.count),
-        metricFetchLatencyMsLow: Math.round(fetchStats.low),
-        metricFetchLatencyMsHigh: Math.round(fetchStats.high),
-        metricFetchLatencyMsAvg: avgFetchMs,
-        metricProcessingLatencyMsLow: Math.round(transformStats.low),
-        metricProcessingLatencyMsHigh: Math.round(transformStats.high),
-        metricProcessingLatencyMsAvg: avgTransformMs,
-        metricStorageLatencyMsLow: Math.round(uploadStats.low),
-        metricStorageLatencyMsHigh: Math.round(uploadStats.high),
-        metricStorageLatencyMsAvg: avgUploadMs,
-        metricJobElapsedMsLow: Math.round(elapsedStats.low),
-        metricJobElapsedMsHigh: Math.round(elapsedStats.high),
-        metricJobElapsedMsAvg: avgEndToEndMs,
-        metricSourceBytesLow: 0,
-        metricSourceBytesHigh: 0,
-        metricSourceBytesAvg: 0,
-        metricTransformedBytesLow: 0,
-        metricTransformedBytesHigh: 0,
-        metricTransformedBytesAvg: 0,
-        avgFetchMs,
-        avgTransformMs,
-        avgUploadMs,
-        avgEndToEndMs,
-        ips,
-        ipm: ips * 60,
-        secPerImage: ips > 0 ? 1 / ips : null,
-        computedAt: sampledAt,
-      };
-    };
-
-    const rollups: OpsPerformanceRollupSet = {
-      rollup15s: buildRollup("15s", OPS_15S_METRICS_WINDOW_MS),
-      rollup1m: buildRollup("1m", OPS_1M_METRICS_WINDOW_MS),
-      rollup15m: buildRollup("15m", OPS_BULLMQ_METRICS_WINDOW_MS),
-      rollup60m: buildRollup("60m", OPS_60M_METRICS_WINDOW_MS),
-      rollup24h: buildRollup("24h", OPS_DAILY_METRICS_WINDOW_MS),
-      rollupDeep: buildRollup("deep", OPS_DEEP_METRICS_WINDOW_MS),
-    };
-
-    performanceRollupsCache = rollups;
-    recent15mWindowCache = rollupToRecentWindow(rollups.rollup15m);
-    recent24hWindowCache = rollupToRecentWindow(rollups.rollup24h);
+    const storedRollups = await readOpsPerformanceRollupSet(
+      refreshRedisConnection,
+    ).catch(() => null);
+    if (storedRollups) {
+      performanceRollupsCache = storedRollups;
+      recent15mWindowCache = rollupToRecentWindow(storedRollups.rollup15m);
+      recent24hWindowCache = rollupToRecentWindow(storedRollups.rollup24h);
+    }
     lastPerformanceRollupRefreshAtMs = nowMs;
-
     return performanceRollupsCache;
   };
 
@@ -5100,12 +4992,14 @@ export async function createOpsUiStateWatcher(input: {
         0,
         Math.floor(latestMetricValue("statusPendingErrorBuffer")),
       ),
-      throughputImagesPerMinute:
-        snapshot?.status?.throughputImagesPerMinute || 0,
-      avgFetchMs: snapshot?.status?.avgFetchMs || 0,
-      avgTransformMs: snapshot?.status?.avgTransformMs || 0,
-      avgUploadMs: snapshot?.status?.avgUploadMs || 0,
-      avgEndToEndMs: snapshot?.status?.avgEndToEndMs || 0,
+      throughputImagesPerMinute: Math.max(
+        0,
+        latestMetricValue("statusThroughputImagesPerMinute"),
+      ),
+      avgFetchMs: Math.max(0, latestMetricValue("avgFetchMs")),
+      avgTransformMs: Math.max(0, latestMetricValue("avgTransformMs")),
+      avgUploadMs: Math.max(0, latestMetricValue("avgUploadMs")),
+      avgEndToEndMs: Math.max(0, latestMetricValue("avgEndToEndMs")),
       updatedAt: nowIso,
     };
 
@@ -5142,6 +5036,26 @@ export async function createOpsUiStateWatcher(input: {
         trendPoints.length > 0 ? projectTrend() : deriveOpsTrendProjection([]),
       errors: {},
     };
+  };
+
+  const ingestDerivedSnapshotSamples = async (
+    sourceSnapshot: OpsUiSnapshot,
+  ): Promise<void> => {
+    const atMs = nextTrendTimestampMs();
+    const samples: OpsMetricSample[] = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map(
+      (metric) => ({
+        key: metric.key,
+        value: metric.getValue(sourceSnapshot),
+        atMs,
+      }),
+    );
+
+    await ingestOpsMetricSamples({
+      redis: refreshRedisConnection,
+      atMs,
+      samples,
+      flushNow: true,
+    });
   };
 
   const scheduleBackgroundPostProcess = (): void => {
@@ -5242,13 +5156,11 @@ export async function createOpsUiStateWatcher(input: {
         };
       })
       .then(async ({ rowsByMetric, redisIoInstances }) => {
-        const hadFreshRows = appendSnapshotTrendRows(rowsByMetric);
+        appendSnapshotTrendRows(rowsByMetric);
         if (trendPoints.length === 0) {
           await seedTrendPointsFromRedis();
         }
-        if (hadFreshRows) {
-          scheduleBackgroundPostProcess();
-        }
+        scheduleBackgroundPostProcess();
         const ownership = await readMetricOwnership(Date.now()).catch(() =>
           defaultOpsMetricSystemOwnership(),
         );
@@ -5260,15 +5172,37 @@ export async function createOpsUiStateWatcher(input: {
           redisIoInstancesLive.length > 0
             ? aggregateRedisIoInstances(redisIoInstancesLive)
             : (snapshot?.redisIoAggregate ?? aggregateRedisIoInstances([]));
+        const liveStatus = await readRunnerStatus(refreshRedisConnection).catch(
+          () => null,
+        );
         const nextSnapshot = buildSnapshotFromTrendMemory();
-        appendTrendPointFromSnapshot(nextSnapshot);
-        snapshot = {
+        const mergedSnapshot: OpsUiSnapshot = {
           ...nextSnapshot,
+          status: liveStatus ?? nextSnapshot.status,
+          settings:
+            liveStatus && nextSnapshot.settings
+              ? {
+                  ...nextSnapshot.settings,
+                  desiredMode: liveStatus.desiredMode,
+                }
+              : nextSnapshot.settings,
+        };
+        if (mergedSnapshot.performanceRollups) {
+          performanceRollupsCache = mergedSnapshot.performanceRollups;
+        }
+        await ingestDerivedSnapshotSamples(mergedSnapshot).catch(
+          () => undefined,
+        );
+        appendTrendPointFromSnapshot(mergedSnapshot);
+        snapshot = {
+          ...mergedSnapshot,
           metricSystem: toOpsMetricSystemSnapshot(ownership),
           redisIoAggregate: redisIoAggregateLive,
           redisIoInstances: redisIoInstancesLive,
           projections:
-            trendPoints.length > 0 ? projectTrend() : nextSnapshot.projections,
+            trendPoints.length > 0
+              ? projectTrend()
+              : mergedSnapshot.projections,
         };
         lastRefreshAtMs = Date.now();
         notifyState();
