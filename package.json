@@ -237,6 +237,8 @@
     "workers:image:ops:refresh:trace": "npm run workers:image:ops:refresh:trace:raw --",
     "workers:image:ops:refresh:trace:full:raw": "tsx src/lib/scripts/run-image-ops-refresh-full-redis-trace.ts",
     "workers:image:ops:refresh:trace:full": "npm run workers:image:ops:refresh:trace:full:raw --",
+    "workers:image:ops:io:latency:harness:raw": "tsx src/lib/scripts/run-image-ops-io-latency-harness.ts",
+    "workers:image:ops:io:latency:harness": "npm run workers:image:ops:io:latency:harness:raw --",
     "workers:image:ops:state:verify:raw": "tsx src/lib/scripts/run-image-ops-state-verify.ts",
     "workers:image:ops:state:verify": "npm run workers:image:ops:state:verify:raw --",
     "workers:image:ops:surface:test:raw": "tsx src/lib/scripts/run-image-ops-surface-tester.ts",

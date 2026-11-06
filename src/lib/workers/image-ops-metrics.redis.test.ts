@@ -1000,6 +1000,33 @@ async function buildRawMetricFixture(
 ): Promise<RawFixtureBundle> {
   const queue = createImageQueue(redis);
   try {
+    await writeOpsControlSettings(
+      {
+        desiredMode: "run",
+        enqueueEnabled: true,
+        requireWorkersForEnqueue: true,
+        minWorkersToEnqueue: 1,
+        maxQueueBacklog: 240,
+        refillLowWatermark: 120,
+        refillTargetBacklog: 180,
+        maxClaimPerCycle: 40,
+        flushIntervalMs: 15000,
+        harvestEnabled: true,
+      },
+      redis,
+    );
+
+    await writeOpsInfraSnapshot(
+      {
+        workersRunning: 3,
+        source: "metrics-contract-test",
+        updatedAt: new Date().toISOString(),
+      },
+      redis,
+    );
+
+    await writeOpsRunnerStatus(makeStatus(), redis);
+
     const pointsForRow = (row: SeededMetricRow): number => {
       const itemCount =
         row.itemsCount ?? Math.max(0, Math.floor(row.processedCount));
@@ -1684,6 +1711,7 @@ describeRedis("image ops metrics seeded contract", () => {
           "rollup_15s",
           "rollup_1m",
           "rollup_24h",
+          "rollup_60m",
           "rollup_deep",
           "updated_at",
         ].sort(),
@@ -1694,6 +1722,7 @@ describeRedis("image ops metrics seeded contract", () => {
         "rollup_1m",
         "rollup_15m",
         "rollup_24h",
+        "rollup_60m",
         "rollup_deep",
       ]) {
         const parsed = JSON.parse(String(rollupHash[field])) as {
@@ -1923,6 +1952,7 @@ describeRedis("image ops metrics seeded contract", () => {
           "rollup_15s",
           "rollup_1m",
           "rollup_24h",
+          "rollup_60m",
           "rollup_deep",
           "updated_at",
         ].sort(),

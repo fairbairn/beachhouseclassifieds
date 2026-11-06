@@ -79,3 +79,11 @@ Generated projects should include:
 - Completed: `fivestar30a` runtime migration + validation.
 - Completed: `localvr30a` runtime migration + validation.
 - Next target: `royaldestinations`.
+
+## When performing work
+
+- Do not write long wrapping shell scripts around existing npm commands or scripts we developed
+- Do not grep code to the terminal
+- Do not sed code to the terminal
+- Review of code should work through the VSCode system
+- Do not hide or obfuscate output by wrapping shell scripts to pipe data elsewhere

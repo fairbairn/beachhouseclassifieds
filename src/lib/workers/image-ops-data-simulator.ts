@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
+  OPS_SNAPSHOT_TREND_METRIC_REGISTRY,
+  OPS_TREND_METRIC_REGISTRY,
   appendOpsBullmqSample,
   createOpsQueueRuntime,
+  ingestOpsMetricSamples,
   listOpsPendingJobsForOperation,
   readOpsControlSettings,
   readOpsSharedState,
@@ -9,7 +12,10 @@ import {
   updateOpsControlSettings,
   writeOpsInfraSnapshot,
   writeOpsRunnerStatus,
+  type OpsMetricSample,
+  type OpsUiSnapshot,
 } from "./image-ops-control-module";
+import type { RunnerStatusSnapshot } from "./image-runner-control";
 
 export type ImageOpsDataSimulatorOptions = {
   durationSeconds: number;
@@ -158,6 +164,107 @@ async function appendBullmqSampleFromTick(input: {
     avgFetchMs: input.avgFetchMs,
     avgTransformMs: input.avgTransformMs,
     avgUploadMs: input.avgUploadMs,
+  });
+}
+
+function buildSyntheticSnapshotFromState(input: {
+  status: RunnerStatusSnapshot;
+  state: Awaited<ReturnType<typeof readOpsSharedState>>;
+  queueBacklog: number;
+}): OpsUiSnapshot {
+  const nowIso = new Date().toISOString();
+  const db = input.state.db;
+  return {
+    at: nowIso,
+    machines: null,
+    queue: {
+      waiting: input.status.queueWaiting,
+      active: input.status.queueActive,
+      completed: input.status.queueCompleted,
+      failed: input.status.queueFailed,
+      delayed: input.status.queueDelayed,
+      paused: input.status.queuePaused,
+      backlog: Math.max(0, input.queueBacklog),
+    },
+    recentJobs15m: null,
+    recentJobs24h: null,
+    performanceRollups: null,
+    queuePaused: input.status.queuePaused > 0,
+    db,
+    settings: input.state.settings,
+    infra: input.state.infra,
+    status: input.status,
+    metricSystem: {
+      selfInstanceId: "simulator",
+      selfRole: "unknown",
+      ownerInstanceId: "simulator",
+      ownerRole: "unknown",
+      activeInstances: 1,
+      role: "master",
+    },
+    redisIoAggregate: {
+      sampledAt: nowIso,
+      activeInstances: 1,
+      redisIngressBytes: 0,
+      redisEgressBytes: 0,
+      redisIngressReads: 0,
+      redisEgressWrites: 0,
+      redisIngressKbps: 0,
+      redisEgressKbps: 0,
+      redisWireKbps: 0,
+      rxLatencyMs: 0,
+      txLatencyMs: 0,
+    },
+    redisIoInstances: [],
+    trendRowsByMetric: {},
+    trendRowsLastAtMs: 0,
+    projections: {
+      points: [],
+      ipsSeries: [],
+      ipsSmoothedSeries: [],
+      backlogDeltaSeries: [],
+      backlogDeltaSmoothedSeries: [],
+      headline: {
+        ipsNow: 0,
+        ipsSmoothedNow: 0,
+        ipsAvg30: 0,
+        ipmAvg30: 0,
+        backlogDeltaNow: 0,
+        backlogDeltaSmoothedNow: 0,
+        drainPerSecSmoothed: 0,
+      },
+    },
+    errors: {},
+  };
+}
+
+async function ingestSyntheticTickSamples(input: {
+  status: RunnerStatusSnapshot;
+  snapshot: OpsUiSnapshot;
+  atMs: number;
+}): Promise<void> {
+  const samples: OpsMetricSample[] = [];
+
+  for (const metric of OPS_TREND_METRIC_REGISTRY) {
+    samples.push({
+      key: metric.key,
+      value: metric.getValue(input.status),
+      atMs: input.atMs,
+    });
+  }
+
+  for (const metric of OPS_SNAPSHOT_TREND_METRIC_REGISTRY) {
+    samples.push({
+      key: metric.key,
+      value: metric.getValue(input.snapshot),
+      atMs: input.atMs,
+    });
+  }
+
+  await ingestOpsMetricSamples({
+    samples,
+    atMs: input.atMs,
+    flushNow: true,
   });
 }
 
@@ -370,14 +477,10 @@ export async function runImageOpsDataSimulator(
 
       const mode = resolveSimMode(desiredMode);
       const gateReason = resolveGateReason(desiredMode);
+      const nowIso = new Date().toISOString();
+      const tickAtMs = Date.now();
 
-      await writeOpsInfraSnapshot({
-        workersRunning,
-        source: "image-ops-data-simulator",
-        updatedAt: new Date().toISOString(),
-      });
-
-      await writeOpsRunnerStatus({
+      const status: RunnerStatusSnapshot = {
         operationId,
         mode,
         desiredMode,
@@ -399,7 +502,7 @@ export async function runImageOpsDataSimulator(
         queueDelayed: simulatedQueueDelayed,
         queuePaused: simulatedQueuePaused,
         queueBacklog: simulatedQueueBacklog,
-        lastFlushAt: new Date().toISOString(),
+        lastFlushAt: nowIso,
         flushBatchCount: tick + 1,
         pendingSuccessBuffer: Math.max(
           0,
@@ -414,7 +517,27 @@ export async function runImageOpsDataSimulator(
         avgTransformMs,
         avgUploadMs,
         avgEndToEndMs,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
+      };
+
+      await writeOpsInfraSnapshot({
+        workersRunning,
+        source: "image-ops-data-simulator",
+        updatedAt: nowIso,
+      });
+
+      await writeOpsRunnerStatus(status);
+
+      const refreshedState = await readOpsSharedState();
+      const syntheticSnapshot = buildSyntheticSnapshotFromState({
+        status,
+        state: refreshedState,
+        queueBacklog: simulatedQueueBacklog,
+      });
+      await ingestSyntheticTickSamples({
+        status,
+        snapshot: syntheticSnapshot,
+        atMs: tickAtMs,
       });
 
       if (options.injectBullmqSamples) {

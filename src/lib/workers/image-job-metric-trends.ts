@@ -88,6 +88,135 @@ type MetricStats = {
 
 const DEFAULT_DEEP_SAMPLE_LIMIT = 1000;
 
+function isRedisIoBreakdownTraceEnabled(): boolean {
+  const raw = String(process.env.IMAGE_OPS_REDIS_IO_BREAKDOWN_TRACE || "")
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
+function byteLen(value: string): number {
+  return Buffer.byteLength(value, "utf8");
+}
+
+function redisReplyBytes(payload: unknown): number {
+  if (payload === null || payload === undefined) {
+    return 0;
+  }
+  if (typeof payload === "string") {
+    return byteLen(payload);
+  }
+  if (typeof payload === "number" || typeof payload === "bigint") {
+    return byteLen(String(payload));
+  }
+  if (typeof payload === "boolean") {
+    return 1;
+  }
+  if (Buffer.isBuffer(payload)) {
+    return payload.length;
+  }
+  if (Array.isArray(payload)) {
+    return payload.reduce((sum, value) => sum + redisReplyBytes(value), 0);
+  }
+  try {
+    return byteLen(JSON.stringify(payload));
+  } catch {
+    return byteLen(String(payload));
+  }
+}
+
+const IMAGE_JOB_ROLLUP_WINDOWS_LUA = `
+local function metric_value(member)
+  local numeric = tonumber(member)
+  if numeric ~= nil then
+    return numeric
+  end
+
+  local ok, decoded = pcall(cjson.decode, member)
+  if ok and type(decoded) == 'table' then
+    local value = tonumber(decoded['value'])
+    if value ~= nil then
+      return value
+    end
+  end
+
+  return nil
+end
+
+local function metric_stats_since(key, min_score)
+  local rows = redis.call('ZRANGEBYSCORE', key, tostring(min_score), '+inf')
+  local count = 0
+  local sum = 0
+  local low = nil
+  local high = nil
+
+  for index = 1, #rows do
+    local value = metric_value(rows[index])
+    if value ~= nil and value >= 0 then
+      count = count + 1
+      sum = sum + value
+      if low == nil or value < low then
+        low = value
+      end
+      if high == nil or value > high then
+        high = value
+      end
+    end
+  end
+
+  if count == 0 then
+    return {0, 0, 0, 0, 0}
+  end
+
+  return {count, sum, low, high, sum / count}
+end
+
+local now_ms = tonumber(ARGV[1]) or 0
+local metric_count = #KEYS - 1
+local failed_key = KEYS[#KEYS]
+local completed_key = KEYS[1]
+
+local windows = {}
+for index = 2, #ARGV do
+  local window_ms = tonumber(ARGV[index]) or 1000
+  if window_ms < 1000 then
+    window_ms = 1000
+  end
+
+  local min_score = now_ms - window_ms
+  local stats = {}
+  for metric_index = 1, metric_count do
+    stats[metric_index] = metric_stats_since(KEYS[metric_index], min_score)
+  end
+
+  windows[#windows + 1] = {
+    windowMs = window_ms,
+    failedJobs = tonumber(redis.call('ZCOUNT', failed_key, tostring(min_score), '+inf')) or 0,
+    stats = stats,
+  }
+end
+
+local deep = cjson.null
+local completed_head = redis.call('ZRANGE', completed_key, 0, 0, 'WITHSCORES')
+if type(completed_head) == 'table' and #completed_head >= 2 then
+  local oldest_at_ms = tonumber(completed_head[2])
+  if oldest_at_ms ~= nil and oldest_at_ms > 0 then
+    local deep_stats = {}
+    for metric_index = 1, metric_count do
+      deep_stats[metric_index] = metric_stats_since(KEYS[metric_index], oldest_at_ms)
+    end
+
+    deep = {
+      oldestAtMs = oldest_at_ms,
+      failedJobs = tonumber(redis.call('ZCOUNT', failed_key, tostring(oldest_at_ms), '+inf')) or 0,
+      stats = deep_stats,
+    }
+  end
+end
+
+return cjson.encode({ windows = windows, deep = deep })
+`;
+
 const METRIC_NAMES: ImageJobMetricName[] = [
   "completed_jobs",
   "fetch_ms",
@@ -429,6 +558,171 @@ function summarizeValues(values: number[]): MetricStats {
   };
 }
 
+function zeroMetricStats(): MetricStats {
+  return {
+    count: 0,
+    sum: 0,
+    low: 0,
+    high: 0,
+    avg: 0,
+  };
+}
+
+function parseLuaMetricStats(raw: unknown): MetricStats {
+  if (!Array.isArray(raw) || raw.length < 5) {
+    return zeroMetricStats();
+  }
+
+  const count = Number(raw[0]);
+  const sum = Number(raw[1]);
+  const low = Number(raw[2]);
+  const high = Number(raw[3]);
+  const avg = Number(raw[4]);
+
+  if (
+    !Number.isFinite(count) ||
+    !Number.isFinite(sum) ||
+    !Number.isFinite(low) ||
+    !Number.isFinite(high) ||
+    !Number.isFinite(avg) ||
+    count <= 0
+  ) {
+    return zeroMetricStats();
+  }
+
+  return {
+    count,
+    sum,
+    low,
+    high,
+    avg,
+  };
+}
+
+function mapLuaMetricStatsByName(
+  rawStats: unknown,
+): Record<ImageJobMetricName, MetricStats> {
+  const stats = Array.isArray(rawStats) ? rawStats : [];
+  const output: Record<ImageJobMetricName, MetricStats> = {
+    completed_jobs: zeroMetricStats(),
+    fetch_ms: zeroMetricStats(),
+    transform_ms: zeroMetricStats(),
+    upload_ms: zeroMetricStats(),
+    end_to_end_ms: zeroMetricStats(),
+    elapsed_ms: zeroMetricStats(),
+    source_bytes: zeroMetricStats(),
+    transformed_bytes: zeroMetricStats(),
+    processed_items: zeroMetricStats(),
+    failed_items: zeroMetricStats(),
+  };
+
+  for (let index = 0; index < METRIC_NAMES.length; index += 1) {
+    output[METRIC_NAMES[index]] = parseLuaMetricStats(stats[index]);
+  }
+
+  return output;
+}
+
+type LuaRollupWindowRow = {
+  windowMs?: unknown;
+  failedJobs?: unknown;
+  stats?: unknown;
+};
+
+type LuaRollupDeepRow = {
+  oldestAtMs?: unknown;
+  failedJobs?: unknown;
+  stats?: unknown;
+};
+
+async function readRollupWindowsViaLua(input: {
+  connection: ReturnType<typeof createRedisConnection>;
+  failedKey: string;
+  nowMs: number;
+  windowsMs: number[];
+}): Promise<{
+  windows: Record<string, ImageQueueRecentJobWindow>;
+  deepWindow: ImageQueueRecentJobWindow | null;
+}> {
+  const keys = [
+    ...METRIC_NAMES.map((metric) => metricTrendKey(metric)),
+    input.failedKey,
+  ];
+
+  const raw = await input.connection.eval(
+    IMAGE_JOB_ROLLUP_WINDOWS_LUA,
+    keys.length,
+    ...keys,
+    String(input.nowMs),
+    ...input.windowsMs.map((windowMs) => String(windowMs)),
+  );
+
+  const parsedRaw = typeof raw === "string" ? raw : String(raw || "{}");
+  const parsed = JSON.parse(parsedRaw) as {
+    windows?: unknown;
+    deep?: unknown;
+  };
+
+  const windowsRows = Array.isArray(parsed?.windows) ? parsed.windows : [];
+  const windows: Record<string, ImageQueueRecentJobWindow> = {};
+
+  for (const rowRaw of windowsRows) {
+    const row = (rowRaw || {}) as LuaRollupWindowRow;
+    const windowMs = Math.max(1000, Number(row.windowMs) || 1000);
+    const windowStartMs = input.nowMs - windowMs;
+    const metricStats = mapLuaMetricStatsByName(row.stats);
+    const failedJobs = Math.max(0, Number(row.failedJobs) || 0);
+
+    windows[String(windowMs)] = buildWindowFromMetricStats({
+      nowMs: input.nowMs,
+      windowMs,
+      windowStartMs,
+      completedJobs: Math.max(0, Math.round(metricStats.completed_jobs.sum)),
+      failedJobs,
+      fetch: metricStats.fetch_ms,
+      transform: metricStats.transform_ms,
+      upload: metricStats.upload_ms,
+      endToEnd: metricStats.end_to_end_ms,
+      elapsed: metricStats.elapsed_ms,
+      sourceBytes: metricStats.source_bytes,
+      transformedBytes: metricStats.transformed_bytes,
+      processedItems: metricStats.processed_items,
+      failedItems: metricStats.failed_items,
+    });
+  }
+
+  let deepWindow: ImageQueueRecentJobWindow | null = null;
+  const deepRaw = parsed?.deep;
+  if (deepRaw && typeof deepRaw === "object" && !Array.isArray(deepRaw)) {
+    const deep = deepRaw as LuaRollupDeepRow;
+    const oldestAtMs = Number(deep.oldestAtMs);
+    if (Number.isFinite(oldestAtMs) && oldestAtMs > 0) {
+      const metricStats = mapLuaMetricStatsByName(deep.stats);
+      deepWindow = buildWindowFromMetricStats({
+        nowMs: input.nowMs,
+        windowMs: Math.max(1000, input.nowMs - oldestAtMs),
+        windowStartMs: oldestAtMs,
+        completedJobs: Math.max(0, Math.round(metricStats.completed_jobs.sum)),
+        failedJobs: Math.max(0, Number(deep.failedJobs) || 0),
+        fetch: metricStats.fetch_ms,
+        transform: metricStats.transform_ms,
+        upload: metricStats.upload_ms,
+        endToEnd: metricStats.end_to_end_ms,
+        elapsed: metricStats.elapsed_ms,
+        sourceBytes: metricStats.source_bytes,
+        transformedBytes: metricStats.transformed_bytes,
+        processedItems: metricStats.processed_items,
+        failedItems: metricStats.failed_items,
+      });
+    }
+  }
+
+  return {
+    windows,
+    deepWindow,
+  };
+}
+
 async function readMetricStatsForWindow(input: {
   connection: ReturnType<typeof createRedisConnection>;
   metric: ImageJobMetricName;
@@ -557,10 +851,23 @@ export async function syncImageJobMetricTrends(input?: {
     }
 
     const payloadPipeline = connection.pipeline();
+    let payloadRequestBytes = 0;
     for (const row of completedRows) {
-      payloadPipeline.hget(queue.toKey(row.jobId), "returnvalue");
+      const jobKey = queue.toKey(row.jobId);
+      payloadPipeline.hget(jobKey, "returnvalue");
+      payloadRequestBytes +=
+        byteLen("HGET") + 1 + byteLen(jobKey) + 1 + byteLen("returnvalue");
     }
+    const payloadStartedAtMs = Date.now();
     const payloadRows = await payloadPipeline.exec();
+    if (isRedisIoBreakdownTraceEnabled()) {
+      const payloadResponseBytes = Array.isArray(payloadRows)
+        ? payloadRows.reduce((sum, row) => sum + redisReplyBytes(row?.[1]), 0)
+        : 0;
+      process.stdout.write(
+        `[image-job-metric-trends:io] phase=sync_returnvalue_hget jobs=${completedRows.length} request_bytes=${payloadRequestBytes} response_bytes=${payloadResponseBytes} elapsed_ms=${Math.max(0, Date.now() - payloadStartedAtMs)}\n`,
+      );
+    }
 
     const writePipeline = connection.pipeline();
     let parsedCompletedJobs = 0;
@@ -787,6 +1094,21 @@ export async function readImageJobMetricRollupWindows(input: {
     const nowMs = Date.now();
     const completedKey = queue.toKey("completed");
     const failedKey = queue.toKey("failed");
+
+    const luaRollups = await readRollupWindowsViaLua({
+      connection,
+      failedKey,
+      nowMs,
+      windowsMs: normalizedWindows,
+    }).catch(() => null);
+    if (luaRollups) {
+      return {
+        windows: luaRollups.windows,
+        deepWindow: luaRollups.deepWindow,
+        sync,
+        durationMs: Date.now() - startedAtMs,
+      };
+    }
 
     type TimedSample = { atMs: number; value: number };
     const parseTimedSamples = (rows: unknown[]): TimedSample[] => {

@@ -68,6 +68,43 @@ function perfTrace(message: string): void {
   process.stdout.write(`[image-queue-ops:perf] ${message}\n`);
 }
 
+function isRedisIoBreakdownTraceEnabled(): boolean {
+  const raw = String(process.env.IMAGE_OPS_REDIS_IO_BREAKDOWN_TRACE || "")
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
+function byteLen(value: string): number {
+  return Buffer.byteLength(value, "utf8");
+}
+
+function redisReplyBytes(payload: unknown): number {
+  if (payload === null || payload === undefined) {
+    return 0;
+  }
+  if (typeof payload === "string") {
+    return byteLen(payload);
+  }
+  if (typeof payload === "number" || typeof payload === "bigint") {
+    return byteLen(String(payload));
+  }
+  if (typeof payload === "boolean") {
+    return 1;
+  }
+  if (Buffer.isBuffer(payload)) {
+    return payload.length;
+  }
+  if (Array.isArray(payload)) {
+    return payload.reduce((sum, value) => sum + redisReplyBytes(value), 0);
+  }
+  try {
+    return byteLen(JSON.stringify(payload));
+  } catch {
+    return byteLen(String(payload));
+  }
+}
+
 type CompletedJobLatencySummary = {
   sampledCompletedJobs: number;
   processedItems: number;
@@ -318,10 +355,24 @@ async function readCompletedJobLatencySamples(input: {
   }
 
   const pipeline = input.connection.pipeline();
+  let payloadRequestBytes = 0;
   for (const sample of samplesMeta) {
-    pipeline.hget(input.queue.toKey(sample.jobId), "returnvalue");
+    const jobKey = input.queue.toKey(sample.jobId);
+    pipeline.hget(jobKey, "returnvalue");
+    payloadRequestBytes +=
+      byteLen("HGET") + 1 + byteLen(jobKey) + 1 + byteLen("returnvalue");
   }
+  const payloadStartedAtMs = Date.now();
   const payloadRows = await pipeline.exec();
+
+  if (isRedisIoBreakdownTraceEnabled()) {
+    const payloadResponseBytes = Array.isArray(payloadRows)
+      ? payloadRows.reduce((sum, row) => sum + redisReplyBytes(row?.[1]), 0)
+      : 0;
+    process.stdout.write(
+      `[image-queue-ops:io] phase=recent_window_returnvalue_hget jobs=${samplesMeta.length} request_bytes=${payloadRequestBytes} response_bytes=${payloadResponseBytes} elapsed_ms=${Math.max(0, Date.now() - payloadStartedAtMs)}\n`,
+    );
+  }
 
   if (!Array.isArray(payloadRows) || payloadRows.length === 0) {
     return [];

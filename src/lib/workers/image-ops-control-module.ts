@@ -217,6 +217,8 @@ export type OpsUiSnapshot = {
   metricSystem?: OpsMetricSystemSnapshot;
   redisIoAggregate?: OpsRedisIoAggregateStats;
   redisIoInstances?: OpsRedisIoInstanceStats[];
+  trendRowsByMetric?: OpsSnapshotTrendRowSeriesMap;
+  trendRowsLastAtMs?: number;
   projections: OpsTrendProjection;
   errors: {
     fly?: string;
@@ -225,6 +227,19 @@ export type OpsUiSnapshot = {
     control?: string;
   };
 };
+
+function cloneTrendRowsByMetric(
+  rowsByMetric: OpsSnapshotTrendRowSeriesMap,
+): OpsSnapshotTrendRowSeriesMap {
+  const output: OpsSnapshotTrendRowSeriesMap = {};
+  for (const [metricName, rows] of Object.entries(rowsByMetric)) {
+    output[metricName] = rows.map((row) => ({
+      atMs: Number(row.atMs || 0),
+      value: Number(row.value || 0),
+    }));
+  }
+  return output;
+}
 
 export type OpsPerformanceRollup = {
   windowId: "15s" | "1m" | "15m" | "60m" | "24h" | "deep";
@@ -362,6 +377,8 @@ export type OpsRedisIoInstanceStats = {
 };
 
 const OPS_TREND_HISTORY_MAX = 1000;
+const OPS_TREND_STATE_MAX_POINTS = 30_000;
+const OPS_TREND_INCREMENTAL_FETCH_LIMIT_PER_METRIC = 120;
 const OPS_TREND_STATE_DEFAULT_WINDOW_MS = 60 * 60 * 1000;
 const OPS_TREND_REDIS_QUERY_LIMIT_MAX = 30_000;
 const OPS_TREND_REDIS_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -375,7 +392,6 @@ const OPS_60M_METRICS_WINDOW_MS = 60 * 60 * 1000;
 const OPS_DAILY_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["24h"];
 const OPS_DEEP_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS.deep;
 const OPS_RECENT_15M_REFRESH_MIN_INTERVAL_MS = 5_000;
-const OPS_RECENT_24H_REFRESH_MIN_INTERVAL_MS = 60_000;
 const OPS_PERFORMANCE_ROLLUP_REFRESH_MIN_INTERVAL_MS = 5_000;
 const OPS_LIVE_SLICE_TTL_MS = 15_000;
 const OPS_PERFORMANCE_ROLLUP_HASH_KEY = IMAGE_PERF_ROLLUPS_HASH_KEY;
@@ -387,6 +403,7 @@ const OPS_REDIS_IO_PUBLISH_MIN_INTERVAL_MS = 5_000;
 const OPS_METRIC_OWNER_REFRESH_MIN_INTERVAL_MS = 5_000;
 const OPS_SAMPLE_FLUSH_INTERVAL_MS_DEFAULT = 1_000;
 const OPS_PIPELINE_TRACE_MAX_CHARS = 1200;
+let opsRollupSliceLuaSha: string | null = null;
 
 type OpsStagedMetricSample = {
   key: string;
@@ -431,7 +448,8 @@ function inferOpsRedisIoProcessRole(): OpsReactiveProfile {
 
 const opsRedisIoProcessRole = inferOpsRedisIoProcessRole();
 const opsRedisIoInstanceId = `${opsRedisIoProcessRole}:${process.pid}-${Date.now().toString(36)}`;
-const opsRedisAutoIoTrackingEnabled = true;
+// Manual instrumentation is used for refresh/query paths to keep accounting deterministic.
+const opsRedisAutoIoTrackingEnabled = false;
 let opsRedisIoPublishInFlight = false;
 let opsRedisIoLastPublishedAtMs = 0;
 const opsRedisIoCounter = {
@@ -608,42 +626,50 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
     {
       name: "workersRunningLive",
       key: imageMetricTrendKey(IMAGE_GROUP_INFRA, "workers_running_live"),
-      getValue: (snapshot) => snapshot.infra?.workersRunning ?? 0,
+      getValue: (snapshot) =>
+        snapshot.infra?.workersRunning ?? snapshot.status?.workersRunning ?? 0,
     },
     {
       name: "queueWaitingLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_waiting_live"),
-      getValue: (snapshot) => snapshot.queue?.waiting ?? 0,
+      getValue: (snapshot) =>
+        snapshot.status?.queueWaiting ?? snapshot.queue?.waiting ?? 0,
     },
     {
       name: "queueActiveLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_active_live"),
-      getValue: (snapshot) => snapshot.queue?.active ?? 0,
+      getValue: (snapshot) =>
+        snapshot.status?.queueActive ?? snapshot.queue?.active ?? 0,
     },
     {
       name: "queueDelayedLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_delayed_live"),
-      getValue: (snapshot) => snapshot.queue?.delayed ?? 0,
+      getValue: (snapshot) =>
+        snapshot.status?.queueDelayed ?? snapshot.queue?.delayed ?? 0,
     },
     {
       name: "queuePausedLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_paused_live"),
-      getValue: (snapshot) => snapshot.queue?.paused ?? 0,
+      getValue: (snapshot) =>
+        snapshot.queue?.paused ?? snapshot.status?.queuePaused ?? 0,
     },
     {
       name: "queueCompletedLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_completed_live"),
-      getValue: (snapshot) => snapshot.queue?.completed ?? 0,
+      getValue: (snapshot) =>
+        snapshot.status?.queueCompleted ?? snapshot.queue?.completed ?? 0,
     },
     {
       name: "queueFailedLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_failed_live"),
-      getValue: (snapshot) => snapshot.queue?.failed ?? 0,
+      getValue: (snapshot) =>
+        snapshot.status?.queueFailed ?? snapshot.queue?.failed ?? 0,
     },
     {
       name: "queueBacklogLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_backlog_live"),
-      getValue: (snapshot) => snapshot.queue?.backlog ?? 0,
+      getValue: (snapshot) =>
+        snapshot.status?.queueBacklog ?? snapshot.queue?.backlog ?? 0,
     },
     {
       name: "statusProcessedItems",
@@ -682,6 +708,26 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
       name: "statusFlushBatchCount",
       key: imageMetricTrendKey(IMAGE_GROUP_JOBS, "status_flush_batch_count"),
       getValue: (snapshot) => snapshot.status?.flushBatchCount ?? 0,
+    },
+    {
+      name: "avgFetchMs",
+      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "avg_fetch_ms"),
+      getValue: (snapshot) => snapshot.status?.avgFetchMs ?? 0,
+    },
+    {
+      name: "avgTransformMs",
+      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "avg_transform_ms"),
+      getValue: (snapshot) => snapshot.status?.avgTransformMs ?? 0,
+    },
+    {
+      name: "avgUploadMs",
+      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "avg_upload_ms"),
+      getValue: (snapshot) => snapshot.status?.avgUploadMs ?? 0,
+    },
+    {
+      name: "avgEndToEndMs",
+      key: imageMetricTrendKey(IMAGE_GROUP_IMAGES, "avg_end_to_end_ms"),
+      getValue: (snapshot) => snapshot.status?.avgEndToEndMs ?? 0,
     },
     {
       name: "settingsFlushIntervalMs",
@@ -1175,6 +1221,32 @@ function parsePerformanceRollupField(
     return null;
   }
 }
+const OPS_WRITE_SLICE_HASHES_LUA = `
+local encoded = ARGV[1] or '{}'
+local ok, decoded = pcall(cjson.decode, encoded)
+if (not ok) or type(decoded) ~= 'table' then
+  return 0
+end
+
+local hash_count = 0
+for key, fields in pairs(decoded) do
+  if type(fields) == 'table' then
+    local command = { key }
+    local field_count = 0
+    for field, value in pairs(fields) do
+      field_count = field_count + 1
+      command[#command + 1] = tostring(field)
+      command[#command + 1] = tostring(value)
+    end
+    if field_count > 0 then
+      redis.call('HSET', unpack(command))
+      hash_count = hash_count + 1
+    end
+  end
+end
+
+return hash_count
+`;
 
 async function writeOpsPerformanceRollupSet(
   rollups: OpsPerformanceRollupSet,
@@ -1510,14 +1582,567 @@ async function writeOpsPerformanceRollupSet(
     }
 
     const updatedAt = new Date().toISOString();
-    const pipeline = connection.pipeline();
+    const payloadByKey: Record<string, Record<string, string>> = {};
     for (const [key, fields] of perMetricFieldsByKey.entries()) {
-      pipeline.hset(key, {
+      payloadByKey[key] = {
         ...fields,
         [IMAGE_SLICE_UPDATED_AT_FIELD]: updatedAt,
-      });
+      };
     }
-    await pipeline.exec();
+
+    await connection.eval(
+      OPS_WRITE_SLICE_HASHES_LUA,
+      0,
+      JSON.stringify(payloadByKey),
+    );
+  });
+}
+
+const OPS_ROLLUP_SLICE_POSTPROCESS_LUA = `
+local function to_number(value)
+  local numeric = tonumber(value)
+  if numeric == nil then
+    return 0
+  end
+  if numeric < 0 then
+    return 0
+  end
+  return numeric
+end
+
+local function round(value)
+  if value >= 0 then
+    return math.floor(value + 0.5)
+  end
+  return math.ceil(value - 0.5)
+end
+
+local function parse_member_value(member)
+  local numeric = tonumber(member)
+  if numeric ~= nil then
+    return numeric
+  end
+
+  local ok, decoded = pcall(cjson.decode, member)
+  if ok and type(decoded) == 'table' then
+    local decoded_value = tonumber(decoded['value'])
+    if decoded_value ~= nil then
+      return decoded_value
+    end
+  end
+
+  return nil
+end
+
+local function metric_stats_since(trend_key, min_score)
+  local rows = redis.call('ZRANGEBYSCORE', trend_key, tostring(min_score), '+inf')
+  local count = 0
+  local sum = 0
+  local low = nil
+  local high = nil
+
+  for index = 1, #rows do
+    local value = parse_member_value(rows[index])
+    if value ~= nil and value >= 0 then
+      count = count + 1
+      sum = sum + value
+      if low == nil or value < low then
+        low = value
+      end
+      if high == nil or value > high then
+        high = value
+      end
+    end
+  end
+
+  if count <= 0 then
+    return { count = 0, sum = 0, low = 0, high = 0, avg = 0 }
+  end
+
+  return {
+    count = count,
+    sum = sum,
+    low = low,
+    high = high,
+    avg = sum / count,
+  }
+end
+
+local function build_rollup(window_id, window_ms, failed_jobs, stats_by_metric, computed_at)
+  local completed_jobs = to_number(stats_by_metric['completed_jobs'].sum)
+  local failed_jobs_normalized = to_number(failed_jobs)
+  local processed_items = to_number(stats_by_metric['processed_items'].sum)
+  local failed_items = to_number(stats_by_metric['failed_items'].sum)
+  local sampled_completed_jobs = to_number(stats_by_metric['fetch_ms'].count)
+  local avg_fetch_ms = to_number(stats_by_metric['fetch_ms'].avg)
+  local avg_transform_ms = to_number(stats_by_metric['transform_ms'].avg)
+  local avg_upload_ms = to_number(stats_by_metric['upload_ms'].avg)
+  local avg_end_to_end_ms = to_number(stats_by_metric['end_to_end_ms'].avg)
+
+  local window_seconds = math.max(1, math.floor(window_ms / 1000))
+  local ips_from_window = processed_items / window_seconds
+  local ips_from_latency = avg_end_to_end_ms > 0 and (1000 / math.max(1, avg_end_to_end_ms)) or 0
+  local ips = math.max(ips_from_window, ips_from_latency)
+
+  return {
+    windowId = window_id,
+    windowMs = window_ms,
+    completedJobs = completed_jobs,
+    failedJobs = failed_jobs_normalized,
+    processedItems = processed_items,
+    failedItems = failed_items,
+    sampledCompletedJobs = sampled_completed_jobs,
+    metricFetchLatencyMsLow = round(to_number(stats_by_metric['fetch_ms'].low)),
+    metricFetchLatencyMsHigh = round(to_number(stats_by_metric['fetch_ms'].high)),
+    metricFetchLatencyMsAvg = round(to_number(stats_by_metric['fetch_ms'].avg)),
+    metricProcessingLatencyMsLow = round(to_number(stats_by_metric['transform_ms'].low)),
+    metricProcessingLatencyMsHigh = round(to_number(stats_by_metric['transform_ms'].high)),
+    metricProcessingLatencyMsAvg = round(to_number(stats_by_metric['transform_ms'].avg)),
+    metricStorageLatencyMsLow = round(to_number(stats_by_metric['upload_ms'].low)),
+    metricStorageLatencyMsHigh = round(to_number(stats_by_metric['upload_ms'].high)),
+    metricStorageLatencyMsAvg = round(to_number(stats_by_metric['upload_ms'].avg)),
+    metricJobElapsedMsLow = round(to_number(stats_by_metric['elapsed_ms'].low)),
+    metricJobElapsedMsHigh = round(to_number(stats_by_metric['elapsed_ms'].high)),
+    metricJobElapsedMsAvg = round(to_number(stats_by_metric['elapsed_ms'].avg)),
+    metricSourceBytesLow = round(to_number(stats_by_metric['source_bytes'].low)),
+    metricSourceBytesHigh = round(to_number(stats_by_metric['source_bytes'].high)),
+    metricSourceBytesAvg = round(to_number(stats_by_metric['source_bytes'].avg)),
+    metricTransformedBytesLow = round(to_number(stats_by_metric['transformed_bytes'].low)),
+    metricTransformedBytesHigh = round(to_number(stats_by_metric['transformed_bytes'].high)),
+    metricTransformedBytesAvg = round(to_number(stats_by_metric['transformed_bytes'].avg)),
+    avgFetchMs = round(avg_fetch_ms),
+    avgTransformMs = round(avg_transform_ms),
+    avgUploadMs = round(avg_upload_ms),
+    avgEndToEndMs = round(avg_end_to_end_ms),
+    ips = ips,
+    ipm = ips * 60,
+    secPerImage = ips > 0 and (1 / ips) or cjson.null,
+    computedAt = computed_at,
+  }
+end
+
+local function slice_payload(low, high, average, latest, timestamp)
+  return cjson.encode({
+    timestamp = timestamp,
+    low = to_number(low),
+    high = to_number(high),
+    average = to_number(average),
+    latest = to_number(latest),
+  })
+end
+
+local function metric_slice_payload(rollup, slug)
+  if slug == 'completed_jobs' then
+    return slice_payload(rollup.completedJobs, rollup.completedJobs, rollup.completedJobs, rollup.completedJobs, rollup.computedAt)
+  end
+  if slug == 'failed_jobs' then
+    return slice_payload(rollup.failedJobs, rollup.failedJobs, rollup.failedJobs, rollup.failedJobs, rollup.computedAt)
+  end
+  if slug == 'processed_items' then
+    return slice_payload(rollup.processedItems, rollup.processedItems, rollup.processedItems, rollup.processedItems, rollup.computedAt)
+  end
+  if slug == 'failed_items' then
+    return slice_payload(rollup.failedItems, rollup.failedItems, rollup.failedItems, rollup.failedItems, rollup.computedAt)
+  end
+  if slug == 'sampled_completed_jobs' then
+    return slice_payload(rollup.sampledCompletedJobs, rollup.sampledCompletedJobs, rollup.sampledCompletedJobs, rollup.sampledCompletedJobs, rollup.computedAt)
+  end
+  if slug == 'fetch_latency_ms_low' or slug == 'fetch_latency_ms_high' or slug == 'fetch_latency_ms_avg' then
+    return slice_payload(rollup.metricFetchLatencyMsLow, rollup.metricFetchLatencyMsHigh, rollup.metricFetchLatencyMsAvg, rollup.metricFetchLatencyMsAvg, rollup.computedAt)
+  end
+  if slug == 'processing_latency_ms_low' or slug == 'processing_latency_ms_high' or slug == 'processing_latency_ms_avg' then
+    return slice_payload(rollup.metricProcessingLatencyMsLow, rollup.metricProcessingLatencyMsHigh, rollup.metricProcessingLatencyMsAvg, rollup.metricProcessingLatencyMsAvg, rollup.computedAt)
+  end
+  if slug == 'storage_latency_ms_low' or slug == 'storage_latency_ms_high' or slug == 'storage_latency_ms_avg' then
+    return slice_payload(rollup.metricStorageLatencyMsLow, rollup.metricStorageLatencyMsHigh, rollup.metricStorageLatencyMsAvg, rollup.metricStorageLatencyMsAvg, rollup.computedAt)
+  end
+  if slug == 'job_elapsed_ms_low' or slug == 'job_elapsed_ms_high' or slug == 'job_elapsed_ms_avg' then
+    return slice_payload(rollup.metricJobElapsedMsLow, rollup.metricJobElapsedMsHigh, rollup.metricJobElapsedMsAvg, rollup.metricJobElapsedMsAvg, rollup.computedAt)
+  end
+  if slug == 'source_bytes_low' or slug == 'source_bytes_high' or slug == 'source_bytes_avg' then
+    return slice_payload(rollup.metricSourceBytesLow, rollup.metricSourceBytesHigh, rollup.metricSourceBytesAvg, rollup.metricSourceBytesAvg, rollup.computedAt)
+  end
+  if slug == 'transformed_bytes_low' or slug == 'transformed_bytes_high' or slug == 'transformed_bytes_avg' then
+    return slice_payload(rollup.metricTransformedBytesLow, rollup.metricTransformedBytesHigh, rollup.metricTransformedBytesAvg, rollup.metricTransformedBytesAvg, rollup.computedAt)
+  end
+  if slug == 'avg_fetch_ms' then
+    return slice_payload(rollup.avgFetchMs, rollup.avgFetchMs, rollup.avgFetchMs, rollup.avgFetchMs, rollup.computedAt)
+  end
+  if slug == 'avg_transform_ms' then
+    return slice_payload(rollup.avgTransformMs, rollup.avgTransformMs, rollup.avgTransformMs, rollup.avgTransformMs, rollup.computedAt)
+  end
+  if slug == 'avg_upload_ms' then
+    return slice_payload(rollup.avgUploadMs, rollup.avgUploadMs, rollup.avgUploadMs, rollup.avgUploadMs, rollup.computedAt)
+  end
+  if slug == 'avg_end_to_end_ms' then
+    return slice_payload(rollup.avgEndToEndMs, rollup.avgEndToEndMs, rollup.avgEndToEndMs, rollup.avgEndToEndMs, rollup.computedAt)
+  end
+  if slug == 'ips' then
+    return slice_payload(rollup.ips, rollup.ips, rollup.ips, rollup.ips, rollup.computedAt)
+  end
+  if slug == 'ipm' then
+    return slice_payload(rollup.ipm, rollup.ipm, rollup.ipm, rollup.ipm, rollup.computedAt)
+  end
+  if slug == 'sec_per_image' then
+    local sec = rollup.secPerImage ~= cjson.null and rollup.secPerImage or 0
+    return slice_payload(sec, sec, sec, sec, rollup.computedAt)
+  end
+
+  return slice_payload(0, 0, 0, 0, rollup.computedAt)
+end
+
+local now_ms = tonumber(ARGV[1]) or 0
+local computed_at_iso = tostring(ARGV[2] or '')
+local live_ttl_ms = tonumber(ARGV[3]) or 15000
+local deep_window_ms = tonumber(ARGV[4]) or 315360000000
+local rollup_hash_key = tostring(ARGV[5] or '')
+local failed_queue_key = tostring(ARGV[6] or '')
+local updated_at_field = tostring(ARGV[7] or 'updated_at')
+local slice_prefix = tostring(ARGV[8] or 'image:ops:metrics')
+
+local ok_image, image_metric_slugs = pcall(cjson.decode, ARGV[9] or '[]')
+if (not ok_image) or type(image_metric_slugs) ~= 'table' then
+  image_metric_slugs = {}
+end
+local ok_job, job_metric_slugs = pcall(cjson.decode, ARGV[10] or '[]')
+if (not ok_job) or type(job_metric_slugs) ~= 'table' then
+  job_metric_slugs = {}
+end
+local ok_keymap, metric_key_map = pcall(cjson.decode, ARGV[11] or '{}')
+if (not ok_keymap) or type(metric_key_map) ~= 'table' then
+  metric_key_map = {}
+end
+
+local metric_order = {
+  'completed_jobs',
+  'fetch_ms',
+  'transform_ms',
+  'upload_ms',
+  'end_to_end_ms',
+  'elapsed_ms',
+  'source_bytes',
+  'transformed_bytes',
+  'processed_items',
+  'failed_items',
+}
+
+local latest_processed_rows = redis.call('ZREVRANGE', tostring(metric_key_map['processed_items'] or ''), 0, 0, 'WITHSCORES')
+local latest_processed_at_ms = nil
+if type(latest_processed_rows) == 'table' and #latest_processed_rows >= 2 then
+  latest_processed_at_ms = tonumber(latest_processed_rows[2])
+end
+local live_is_fresh = latest_processed_at_ms ~= nil and latest_processed_at_ms > 0 and (now_ms - latest_processed_at_ms) <= live_ttl_ms
+
+local oldest_completed_rows = redis.call('ZRANGE', tostring(metric_key_map['completed_jobs'] or ''), 0, 0, 'WITHSCORES')
+local oldest_completed_at_ms = nil
+if type(oldest_completed_rows) == 'table' and #oldest_completed_rows >= 2 then
+  oldest_completed_at_ms = tonumber(oldest_completed_rows[2])
+end
+
+local window_specs = {
+  { id = '15s', ms = 15000 },
+  { id = '1m', ms = 60000 },
+  { id = '15m', ms = 900000 },
+  { id = '60m', ms = 3600000 },
+  { id = '24h', ms = 86400000 },
+  { id = 'deep', ms = deep_window_ms },
+}
+
+local rollups_by_id = {}
+
+for _, spec in ipairs(window_specs) do
+  local window_id = spec.id
+  local window_ms = spec.ms
+  local window_start_ms = now_ms - window_ms
+  if window_id == 'deep' and oldest_completed_at_ms ~= nil and oldest_completed_at_ms > 0 then
+    window_start_ms = oldest_completed_at_ms
+    window_ms = math.max(1000, now_ms - oldest_completed_at_ms)
+  end
+
+  local stats_by_metric = {}
+  for _, metric_name in ipairs(metric_order) do
+    local trend_key = tostring(metric_key_map[metric_name] or '')
+    if trend_key == '' then
+      stats_by_metric[metric_name] = { count = 0, sum = 0, low = 0, high = 0, avg = 0 }
+    else
+      stats_by_metric[metric_name] = metric_stats_since(trend_key, window_start_ms)
+    end
+  end
+
+  local failed_jobs = tonumber(redis.call('ZCOUNT', failed_queue_key, tostring(window_start_ms), '+inf')) or 0
+  rollups_by_id[window_id] = build_rollup(
+    window_id,
+    window_ms,
+    failed_jobs,
+    stats_by_metric,
+    computed_at_iso
+  )
+end
+
+redis.call(
+  'HSET',
+  rollup_hash_key,
+  'rollup_15s', cjson.encode(rollups_by_id['15s']),
+  'rollup_1m', cjson.encode(rollups_by_id['1m']),
+  'rollup_15m', cjson.encode(rollups_by_id['15m']),
+  'rollup_60m', cjson.encode(rollups_by_id['60m']),
+  'rollup_24h', cjson.encode(rollups_by_id['24h']),
+  'rollup_deep', cjson.encode(rollups_by_id['deep']),
+  'updated_at', computed_at_iso
+)
+
+local slice_window_specs = {
+  { id = '15s', field = 'w_15s' },
+  { id = '1m', field = 'w_1m' },
+  { id = '15m', field = 'w_15m' },
+  { id = '24h', field = 'w_24h' },
+  { id = 'deep', field = 'w_deep' },
+}
+
+local function write_slice_group(group_codeword, slugs)
+  for _, slug in ipairs(slugs) do
+    local key = slice_prefix .. ':' .. group_codeword .. ':' .. tostring(slug) .. ':slice'
+    local command = { 'HSET', key, updated_at_field, computed_at_iso }
+    for _, spec in ipairs(slice_window_specs) do
+      local rollup = rollups_by_id[spec.id]
+      local payload = metric_slice_payload(rollup, tostring(slug))
+      if spec.id == '15s' and not live_is_fresh then
+        payload = slice_payload(0, 0, 0, 0, rollup.computedAt)
+      end
+      command[#command + 1] = spec.field
+      command[#command + 1] = payload
+    end
+    redis.call(unpack(command))
+  end
+end
+
+write_slice_group('images', image_metric_slugs)
+write_slice_group('jobs', job_metric_slugs)
+
+return cjson.encode({
+  rollups = {
+    rollup_15s = rollups_by_id['15s'],
+    rollup_1m = rollups_by_id['1m'],
+    rollup_15m = rollups_by_id['15m'],
+    rollup_60m = rollups_by_id['60m'],
+    rollup_24h = rollups_by_id['24h'],
+    rollup_deep = rollups_by_id['deep'],
+  },
+  liveIsFresh = live_is_fresh,
+})
+`;
+
+function rollupToRecentWindow(
+  rollup: OpsPerformanceRollup,
+): ImageQueueRecentJobWindow {
+  const sampledAt = rollup.computedAt || new Date().toISOString();
+  const sampledAtMs = Date.parse(sampledAt);
+  const windowStartMs = Number.isFinite(sampledAtMs)
+    ? sampledAtMs - Math.max(1000, Math.floor(rollup.windowMs))
+    : Date.now() - Math.max(1000, Math.floor(rollup.windowMs));
+  return {
+    windowMs: Math.max(1000, Math.floor(rollup.windowMs)),
+    windowStartAt: new Date(windowStartMs).toISOString(),
+    sampledAt,
+    completedJobs: Math.max(0, Math.round(rollup.completedJobs)),
+    failedJobs: Math.max(0, Math.round(rollup.failedJobs)),
+    processedItems: Math.max(0, Math.round(rollup.processedItems)),
+    failedItems: Math.max(0, Math.round(rollup.failedItems)),
+    sampledCompletedJobs: Math.max(0, Math.round(rollup.sampledCompletedJobs)),
+    fetchElapsedMsLow: Math.max(0, Math.round(rollup.metricFetchLatencyMsLow)),
+    fetchElapsedMsHigh: Math.max(
+      0,
+      Math.round(rollup.metricFetchLatencyMsHigh),
+    ),
+    fetchElapsedMsAvg: Math.max(0, Math.round(rollup.metricFetchLatencyMsAvg)),
+    transformElapsedMsLow: Math.max(
+      0,
+      Math.round(rollup.metricProcessingLatencyMsLow),
+    ),
+    transformElapsedMsHigh: Math.max(
+      0,
+      Math.round(rollup.metricProcessingLatencyMsHigh),
+    ),
+    transformElapsedMsAvg: Math.max(
+      0,
+      Math.round(rollup.metricProcessingLatencyMsAvg),
+    ),
+    uploadElapsedMsLow: Math.max(
+      0,
+      Math.round(rollup.metricStorageLatencyMsLow),
+    ),
+    uploadElapsedMsHigh: Math.max(
+      0,
+      Math.round(rollup.metricStorageLatencyMsHigh),
+    ),
+    uploadElapsedMsAvg: Math.max(
+      0,
+      Math.round(rollup.metricStorageLatencyMsAvg),
+    ),
+    elapsedMsLow: Math.max(0, Math.round(rollup.metricJobElapsedMsLow)),
+    elapsedMsHigh: Math.max(0, Math.round(rollup.metricJobElapsedMsHigh)),
+    elapsedMsAvg: Math.max(0, Math.round(rollup.metricJobElapsedMsAvg)),
+    sourceBytesLow: Math.max(0, Math.round(rollup.metricSourceBytesLow)),
+    sourceBytesHigh: Math.max(0, Math.round(rollup.metricSourceBytesHigh)),
+    sourceBytesAvg: Math.max(0, Math.round(rollup.metricSourceBytesAvg)),
+    transformedBytesLow: Math.max(
+      0,
+      Math.round(rollup.metricTransformedBytesLow),
+    ),
+    transformedBytesHigh: Math.max(
+      0,
+      Math.round(rollup.metricTransformedBytesHigh),
+    ),
+    transformedBytesAvg: Math.max(
+      0,
+      Math.round(rollup.metricTransformedBytesAvg),
+    ),
+    avgFetchMs: Math.max(0, Math.round(rollup.avgFetchMs)),
+    avgTransformMs: Math.max(0, Math.round(rollup.avgTransformMs)),
+    avgUploadMs: Math.max(0, Math.round(rollup.avgUploadMs)),
+    avgEndToEndMs: Math.max(0, Math.round(rollup.avgEndToEndMs)),
+  };
+}
+
+function parseLuaRollupSet(
+  rawPayload: unknown,
+): OpsPerformanceRollupSet | null {
+  const payloadText =
+    typeof rawPayload === "string" ? rawPayload : String(rawPayload || "");
+  if (!payloadText) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(payloadText) as {
+      rollups?: Record<string, unknown>;
+    };
+    const rollup15s = parsePerformanceRollupField(
+      JSON.stringify(parsed?.rollups?.rollup_15s || null),
+    );
+    const rollup1m = parsePerformanceRollupField(
+      JSON.stringify(parsed?.rollups?.rollup_1m || null),
+    );
+    const rollup15m = parsePerformanceRollupField(
+      JSON.stringify(parsed?.rollups?.rollup_15m || null),
+    );
+    const rollup60m = parsePerformanceRollupField(
+      JSON.stringify(parsed?.rollups?.rollup_60m || null),
+    );
+    const rollup24h = parsePerformanceRollupField(
+      JSON.stringify(parsed?.rollups?.rollup_24h || null),
+    );
+    const rollupDeep = parsePerformanceRollupField(
+      JSON.stringify(parsed?.rollups?.rollup_deep || null),
+    );
+    if (
+      !rollup15s ||
+      !rollup1m ||
+      !rollup15m ||
+      !rollup60m ||
+      !rollup24h ||
+      !rollupDeep
+    ) {
+      return null;
+    }
+    return {
+      rollup15s,
+      rollup1m,
+      rollup15m,
+      rollup60m,
+      rollup24h,
+      rollupDeep,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function runOpsPerformancePostProcessViaLua(input?: {
+  redis?: IORedis;
+}): Promise<{
+  rollups: OpsPerformanceRollupSet;
+  window15s: ImageQueueRecentJobWindow;
+  window1m: ImageQueueRecentJobWindow;
+  window15m: ImageQueueRecentJobWindow;
+  window24h: ImageQueueRecentJobWindow;
+  windowDeep: ImageQueueRecentJobWindow;
+}> {
+  return withControlRedis(input?.redis, async (connection) => {
+    const queue = createImageQueue(connection);
+    const failedQueueKey = queue.toKey("failed");
+    const nowMs = Date.now();
+    const computedAtIso = new Date(nowMs).toISOString();
+    const metricKeyMap = {
+      completed_jobs: imageRawJobTrendMetricKey("completed_jobs"),
+      fetch_ms: imageRawJobTrendMetricKey("fetch_ms"),
+      transform_ms: imageRawJobTrendMetricKey("transform_ms"),
+      upload_ms: imageRawJobTrendMetricKey("upload_ms"),
+      end_to_end_ms: imageRawJobTrendMetricKey("end_to_end_ms"),
+      elapsed_ms: imageRawJobTrendMetricKey("elapsed_ms"),
+      source_bytes: imageRawJobTrendMetricKey("source_bytes"),
+      transformed_bytes: imageRawJobTrendMetricKey("transformed_bytes"),
+      processed_items: imageRawJobTrendMetricKey("processed_items"),
+      failed_items: imageRawJobTrendMetricKey("failed_items"),
+    };
+
+    const args = [
+      String(nowMs),
+      computedAtIso,
+      String(OPS_LIVE_SLICE_TTL_MS),
+      String(OPS_DEEP_METRICS_WINDOW_MS),
+      OPS_PERFORMANCE_ROLLUP_HASH_KEY,
+      failedQueueKey,
+      IMAGE_SLICE_UPDATED_AT_FIELD,
+      "image:ops:metrics",
+      JSON.stringify([...IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS]),
+      JSON.stringify([...IMAGE_JOB_SLICE_METRIC_SLUGS]),
+      JSON.stringify(metricKeyMap),
+    ];
+
+    const runEvalSha = async (): Promise<unknown> => {
+      if (!opsRollupSliceLuaSha) {
+        const loaded = await connection.script(
+          "LOAD",
+          OPS_ROLLUP_SLICE_POSTPROCESS_LUA,
+        );
+        opsRollupSliceLuaSha = String(loaded || "");
+      }
+      return connection.evalsha(opsRollupSliceLuaSha, 0, ...args);
+    };
+
+    let rawResult: unknown;
+    try {
+      rawResult = await runEvalSha();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : String(error || "unknown error");
+      if (!message.toUpperCase().includes("NOSCRIPT")) {
+        throw error;
+      }
+      const loaded = await connection.script(
+        "LOAD",
+        OPS_ROLLUP_SLICE_POSTPROCESS_LUA,
+      );
+      opsRollupSliceLuaSha = String(loaded || "");
+      rawResult = await runEvalSha();
+    }
+
+    const rollups = parseLuaRollupSet(rawResult);
+    if (!rollups) {
+      throw new Error("rollup/slice Lua post-process returned invalid payload");
+    }
+
+    return {
+      rollups,
+      window15s: rollupToRecentWindow(rollups.rollup15s),
+      window1m: rollupToRecentWindow(rollups.rollup1m),
+      window15m: rollupToRecentWindow(rollups.rollup15m),
+      window24h: rollupToRecentWindow(rollups.rollup24h),
+      windowDeep: rollupToRecentWindow(rollups.rollupDeep),
+    };
   });
 }
 
@@ -1787,8 +2412,10 @@ function isLikelyRedisReadCommand(commandNameRaw: string): boolean {
     commandName === "HGETALL" ||
     commandName === "HMGET" ||
     commandName === "ZRANGE" ||
+    commandName === "ZRANGEBYSCORE" ||
     commandName === "ZREVRANGE" ||
     commandName === "ZREVRANGEBYSCORE" ||
+    commandName === "ZCOUNT" ||
     commandName === "ZCARD" ||
     commandName === "SCARD" ||
     commandName === "LLEN" ||
@@ -2016,13 +2643,6 @@ function toOpsMetricSystemSnapshot(
     activeInstances: ownership.activeInstances,
     role: ownership.isOwner ? "master" : "standby",
   };
-}
-
-async function readOpsMetricSystemOwnership(
-  redis?: IORedis,
-): Promise<OpsMetricSystemOwnership> {
-  const instances = await readOpsRedisIoInstanceStats(redis).catch(() => []);
-  return resolveOpsMetricSystemOwnership(instances);
 }
 
 function maybePublishOpsRedisIoInstanceStats(): void {
@@ -2996,6 +3616,297 @@ async function readTrendMetricRowsBatch<TName extends string>(
   });
 }
 
+async function readTrendMetricRowsSinceBatch<TName extends string>(
+  connection: IORedis,
+  descriptors: Array<{ name: TName; key: string }>,
+  sinceAtMsExclusive: number,
+  limitPerMetric: number,
+): Promise<Array<{ name: TName; rows: TrendMetricRow[] }>> {
+  const pipeline = connection.pipeline();
+  const pipelineCommands: string[][] = [];
+  const boundedLimit = Math.max(1, Math.floor(limitPerMetric));
+  const minScore = `(${Math.floor(sinceAtMsExclusive)}`;
+
+  for (const descriptor of descriptors) {
+    pipelineCommands.push([
+      "ZRANGEBYSCORE",
+      descriptor.key,
+      minScore,
+      "+inf",
+      "WITHSCORES",
+      "LIMIT",
+      "0",
+      String(boundedLimit),
+    ]);
+    pipeline.zrangebyscore(
+      descriptor.key,
+      minScore,
+      "+inf",
+      "WITHSCORES",
+      "LIMIT",
+      0,
+      boundedLimit,
+    );
+  }
+
+  const startedAtMs = Date.now();
+  const rawResults = await pipeline.exec();
+  const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+  traceOpsRedisPipeline({
+    phase: "trend-rows-since-batch",
+    commands: pipelineCommands,
+    rawResults,
+    elapsedMs,
+  });
+
+  if (!rawResults) {
+    trackRedisReadIo(
+      descriptors.reduce(
+        (sum, descriptor) =>
+          sum +
+          redisCommandPayloadBytes([
+            "ZRANGEBYSCORE",
+            descriptor.key,
+            minScore,
+            "+inf",
+            "WITHSCORES",
+            "LIMIT",
+            "0",
+            String(boundedLimit),
+          ]),
+        0,
+      ),
+      0,
+      elapsedMs,
+    );
+    return descriptors.map((descriptor) => ({
+      name: descriptor.name,
+      rows: [],
+    }));
+  }
+
+  let totalBytes = 0;
+  for (const result of rawResults) {
+    const payload = result?.[1];
+    if (!Array.isArray(payload)) {
+      continue;
+    }
+    for (const token of payload) {
+      totalBytes += byteLen(String(token));
+    }
+  }
+
+  trackRedisReadIo(
+    descriptors.reduce(
+      (sum, descriptor) =>
+        sum +
+        redisCommandPayloadBytes([
+          "ZRANGEBYSCORE",
+          descriptor.key,
+          minScore,
+          "+inf",
+          "WITHSCORES",
+          "LIMIT",
+          "0",
+          String(boundedLimit),
+        ]),
+      0,
+    ),
+    totalBytes,
+    elapsedMs,
+  );
+
+  return descriptors.map((descriptor, index) => {
+    const payload = rawResults[index]?.[1];
+    return {
+      name: descriptor.name,
+      rows: parseTrendMetricRowsRaw(payload),
+    };
+  });
+}
+
+async function readSnapshotRefreshBatch<TName extends string>(
+  connection: IORedis,
+  descriptors: Array<{ name: TName; key: string }>,
+  sinceAtMsExclusiveByName: Record<string, number>,
+  limitPerMetric: number,
+): Promise<{
+  rowsByMetric: Array<{ name: TName; rows: TrendMetricRow[] }>;
+  redisIoHashEntries: Record<string, string>;
+}> {
+  const pipeline = connection.pipeline();
+  const pipelineCommands: string[][] = [];
+  const boundedLimit = Math.max(1, Math.floor(limitPerMetric));
+
+  for (const descriptor of descriptors) {
+    const sinceAtMsExclusive = Math.max(
+      0,
+      Math.floor(sinceAtMsExclusiveByName[descriptor.name] ?? 0),
+    );
+    const minScore = `(${sinceAtMsExclusive}`;
+    pipelineCommands.push([
+      "ZRANGEBYSCORE",
+      descriptor.key,
+      minScore,
+      "+inf",
+      "WITHSCORES",
+      "LIMIT",
+      "0",
+      String(boundedLimit),
+    ]);
+    pipeline.zrangebyscore(
+      descriptor.key,
+      minScore,
+      "+inf",
+      "WITHSCORES",
+      "LIMIT",
+      0,
+      boundedLimit,
+    );
+  }
+
+  pipelineCommands.push(["HGETALL", OPS_REDIS_IO_INSTANCES_HASH_KEY]);
+  pipeline.hgetall(OPS_REDIS_IO_INSTANCES_HASH_KEY);
+
+  const startedAtMs = Date.now();
+  const rawResults = await pipeline.exec();
+  const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+  traceOpsRedisPipeline({
+    phase: "snapshot-refresh-batch",
+    commands: pipelineCommands,
+    rawResults,
+    elapsedMs,
+  });
+
+  const requestBytes =
+    descriptors.reduce((sum, descriptor) => {
+      const sinceAtMsExclusive = Math.max(
+        0,
+        Math.floor(sinceAtMsExclusiveByName[descriptor.name] ?? 0),
+      );
+      const minScore = `(${sinceAtMsExclusive}`;
+      return (
+        sum +
+        redisCommandPayloadBytes([
+          "ZRANGEBYSCORE",
+          descriptor.key,
+          minScore,
+          "+inf",
+          "WITHSCORES",
+          "LIMIT",
+          "0",
+          String(boundedLimit),
+        ])
+      );
+    }, 0) +
+    redisCommandPayloadBytes(["HGETALL", OPS_REDIS_IO_INSTANCES_HASH_KEY]);
+
+  if (!rawResults) {
+    trackRedisReadIo(requestBytes, 0, elapsedMs);
+    return {
+      rowsByMetric: descriptors.map((descriptor) => ({
+        name: descriptor.name,
+        rows: [],
+      })),
+      redisIoHashEntries: {},
+    };
+  }
+
+  let totalBytes = 0;
+  for (const result of rawResults) {
+    totalBytes += redisReplyPayloadBytes(result?.[1]);
+  }
+  trackRedisReadIo(requestBytes, totalBytes, elapsedMs);
+
+  const rowsByMetric = descriptors.map((descriptor, index) => {
+    const payload = rawResults[index]?.[1];
+    return {
+      name: descriptor.name,
+      rows: parseTrendMetricRowsRaw(payload),
+    };
+  });
+
+  const ioPayload = rawResults[descriptors.length]?.[1];
+  const redisIoHashEntries =
+    ioPayload && typeof ioPayload === "object" && !Array.isArray(ioPayload)
+      ? (ioPayload as Record<string, string>)
+      : {};
+
+  return {
+    rowsByMetric,
+    redisIoHashEntries,
+  };
+}
+
+function parseOpsRedisIoInstancesFromHashEntries(
+  hashEntries: Record<string, string>,
+): OpsRedisIoInstanceStats[] {
+  const entries = Object.entries(hashEntries);
+  if (entries.length === 0) {
+    return [];
+  }
+
+  const staleBeforeIso = new Date(
+    Date.now() - OPS_REDIS_IO_INSTANCE_TTL_SECONDS * 1000,
+  ).toISOString();
+
+  const instances: OpsRedisIoInstanceStats[] = [];
+  for (const [, rawPayload] of entries) {
+    if (!rawPayload) {
+      continue;
+    }
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(rawPayload);
+    } catch {
+      continue;
+    }
+
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      continue;
+    }
+
+    const payload = parsed as Record<string, unknown>;
+    const updatedAt = String(payload.updated_at ?? "");
+    if (!updatedAt || updatedAt < staleBeforeIso) {
+      continue;
+    }
+
+    instances.push(mapInstanceRecord(payload));
+  }
+
+  instances.sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
+  return instances;
+}
+
+function dedupeRedisIoInstancesByInstanceId(
+  instances: OpsRedisIoInstanceStats[],
+): OpsRedisIoInstanceStats[] {
+  const deduped = new Map<string, OpsRedisIoInstanceStats>();
+  for (const instance of instances) {
+    const instanceId = String(instance.instanceId || "").trim();
+    if (!instanceId) {
+      continue;
+    }
+
+    const existing = deduped.get(instanceId);
+    if (!existing) {
+      deduped.set(instanceId, instance);
+      continue;
+    }
+
+    if (parseIsoToMs(instance.updatedAt) >= parseIsoToMs(existing.updatedAt)) {
+      deduped.set(instanceId, instance);
+    }
+  }
+
+  return Array.from(deduped.values()).sort(
+    (left, right) =>
+      parseIsoToMs(right.updatedAt) - parseIsoToMs(left.updatedAt),
+  );
+}
 function sampleTrendRowsInterpolated(
   rows: TrendMetricRow[],
   sampleCount: number,
@@ -3148,7 +4059,7 @@ export async function writeOpsSnapshotTrendMetrics(
     redis,
     atMs: nextTrendTimestampMs(),
     samples: buildTrendSamplesFromUiSnapshot(snapshot),
-    flushNow: Boolean(redis),
+    flushNow: true,
   });
 }
 
@@ -3246,6 +4157,49 @@ export async function readOpsSnapshotTrendRows(input?: {
     const output: OpsSnapshotTrendRowSeriesMap = {};
     for (const row of rowsByMetric) {
       output[row.name] = filterStaleTrendRows(row.rows, maxAgeMs);
+    }
+    return output;
+  });
+}
+
+export async function readOpsSnapshotTrendRowsSince(input?: {
+  metricNames?: string[];
+  sinceAtMsExclusive?: number;
+  limitPerMetric?: number;
+  redis?: IORedis;
+}): Promise<OpsSnapshotTrendRowSeriesMap> {
+  const selected = input?.metricNames?.length
+    ? OPS_SNAPSHOT_TREND_METRIC_REGISTRY.filter((metric) =>
+        input.metricNames?.includes(metric.name),
+      )
+    : OPS_SNAPSHOT_TREND_METRIC_REGISTRY;
+
+  const sinceAtMsExclusive = Math.max(
+    0,
+    Math.floor(input?.sinceAtMsExclusive ?? 0),
+  );
+  const limitPerMetric = Math.max(
+    1,
+    Math.min(
+      OPS_TREND_REDIS_QUERY_LIMIT_MAX,
+      input?.limitPerMetric ?? OPS_TREND_INCREMENTAL_FETCH_LIMIT_PER_METRIC,
+    ),
+  );
+
+  return withControlRedis(input?.redis, async (connection) => {
+    const rowsByMetric = await readTrendMetricRowsSinceBatch(
+      connection,
+      selected.map((metric) => ({
+        name: metric.name,
+        key: metric.key,
+      })),
+      sinceAtMsExclusive,
+      limitPerMetric,
+    );
+
+    const output: OpsSnapshotTrendRowSeriesMap = {};
+    for (const row of rowsByMetric) {
+      output[row.name] = row.rows;
     }
     return output;
   });
@@ -3599,18 +4553,12 @@ export async function createOpsUiStateWatcher(input: {
       : {
           minRefreshIntervalMs: 5000,
           fallbackRefreshIntervalMs: 15000,
-          subscribeToSignals: true,
+          subscribeToSignals: false,
         };
 
-  const snapshotTimeoutMs = Math.max(1000, input.snapshotTimeoutMs ?? 8000);
   const minRefreshIntervalMs = Math.max(
     1000,
     input.minRefreshIntervalMs ?? profileDefaults.minRefreshIntervalMs,
-  );
-  const fallbackRefreshIntervalMs = Math.max(
-    1000,
-    input.fallbackRefreshIntervalMs ??
-      profileDefaults.fallbackRefreshIntervalMs,
   );
   const subscribeToSignals =
     input.subscribeToSignals ?? profileDefaults.subscribeToSignals;
@@ -3644,11 +4592,12 @@ export async function createOpsUiStateWatcher(input: {
   const configuredCollectors: OpsSampleCollectorKey[] =
     input.collectors && input.collectors.length > 0
       ? input.collectors
-      : ["db", "fly", "redis", "bullmq"];
+      : ["db", "fly"];
 
   const subscriber = subscribeToSignals
     ? await createOpsStateUpdatesSubscriber().catch(() => null)
     : null;
+  const refreshRedisConnection = createRedisConnection();
   const queueEventsConnection = subscribeToSignals
     ? createRedisConnection()
     : null;
@@ -3667,17 +4616,19 @@ export async function createOpsUiStateWatcher(input: {
 
   let snapshot: OpsUiSnapshot | null = null;
   let trendPoints: OpsTrendPoint[] = [];
+  const snapshotTrendRowsByMetric: OpsSnapshotTrendRowSeriesMap = {};
+  let snapshotTrendLastAtMs = 0;
+  const snapshotTrendLastAtMsByMetric: Record<string, number> = {};
   let lastRefreshAtMs = Date.now();
   let refreshInFlight: Promise<OpsUiSnapshot> | null = null;
   let stateVersion = 0;
   let closed = false;
   let loopInFlight: Promise<void> | null = null;
   let queueSignalPending = false;
-  let lastBullmqStatusPublishAtMs = 0;
+  let postProcessInFlight: Promise<void> | null = null;
+  let postProcessPending = false;
   let recent15mWindowCache: ImageQueueRecentJobWindow | null = null;
   let recent24hWindowCache: ImageQueueRecentJobWindow | null = null;
-  let lastRecent15mReadAtMs = 0;
-  let lastRecent24hReadAtMs = 0;
   let performanceRollupsCache: OpsPerformanceRollupSet | null = null;
   let lastPerformanceRollupRefreshAtMs = 0;
   let metricOwnershipCache: OpsMetricSystemOwnership | null = null;
@@ -3698,9 +4649,7 @@ export async function createOpsUiStateWatcher(input: {
       return metricOwnershipCache;
     }
 
-    const ownership = await readOpsMetricSystemOwnership().catch(() =>
-      defaultOpsMetricSystemOwnership(),
-    );
+    const ownership = defaultOpsMetricSystemOwnership();
 
     metricOwnershipCache = ownership;
     lastMetricOwnershipRefreshAtMs = nowMs;
@@ -3717,10 +4666,6 @@ export async function createOpsUiStateWatcher(input: {
     }
 
     const nowMs = runInput?.nowMs ?? Date.now();
-    const ownership = await readMetricOwnership(nowMs);
-    if (!ownership.isOwner) {
-      return;
-    }
 
     const dueCollectors = configuredCollectors.filter((collector) => {
       if (runInput?.force) {
@@ -3753,41 +4698,6 @@ export async function createOpsUiStateWatcher(input: {
     }
   };
 
-  const readRecent15mWindow = async (
-    nowMs: number,
-  ): Promise<ImageQueueRecentJobWindow | null> => {
-    if (
-      recent15mWindowCache &&
-      nowMs - lastRecent15mReadAtMs < OPS_RECENT_15M_REFRESH_MIN_INTERVAL_MS
-    ) {
-      return recent15mWindowCache;
-    }
-    const next = await readImageQueueRecentJobWindow(
-      OPS_BULLMQ_METRICS_WINDOW_MS,
-    ).catch(() => null);
-    if (next) {
-      recent15mWindowCache = next;
-      lastRecent15mReadAtMs = nowMs;
-    }
-    return recent15mWindowCache;
-  };
-
-  const readRecent24hWindow = async (nowMs: number): Promise<void> => {
-    if (
-      recent24hWindowCache &&
-      nowMs - lastRecent24hReadAtMs < OPS_RECENT_24H_REFRESH_MIN_INTERVAL_MS
-    ) {
-      return;
-    }
-    const next = await readImageQueueRecentJobWindow(
-      OPS_DAILY_METRICS_WINDOW_MS,
-    ).catch(() => null);
-    if (next) {
-      recent24hWindowCache = next;
-      lastRecent24hReadAtMs = nowMs;
-    }
-  };
-
   const refreshPerformanceRollups = async (
     nowMs: number,
   ): Promise<OpsPerformanceRollupSet | null> => {
@@ -3799,30 +4709,153 @@ export async function createOpsUiStateWatcher(input: {
       return performanceRollupsCache;
     }
 
-    const ownership = await readMetricOwnership(nowMs);
-    if (!ownership.isOwner) {
-      const stored = await readOpsPerformanceRollupSet().catch(() => null);
-      if (stored) {
-        performanceRollupsCache = stored;
-        lastPerformanceRollupRefreshAtMs = nowMs;
+    const computeCounterDelta = (
+      metricName: string,
+      windowStartMs: number,
+    ): number => {
+      const rows = snapshotTrendRowsByMetric[metricName] ?? [];
+      if (rows.length <= 0) {
+        return 0;
       }
-      return performanceRollupsCache;
-    }
 
-    const built = await buildOpsPerformanceRollupSetFromWindows().catch(
-      () => null,
-    );
-    if (!built) {
-      return performanceRollupsCache;
-    }
+      const latest = rows[rows.length - 1];
+      if (!latest || latest.atMs < windowStartMs) {
+        return 0;
+      }
 
-    recent15mWindowCache = built.window15m;
-    lastRecent15mReadAtMs = nowMs;
-    recent24hWindowCache = built.window24h;
-    lastRecent24hReadAtMs = nowMs;
-    performanceRollupsCache = built.rollups;
+      let baseline = rows[0]?.value ?? 0;
+      for (let index = rows.length - 1; index >= 0; index -= 1) {
+        const row = rows[index];
+        if (row.atMs < windowStartMs) {
+          baseline = row.value;
+          break;
+        }
+        baseline = row.value;
+      }
+
+      const delta = Number(latest.value || 0) - Number(baseline || 0);
+      return Number.isFinite(delta) && delta > 0 ? Math.round(delta) : 0;
+    };
+
+    const computeStats = (
+      metricName: string,
+      windowStartMs: number,
+    ): { low: number; high: number; avg: number; count: number } => {
+      const rows = snapshotTrendRowsByMetric[metricName] ?? [];
+      const values = rows
+        .filter((row) => row.atMs >= windowStartMs)
+        .map((row) => Number(row.value))
+        .filter((value) => Number.isFinite(value) && value >= 0);
+
+      if (values.length <= 0) {
+        return { low: 0, high: 0, avg: 0, count: 0 };
+      }
+
+      let low = values[0] ?? 0;
+      let high = values[0] ?? 0;
+      let sum = 0;
+      for (const value of values) {
+        low = Math.min(low, value);
+        high = Math.max(high, value);
+        sum += value;
+      }
+
+      return {
+        low,
+        high,
+        avg: sum / values.length,
+        count: values.length,
+      };
+    };
+
+    const buildRollup = (
+      windowId: "15s" | "1m" | "15m" | "60m" | "24h" | "deep",
+      windowMs: number,
+    ): OpsPerformanceRollup => {
+      const safeWindowMs = Math.max(1000, Math.floor(windowMs));
+      const windowStartMs = nowMs - safeWindowMs;
+      const sampledAt = new Date(nowMs).toISOString();
+
+      const completedJobs = computeCounterDelta(
+        "statusCompletedJobs",
+        windowStartMs,
+      );
+      const failedJobs = computeCounterDelta("statusFailedJobs", windowStartMs);
+      const processedItems = computeCounterDelta(
+        "statusProcessedItems",
+        windowStartMs,
+      );
+      const failedItems = computeCounterDelta(
+        "statusFailedItems",
+        windowStartMs,
+      );
+
+      const fetchStats = computeStats("avgFetchMs", windowStartMs);
+      const transformStats = computeStats("avgTransformMs", windowStartMs);
+      const uploadStats = computeStats("avgUploadMs", windowStartMs);
+      const elapsedStats = computeStats("avgEndToEndMs", windowStartMs);
+
+      const avgFetchMs = Math.round(fetchStats.avg);
+      const avgTransformMs = Math.round(transformStats.avg);
+      const avgUploadMs = Math.round(uploadStats.avg);
+      const avgEndToEndMs = Math.round(elapsedStats.avg);
+
+      const windowSeconds = Math.max(1, Math.floor(safeWindowMs / 1000));
+      const ipsFromWindow = processedItems / windowSeconds;
+      const ipsFromLatency = avgEndToEndMs > 0 ? 1000 / avgEndToEndMs : 0;
+      const ips = Math.max(0, ipsFromWindow, ipsFromLatency);
+
+      return {
+        windowId,
+        windowMs: safeWindowMs,
+        completedJobs,
+        failedJobs,
+        processedItems,
+        failedItems,
+        sampledCompletedJobs: Math.max(completedJobs, fetchStats.count),
+        metricFetchLatencyMsLow: Math.round(fetchStats.low),
+        metricFetchLatencyMsHigh: Math.round(fetchStats.high),
+        metricFetchLatencyMsAvg: avgFetchMs,
+        metricProcessingLatencyMsLow: Math.round(transformStats.low),
+        metricProcessingLatencyMsHigh: Math.round(transformStats.high),
+        metricProcessingLatencyMsAvg: avgTransformMs,
+        metricStorageLatencyMsLow: Math.round(uploadStats.low),
+        metricStorageLatencyMsHigh: Math.round(uploadStats.high),
+        metricStorageLatencyMsAvg: avgUploadMs,
+        metricJobElapsedMsLow: Math.round(elapsedStats.low),
+        metricJobElapsedMsHigh: Math.round(elapsedStats.high),
+        metricJobElapsedMsAvg: avgEndToEndMs,
+        metricSourceBytesLow: 0,
+        metricSourceBytesHigh: 0,
+        metricSourceBytesAvg: 0,
+        metricTransformedBytesLow: 0,
+        metricTransformedBytesHigh: 0,
+        metricTransformedBytesAvg: 0,
+        avgFetchMs,
+        avgTransformMs,
+        avgUploadMs,
+        avgEndToEndMs,
+        ips,
+        ipm: ips * 60,
+        secPerImage: ips > 0 ? 1 / ips : null,
+        computedAt: sampledAt,
+      };
+    };
+
+    const rollups: OpsPerformanceRollupSet = {
+      rollup15s: buildRollup("15s", OPS_15S_METRICS_WINDOW_MS),
+      rollup1m: buildRollup("1m", OPS_1M_METRICS_WINDOW_MS),
+      rollup15m: buildRollup("15m", OPS_BULLMQ_METRICS_WINDOW_MS),
+      rollup60m: buildRollup("60m", OPS_60M_METRICS_WINDOW_MS),
+      rollup24h: buildRollup("24h", OPS_DAILY_METRICS_WINDOW_MS),
+      rollupDeep: buildRollup("deep", OPS_DEEP_METRICS_WINDOW_MS),
+    };
+
+    performanceRollupsCache = rollups;
+    recent15mWindowCache = rollupToRecentWindow(rollups.rollup15m);
+    recent24hWindowCache = rollupToRecentWindow(rollups.rollup24h);
     lastPerformanceRollupRefreshAtMs = nowMs;
-    void writeOpsPerformanceRollupSet(built.rollups).catch(() => undefined);
+
     return performanceRollupsCache;
   };
 
@@ -3864,7 +4897,7 @@ export async function createOpsUiStateWatcher(input: {
     if (trendPoints.length > 0) {
       return;
     }
-    const history = await readOpsTrendHistory(OPS_TREND_HISTORY_MAX).catch(
+    const history = await readOpsTrendHistory(OPS_TREND_STATE_MAX_POINTS).catch(
       () => [],
     );
     if (history.length === 0) {
@@ -3879,7 +4912,7 @@ export async function createOpsUiStateWatcher(input: {
       windowStartMs !== null
         ? history.filter((point) => point.atMs >= windowStartMs)
         : history;
-    trendPoints = seeded.slice(-OPS_TREND_HISTORY_MAX);
+    trendPoints = seeded.slice(-OPS_TREND_STATE_MAX_POINTS);
   };
 
   const appendTrendPointFromSnapshot = (nextSnapshot: OpsUiSnapshot): void => {
@@ -3920,155 +4953,245 @@ export async function createOpsUiStateWatcher(input: {
       workersRunning,
     });
 
-    if (trendPoints.length > OPS_TREND_HISTORY_MAX) {
+    if (trendPoints.length > OPS_TREND_STATE_MAX_POINTS) {
       trendPoints = trendPoints.slice(
-        trendPoints.length - OPS_TREND_HISTORY_MAX,
+        trendPoints.length - OPS_TREND_STATE_MAX_POINTS,
       );
     }
   };
 
-  const hydrateFromStateStore = async (): Promise<OpsUiSnapshot> => {
+  const appendSnapshotTrendRows = (
+    rowsByMetric: OpsSnapshotTrendRowSeriesMap,
+  ): boolean => {
+    let changed = false;
+    let maxAtMs = snapshotTrendLastAtMs;
+
+    for (const metric of OPS_SNAPSHOT_TREND_METRIC_REGISTRY) {
+      const name = metric.name;
+      const incoming = rowsByMetric[name] ?? [];
+      if (incoming.length === 0) {
+        continue;
+      }
+
+      const existing = snapshotTrendRowsByMetric[name] ?? [];
+      const tailAtMs = existing[existing.length - 1]?.atMs ?? 0;
+      const fresh = incoming.filter((row) => row.atMs > tailAtMs);
+      if (fresh.length === 0) {
+        continue;
+      }
+
+      const merged = [...existing, ...fresh];
+      snapshotTrendRowsByMetric[name] =
+        merged.length > OPS_TREND_STATE_MAX_POINTS
+          ? merged.slice(merged.length - OPS_TREND_STATE_MAX_POINTS)
+          : merged;
+
+      snapshotTrendLastAtMsByMetric[name] =
+        snapshotTrendRowsByMetric[name][
+          snapshotTrendRowsByMetric[name].length - 1
+        ]?.atMs ?? tailAtMs;
+
+      maxAtMs = Math.max(maxAtMs, fresh[fresh.length - 1]?.atMs ?? 0);
+      changed = true;
+    }
+
+    if (maxAtMs > snapshotTrendLastAtMs) {
+      snapshotTrendLastAtMs = maxAtMs;
+    }
+
+    return changed;
+  };
+
+  const latestMetricValue = (metricName: string): number => {
+    const rows = snapshotTrendRowsByMetric[metricName] ?? [];
+    const value = rows[rows.length - 1]?.value;
+    return Number.isFinite(value) ? Number(value) : 0;
+  };
+
+  const buildSnapshotFromTrendMemory = (): OpsUiSnapshot => {
     const nowIso = new Date().toISOString();
-    const nextSnapshot: OpsUiSnapshot = {
+    const queue = {
+      waiting: Math.max(0, Math.floor(latestMetricValue("queueWaitingLive"))),
+      active: Math.max(0, Math.floor(latestMetricValue("queueActiveLive"))),
+      completed: Math.max(
+        0,
+        Math.floor(latestMetricValue("queueCompletedLive")),
+      ),
+      failed: Math.max(0, Math.floor(latestMetricValue("queueFailedLive"))),
+      delayed: Math.max(0, Math.floor(latestMetricValue("queueDelayedLive"))),
+      paused: Math.max(0, Math.floor(latestMetricValue("queuePausedLive"))),
+      backlog: Math.max(0, Math.floor(latestMetricValue("queueBacklogLive"))),
+    };
+
+    const settings: RunnerControlSettings = {
+      desiredMode: "run",
+      enqueueEnabled: true,
+      requireWorkersForEnqueue: true,
+      minWorkersToEnqueue: 1,
+      maxQueueBacklog: Math.max(
+        0,
+        Math.floor(latestMetricValue("settingsMaxQueueBacklog")),
+      ),
+      refillLowWatermark: Math.max(
+        0,
+        Math.floor(latestMetricValue("settingsRefillLowWatermark")),
+      ),
+      refillTargetBacklog: Math.max(
+        0,
+        Math.floor(latestMetricValue("settingsRefillTargetBacklog")),
+      ),
+      maxClaimPerCycle: Math.max(
+        0,
+        Math.floor(latestMetricValue("settingsMaxClaimPerCycle")),
+      ),
+      flushIntervalMs: Math.max(
+        0,
+        Math.floor(latestMetricValue("settingsFlushIntervalMs")),
+      ),
+      harvestEnabled: true,
+    };
+
+    const workersRunning = Math.max(
+      0,
+      Math.floor(latestMetricValue("workersRunningLive")),
+    );
+
+    const status: RunnerStatusSnapshot = {
+      operationId: snapshot?.status?.operationId || "trend-refresh",
+      mode: queue.backlog > 0 || queue.active > 0 ? "running" : "idle",
+      desiredMode: settings.desiredMode,
+      gateReason: snapshot?.status?.gateReason || "gate=open:trend-refresh",
+      workersRunning,
+      claimedCount: queue.waiting + queue.active + queue.delayed + queue.paused,
+      queuedCount: queue.waiting + queue.active + queue.delayed + queue.paused,
+      completedJobs: Math.max(
+        0,
+        Math.floor(latestMetricValue("statusCompletedJobs")),
+      ),
+      failedJobs: Math.max(
+        0,
+        Math.floor(latestMetricValue("statusFailedJobs")),
+      ),
+      processedItems: Math.max(
+        0,
+        Math.floor(latestMetricValue("statusProcessedItems")),
+      ),
+      failedItems: Math.max(
+        0,
+        Math.floor(latestMetricValue("statusFailedItems")),
+      ),
+      queueWaiting: queue.waiting,
+      queueActive: queue.active,
+      queueCompleted: queue.completed,
+      queueFailed: queue.failed,
+      queueDelayed: queue.delayed,
+      queuePaused: queue.paused,
+      queueBacklog: queue.backlog,
+      lastFlushAt: snapshot?.status?.lastFlushAt || null,
+      flushBatchCount: Math.max(
+        0,
+        Math.floor(latestMetricValue("statusFlushBatchCount")),
+      ),
+      pendingSuccessBuffer: Math.max(
+        0,
+        Math.floor(latestMetricValue("statusPendingSuccessBuffer")),
+      ),
+      pendingErrorBuffer: Math.max(
+        0,
+        Math.floor(latestMetricValue("statusPendingErrorBuffer")),
+      ),
+      throughputImagesPerMinute:
+        snapshot?.status?.throughputImagesPerMinute || 0,
+      avgFetchMs: snapshot?.status?.avgFetchMs || 0,
+      avgTransformMs: snapshot?.status?.avgTransformMs || 0,
+      avgUploadMs: snapshot?.status?.avgUploadMs || 0,
+      avgEndToEndMs: snapshot?.status?.avgEndToEndMs || 0,
+      updatedAt: nowIso,
+    };
+
+    return {
       at: nowIso,
       machines: snapshot?.machines ?? null,
-      queue: snapshot?.queue ?? null,
-      recentJobs15m: snapshot?.recentJobs15m ?? null,
-      recentJobs24h: snapshot?.recentJobs24h ?? null,
-      performanceRollups: snapshot?.performanceRollups ?? null,
-      queuePaused: snapshot?.queuePaused ?? null,
-      db: snapshot?.db ?? null,
-      settings: snapshot?.settings ?? null,
-      infra: snapshot?.infra ?? null,
-      status: snapshot?.status ?? null,
-      metricSystem: snapshot?.metricSystem,
+      queue,
+      recentJobs15m: recent15mWindowCache,
+      recentJobs24h: recent24hWindowCache,
+      performanceRollups: performanceRollupsCache,
+      queuePaused: queue.paused > 0,
+      db: {
+        processed: Math.max(0, Math.floor(latestMetricValue("dbProcessed"))),
+        pending: Math.max(0, Math.floor(latestMetricValue("dbPending"))),
+        failed: snapshot?.db?.failed ?? 0,
+        total: Math.max(0, Math.floor(latestMetricValue("dbTotal"))),
+        pct: Math.max(0, latestMetricValue("dbProgressPct")),
+      },
+      settings,
+      infra: {
+        workersRunning,
+        source: "image-ops-module:refresh-trend-memory",
+        updatedAt: nowIso,
+      },
+      status,
+      metricSystem:
+        snapshot?.metricSystem ??
+        toOpsMetricSystemSnapshot(defaultOpsMetricSystemOwnership()),
       redisIoAggregate: snapshot?.redisIoAggregate,
       redisIoInstances: snapshot?.redisIoInstances,
-      projections: snapshot?.projections ?? deriveOpsTrendProjection([]),
+      trendRowsByMetric: cloneTrendRowsByMetric(snapshotTrendRowsByMetric),
+      trendRowsLastAtMs: snapshotTrendLastAtMs,
+      projections:
+        trendPoints.length > 0 ? projectTrend() : deriveOpsTrendProjection([]),
       errors: {},
     };
+  };
 
-    const [
-      control,
-      queue,
-      db,
-      liveWorkers,
-      recentJobs24h,
-      queuePaused,
-      redisIoInstances,
-    ] = await Promise.allSettled([
-      withTimeout("control", snapshotTimeoutMs, readOpsControlSnapshot()),
-      withTimeout("queue", snapshotTimeoutMs, readOpsQueueSnapshot()),
-      withTimeout("db", snapshotTimeoutMs, readOpsDbProgress()),
-      withTimeout(
-        "liveWorkers",
-        snapshotTimeoutMs,
-        readOpsLiveWorkersRunning(),
-      ),
-      withTimeout(
-        "recentJobs24h",
-        snapshotTimeoutMs,
-        readImageQueueRecentJobWindow(24 * 60 * 60 * 1000),
-      ),
-      withTimeout("queuePaused", snapshotTimeoutMs, readOpsQueuePausedState()),
-      withTimeout(
-        "redisIoInstances",
-        snapshotTimeoutMs,
-        readOpsRedisIoInstanceStats(),
-      ),
-    ]);
-
-    if (control.status === "fulfilled") {
-      nextSnapshot.settings = control.value.settings;
-      nextSnapshot.infra = control.value.infra;
-      nextSnapshot.status = control.value.status;
-    } else {
-      nextSnapshot.errors.control = shortError(control.reason);
+  const scheduleBackgroundPostProcess = (): void => {
+    if (closed) {
+      return;
+    }
+    if (postProcessInFlight) {
+      postProcessPending = true;
+      return;
     }
 
-    if (queue.status === "fulfilled") {
-      nextSnapshot.queue = queue.value;
-    } else {
-      nextSnapshot.errors.queue = shortError(queue.reason);
-      nextSnapshot.queue =
-        nextSnapshot.queue ?? queueCountsFromStatus(nextSnapshot.status);
-    }
-
-    if (db.status === "fulfilled") {
-      nextSnapshot.db = db.value;
-    } else {
-      nextSnapshot.errors.db = shortError(db.reason);
-    }
-
-    if (liveWorkers.status === "fulfilled") {
-      const normalized = applyLiveWorkersToControlSnapshot({
-        infra: nextSnapshot.infra,
-        status: nextSnapshot.status,
-        liveWorkers: liveWorkers.value,
-      });
-      nextSnapshot.infra = normalized.infra;
-      nextSnapshot.status = normalized.status;
-    }
-
-    await seedTrendPointsFromRedis();
-    if (trendPoints.length > 0) {
-      nextSnapshot.projections = projectTrend();
-    }
-
-    if (recentJobs24h.status === "fulfilled") {
-      nextSnapshot.recentJobs24h = recentJobs24h.value;
-    }
-
-    if (queuePaused.status === "fulfilled") {
-      nextSnapshot.queuePaused = queuePaused.value;
-    }
-
-    if (redisIoInstances.status === "fulfilled") {
-      nextSnapshot.redisIoInstances = redisIoInstances.value;
-      nextSnapshot.redisIoAggregate = aggregateRedisIoInstances(
-        redisIoInstances.value,
+    postProcessInFlight = (async () => {
+      await readMetricOwnership(Date.now()).catch(() =>
+        defaultOpsMetricSystemOwnership(),
       );
-    }
+      const previousComputedAt =
+        performanceRollupsCache?.rollup15s?.computedAt || null;
+      const rollups = await refreshPerformanceRollups(Date.now()).catch(
+        () => null,
+      );
+      if (!rollups || !snapshot) {
+        return;
+      }
 
-    appendTrendPointFromSnapshot(nextSnapshot);
-    snapshot = {
-      ...nextSnapshot,
-      projections:
-        trendPoints.length > 0 ? projectTrend() : nextSnapshot.projections,
-    };
-    const nowMs = Date.now();
-    snapshot.performanceRollups = await refreshPerformanceRollups(nowMs);
-    snapshot.recentJobs15m = await readRecent15mWindow(nowMs);
-    await readRecent24hWindow(nowMs);
-    snapshot.recentJobs24h = recent24hWindowCache;
-    const ownership = await readMetricOwnership(nowMs);
-    snapshot.metricSystem = toOpsMetricSystemSnapshot(ownership);
-    const recentWindow15m = snapshot.recentJobs15m;
-    if (
-      ownership.isOwner &&
-      shouldReconcileBullmqStatus({
-        status: snapshot.status,
-        queue: snapshot.queue,
-        recentWindow: recentWindow15m,
-        nowMs,
-        lastPublishAtMs: lastBullmqStatusPublishAtMs,
-      }) &&
-      snapshot.queue
-    ) {
-      const reconciled = buildBullmqRepresentativeStatus({
-        status: snapshot.status,
-        settings: snapshot.settings,
-        infra: snapshot.infra,
-        queue: snapshot.queue,
-        recentWindow: recentWindow15m,
+      const nextComputedAt = rollups.rollup15s?.computedAt || null;
+      if (nextComputedAt === previousComputedAt) {
+        return;
+      }
+
+      snapshot = {
+        ...snapshot,
+        at: new Date().toISOString(),
+        performanceRollups: rollups,
+        recentJobs15m: recent15mWindowCache,
+        recentJobs24h: recent24hWindowCache,
+      };
+      notifyState();
+    })()
+      .catch(() => undefined)
+      .finally(() => {
+        postProcessInFlight = null;
+        if (postProcessPending && !closed) {
+          postProcessPending = false;
+          scheduleBackgroundPostProcess();
+        }
       });
-      await writeOpsRunnerStatus(reconciled);
-      snapshot.status = reconciled;
-      lastBullmqStatusPublishAtMs = nowMs;
-    }
-    lastRefreshAtMs = Date.now();
-    notifyState();
-    return snapshot;
+  };
+
+  const hydrateFromStateStore = async (): Promise<OpsUiSnapshot> => {
+    return refresh(true);
   };
 
   const refresh = async (force: boolean): Promise<OpsUiSnapshot> => {
@@ -4083,61 +5206,70 @@ export async function createOpsUiStateWatcher(input: {
       return refreshInFlight;
     }
 
-    await seedTrendPointsFromRedis();
+    const isInitialSnapshotHydration = snapshotTrendLastAtMs <= 0;
+    const refreshLimitPerMetric = isInitialSnapshotHydration
+      ? OPS_TREND_REDIS_QUERY_LIMIT_MAX
+      : OPS_TREND_INCREMENTAL_FETCH_LIMIT_PER_METRIC;
 
-    const nowMs = Date.now();
-    const ownership = await readMetricOwnership(nowMs);
+    const descriptorList = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map((metric) => ({
+      name: metric.name,
+      key: metric.key,
+    }));
+    const sinceAtMsExclusiveByName: Record<string, number> = {};
+    for (const descriptor of descriptorList) {
+      sinceAtMsExclusiveByName[descriptor.name] = Math.max(
+        0,
+        Math.floor(snapshotTrendLastAtMsByMetric[descriptor.name] ?? 0),
+      );
+    }
 
-    refreshInFlight = readOpsUiSnapshot(input.appName, snapshotTimeoutMs, {
-      includeFly: ownership.isOwner,
-      includeTrendProjection: false,
-      includeRecentJobs15m: false,
-      includeRecentJobs24h: false,
-      includePerformanceRollups: false,
-    })
-      .then(async (nextSnapshot) => {
+    refreshInFlight = readSnapshotRefreshBatch(
+      refreshRedisConnection,
+      descriptorList,
+      sinceAtMsExclusiveByName,
+      refreshLimitPerMetric,
+    )
+      .then((batch) => {
+        const rowsByMetric: OpsSnapshotTrendRowSeriesMap = {};
+        for (const rowSet of batch.rowsByMetric) {
+          rowsByMetric[rowSet.name] = rowSet.rows;
+        }
+        return {
+          rowsByMetric,
+          redisIoInstances: parseOpsRedisIoInstancesFromHashEntries(
+            batch.redisIoHashEntries,
+          ),
+        };
+      })
+      .then(async ({ rowsByMetric, redisIoInstances }) => {
+        const hadFreshRows = appendSnapshotTrendRows(rowsByMetric);
+        if (trendPoints.length === 0) {
+          await seedTrendPointsFromRedis();
+        }
+        if (hadFreshRows) {
+          scheduleBackgroundPostProcess();
+        }
+        const ownership = await readMetricOwnership(Date.now()).catch(() =>
+          defaultOpsMetricSystemOwnership(),
+        );
+        const redisIoInstancesLive =
+          redisIoInstances.length > 0
+            ? dedupeRedisIoInstancesByInstanceId(redisIoInstances)
+            : (snapshot?.redisIoInstances ?? []);
+        const redisIoAggregateLive =
+          redisIoInstancesLive.length > 0
+            ? aggregateRedisIoInstances(redisIoInstancesLive)
+            : (snapshot?.redisIoAggregate ?? aggregateRedisIoInstances([]));
+        const nextSnapshot = buildSnapshotFromTrendMemory();
         appendTrendPointFromSnapshot(nextSnapshot);
-        const next = {
+        snapshot = {
           ...nextSnapshot,
+          metricSystem: toOpsMetricSystemSnapshot(ownership),
+          redisIoAggregate: redisIoAggregateLive,
+          redisIoInstances: redisIoInstancesLive,
           projections:
             trendPoints.length > 0 ? projectTrend() : nextSnapshot.projections,
-          recentJobs15m:
-            nextSnapshot.recentJobs15m ?? snapshot?.recentJobs15m ?? null,
-          recentJobs24h:
-            nextSnapshot.recentJobs24h ?? snapshot?.recentJobs24h ?? null,
-          performanceRollups:
-            nextSnapshot.performanceRollups ??
-            snapshot?.performanceRollups ??
-            null,
         };
-        next.performanceRollups = await refreshPerformanceRollups(nowMs);
-        next.recentJobs15m = await readRecent15mWindow(nowMs);
-        await readRecent24hWindow(nowMs);
-        next.recentJobs24h = recent24hWindowCache;
-        const recentWindow15m = next.recentJobs15m;
-        if (
-          ownership.isOwner &&
-          shouldReconcileBullmqStatus({
-            status: next.status,
-            queue: next.queue,
-            recentWindow: recentWindow15m,
-            nowMs,
-            lastPublishAtMs: lastBullmqStatusPublishAtMs,
-          }) &&
-          next.queue
-        ) {
-          const reconciled = buildBullmqRepresentativeStatus({
-            status: next.status,
-            settings: next.settings,
-            infra: next.infra,
-            queue: next.queue,
-            recentWindow: recentWindow15m,
-          });
-          void writeOpsRunnerStatus(reconciled).catch(() => undefined);
-          next.status = reconciled;
-          lastBullmqStatusPublishAtMs = nowMs;
-        }
-        snapshot = next;
         lastRefreshAtMs = Date.now();
         notifyState();
         return snapshot;
@@ -4186,13 +5318,16 @@ export async function createOpsUiStateWatcher(input: {
         }
 
         const ageMs = Date.now() - lastRefreshAtMs;
-        if (ageMs >= fallbackRefreshIntervalMs) {
+        if (ageMs >= minRefreshIntervalMs) {
           await refresh(true);
           touchedState = true;
         }
 
+        // Post-processing cadence is intentionally disabled for now.
+        // Refresh remains the only recurring loop operation.
+
         if (!subscriber && !touchedState) {
-          await sleep(Math.min(500, fallbackRefreshIntervalMs));
+          await sleep(Math.min(500, minRefreshIntervalMs));
         }
       }
     })().finally(() => {
@@ -4201,6 +5336,7 @@ export async function createOpsUiStateWatcher(input: {
   };
 
   if (!skipInitialRefresh) {
+    await seedTrendPointsFromRedis().catch(() => undefined);
     await refresh(true);
   } else if (hydrateOnInit) {
     await hydrateFromStateStore().catch(() => undefined);
@@ -4270,6 +5406,7 @@ export async function createOpsUiStateWatcher(input: {
       if (queueEventsConnection) {
         await queueEventsConnection.quit().catch(() => undefined);
       }
+      await refreshRedisConnection.quit().catch(() => undefined);
       if (loopInFlight) {
         await loopInFlight;
       }
@@ -4984,8 +6121,10 @@ export async function readOpsUiSnapshot(
   const includeRecentJobs15m = input?.includeRecentJobs15m ?? true;
   const includeRecentJobs24h = input?.includeRecentJobs24h ?? true;
   const includePerformanceRollups = input?.includePerformanceRollups ?? true;
-  const awaitPerformanceRollupWrite =
-    input?.awaitPerformanceRollupWrite ?? false;
+  const readRecentJobs15mDirect =
+    includeRecentJobs15m && !includePerformanceRollups;
+  const readRecentJobs24hDirect =
+    includeRecentJobs24h && !includePerformanceRollups;
   const projectionLimit = OPS_TREND_PROJECTION_DEFAULT_LIMIT;
   const projectionAnchorAtMs = Date.now();
   const projectionWindowMs = projectionLimit * 1000;
@@ -5005,6 +6144,8 @@ export async function readOpsUiSnapshot(
     metricSystem: toOpsMetricSystemSnapshot(ownership),
     redisIoAggregate: undefined,
     redisIoInstances: undefined,
+    trendRowsByMetric: {},
+    trendRowsLastAtMs: 0,
     projections: deriveOpsTrendProjection([]),
     errors: {},
   };
@@ -5050,14 +6191,14 @@ export async function readOpsUiSnapshot(
           }),
         )
       : Promise.resolve<OpsTrendProjection>(deriveOpsTrendProjection([])),
-    includeRecentJobs24h
+    readRecentJobs24hDirect
       ? withTimeout(
           "recentJobs24h",
           timeoutMs,
           readImageQueueRecentJobWindow(OPS_DAILY_METRICS_WINDOW_MS),
         )
       : Promise.resolve<ImageQueueRecentJobWindow | null>(null),
-    includeRecentJobs15m
+    readRecentJobs15mDirect
       ? withTimeout(
           "recentJobs15m",
           timeoutMs,
@@ -5119,29 +6260,15 @@ export async function readOpsUiSnapshot(
 
   if (performanceRollupsStored.status === "fulfilled") {
     snapshot.performanceRollups = performanceRollupsStored.value || null;
-  }
-
-  if (includePerformanceRollups && metricWritesEnabled) {
-    const computed = await withTimeout(
-      "performanceRollupsComputed",
-      timeoutMs,
-      buildOpsPerformanceRollupSetFromWindows(),
-    ).catch(() => null);
-    if (computed) {
-      snapshot.performanceRollups = computed.rollups;
-      if (!snapshot.recentJobs15m) {
-        snapshot.recentJobs15m = computed.window15m;
-      }
-      if (!snapshot.recentJobs24h) {
-        snapshot.recentJobs24h = computed.window24h;
-      }
-      if (awaitPerformanceRollupWrite) {
-        await writeOpsPerformanceRollupSet(computed.rollups).catch(
-          () => undefined,
+    if (snapshot.performanceRollups) {
+      if (includeRecentJobs15m && !snapshot.recentJobs15m) {
+        snapshot.recentJobs15m = rollupToRecentWindow(
+          snapshot.performanceRollups.rollup15m,
         );
-      } else {
-        void writeOpsPerformanceRollupSet(computed.rollups).catch(
-          () => undefined,
+      }
+      if (includeRecentJobs24h && !snapshot.recentJobs24h) {
+        snapshot.recentJobs24h = rollupToRecentWindow(
+          snapshot.performanceRollups.rollup24h,
         );
       }
     }
@@ -5158,10 +6285,6 @@ export async function readOpsUiSnapshot(
     );
   }
 
-  if (metricWritesEnabled) {
-    await writeOpsSnapshotTrendMetrics(snapshot);
-  }
-
   return snapshot;
 }
 
@@ -5174,9 +6297,16 @@ export type OpsOneShotPerformanceRefreshResult = {
   windowDeep: ImageQueueRecentJobWindow | null;
 };
 
-export async function runOpsOneShotPerformanceRefresh(): Promise<OpsOneShotPerformanceRefreshResult> {
-  const built = await buildOpsPerformanceRollupSetFromWindows();
-  await writeOpsPerformanceRollupSet(built.rollups);
+export async function runOpsOneShotPerformanceRefresh(input?: {
+  redis?: IORedis;
+}): Promise<OpsOneShotPerformanceRefreshResult> {
+  const built = await runOpsPerformancePostProcessViaLua({
+    redis: input?.redis,
+  }).catch(async () => {
+    const legacy = await buildOpsPerformanceRollupSetFromWindows();
+    await writeOpsPerformanceRollupSet(legacy.rollups);
+    return legacy;
+  });
   return {
     rollups: built.rollups,
     window15s: built.window15s,
@@ -5219,6 +6349,8 @@ export async function runOpsOneShotPipeline(
     },
   );
 
+  let statusReconciled = false;
+
   if ((input.reconcileBullmqStatus ?? true) && snapshot.queue) {
     const nowMs = Date.now();
     const recentWindow = snapshot.recentJobs15m;
@@ -5240,16 +6372,15 @@ export async function runOpsOneShotPipeline(
       });
       await writeOpsRunnerStatus(reconciled);
       snapshot.status = reconciled;
-      return {
-        snapshot,
-        statusReconciled: true,
-      };
+      statusReconciled = true;
     }
   }
 
+  await writeOpsSnapshotTrendMetrics(snapshot);
+
   return {
     snapshot,
-    statusReconciled: false,
+    statusReconciled,
   };
 }
 
