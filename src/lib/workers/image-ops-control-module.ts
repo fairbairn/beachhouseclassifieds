@@ -22,29 +22,26 @@ import {
   type FlyAppSnapshot,
   type FlyMachine,
 } from "./image-fly-ops";
-import { readImageJobMetricRollupWindows } from "./image-job-metric-trends";
 import {
   IMAGE_GROUP_DB,
   IMAGE_GROUP_IMAGES,
   IMAGE_GROUP_INFRA,
   IMAGE_GROUP_JOBS,
   IMAGE_GROUP_QUEUE,
-  IMAGE_PERF_ROLLUPS_HASH_KEY,
-  IMAGE_SLICE_UPDATED_AT_FIELD,
-  IMAGE_SLICE_WINDOWS,
   IMAGE_SLICE_WINDOW_MS,
-  encodeImageSliceWindowPayload,
   encodeImageTrendPoint,
-  imageMetricSliceHashKey,
-  imageMetricSliceWindowField,
   imageMetricTrendKey,
-  imageRawJobTrendMetricKey,
   parseImageTrendPoint,
 } from "./image-metrics-redis-keys";
 import {
-  IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS,
-  IMAGE_JOB_SLICE_METRIC_SLUGS,
-} from "./image-metrics-registry";
+  buildMetricSliceCacheFromTrendRows,
+  buildPerformanceRollupSetFromTrendRows,
+  type OpsMetricSliceCache,
+  type OpsMetricSliceId,
+  type OpsMetricSliceValueType,
+  type OpsQueueWindowAverages,
+  type OpsQueueWindowSummary,
+} from "./image-ops-slice-generation";
 import {
   purgePendingImageQueueJobs,
   readImageQueueCounts,
@@ -91,6 +88,7 @@ export const OPS_UI_METRIC_LABELS = {
   },
   image: {
     processed: "processed",
+    completed: "completed",
     failed: "failed",
     ips: "ips",
     ipm: "ipm",
@@ -279,6 +277,8 @@ export type OpsUiSnapshot = {
   recentJobs15m: ImageQueueRecentJobWindow | null;
   recentJobs24h: ImageQueueRecentJobWindow | null;
   performanceRollups: OpsPerformanceRollupSet | null;
+  metricSlices?: OpsMetricSliceCache;
+  queueWindowAverages?: OpsQueueWindowAverages;
   queuePaused?: boolean | null;
   db: OpsDbProgress;
   settings: RunnerControlSettings | null;
@@ -297,6 +297,30 @@ export type OpsUiSnapshot = {
     control?: string;
   };
 };
+
+export type OpsMetricSliceLookupInput = {
+  snapshot: OpsUiSnapshot | null | undefined;
+  metricName: string;
+  sliceId: OpsMetricSliceId;
+  valueType?: OpsMetricSliceValueType;
+};
+
+export function readOpsMetricSliceValue(
+  input: OpsMetricSliceLookupInput,
+): number {
+  const requestedType = input.valueType ?? "avg";
+  const metricSlices = input.snapshot?.metricSlices?.[input.metricName];
+  if (!metricSlices) {
+    return 0;
+  }
+  const slice = metricSlices[input.sliceId];
+  if (!slice) {
+    return 0;
+  }
+
+  const value = slice[requestedType];
+  return Number.isFinite(value) ? Number(value) : 0;
+}
 
 function cloneTrendRowsByMetric(
   rowsByMetric: OpsSnapshotTrendRowSeriesMap,
@@ -354,6 +378,14 @@ export type OpsPerformanceRollupSet = {
   rollup60m: OpsPerformanceRollup;
   rollup24h: OpsPerformanceRollup;
   rollupDeep: OpsPerformanceRollup;
+};
+
+export type {
+  OpsMetricSliceCache,
+  OpsMetricSliceId,
+  OpsMetricSliceValueType,
+  OpsQueueWindowAverages,
+  OpsQueueWindowSummary,
 };
 
 export type OpsSnapshotTrendMetricDescriptor = {
@@ -455,6 +487,7 @@ const OPS_TREND_REDIS_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const OPS_TREND_PROJECTION_DEFAULT_LIMIT = 50;
 const OPS_LIVE_STATUS_STALE_THRESHOLD_MS = 10_000;
 const OPS_LIVE_STATUS_PUBLISH_MIN_INTERVAL_MS = 2_000;
+const OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS = 15_000;
 const OPS_15S_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["15s"];
 const OPS_1M_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["1m"];
 const OPS_BULLMQ_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["15m"];
@@ -462,9 +495,14 @@ const OPS_60M_METRICS_WINDOW_MS = 60 * 60 * 1000;
 const OPS_DAILY_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["24h"];
 const OPS_DEEP_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS.deep;
 const OPS_RECENT_15M_REFRESH_MIN_INTERVAL_MS = 5_000;
-const OPS_PERFORMANCE_ROLLUP_REFRESH_MIN_INTERVAL_MS = 5_000;
-const OPS_LIVE_SLICE_TTL_MS = 15_000;
-const OPS_PERFORMANCE_ROLLUP_HASH_KEY = IMAGE_PERF_ROLLUPS_HASH_KEY;
+const OPS_METRIC_SLICE_WINDOW_MS_BY_ID = {
+  w15s: OPS_15S_METRICS_WINDOW_MS,
+  w1m: OPS_1M_METRICS_WINDOW_MS,
+  w15m: OPS_BULLMQ_METRICS_WINDOW_MS,
+  w60m: OPS_60M_METRICS_WINDOW_MS,
+  w24h: OPS_DAILY_METRICS_WINDOW_MS,
+  wDeep: OPS_DEEP_METRICS_WINDOW_MS,
+} as const;
 let lastTrendTimestampMs = 0;
 const OPS_REDIS_IO_INSTANCES_HASH_KEY =
   "image:runner:control:redis_io:instances";
@@ -473,7 +511,6 @@ const OPS_REDIS_IO_PUBLISH_MIN_INTERVAL_MS = 5_000;
 const OPS_METRIC_OWNER_REFRESH_MIN_INTERVAL_MS = 5_000;
 const OPS_SAMPLE_FLUSH_INTERVAL_MS_DEFAULT = 1_000;
 const OPS_PIPELINE_TRACE_MAX_CHARS = 1200;
-let opsRollupSliceLuaSha: string | null = null;
 
 type OpsStagedMetricSample = {
   key: string;
@@ -1001,930 +1038,6 @@ export async function readOpsRedisPreflight(input?: {
   }
 }
 
-function parseNonNegativeNumber(value: unknown): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return 0;
-  }
-  return parsed;
-}
-
-function buildPerformanceRollupFromWindow(
-  windowId: "15s" | "1m" | "15m" | "60m" | "24h" | "deep",
-  windowMs: number,
-  window: ImageQueueRecentJobWindow | null,
-  computedAtIso: string,
-): OpsPerformanceRollup {
-  const completedJobs = Math.max(0, Number(window?.completedJobs || 0));
-  const failedJobs = Math.max(0, Number(window?.failedJobs || 0));
-  const processedItems = Math.max(0, Number(window?.processedItems || 0));
-  const failedItems = Math.max(0, Number(window?.failedItems || 0));
-  const sampledCompletedJobs = Math.max(
-    0,
-    Number(window?.sampledCompletedJobs || 0),
-  );
-  const avgFetchMs = parseNonNegativeNumber(window?.avgFetchMs);
-  const avgTransformMs = parseNonNegativeNumber(window?.avgTransformMs);
-  const avgUploadMs = parseNonNegativeNumber(window?.avgUploadMs);
-  const avgEndToEndMs = parseNonNegativeNumber(window?.avgEndToEndMs);
-  const metricFetchLatencyMsLow = parseNonNegativeNumber(
-    window?.fetchElapsedMsLow,
-  );
-  const metricFetchLatencyMsHigh = parseNonNegativeNumber(
-    window?.fetchElapsedMsHigh,
-  );
-  const metricFetchLatencyMsAvg = parseNonNegativeNumber(
-    window?.fetchElapsedMsAvg,
-  );
-  const metricProcessingLatencyMsLow = parseNonNegativeNumber(
-    window?.transformElapsedMsLow,
-  );
-  const metricProcessingLatencyMsHigh = parseNonNegativeNumber(
-    window?.transformElapsedMsHigh,
-  );
-  const metricProcessingLatencyMsAvg = parseNonNegativeNumber(
-    window?.transformElapsedMsAvg,
-  );
-  const metricStorageLatencyMsLow = parseNonNegativeNumber(
-    window?.uploadElapsedMsLow,
-  );
-  const metricStorageLatencyMsHigh = parseNonNegativeNumber(
-    window?.uploadElapsedMsHigh,
-  );
-  const metricStorageLatencyMsAvg = parseNonNegativeNumber(
-    window?.uploadElapsedMsAvg,
-  );
-  const metricJobElapsedMsLow = parseNonNegativeNumber(window?.elapsedMsLow);
-  const metricJobElapsedMsHigh = parseNonNegativeNumber(window?.elapsedMsHigh);
-  const metricJobElapsedMsAvg = parseNonNegativeNumber(window?.elapsedMsAvg);
-  const metricSourceBytesLow = parseNonNegativeNumber(window?.sourceBytesLow);
-  const metricSourceBytesHigh = parseNonNegativeNumber(window?.sourceBytesHigh);
-  const metricSourceBytesAvg = parseNonNegativeNumber(window?.sourceBytesAvg);
-  const metricTransformedBytesLow = parseNonNegativeNumber(
-    window?.transformedBytesLow,
-  );
-  const metricTransformedBytesHigh = parseNonNegativeNumber(
-    window?.transformedBytesHigh,
-  );
-  const metricTransformedBytesAvg = parseNonNegativeNumber(
-    window?.transformedBytesAvg,
-  );
-
-  const windowSeconds = Math.max(1, Math.floor(windowMs / 1000));
-  const ipsFromWindow = processedItems / windowSeconds;
-  const ipsFromLatency =
-    avgEndToEndMs > 0 ? 1000 / Math.max(1, avgEndToEndMs) : 0;
-  const ips = Math.max(ipsFromWindow, ipsFromLatency);
-
-  return {
-    windowId,
-    windowMs,
-    completedJobs,
-    failedJobs,
-    processedItems,
-    failedItems,
-    sampledCompletedJobs,
-    metricFetchLatencyMsLow: Math.round(metricFetchLatencyMsLow),
-    metricFetchLatencyMsHigh: Math.round(metricFetchLatencyMsHigh),
-    metricFetchLatencyMsAvg: Math.round(metricFetchLatencyMsAvg),
-    metricProcessingLatencyMsLow: Math.round(metricProcessingLatencyMsLow),
-    metricProcessingLatencyMsHigh: Math.round(metricProcessingLatencyMsHigh),
-    metricProcessingLatencyMsAvg: Math.round(metricProcessingLatencyMsAvg),
-    metricStorageLatencyMsLow: Math.round(metricStorageLatencyMsLow),
-    metricStorageLatencyMsHigh: Math.round(metricStorageLatencyMsHigh),
-    metricStorageLatencyMsAvg: Math.round(metricStorageLatencyMsAvg),
-    metricJobElapsedMsLow: Math.round(metricJobElapsedMsLow),
-    metricJobElapsedMsHigh: Math.round(metricJobElapsedMsHigh),
-    metricJobElapsedMsAvg: Math.round(metricJobElapsedMsAvg),
-    metricSourceBytesLow: Math.round(metricSourceBytesLow),
-    metricSourceBytesHigh: Math.round(metricSourceBytesHigh),
-    metricSourceBytesAvg: Math.round(metricSourceBytesAvg),
-    metricTransformedBytesLow: Math.round(metricTransformedBytesLow),
-    metricTransformedBytesHigh: Math.round(metricTransformedBytesHigh),
-    metricTransformedBytesAvg: Math.round(metricTransformedBytesAvg),
-    avgFetchMs: Math.round(avgFetchMs),
-    avgTransformMs: Math.round(avgTransformMs),
-    avgUploadMs: Math.round(avgUploadMs),
-    avgEndToEndMs: Math.round(avgEndToEndMs),
-    ips,
-    ipm: ips * 60,
-    secPerImage: ips > 0 ? 1 / ips : null,
-    computedAt: computedAtIso,
-  };
-}
-
-function parsePerformanceRollupField(
-  raw: string | undefined,
-): OpsPerformanceRollup | null {
-  if (!raw) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw) as OpsPerformanceRollup;
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-    if (
-      parsed.windowId !== "15s" &&
-      parsed.windowId !== "1m" &&
-      parsed.windowId !== "15m" &&
-      parsed.windowId !== "60m" &&
-      parsed.windowId !== "24h" &&
-      parsed.windowId !== "deep"
-    ) {
-      return null;
-    }
-    return {
-      ...parsed,
-      completedJobs: parseNonNegativeNumber(parsed.completedJobs),
-      failedJobs: parseNonNegativeNumber(parsed.failedJobs),
-      processedItems: parseNonNegativeNumber(parsed.processedItems),
-      failedItems: parseNonNegativeNumber(parsed.failedItems),
-      sampledCompletedJobs: parseNonNegativeNumber(parsed.sampledCompletedJobs),
-      metricFetchLatencyMsLow: parseNonNegativeNumber(
-        parsed.metricFetchLatencyMsLow,
-      ),
-      metricFetchLatencyMsHigh: parseNonNegativeNumber(
-        parsed.metricFetchLatencyMsHigh,
-      ),
-      metricFetchLatencyMsAvg: parseNonNegativeNumber(
-        parsed.metricFetchLatencyMsAvg,
-      ),
-      metricProcessingLatencyMsLow: parseNonNegativeNumber(
-        parsed.metricProcessingLatencyMsLow,
-      ),
-      metricProcessingLatencyMsHigh: parseNonNegativeNumber(
-        parsed.metricProcessingLatencyMsHigh,
-      ),
-      metricProcessingLatencyMsAvg: parseNonNegativeNumber(
-        parsed.metricProcessingLatencyMsAvg,
-      ),
-      metricStorageLatencyMsLow: parseNonNegativeNumber(
-        parsed.metricStorageLatencyMsLow,
-      ),
-      metricStorageLatencyMsHigh: parseNonNegativeNumber(
-        parsed.metricStorageLatencyMsHigh,
-      ),
-      metricStorageLatencyMsAvg: parseNonNegativeNumber(
-        parsed.metricStorageLatencyMsAvg,
-      ),
-      metricJobElapsedMsLow: parseNonNegativeNumber(
-        parsed.metricJobElapsedMsLow,
-      ),
-      metricJobElapsedMsHigh: parseNonNegativeNumber(
-        parsed.metricJobElapsedMsHigh,
-      ),
-      metricJobElapsedMsAvg: parseNonNegativeNumber(
-        parsed.metricJobElapsedMsAvg,
-      ),
-      metricSourceBytesLow: parseNonNegativeNumber(parsed.metricSourceBytesLow),
-      metricSourceBytesHigh: parseNonNegativeNumber(
-        parsed.metricSourceBytesHigh,
-      ),
-      metricSourceBytesAvg: parseNonNegativeNumber(parsed.metricSourceBytesAvg),
-      metricTransformedBytesLow: parseNonNegativeNumber(
-        parsed.metricTransformedBytesLow,
-      ),
-      metricTransformedBytesHigh: parseNonNegativeNumber(
-        parsed.metricTransformedBytesHigh,
-      ),
-      metricTransformedBytesAvg: parseNonNegativeNumber(
-        parsed.metricTransformedBytesAvg,
-      ),
-      avgFetchMs: parseNonNegativeNumber(parsed.avgFetchMs),
-      avgTransformMs: parseNonNegativeNumber(parsed.avgTransformMs),
-      avgUploadMs: parseNonNegativeNumber(parsed.avgUploadMs),
-      avgEndToEndMs: parseNonNegativeNumber(parsed.avgEndToEndMs),
-      ips: parseNonNegativeNumber(parsed.ips),
-      ipm: parseNonNegativeNumber(parsed.ipm),
-      secPerImage:
-        parsed.secPerImage === null
-          ? null
-          : parseNonNegativeNumber(parsed.secPerImage),
-      windowMs: Math.max(
-        1,
-        Math.floor(parseNonNegativeNumber(parsed.windowMs)),
-      ),
-      computedAt:
-        typeof parsed.computedAt === "string"
-          ? parsed.computedAt
-          : new Date().toISOString(),
-    };
-  } catch {
-    return null;
-  }
-}
-const OPS_WRITE_SLICE_HASHES_LUA = `
-local encoded = ARGV[1] or '{}'
-local ok, decoded = pcall(cjson.decode, encoded)
-if (not ok) or type(decoded) ~= 'table' then
-  return 0
-end
-
-local hash_count = 0
-for key, fields in pairs(decoded) do
-  if type(fields) == 'table' then
-    local command = { key }
-    local field_count = 0
-    for field, value in pairs(fields) do
-      field_count = field_count + 1
-      command[#command + 1] = tostring(field)
-      command[#command + 1] = tostring(value)
-    end
-    if field_count > 0 then
-      redis.call('HSET', unpack(command))
-      hash_count = hash_count + 1
-    end
-  end
-end
-
-return hash_count
-`;
-
-async function writeOpsPerformanceRollupSet(
-  rollups: OpsPerformanceRollupSet,
-  redis?: IORedis,
-): Promise<void> {
-  await withControlRedis(redis, async (connection) => {
-    const liveSliceField = imageMetricSliceWindowField("15s");
-    const latestLiveRows = await connection.zrevrange(
-      imageRawJobTrendMetricKey("processed_items"),
-      0,
-      0,
-      "WITHSCORES",
-    );
-    const latestLiveAtMs =
-      Array.isArray(latestLiveRows) && latestLiveRows.length >= 2
-        ? Number(latestLiveRows[1])
-        : NaN;
-    const liveIsFresh =
-      Number.isFinite(latestLiveAtMs) &&
-      Date.now() - latestLiveAtMs <= OPS_LIVE_SLICE_TTL_MS;
-
-    await connection.hset(OPS_PERFORMANCE_ROLLUP_HASH_KEY, {
-      rollup_15s: JSON.stringify(rollups.rollup15s),
-      rollup_1m: JSON.stringify(rollups.rollup1m),
-      rollup_15m: JSON.stringify(rollups.rollup15m),
-      rollup_60m: JSON.stringify(rollups.rollup60m),
-      rollup_24h: JSON.stringify(rollups.rollup24h),
-      rollup_deep: JSON.stringify(rollups.rollupDeep),
-      updated_at: new Date().toISOString(),
-    });
-
-    const perMetricFieldsByKey = new Map<string, Record<string, string>>();
-    const rollupByWindowId: Record<
-      "15s" | "1m" | "15m" | "60m" | "24h" | "deep",
-      OpsPerformanceRollup
-    > = {
-      "15s": rollups.rollup15s,
-      "1m": rollups.rollup1m,
-      "15m": rollups.rollup15m,
-      "60m": rollups.rollup60m,
-      "24h": rollups.rollup24h,
-      deep: rollups.rollupDeep,
-    };
-    const windows = IMAGE_SLICE_WINDOWS.map((window) => ({
-      field: imageMetricSliceWindowField(window.id),
-      rollup: rollupByWindowId[window.id],
-    }));
-
-    const toSlicePoint = (input: {
-      low: number;
-      high: number;
-      average: number;
-      latest?: number;
-      timestamp: string;
-    }) => ({
-      low: Number.isFinite(input.low) ? input.low : 0,
-      high: Number.isFinite(input.high) ? input.high : 0,
-      average: Number.isFinite(input.average) ? input.average : 0,
-      latest: Number.isFinite(input.latest ?? input.average)
-        ? Number(input.latest ?? input.average)
-        : 0,
-      timestamp: input.timestamp,
-    });
-
-    const valueByMetric = (
-      rollup: OpsPerformanceRollup,
-    ): Record<
-      string,
-      {
-        low: number;
-        high: number;
-        average: number;
-        latest: number;
-        timestamp: string;
-      }
-    > => ({
-      completed_jobs: toSlicePoint({
-        low: rollup.completedJobs,
-        high: rollup.completedJobs,
-        average: rollup.completedJobs,
-        latest: rollup.completedJobs,
-        timestamp: rollup.computedAt,
-      }),
-      failed_jobs: toSlicePoint({
-        low: rollup.failedJobs,
-        high: rollup.failedJobs,
-        average: rollup.failedJobs,
-        latest: rollup.failedJobs,
-        timestamp: rollup.computedAt,
-      }),
-      processed_items: toSlicePoint({
-        low: rollup.processedItems,
-        high: rollup.processedItems,
-        average: rollup.processedItems,
-        latest: rollup.processedItems,
-        timestamp: rollup.computedAt,
-      }),
-      failed_items: toSlicePoint({
-        low: rollup.failedItems,
-        high: rollup.failedItems,
-        average: rollup.failedItems,
-        latest: rollup.failedItems,
-        timestamp: rollup.computedAt,
-      }),
-      sampled_completed_jobs: toSlicePoint({
-        low: rollup.sampledCompletedJobs,
-        high: rollup.sampledCompletedJobs,
-        average: rollup.sampledCompletedJobs,
-        latest: rollup.sampledCompletedJobs,
-        timestamp: rollup.computedAt,
-      }),
-      fetch_latency_ms_low: toSlicePoint({
-        low: rollup.metricFetchLatencyMsLow,
-        high: rollup.metricFetchLatencyMsHigh,
-        average: rollup.metricFetchLatencyMsAvg,
-        latest: rollup.metricFetchLatencyMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      fetch_latency_ms_high: toSlicePoint({
-        low: rollup.metricFetchLatencyMsLow,
-        high: rollup.metricFetchLatencyMsHigh,
-        average: rollup.metricFetchLatencyMsAvg,
-        latest: rollup.metricFetchLatencyMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      fetch_latency_ms_avg: toSlicePoint({
-        low: rollup.metricFetchLatencyMsLow,
-        high: rollup.metricFetchLatencyMsHigh,
-        average: rollup.metricFetchLatencyMsAvg,
-        latest: rollup.metricFetchLatencyMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      processing_latency_ms_low: toSlicePoint({
-        low: rollup.metricProcessingLatencyMsLow,
-        high: rollup.metricProcessingLatencyMsHigh,
-        average: rollup.metricProcessingLatencyMsAvg,
-        latest: rollup.metricProcessingLatencyMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      processing_latency_ms_high: toSlicePoint({
-        low: rollup.metricProcessingLatencyMsLow,
-        high: rollup.metricProcessingLatencyMsHigh,
-        average: rollup.metricProcessingLatencyMsAvg,
-        latest: rollup.metricProcessingLatencyMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      processing_latency_ms_avg: toSlicePoint({
-        low: rollup.metricProcessingLatencyMsLow,
-        high: rollup.metricProcessingLatencyMsHigh,
-        average: rollup.metricProcessingLatencyMsAvg,
-        latest: rollup.metricProcessingLatencyMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      storage_latency_ms_low: toSlicePoint({
-        low: rollup.metricStorageLatencyMsLow,
-        high: rollup.metricStorageLatencyMsHigh,
-        average: rollup.metricStorageLatencyMsAvg,
-        latest: rollup.metricStorageLatencyMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      storage_latency_ms_high: toSlicePoint({
-        low: rollup.metricStorageLatencyMsLow,
-        high: rollup.metricStorageLatencyMsHigh,
-        average: rollup.metricStorageLatencyMsAvg,
-        latest: rollup.metricStorageLatencyMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      storage_latency_ms_avg: toSlicePoint({
-        low: rollup.metricStorageLatencyMsLow,
-        high: rollup.metricStorageLatencyMsHigh,
-        average: rollup.metricStorageLatencyMsAvg,
-        latest: rollup.metricStorageLatencyMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      job_elapsed_ms_low: toSlicePoint({
-        low: rollup.metricJobElapsedMsLow,
-        high: rollup.metricJobElapsedMsHigh,
-        average: rollup.metricJobElapsedMsAvg,
-        latest: rollup.metricJobElapsedMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      job_elapsed_ms_high: toSlicePoint({
-        low: rollup.metricJobElapsedMsLow,
-        high: rollup.metricJobElapsedMsHigh,
-        average: rollup.metricJobElapsedMsAvg,
-        latest: rollup.metricJobElapsedMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      job_elapsed_ms_avg: toSlicePoint({
-        low: rollup.metricJobElapsedMsLow,
-        high: rollup.metricJobElapsedMsHigh,
-        average: rollup.metricJobElapsedMsAvg,
-        latest: rollup.metricJobElapsedMsAvg,
-        timestamp: rollup.computedAt,
-      }),
-      source_bytes_low: toSlicePoint({
-        low: rollup.metricSourceBytesLow,
-        high: rollup.metricSourceBytesHigh,
-        average: rollup.metricSourceBytesAvg,
-        latest: rollup.metricSourceBytesAvg,
-        timestamp: rollup.computedAt,
-      }),
-      source_bytes_high: toSlicePoint({
-        low: rollup.metricSourceBytesLow,
-        high: rollup.metricSourceBytesHigh,
-        average: rollup.metricSourceBytesAvg,
-        latest: rollup.metricSourceBytesAvg,
-        timestamp: rollup.computedAt,
-      }),
-      source_bytes_avg: toSlicePoint({
-        low: rollup.metricSourceBytesLow,
-        high: rollup.metricSourceBytesHigh,
-        average: rollup.metricSourceBytesAvg,
-        latest: rollup.metricSourceBytesAvg,
-        timestamp: rollup.computedAt,
-      }),
-      transformed_bytes_low: toSlicePoint({
-        low: rollup.metricTransformedBytesLow,
-        high: rollup.metricTransformedBytesHigh,
-        average: rollup.metricTransformedBytesAvg,
-        latest: rollup.metricTransformedBytesAvg,
-        timestamp: rollup.computedAt,
-      }),
-      transformed_bytes_high: toSlicePoint({
-        low: rollup.metricTransformedBytesLow,
-        high: rollup.metricTransformedBytesHigh,
-        average: rollup.metricTransformedBytesAvg,
-        latest: rollup.metricTransformedBytesAvg,
-        timestamp: rollup.computedAt,
-      }),
-      transformed_bytes_avg: toSlicePoint({
-        low: rollup.metricTransformedBytesLow,
-        high: rollup.metricTransformedBytesHigh,
-        average: rollup.metricTransformedBytesAvg,
-        latest: rollup.metricTransformedBytesAvg,
-        timestamp: rollup.computedAt,
-      }),
-      avg_fetch_ms: toSlicePoint({
-        low: rollup.avgFetchMs,
-        high: rollup.avgFetchMs,
-        average: rollup.avgFetchMs,
-        latest: rollup.avgFetchMs,
-        timestamp: rollup.computedAt,
-      }),
-      avg_transform_ms: toSlicePoint({
-        low: rollup.avgTransformMs,
-        high: rollup.avgTransformMs,
-        average: rollup.avgTransformMs,
-        latest: rollup.avgTransformMs,
-        timestamp: rollup.computedAt,
-      }),
-      avg_upload_ms: toSlicePoint({
-        low: rollup.avgUploadMs,
-        high: rollup.avgUploadMs,
-        average: rollup.avgUploadMs,
-        latest: rollup.avgUploadMs,
-        timestamp: rollup.computedAt,
-      }),
-      avg_end_to_end_ms: toSlicePoint({
-        low: rollup.avgEndToEndMs,
-        high: rollup.avgEndToEndMs,
-        average: rollup.avgEndToEndMs,
-        latest: rollup.avgEndToEndMs,
-        timestamp: rollup.computedAt,
-      }),
-      ips: toSlicePoint({
-        low: rollup.ips,
-        high: rollup.ips,
-        average: rollup.ips,
-        latest: rollup.ips,
-        timestamp: rollup.computedAt,
-      }),
-      ipm: toSlicePoint({
-        low: rollup.ipm,
-        high: rollup.ipm,
-        average: rollup.ipm,
-        latest: rollup.ipm,
-        timestamp: rollup.computedAt,
-      }),
-      sec_per_image: toSlicePoint({
-        low: rollup.secPerImage ?? 0,
-        high: rollup.secPerImage ?? 0,
-        average: rollup.secPerImage ?? 0,
-        latest: rollup.secPerImage ?? 0,
-        timestamp: rollup.computedAt,
-      }),
-    });
-
-    const sliceFamilies: Array<{
-      groupCodeword: string;
-      metricSlugs: readonly string[];
-    }> = [
-      {
-        groupCodeword: IMAGE_GROUP_IMAGES,
-        metricSlugs: IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS,
-      },
-      {
-        groupCodeword: IMAGE_GROUP_JOBS,
-        metricSlugs: IMAGE_JOB_SLICE_METRIC_SLUGS,
-      },
-    ];
-
-    for (const window of windows) {
-      const metricValues = valueByMetric(window.rollup);
-      for (const family of sliceFamilies) {
-        for (const metricSlug of family.metricSlugs) {
-          const key = imageMetricSliceHashKey(metricSlug, family.groupCodeword);
-          const existing = perMetricFieldsByKey.get(key) || {};
-          let metricValue =
-            metricValues[metricSlug] ||
-            toSlicePoint({
-              low: 0,
-              high: 0,
-              average: 0,
-              latest: 0,
-              timestamp: window.rollup.computedAt,
-            });
-
-          if (window.field === liveSliceField && !liveIsFresh) {
-            metricValue = toSlicePoint({
-              low: 0,
-              high: 0,
-              average: 0,
-              latest: 0,
-              timestamp: window.rollup.computedAt,
-            });
-          }
-
-          existing[window.field] = encodeImageSliceWindowPayload(metricValue);
-          perMetricFieldsByKey.set(key, existing);
-        }
-      }
-    }
-
-    const updatedAt = new Date().toISOString();
-    const payloadByKey: Record<string, Record<string, string>> = {};
-    for (const [key, fields] of perMetricFieldsByKey.entries()) {
-      payloadByKey[key] = {
-        ...fields,
-        [IMAGE_SLICE_UPDATED_AT_FIELD]: updatedAt,
-      };
-    }
-
-    await connection.eval(
-      OPS_WRITE_SLICE_HASHES_LUA,
-      0,
-      JSON.stringify(payloadByKey),
-    );
-  });
-}
-
-const OPS_ROLLUP_SLICE_POSTPROCESS_LUA = `
-local function to_number(value)
-  local numeric = tonumber(value)
-  if numeric == nil then
-    return 0
-  end
-  if numeric < 0 then
-    return 0
-  end
-  return numeric
-end
-
-local function round(value)
-  if value >= 0 then
-    return math.floor(value + 0.5)
-  end
-  return math.ceil(value - 0.5)
-end
-
-local function parse_member_value(member)
-  local numeric = tonumber(member)
-  if numeric ~= nil then
-    return numeric
-  end
-
-  local ok, decoded = pcall(cjson.decode, member)
-  if ok and type(decoded) == 'table' then
-    local decoded_value = tonumber(decoded['value'])
-    if decoded_value ~= nil then
-      return decoded_value
-    end
-  end
-
-  return nil
-end
-
-local function metric_stats_since(trend_key, min_score)
-  local rows = redis.call('ZRANGEBYSCORE', trend_key, tostring(min_score), '+inf')
-  local count = 0
-  local sum = 0
-  local low = nil
-  local high = nil
-
-  for index = 1, #rows do
-    local value = parse_member_value(rows[index])
-    if value ~= nil and value >= 0 then
-      count = count + 1
-      sum = sum + value
-      if low == nil or value < low then
-        low = value
-      end
-      if high == nil or value > high then
-        high = value
-      end
-    end
-  end
-
-  if count <= 0 then
-    return { count = 0, sum = 0, low = 0, high = 0, avg = 0 }
-  end
-
-  return {
-    count = count,
-    sum = sum,
-    low = low,
-    high = high,
-    avg = sum / count,
-  }
-end
-
-local function build_rollup(window_id, window_ms, failed_jobs, stats_by_metric, computed_at)
-  local completed_jobs = to_number(stats_by_metric['completed_jobs'].sum)
-  local failed_jobs_normalized = to_number(failed_jobs)
-  local processed_items = to_number(stats_by_metric['processed_items'].sum)
-  local failed_items = to_number(stats_by_metric['failed_items'].sum)
-  local sampled_completed_jobs = to_number(stats_by_metric['fetch_ms'].count)
-  local avg_fetch_ms = to_number(stats_by_metric['fetch_ms'].avg)
-  local avg_transform_ms = to_number(stats_by_metric['transform_ms'].avg)
-  local avg_upload_ms = to_number(stats_by_metric['upload_ms'].avg)
-  local avg_end_to_end_ms = to_number(stats_by_metric['end_to_end_ms'].avg)
-
-  local window_seconds = math.max(1, math.floor(window_ms / 1000))
-  local ips_from_window = processed_items / window_seconds
-  local ips_from_latency = avg_end_to_end_ms > 0 and (1000 / math.max(1, avg_end_to_end_ms)) or 0
-  local ips = math.max(ips_from_window, ips_from_latency)
-
-  return {
-    windowId = window_id,
-    windowMs = window_ms,
-    completedJobs = completed_jobs,
-    failedJobs = failed_jobs_normalized,
-    processedItems = processed_items,
-    failedItems = failed_items,
-    sampledCompletedJobs = sampled_completed_jobs,
-    metricFetchLatencyMsLow = round(to_number(stats_by_metric['fetch_ms'].low)),
-    metricFetchLatencyMsHigh = round(to_number(stats_by_metric['fetch_ms'].high)),
-    metricFetchLatencyMsAvg = round(to_number(stats_by_metric['fetch_ms'].avg)),
-    metricProcessingLatencyMsLow = round(to_number(stats_by_metric['transform_ms'].low)),
-    metricProcessingLatencyMsHigh = round(to_number(stats_by_metric['transform_ms'].high)),
-    metricProcessingLatencyMsAvg = round(to_number(stats_by_metric['transform_ms'].avg)),
-    metricStorageLatencyMsLow = round(to_number(stats_by_metric['upload_ms'].low)),
-    metricStorageLatencyMsHigh = round(to_number(stats_by_metric['upload_ms'].high)),
-    metricStorageLatencyMsAvg = round(to_number(stats_by_metric['upload_ms'].avg)),
-    metricJobElapsedMsLow = round(to_number(stats_by_metric['elapsed_ms'].low)),
-    metricJobElapsedMsHigh = round(to_number(stats_by_metric['elapsed_ms'].high)),
-    metricJobElapsedMsAvg = round(to_number(stats_by_metric['elapsed_ms'].avg)),
-    metricSourceBytesLow = round(to_number(stats_by_metric['source_bytes'].low)),
-    metricSourceBytesHigh = round(to_number(stats_by_metric['source_bytes'].high)),
-    metricSourceBytesAvg = round(to_number(stats_by_metric['source_bytes'].avg)),
-    metricTransformedBytesLow = round(to_number(stats_by_metric['transformed_bytes'].low)),
-    metricTransformedBytesHigh = round(to_number(stats_by_metric['transformed_bytes'].high)),
-    metricTransformedBytesAvg = round(to_number(stats_by_metric['transformed_bytes'].avg)),
-    avgFetchMs = round(avg_fetch_ms),
-    avgTransformMs = round(avg_transform_ms),
-    avgUploadMs = round(avg_upload_ms),
-    avgEndToEndMs = round(avg_end_to_end_ms),
-    ips = ips,
-    ipm = ips * 60,
-    secPerImage = ips > 0 and (1 / ips) or cjson.null,
-    computedAt = computed_at,
-  }
-end
-
-local function slice_payload(low, high, average, latest, timestamp)
-  return cjson.encode({
-    timestamp = timestamp,
-    low = to_number(low),
-    high = to_number(high),
-    average = to_number(average),
-    latest = to_number(latest),
-  })
-end
-
-local function metric_slice_payload(rollup, slug)
-  if slug == 'completed_jobs' then
-    return slice_payload(rollup.completedJobs, rollup.completedJobs, rollup.completedJobs, rollup.completedJobs, rollup.computedAt)
-  end
-  if slug == 'failed_jobs' then
-    return slice_payload(rollup.failedJobs, rollup.failedJobs, rollup.failedJobs, rollup.failedJobs, rollup.computedAt)
-  end
-  if slug == 'processed_items' then
-    return slice_payload(rollup.processedItems, rollup.processedItems, rollup.processedItems, rollup.processedItems, rollup.computedAt)
-  end
-  if slug == 'failed_items' then
-    return slice_payload(rollup.failedItems, rollup.failedItems, rollup.failedItems, rollup.failedItems, rollup.computedAt)
-  end
-  if slug == 'sampled_completed_jobs' then
-    return slice_payload(rollup.sampledCompletedJobs, rollup.sampledCompletedJobs, rollup.sampledCompletedJobs, rollup.sampledCompletedJobs, rollup.computedAt)
-  end
-  if slug == 'fetch_latency_ms_low' or slug == 'fetch_latency_ms_high' or slug == 'fetch_latency_ms_avg' then
-    return slice_payload(rollup.metricFetchLatencyMsLow, rollup.metricFetchLatencyMsHigh, rollup.metricFetchLatencyMsAvg, rollup.metricFetchLatencyMsAvg, rollup.computedAt)
-  end
-  if slug == 'processing_latency_ms_low' or slug == 'processing_latency_ms_high' or slug == 'processing_latency_ms_avg' then
-    return slice_payload(rollup.metricProcessingLatencyMsLow, rollup.metricProcessingLatencyMsHigh, rollup.metricProcessingLatencyMsAvg, rollup.metricProcessingLatencyMsAvg, rollup.computedAt)
-  end
-  if slug == 'storage_latency_ms_low' or slug == 'storage_latency_ms_high' or slug == 'storage_latency_ms_avg' then
-    return slice_payload(rollup.metricStorageLatencyMsLow, rollup.metricStorageLatencyMsHigh, rollup.metricStorageLatencyMsAvg, rollup.metricStorageLatencyMsAvg, rollup.computedAt)
-  end
-  if slug == 'job_elapsed_ms_low' or slug == 'job_elapsed_ms_high' or slug == 'job_elapsed_ms_avg' then
-    return slice_payload(rollup.metricJobElapsedMsLow, rollup.metricJobElapsedMsHigh, rollup.metricJobElapsedMsAvg, rollup.metricJobElapsedMsAvg, rollup.computedAt)
-  end
-  if slug == 'source_bytes_low' or slug == 'source_bytes_high' or slug == 'source_bytes_avg' then
-    return slice_payload(rollup.metricSourceBytesLow, rollup.metricSourceBytesHigh, rollup.metricSourceBytesAvg, rollup.metricSourceBytesAvg, rollup.computedAt)
-  end
-  if slug == 'transformed_bytes_low' or slug == 'transformed_bytes_high' or slug == 'transformed_bytes_avg' then
-    return slice_payload(rollup.metricTransformedBytesLow, rollup.metricTransformedBytesHigh, rollup.metricTransformedBytesAvg, rollup.metricTransformedBytesAvg, rollup.computedAt)
-  end
-  if slug == 'avg_fetch_ms' then
-    return slice_payload(rollup.avgFetchMs, rollup.avgFetchMs, rollup.avgFetchMs, rollup.avgFetchMs, rollup.computedAt)
-  end
-  if slug == 'avg_transform_ms' then
-    return slice_payload(rollup.avgTransformMs, rollup.avgTransformMs, rollup.avgTransformMs, rollup.avgTransformMs, rollup.computedAt)
-  end
-  if slug == 'avg_upload_ms' then
-    return slice_payload(rollup.avgUploadMs, rollup.avgUploadMs, rollup.avgUploadMs, rollup.avgUploadMs, rollup.computedAt)
-  end
-  if slug == 'avg_end_to_end_ms' then
-    return slice_payload(rollup.avgEndToEndMs, rollup.avgEndToEndMs, rollup.avgEndToEndMs, rollup.avgEndToEndMs, rollup.computedAt)
-  end
-  if slug == 'ips' then
-    return slice_payload(rollup.ips, rollup.ips, rollup.ips, rollup.ips, rollup.computedAt)
-  end
-  if slug == 'ipm' then
-    return slice_payload(rollup.ipm, rollup.ipm, rollup.ipm, rollup.ipm, rollup.computedAt)
-  end
-  if slug == 'sec_per_image' then
-    local sec = rollup.secPerImage ~= cjson.null and rollup.secPerImage or 0
-    return slice_payload(sec, sec, sec, sec, rollup.computedAt)
-  end
-
-  return slice_payload(0, 0, 0, 0, rollup.computedAt)
-end
-
-local now_ms = tonumber(ARGV[1]) or 0
-local computed_at_iso = tostring(ARGV[2] or '')
-local live_ttl_ms = tonumber(ARGV[3]) or 15000
-local deep_window_ms = tonumber(ARGV[4]) or 315360000000
-local rollup_hash_key = tostring(ARGV[5] or '')
-local failed_queue_key = tostring(ARGV[6] or '')
-local updated_at_field = tostring(ARGV[7] or 'updated_at')
-local slice_prefix = tostring(ARGV[8] or 'image:ops:metrics')
-
-local ok_image, image_metric_slugs = pcall(cjson.decode, ARGV[9] or '[]')
-if (not ok_image) or type(image_metric_slugs) ~= 'table' then
-  image_metric_slugs = {}
-end
-local ok_job, job_metric_slugs = pcall(cjson.decode, ARGV[10] or '[]')
-if (not ok_job) or type(job_metric_slugs) ~= 'table' then
-  job_metric_slugs = {}
-end
-local ok_keymap, metric_key_map = pcall(cjson.decode, ARGV[11] or '{}')
-if (not ok_keymap) or type(metric_key_map) ~= 'table' then
-  metric_key_map = {}
-end
-
-local metric_order = {
-  'completed_jobs',
-  'fetch_ms',
-  'transform_ms',
-  'upload_ms',
-  'end_to_end_ms',
-  'elapsed_ms',
-  'source_bytes',
-  'transformed_bytes',
-  'processed_items',
-  'failed_items',
-}
-
-local latest_processed_rows = redis.call('ZREVRANGE', tostring(metric_key_map['processed_items'] or ''), 0, 0, 'WITHSCORES')
-local latest_processed_at_ms = nil
-if type(latest_processed_rows) == 'table' and #latest_processed_rows >= 2 then
-  latest_processed_at_ms = tonumber(latest_processed_rows[2])
-end
-local live_is_fresh = latest_processed_at_ms ~= nil and latest_processed_at_ms > 0 and (now_ms - latest_processed_at_ms) <= live_ttl_ms
-
-local oldest_completed_rows = redis.call('ZRANGE', tostring(metric_key_map['completed_jobs'] or ''), 0, 0, 'WITHSCORES')
-local oldest_completed_at_ms = nil
-if type(oldest_completed_rows) == 'table' and #oldest_completed_rows >= 2 then
-  oldest_completed_at_ms = tonumber(oldest_completed_rows[2])
-end
-
-local window_specs = {
-  { id = '15s', ms = 15000 },
-  { id = '1m', ms = 60000 },
-  { id = '15m', ms = 900000 },
-  { id = '60m', ms = 3600000 },
-  { id = '24h', ms = 86400000 },
-  { id = 'deep', ms = deep_window_ms },
-}
-
-local rollups_by_id = {}
-
-for _, spec in ipairs(window_specs) do
-  local window_id = spec.id
-  local window_ms = spec.ms
-  local window_start_ms = now_ms - window_ms
-  if window_id == 'deep' and oldest_completed_at_ms ~= nil and oldest_completed_at_ms > 0 then
-    window_start_ms = oldest_completed_at_ms
-    window_ms = math.max(1000, now_ms - oldest_completed_at_ms)
-  end
-
-  local stats_by_metric = {}
-  for _, metric_name in ipairs(metric_order) do
-    local trend_key = tostring(metric_key_map[metric_name] or '')
-    if trend_key == '' then
-      stats_by_metric[metric_name] = { count = 0, sum = 0, low = 0, high = 0, avg = 0 }
-    else
-      stats_by_metric[metric_name] = metric_stats_since(trend_key, window_start_ms)
-    end
-  end
-
-  local failed_jobs = tonumber(redis.call('ZCOUNT', failed_queue_key, tostring(window_start_ms), '+inf')) or 0
-  rollups_by_id[window_id] = build_rollup(
-    window_id,
-    window_ms,
-    failed_jobs,
-    stats_by_metric,
-    computed_at_iso
-  )
-end
-
-redis.call(
-  'HSET',
-  rollup_hash_key,
-  'rollup_15s', cjson.encode(rollups_by_id['15s']),
-  'rollup_1m', cjson.encode(rollups_by_id['1m']),
-  'rollup_15m', cjson.encode(rollups_by_id['15m']),
-  'rollup_60m', cjson.encode(rollups_by_id['60m']),
-  'rollup_24h', cjson.encode(rollups_by_id['24h']),
-  'rollup_deep', cjson.encode(rollups_by_id['deep']),
-  'updated_at', computed_at_iso
-)
-
-local slice_window_specs = {
-  { id = '15s', field = 'w_15s' },
-  { id = '1m', field = 'w_1m' },
-  { id = '15m', field = 'w_15m' },
-  { id = '24h', field = 'w_24h' },
-  { id = 'deep', field = 'w_deep' },
-}
-
-local function write_slice_group(group_codeword, slugs)
-  for _, slug in ipairs(slugs) do
-    local key = slice_prefix .. ':' .. group_codeword .. ':' .. tostring(slug) .. ':slice'
-    local command = { 'HSET', key, updated_at_field, computed_at_iso }
-    for _, spec in ipairs(slice_window_specs) do
-      local rollup = rollups_by_id[spec.id]
-      local payload = metric_slice_payload(rollup, tostring(slug))
-      if spec.id == '15s' and not live_is_fresh then
-        payload = slice_payload(0, 0, 0, 0, rollup.computedAt)
-      end
-      command[#command + 1] = spec.field
-      command[#command + 1] = payload
-    end
-    redis.call(unpack(command))
-  end
-end
-
-write_slice_group('images', image_metric_slugs)
-write_slice_group('jobs', job_metric_slugs)
-
-return cjson.encode({
-  rollups = {
-    rollup_15s = rollups_by_id['15s'],
-    rollup_1m = rollups_by_id['1m'],
-    rollup_15m = rollups_by_id['15m'],
-    rollup_60m = rollups_by_id['60m'],
-    rollup_24h = rollups_by_id['24h'],
-    rollup_deep = rollups_by_id['deep'],
-  },
-  liveIsFresh = live_is_fresh,
-})
-`;
-
 function rollupToRecentWindow(
   rollup: OpsPerformanceRollup,
 ): ImageQueueRecentJobWindow {
@@ -1994,263 +1107,6 @@ function rollupToRecentWindow(
     avgTransformMs: Math.max(0, Math.round(rollup.avgTransformMs)),
     avgUploadMs: Math.max(0, Math.round(rollup.avgUploadMs)),
     avgEndToEndMs: Math.max(0, Math.round(rollup.avgEndToEndMs)),
-  };
-}
-
-function parseLuaRollupSet(
-  rawPayload: unknown,
-): OpsPerformanceRollupSet | null {
-  const payloadText =
-    typeof rawPayload === "string" ? rawPayload : String(rawPayload || "");
-  if (!payloadText) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(payloadText) as {
-      rollups?: Record<string, unknown>;
-    };
-    const rollup15s = parsePerformanceRollupField(
-      JSON.stringify(parsed?.rollups?.rollup_15s || null),
-    );
-    const rollup1m = parsePerformanceRollupField(
-      JSON.stringify(parsed?.rollups?.rollup_1m || null),
-    );
-    const rollup15m = parsePerformanceRollupField(
-      JSON.stringify(parsed?.rollups?.rollup_15m || null),
-    );
-    const rollup60m = parsePerformanceRollupField(
-      JSON.stringify(parsed?.rollups?.rollup_60m || null),
-    );
-    const rollup24h = parsePerformanceRollupField(
-      JSON.stringify(parsed?.rollups?.rollup_24h || null),
-    );
-    const rollupDeep = parsePerformanceRollupField(
-      JSON.stringify(parsed?.rollups?.rollup_deep || null),
-    );
-    if (
-      !rollup15s ||
-      !rollup1m ||
-      !rollup15m ||
-      !rollup60m ||
-      !rollup24h ||
-      !rollupDeep
-    ) {
-      return null;
-    }
-    return {
-      rollup15s,
-      rollup1m,
-      rollup15m,
-      rollup60m,
-      rollup24h,
-      rollupDeep,
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function runOpsPerformancePostProcessViaLua(input?: {
-  redis?: IORedis;
-}): Promise<{
-  rollups: OpsPerformanceRollupSet;
-  window15s: ImageQueueRecentJobWindow;
-  window1m: ImageQueueRecentJobWindow;
-  window15m: ImageQueueRecentJobWindow;
-  window24h: ImageQueueRecentJobWindow;
-  windowDeep: ImageQueueRecentJobWindow;
-}> {
-  return withControlRedis(input?.redis, async (connection) => {
-    const queue = createImageQueue(connection);
-    const failedQueueKey = queue.toKey("failed");
-    const nowMs = Date.now();
-    const computedAtIso = new Date(nowMs).toISOString();
-    const metricKeyMap = {
-      completed_jobs: imageRawJobTrendMetricKey("completed_jobs"),
-      fetch_ms: imageRawJobTrendMetricKey("fetch_ms"),
-      transform_ms: imageRawJobTrendMetricKey("transform_ms"),
-      upload_ms: imageRawJobTrendMetricKey("upload_ms"),
-      end_to_end_ms: imageRawJobTrendMetricKey("end_to_end_ms"),
-      elapsed_ms: imageRawJobTrendMetricKey("elapsed_ms"),
-      source_bytes: imageRawJobTrendMetricKey("source_bytes"),
-      transformed_bytes: imageRawJobTrendMetricKey("transformed_bytes"),
-      processed_items: imageRawJobTrendMetricKey("processed_items"),
-      failed_items: imageRawJobTrendMetricKey("failed_items"),
-    };
-
-    const args = [
-      String(nowMs),
-      computedAtIso,
-      String(OPS_LIVE_SLICE_TTL_MS),
-      String(OPS_DEEP_METRICS_WINDOW_MS),
-      OPS_PERFORMANCE_ROLLUP_HASH_KEY,
-      failedQueueKey,
-      IMAGE_SLICE_UPDATED_AT_FIELD,
-      "image:ops:metrics",
-      JSON.stringify([...IMAGE_IMAGE_PERFORMANCE_SLICE_METRIC_SLUGS]),
-      JSON.stringify([...IMAGE_JOB_SLICE_METRIC_SLUGS]),
-      JSON.stringify(metricKeyMap),
-    ];
-
-    const runEvalSha = async (): Promise<unknown> => {
-      if (!opsRollupSliceLuaSha) {
-        const loaded = await connection.script(
-          "LOAD",
-          OPS_ROLLUP_SLICE_POSTPROCESS_LUA,
-        );
-        opsRollupSliceLuaSha = String(loaded || "");
-      }
-      return connection.evalsha(opsRollupSliceLuaSha, 0, ...args);
-    };
-
-    let rawResult: unknown;
-    try {
-      rawResult = await runEvalSha();
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : String(error || "unknown error");
-      if (!message.toUpperCase().includes("NOSCRIPT")) {
-        throw error;
-      }
-      const loaded = await connection.script(
-        "LOAD",
-        OPS_ROLLUP_SLICE_POSTPROCESS_LUA,
-      );
-      opsRollupSliceLuaSha = String(loaded || "");
-      rawResult = await runEvalSha();
-    }
-
-    const rollups = parseLuaRollupSet(rawResult);
-    if (!rollups) {
-      throw new Error("rollup/slice Lua post-process returned invalid payload");
-    }
-
-    return {
-      rollups,
-      window15s: rollupToRecentWindow(rollups.rollup15s),
-      window1m: rollupToRecentWindow(rollups.rollup1m),
-      window15m: rollupToRecentWindow(rollups.rollup15m),
-      window24h: rollupToRecentWindow(rollups.rollup24h),
-      windowDeep: rollupToRecentWindow(rollups.rollupDeep),
-    };
-  });
-}
-
-async function readOpsPerformanceRollupSet(
-  redis?: IORedis,
-): Promise<OpsPerformanceRollupSet | null> {
-  return withControlRedis(redis, async (connection) => {
-    const values = await connection.hgetall(OPS_PERFORMANCE_ROLLUP_HASH_KEY);
-    const rollup15s = parsePerformanceRollupField(values.rollup_15s);
-    const rollup1m = parsePerformanceRollupField(values.rollup_1m);
-    const rollup15m = parsePerformanceRollupField(values.rollup_15m);
-    const rollup60m = parsePerformanceRollupField(values.rollup_60m);
-    const rollup24h = parsePerformanceRollupField(values.rollup_24h);
-    const rollupDeep = parsePerformanceRollupField(values.rollup_deep);
-    if (
-      !rollup15s ||
-      !rollup1m ||
-      !rollup15m ||
-      !rollup60m ||
-      !rollup24h ||
-      !rollupDeep
-    ) {
-      return null;
-    }
-    return {
-      rollup15s,
-      rollup1m,
-      rollup15m,
-      rollup60m,
-      rollup24h,
-      rollupDeep,
-    };
-  });
-}
-
-async function buildOpsPerformanceRollupSetFromWindows(): Promise<{
-  rollups: OpsPerformanceRollupSet;
-  window15s: ImageQueueRecentJobWindow | null;
-  window1m: ImageQueueRecentJobWindow | null;
-  window15m: ImageQueueRecentJobWindow | null;
-  window60m: ImageQueueRecentJobWindow | null;
-  window24h: ImageQueueRecentJobWindow | null;
-  windowDeep: ImageQueueRecentJobWindow | null;
-}> {
-  const rollupSource = await readImageJobMetricRollupWindows({
-    windowsMs: [
-      OPS_15S_METRICS_WINDOW_MS,
-      OPS_1M_METRICS_WINDOW_MS,
-      OPS_BULLMQ_METRICS_WINDOW_MS,
-      OPS_60M_METRICS_WINDOW_MS,
-      OPS_DAILY_METRICS_WINDOW_MS,
-    ],
-    deepSampleLimit: 1000,
-    syncBeforeRead: true,
-  }).catch(() => null);
-  const windows = rollupSource?.windows || {};
-  const computedAtIso = new Date().toISOString();
-  const window15s = windows[String(OPS_15S_METRICS_WINDOW_MS)] || null;
-  const window1m = windows[String(OPS_1M_METRICS_WINDOW_MS)] || null;
-  const window15m = windows[String(OPS_BULLMQ_METRICS_WINDOW_MS)] || null;
-  const window60m = windows[String(OPS_60M_METRICS_WINDOW_MS)] || null;
-  const window24h = windows[String(OPS_DAILY_METRICS_WINDOW_MS)] || null;
-  const windowDeep = rollupSource?.deepWindow || null;
-  const deepWindowMs = Math.max(
-    1_000,
-    Math.floor(windowDeep?.windowMs || OPS_DEEP_METRICS_WINDOW_MS),
-  );
-
-  const rollups: OpsPerformanceRollupSet = {
-    rollup15s: buildPerformanceRollupFromWindow(
-      "15s",
-      OPS_15S_METRICS_WINDOW_MS,
-      window15s,
-      computedAtIso,
-    ),
-    rollup1m: buildPerformanceRollupFromWindow(
-      "1m",
-      OPS_1M_METRICS_WINDOW_MS,
-      window1m,
-      computedAtIso,
-    ),
-    rollup15m: buildPerformanceRollupFromWindow(
-      "15m",
-      OPS_BULLMQ_METRICS_WINDOW_MS,
-      window15m,
-      computedAtIso,
-    ),
-    rollup60m: buildPerformanceRollupFromWindow(
-      "60m",
-      OPS_60M_METRICS_WINDOW_MS,
-      window60m,
-      computedAtIso,
-    ),
-    rollup24h: buildPerformanceRollupFromWindow(
-      "24h",
-      OPS_DAILY_METRICS_WINDOW_MS,
-      window24h,
-      computedAtIso,
-    ),
-    rollupDeep: buildPerformanceRollupFromWindow(
-      "deep",
-      deepWindowMs,
-      windowDeep,
-      computedAtIso,
-    ),
-  };
-
-  return {
-    rollups,
-    window15s,
-    window1m,
-    window15m,
-    window60m,
-    window24h,
-    windowDeep,
   };
 }
 
@@ -3049,10 +1905,34 @@ function buildTrendSamplesFromRunnerStatus(
 function buildTrendSamplesFromUiSnapshot(
   snapshot: OpsUiSnapshot,
   descriptors: OpsSnapshotTrendMetricDescriptor[] = OPS_SNAPSHOT_TREND_METRIC_REGISTRY,
+  options?: {
+    nowMs?: number;
+    statusMaxAgeMs?: number;
+  },
 ): OpsMetricSample[] {
+  const nowMs = Number.isFinite(options?.nowMs)
+    ? Number(options?.nowMs)
+    : Date.now();
+  const statusMaxAgeMs = Number.isFinite(options?.statusMaxAgeMs)
+    ? Math.max(1, Number(options?.statusMaxAgeMs))
+    : OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS;
+  const statusUpdatedAtMs = runnerStatusUpdatedAtMs(snapshot.status);
+  const statusIsFresh =
+    statusUpdatedAtMs > 0 && nowMs - statusUpdatedAtMs <= statusMaxAgeMs;
+  const isStatusDerivedSnapshotMetric = (metricName: string): boolean =>
+    metricName.startsWith("status") ||
+    metricName === "avgFetchMs" ||
+    metricName === "avgTransformMs" ||
+    metricName === "avgUploadMs" ||
+    metricName === "avgEndToEndMs";
+
   return descriptors.map((metric) => ({
     key: metric.key,
-    value: normalizeSampleValue(metric.getValue(snapshot)),
+    value: normalizeSampleValue(
+      !statusIsFresh && isStatusDerivedSnapshotMetric(metric.name)
+        ? 0
+        : metric.getValue(snapshot),
+    ),
   }));
 }
 
@@ -3199,6 +2079,10 @@ async function collectBullmqMetricSamples(): Promise<OpsMetricSample[]> {
       queuePaused: queue.paused > 0,
     }),
     OPS_SNAPSHOT_TREND_METRICS_BY_COLLECTOR.bullmq,
+    {
+      nowMs: Date.now(),
+      statusMaxAgeMs: OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS,
+    },
   );
 }
 
@@ -4559,6 +3443,7 @@ export async function createOpsUiStateWatcher(input: {
   trendSampleWindowMs?: number;
   trendSampleMaxGapMs?: number;
   enableCollectors?: boolean;
+  ingestDerivedSamplesOnRefresh?: boolean;
   collectorIntervalsMs?: OpsSampleCollectorIntervalsMs;
   collectors?: OpsSampleCollectorKey[];
 }): Promise<OpsUiStateWatcher> {
@@ -4606,6 +3491,8 @@ export async function createOpsUiStateWatcher(input: {
       ? Number(input.trendSampleMaxGapMs)
       : undefined;
   const collectorsEnabled = input.enableCollectors ?? true;
+  const ingestDerivedSamplesOnRefresh =
+    input.ingestDerivedSamplesOnRefresh ?? true;
   const collectorIntervalsMs = resolveCollectorIntervalsMs(
     input.collectorIntervalsMs,
   );
@@ -4645,12 +3532,10 @@ export async function createOpsUiStateWatcher(input: {
   let closed = false;
   let loopInFlight: Promise<void> | null = null;
   let queueSignalPending = false;
-  let postProcessInFlight: Promise<void> | null = null;
-  let postProcessPending = false;
   let recent15mWindowCache: ImageQueueRecentJobWindow | null = null;
   let recent24hWindowCache: ImageQueueRecentJobWindow | null = null;
   let performanceRollupsCache: OpsPerformanceRollupSet | null = null;
-  let lastPerformanceRollupRefreshAtMs = 0;
+  let metricSlicesCache: OpsMetricSliceCache = {};
   let metricOwnershipCache: OpsMetricSystemOwnership | null = null;
   let lastMetricOwnershipRefreshAtMs = 0;
   const collectorLastRunAtMs: Partial<Record<OpsSampleCollectorKey, number>> =
@@ -4718,37 +3603,105 @@ export async function createOpsUiStateWatcher(input: {
     }
   };
 
-  const refreshPerformanceRollups = async (
-    nowMs: number,
-  ): Promise<OpsPerformanceRollupSet | null> => {
-    if (
-      performanceRollupsCache &&
-      nowMs - lastPerformanceRollupRefreshAtMs <
-        OPS_PERFORMANCE_ROLLUP_REFRESH_MIN_INTERVAL_MS
-    ) {
-      return performanceRollupsCache;
-    }
-    const built = await runOpsPerformancePostProcessViaLua({
-      redis: refreshRedisConnection,
-    }).catch(() => null);
-    if (built?.rollups) {
-      performanceRollupsCache = built.rollups;
-      recent15mWindowCache = built.window15m;
-      recent24hWindowCache = built.window24h;
-      lastPerformanceRollupRefreshAtMs = nowMs;
-      return performanceRollupsCache;
-    }
+  const recomputeDerivedCaches = (nowMs: number): void => {
+    const computedAtIso = new Date(nowMs).toISOString();
+    const rollups = buildPerformanceRollupSetFromTrendRows({
+      nowMs,
+      computedAtIso,
+      trendRowsByMetric: snapshotTrendRowsByMetric,
+      windowMsById: {
+        w15s: OPS_15S_METRICS_WINDOW_MS,
+        w1m: OPS_1M_METRICS_WINDOW_MS,
+        w15m: OPS_BULLMQ_METRICS_WINDOW_MS,
+        w60m: OPS_60M_METRICS_WINDOW_MS,
+        w24h: OPS_DAILY_METRICS_WINDOW_MS,
+        deep: OPS_DEEP_METRICS_WINDOW_MS,
+      },
+    });
 
-    const storedRollups = await readOpsPerformanceRollupSet(
-      refreshRedisConnection,
-    ).catch(() => null);
-    if (storedRollups) {
-      performanceRollupsCache = storedRollups;
-      recent15mWindowCache = rollupToRecentWindow(storedRollups.rollup15m);
-      recent24hWindowCache = rollupToRecentWindow(storedRollups.rollup24h);
-    }
-    lastPerformanceRollupRefreshAtMs = nowMs;
-    return performanceRollupsCache;
+    const metricNames = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map(
+      (metric) => metric.name,
+    );
+    metricSlicesCache = buildMetricSliceCacheFromTrendRows({
+      trendRowsByMetric: snapshotTrendRowsByMetric,
+      metricNames,
+      nowMs,
+      windowMsById: OPS_METRIC_SLICE_WINDOW_MS_BY_ID,
+      isLiveMetric: (metricName) =>
+        metricName.endsWith("Live") || metricName.startsWith("db"),
+      resolveLiveMetricMaxAgeMs: (metricName) => {
+        const collectors = inferSnapshotMetricCollectors(metricName);
+        if (collectors.length <= 0) {
+          return OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS;
+        }
+        const slowestIntervalMs = collectors.reduce((maxMs, collector) => {
+          const collectorIntervalMs = collectorIntervalsMs[collector];
+          return Math.max(maxMs, collectorIntervalMs);
+        }, 0);
+        return Math.max(
+          OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS,
+          slowestIntervalMs * 2,
+        );
+      },
+    });
+
+    performanceRollupsCache = rollups;
+    recent15mWindowCache = rollupToRecentWindow(rollups.rollup15m);
+    recent24hWindowCache = rollupToRecentWindow(rollups.rollup24h);
+  };
+
+  const queueWindowAveragesFromSliceCache = (): OpsQueueWindowAverages => {
+    const value = (
+      metricName: string,
+      sliceId: OpsMetricSliceId,
+      valueType: OpsMetricSliceValueType = "avg",
+    ): number => {
+      const metricSlices = metricSlicesCache[metricName];
+      if (!metricSlices) {
+        return 0;
+      }
+      const slice = metricSlices[sliceId];
+      if (!slice) {
+        return 0;
+      }
+      const numeric = Number(slice[valueType]);
+      return Number.isFinite(numeric) ? numeric : 0;
+    };
+
+    const pendingForSlice = (sliceId: OpsMetricSliceId): number =>
+      Math.max(
+        0,
+        Math.round(
+          value("queueWaitingLive", sliceId) +
+            value("queueDelayedLive", sliceId) +
+            value("queuePausedLive", sliceId),
+        ),
+      );
+    const activeForSlice = (sliceId: OpsMetricSliceId): number =>
+      Math.max(0, Math.round(value("queueActiveLive", sliceId)));
+
+    return {
+      w15s: {
+        pending: pendingForSlice("w15s"),
+        active: activeForSlice("w15s"),
+      },
+      w1m: {
+        pending: pendingForSlice("w1m"),
+        active: activeForSlice("w1m"),
+      },
+      w15m: {
+        pending: pendingForSlice("w15m"),
+        active: activeForSlice("w15m"),
+      },
+      w60m: {
+        pending: pendingForSlice("w60m"),
+        active: activeForSlice("w60m"),
+      },
+      w24h: {
+        pending: pendingForSlice("w24h"),
+        active: activeForSlice("w24h"),
+      },
+    };
   };
 
   const onQueueSignal = (): void => {
@@ -4901,7 +3854,8 @@ export async function createOpsUiStateWatcher(input: {
   };
 
   const buildSnapshotFromTrendMemory = (): OpsUiSnapshot => {
-    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
     const queue = {
       waiting: Math.max(0, Math.floor(latestMetricValue("queueWaitingLive"))),
       active: Math.max(0, Math.floor(latestMetricValue("queueActiveLive"))),
@@ -5003,6 +3957,8 @@ export async function createOpsUiStateWatcher(input: {
       updatedAt: nowIso,
     };
 
+    const queueWindowAverages = queueWindowAveragesFromSliceCache();
+
     return {
       at: nowIso,
       machines: snapshot?.machines ?? null,
@@ -5010,6 +3966,8 @@ export async function createOpsUiStateWatcher(input: {
       recentJobs15m: recent15mWindowCache,
       recentJobs24h: recent24hWindowCache,
       performanceRollups: performanceRollupsCache,
+      metricSlices: metricSlicesCache,
+      queueWindowAverages,
       queuePaused: queue.paused > 0,
       db: {
         processed: Math.max(0, Math.floor(latestMetricValue("dbProcessed"))),
@@ -5042,13 +4000,17 @@ export async function createOpsUiStateWatcher(input: {
     sourceSnapshot: OpsUiSnapshot,
   ): Promise<void> => {
     const atMs = nextTrendTimestampMs();
-    const samples: OpsMetricSample[] = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map(
-      (metric) => ({
-        key: metric.key,
-        value: metric.getValue(sourceSnapshot),
-        atMs,
-      }),
-    );
+    const samples: OpsMetricSample[] = buildTrendSamplesFromUiSnapshot(
+      sourceSnapshot,
+      OPS_SNAPSHOT_TREND_METRIC_REGISTRY,
+      {
+        nowMs: atMs,
+        statusMaxAgeMs: OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS,
+      },
+    ).map((sample) => ({
+      ...sample,
+      atMs,
+    }));
 
     await ingestOpsMetricSamples({
       redis: refreshRedisConnection,
@@ -5056,52 +4018,6 @@ export async function createOpsUiStateWatcher(input: {
       samples,
       flushNow: true,
     });
-  };
-
-  const scheduleBackgroundPostProcess = (): void => {
-    if (closed) {
-      return;
-    }
-    if (postProcessInFlight) {
-      postProcessPending = true;
-      return;
-    }
-
-    postProcessInFlight = (async () => {
-      await readMetricOwnership(Date.now()).catch(() =>
-        defaultOpsMetricSystemOwnership(),
-      );
-      const previousComputedAt =
-        performanceRollupsCache?.rollup15s?.computedAt || null;
-      const rollups = await refreshPerformanceRollups(Date.now()).catch(
-        () => null,
-      );
-      if (!rollups || !snapshot) {
-        return;
-      }
-
-      const nextComputedAt = rollups.rollup15s?.computedAt || null;
-      if (nextComputedAt === previousComputedAt) {
-        return;
-      }
-
-      snapshot = {
-        ...snapshot,
-        at: new Date().toISOString(),
-        performanceRollups: rollups,
-        recentJobs15m: recent15mWindowCache,
-        recentJobs24h: recent24hWindowCache,
-      };
-      notifyState();
-    })()
-      .catch(() => undefined)
-      .finally(() => {
-        postProcessInFlight = null;
-        if (postProcessPending && !closed) {
-          postProcessPending = false;
-          scheduleBackgroundPostProcess();
-        }
-      });
   };
 
   const hydrateFromStateStore = async (): Promise<OpsUiSnapshot> => {
@@ -5160,7 +4076,7 @@ export async function createOpsUiStateWatcher(input: {
         if (trendPoints.length === 0) {
           await seedTrendPointsFromRedis();
         }
-        scheduleBackgroundPostProcess();
+        recomputeDerivedCaches(Date.now());
         const ownership = await readMetricOwnership(Date.now()).catch(() =>
           defaultOpsMetricSystemOwnership(),
         );
@@ -5187,12 +4103,11 @@ export async function createOpsUiStateWatcher(input: {
                 }
               : nextSnapshot.settings,
         };
-        if (mergedSnapshot.performanceRollups) {
-          performanceRollupsCache = mergedSnapshot.performanceRollups;
+        if (ingestDerivedSamplesOnRefresh) {
+          await ingestDerivedSnapshotSamples(mergedSnapshot).catch(
+            () => undefined,
+          );
         }
-        await ingestDerivedSnapshotSamples(mergedSnapshot).catch(
-          () => undefined,
-        );
         appendTrendPointFromSnapshot(mergedSnapshot);
         snapshot = {
           ...mergedSnapshot,
@@ -6070,6 +4985,7 @@ export async function readOpsUiSnapshot(
     recentJobs15m: null,
     recentJobs24h: null,
     performanceRollups: null,
+    metricSlices: {},
     queuePaused: null,
     db: null,
     settings: null,
@@ -6106,7 +5022,6 @@ export async function readOpsUiSnapshot(
     trendProjection,
     recentJobs24h,
     recentJobs15m,
-    performanceRollupsStored,
     queuePaused,
   ] = await Promise.allSettled([
     withTimeout("control", timeoutMs, readOpsControlSnapshot()),
@@ -6139,13 +5054,6 @@ export async function readOpsUiSnapshot(
           readImageQueueRecentJobWindow(OPS_BULLMQ_METRICS_WINDOW_MS),
         )
       : Promise.resolve<ImageQueueRecentJobWindow | null>(null),
-    includePerformanceRollups
-      ? withTimeout(
-          "performanceRollupsStored",
-          timeoutMs,
-          readOpsPerformanceRollupSet(),
-        )
-      : Promise.resolve<OpsPerformanceRollupSet | null>(null),
     withTimeout("queuePaused", timeoutMs, readOpsQueuePausedState()),
   ]);
 
@@ -6192,22 +5100,6 @@ export async function readOpsUiSnapshot(
     snapshot.recentJobs24h = recentJobs24h.value || null;
   }
 
-  if (performanceRollupsStored.status === "fulfilled") {
-    snapshot.performanceRollups = performanceRollupsStored.value || null;
-    if (snapshot.performanceRollups) {
-      if (includeRecentJobs15m && !snapshot.recentJobs15m) {
-        snapshot.recentJobs15m = rollupToRecentWindow(
-          snapshot.performanceRollups.rollup15m,
-        );
-      }
-      if (includeRecentJobs24h && !snapshot.recentJobs24h) {
-        snapshot.recentJobs24h = rollupToRecentWindow(
-          snapshot.performanceRollups.rollup24h,
-        );
-      }
-    }
-  }
-
   if (queuePaused.status === "fulfilled") {
     snapshot.queuePaused = queuePaused.value;
   }
@@ -6234,20 +5126,34 @@ export type OpsOneShotPerformanceRefreshResult = {
 export async function runOpsOneShotPerformanceRefresh(input?: {
   redis?: IORedis;
 }): Promise<OpsOneShotPerformanceRefreshResult> {
-  const built = await runOpsPerformancePostProcessViaLua({
+  const nowMs = Date.now();
+  const computedAtIso = new Date(nowMs).toISOString();
+  const trendRowsByMetric = await readOpsSnapshotTrendRows({
     redis: input?.redis,
-  }).catch(async () => {
-    const legacy = await buildOpsPerformanceRollupSetFromWindows();
-    await writeOpsPerformanceRollupSet(legacy.rollups);
-    return legacy;
+    limit: OPS_TREND_REDIS_QUERY_LIMIT_MAX,
+    maxAgeMs: OPS_DEEP_METRICS_WINDOW_MS,
   });
+  const rollups = buildPerformanceRollupSetFromTrendRows({
+    nowMs,
+    computedAtIso,
+    trendRowsByMetric,
+    windowMsById: {
+      w15s: OPS_15S_METRICS_WINDOW_MS,
+      w1m: OPS_1M_METRICS_WINDOW_MS,
+      w15m: OPS_BULLMQ_METRICS_WINDOW_MS,
+      w60m: OPS_60M_METRICS_WINDOW_MS,
+      w24h: OPS_DAILY_METRICS_WINDOW_MS,
+      deep: OPS_DEEP_METRICS_WINDOW_MS,
+    },
+  });
+
   return {
-    rollups: built.rollups,
-    window15s: built.window15s,
-    window1m: built.window1m,
-    window15m: built.window15m,
-    window24h: built.window24h,
-    windowDeep: built.windowDeep,
+    rollups,
+    window15s: rollupToRecentWindow(rollups.rollup15s),
+    window1m: rollupToRecentWindow(rollups.rollup1m),
+    window15m: rollupToRecentWindow(rollups.rollup15m),
+    window24h: rollupToRecentWindow(rollups.rollup24h),
+    windowDeep: rollupToRecentWindow(rollups.rollupDeep),
   };
 }
 

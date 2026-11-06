@@ -14,6 +14,7 @@ import {
   OPS_TREND_METRIC_REGISTRY,
   OPS_UI_METRIC_LABELS,
   pauseOpsSystemFlow,
+  readOpsMetricSliceValue,
   readOpsRedisIoStats,
   readOpsRedisPreflight,
   readOpsRedisServerIoStats,
@@ -25,7 +26,11 @@ import {
   scaleOpsWorkers,
   setOpsDesiredModeWithQueueAction,
   updateOpsControlSettings,
+  type OpsMetricSliceCache,
+  type OpsMetricSliceId,
+  type OpsMetricSliceValueType,
   type OpsMetricSystemSnapshot,
+  type OpsQueueWindowAverages,
   type OpsRedisIoAggregateStats,
   type OpsRedisIoInstanceStats,
   type OpsRedisIoStats,
@@ -39,7 +44,6 @@ import {
   createOpsMetricState,
   ingestTrendRows,
   metricPointCountFromState,
-  metricWindowStatsFromState,
   resetOpsMetricState,
   type OpsMetricState,
 } from "../workers/image-ops-shared-state";
@@ -65,7 +69,6 @@ const TREND_GRAPH_BUCKET_MS = 5000;
 const QUEUE_24H_DISPLAY_POINT_MAX = 720;
 const QUEUE_TREND_DISPLAY_POINT_MAX = 240;
 const INFRA_REDIS_DISPLAY_POINT_MAX = 240;
-const LIVE_SLICE_MAX_AGE_MS = 20_000;
 const METRIC_HISTORY_MAX_POINTS = 30_000;
 const STARTUP_REDIS_PREFLIGHT_TIMEOUT_MS = 8_000;
 const STARTUP_REDIS_PREFLIGHT_MAX_ATTEMPTS = 3;
@@ -126,6 +129,8 @@ type DashboardSnapshot = {
   recentJobs15m: OpsUiSnapshot["recentJobs15m"];
   recentJobs24h: OpsUiSnapshot["recentJobs24h"];
   performanceRollups: OpsUiSnapshot["performanceRollups"];
+  metricSlices: OpsMetricSliceCache | undefined;
+  queueWindowAverages: OpsUiSnapshot["queueWindowAverages"];
   queuePaused: OpsUiSnapshot["queuePaused"];
   db: OpsUiSnapshot["db"];
   settings: RunnerControlSettings | null;
@@ -144,9 +149,13 @@ const SNAPSHOT_METRIC_NAME_SET = new Set(
   OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map((metric) => metric.name),
 );
 
-const RUNNER_METRIC_NAME_SET = new Set(
-  OPS_TREND_METRIC_REGISTRY.map((metric) => metric.name),
-);
+const ZERO_QUEUE_WINDOW_AVERAGES: OpsQueueWindowAverages = {
+  w15s: { pending: 0, active: 0 },
+  w1m: { pending: 0, active: 0 },
+  w15m: { pending: 0, active: 0 },
+  w60m: { pending: 0, active: 0 },
+  w24h: { pending: 0, active: 0 },
+};
 
 type State = {
   appName: string;
@@ -218,21 +227,13 @@ type State = {
   redisIoAggregate: OpsRedisIoAggregateStats;
   redisIoInstances: OpsRedisIoInstanceStats[];
   snapshotTrendLatestByName: Record<string, number | null>;
-  snapshotTrendLatestAtMsByName: Record<string, number | null>;
+  snapshotTrendLatestAtMsByName: Record<string, number>;
   runnerTrendLatestByName: Record<string, number | null>;
-  runnerTrendLatestAtMsByName: Record<string, number | null>;
+  runnerTrendLatestAtMsByName: Record<string, number>;
   collectorBootLatencyMs: Partial<Record<OpsSampleCollectorKey, number>>;
   collectorBootSamples: Partial<Record<OpsSampleCollectorKey, number>>;
   metricReferenceErrors: string[];
   lockedYAxisMaxByChart: Record<string, number>;
-  queueWindowAverages: QueueWindowAverages;
-};
-
-type MenuItem = {
-  id: string;
-  label: string;
-  hint?: string;
-  disabled?: boolean;
 };
 
 type ValuePromptAction =
@@ -245,129 +246,64 @@ type ValuePromptAction =
   | "setMaxClaimCycle"
   | "rawCommand";
 
-type QueueWindowSummary = {
-  pending: number;
-  active: number;
+type MenuItem = {
+  id: string;
+  label: string;
+  hint?: string;
+  disabled?: boolean;
 };
-
-type QueueWindowAverages = {
-  w15s: QueueWindowSummary;
-  w1m: QueueWindowSummary;
-  w15m: QueueWindowSummary;
-  w60m: QueueWindowSummary;
-  w24h: QueueWindowSummary;
-};
-
-const SCREEN_ORDER: Array<
-  "summary" | "infra" | "processing" | "queuejobs" | "observability"
-> = ["summary", "infra", "processing", "queuejobs", "observability"];
-
-function nextScreen(
-  screen: "summary" | "infra" | "processing" | "queuejobs" | "observability",
-): "summary" | "infra" | "processing" | "queuejobs" | "observability" {
-  const index = SCREEN_ORDER.indexOf(screen);
-  const safeIndex = index < 0 ? 0 : index;
-  const nextIndex = (safeIndex + 1) % SCREEN_ORDER.length;
-  return SCREEN_ORDER[nextIndex];
-}
 
 function textState(value = ""): TextEditState {
-  return { value, cursor: value.length };
-}
-
-type TextEditKeyEvent = {
-  key: string;
-  text?: string;
-};
-
-function insertText(state: TextEditState, text: string): TextEditState {
-  if (!text) {
-    return state;
-  }
-  const cursor = Math.max(0, Math.min(state.cursor, state.value.length));
-  const nextValue =
-    state.value.slice(0, cursor) + text + state.value.slice(cursor);
-  return { value: nextValue, cursor: cursor + text.length };
-}
-
-function deleteLeft(state: TextEditState): TextEditState {
-  const cursor = Math.max(0, Math.min(state.cursor, state.value.length));
-  if (cursor <= 0) {
-    return state;
-  }
-  const nextValue =
-    state.value.slice(0, cursor - 1) + state.value.slice(cursor);
-  return { value: nextValue, cursor: cursor - 1 };
-}
-
-function deleteRight(state: TextEditState): TextEditState {
-  const cursor = Math.max(0, Math.min(state.cursor, state.value.length));
-  if (cursor >= state.value.length) {
-    return state;
-  }
-  const nextValue =
-    state.value.slice(0, cursor) + state.value.slice(cursor + 1);
-  return { value: nextValue, cursor };
+  return {
+    value,
+    cursor: value.length,
+  } as TextEditState;
 }
 
 function editText(
   state: TextEditState,
-  event: TextEditKeyEvent,
+  event: { key?: string; name?: string; sequence?: string },
 ): TextEditState | null {
-  if (event.key === "left") {
-    return { ...state, cursor: Math.max(0, state.cursor - 1) };
+  const key = String(event.key || event.name || "");
+  const rawValue = String(state.value ?? "");
+  const rawCursor = Number.isFinite(Number(state.cursor))
+    ? Number(state.cursor)
+    : rawValue.length;
+  const cursor = clamp(rawCursor, 0, rawValue.length);
+
+  if (key === "left") {
+    return { ...state, cursor: clamp(cursor - 1, 0, rawValue.length) };
   }
-  if (event.key === "right") {
-    return { ...state, cursor: Math.min(state.value.length, state.cursor + 1) };
+  if (key === "right") {
+    return { ...state, cursor: clamp(cursor + 1, 0, rawValue.length) };
   }
-  if (event.key === "home") {
+  if (key === "home") {
     return { ...state, cursor: 0 };
   }
-  if (event.key === "end") {
-    return { ...state, cursor: state.value.length };
+  if (key === "end") {
+    return { ...state, cursor: rawValue.length };
   }
-  if (event.key === "backspace") {
-    return deleteLeft(state);
+  if (key === "backspace") {
+    if (cursor <= 0) {
+      return null;
+    }
+    const next = `${rawValue.slice(0, cursor - 1)}${rawValue.slice(cursor)}`;
+    return { ...state, value: next, cursor: cursor - 1 };
   }
-  if (event.key === "delete") {
-    return deleteRight(state);
-  }
-  if (event.key === "escape" || event.key === "enter" || event.key === "tab") {
-    return null;
-  }
-
-  const printable =
-    typeof event.text === "string"
-      ? event.text
-      : event.key.length === 1
-        ? event.key
-        : "";
-  if (!printable) {
-    return null;
+  if (key === "delete") {
+    if (cursor >= rawValue.length) {
+      return null;
+    }
+    const next = `${rawValue.slice(0, cursor)}${rawValue.slice(cursor + 1)}`;
+    return { ...state, value: next, cursor };
   }
 
-  return insertText(state, printable);
-}
+  if (key.length === 1 && key >= " ") {
+    const next = `${rawValue.slice(0, cursor)}${key}${rawValue.slice(cursor)}`;
+    return { ...state, value: next, cursor: cursor + 1 };
+  }
 
-const localClockFormatter = new Intl.DateTimeFormat(undefined, {
-  year: "numeric",
-  month: "short",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: true,
-  timeZoneName: "short",
-});
-
-function formatLocalClockAt(now: Date = new Date()): string {
-  return localClockFormatter.format(now);
-}
-
-function shortInstance(instanceId: string): string {
-  const parts = instanceId.split("-");
-  const tail = parts[parts.length - 1] || instanceId;
-  return tail.length <= 8 ? tail : tail.slice(0, 8);
+  return null;
 }
 
 function commandMenuItems(
@@ -376,10 +312,10 @@ function commandMenuItems(
 ): MenuItem[] {
   if (menu === "mode") {
     return [
-      { id: "mode:run", label: "Set Mode: run", hint: "enqueue + harvest" },
-      { id: "mode:idle", label: "Set Mode: idle", hint: "pause enqueue" },
-      { id: "mode:drain", label: "Set Mode: drain", hint: "drain backlog" },
-      { id: "mode:stop", label: "Set Mode: stop", hint: "halt runner" },
+      { id: "mode:run", label: "Mode: run", hint: "normal operation" },
+      { id: "mode:idle", label: "Mode: idle", hint: "pause new work" },
+      { id: "mode:drain", label: "Mode: drain", hint: "finish active jobs" },
+      { id: "mode:stop", label: "Mode: stop", hint: "stop workers" },
       { id: "back", label: "Back", hint: "return to main menu" },
     ];
   }
@@ -388,8 +324,8 @@ function commandMenuItems(
     return [
       {
         id: "prompt:max-backlog",
-        label: "Set max backlog",
-        hint: "target queue ceiling",
+        label: "Set max queue backlog",
+        hint: "queue cap",
       },
       {
         id: "prompt:refill-low",
@@ -616,45 +552,6 @@ function lockYAxisMaxFromSeries(input: {
   return nextMax;
 }
 
-function queueWindowSummaryFromState(input: {
-  metricState: OpsMetricState;
-  nowMs: number;
-  windowMs: number;
-}): QueueWindowSummary {
-  const waitingStats = metricWindowStatsFromState({
-    state: input.metricState,
-    metricId: "snapshot.queueWaitingLive",
-    nowMs: input.nowMs,
-    windowMs: input.windowMs,
-  });
-  const delayedStats = metricWindowStatsFromState({
-    state: input.metricState,
-    metricId: "snapshot.queueDelayedLive",
-    nowMs: input.nowMs,
-    windowMs: input.windowMs,
-  });
-  const pausedStats = metricWindowStatsFromState({
-    state: input.metricState,
-    metricId: "snapshot.queuePausedLive",
-    nowMs: input.nowMs,
-    windowMs: input.windowMs,
-  });
-  const activeStats = metricWindowStatsFromState({
-    state: input.metricState,
-    metricId: "snapshot.queueActiveLive",
-    nowMs: input.nowMs,
-    windowMs: input.windowMs,
-  });
-
-  return {
-    pending: Math.max(
-      0,
-      Math.round(waitingStats.avg + delayedStats.avg + pausedStats.avg),
-    ),
-    active: Math.max(0, Math.round(activeStats.avg)),
-  };
-}
-
 function pushHistory(values: number[], next: number, max = 120): number[] {
   values.push(next);
   if (values.length > max) {
@@ -670,17 +567,6 @@ function validateSnapshotMetricId(metricId: string): string | null {
   const metricName = metricId.slice("snapshot.".length);
   if (!SNAPSHOT_METRIC_NAME_SET.has(metricName)) {
     return `invalid snapshot metric reference: ${metricId}`;
-  }
-  return null;
-}
-
-function validateRunnerMetricId(metricId: string): string | null {
-  if (!metricId.startsWith("runner.")) {
-    return null;
-  }
-  const metricName = metricId.slice("runner.".length);
-  if (!RUNNER_METRIC_NAME_SET.has(metricName)) {
-    return `invalid runner metric reference: ${metricId}`;
   }
   return null;
 }
@@ -710,6 +596,13 @@ function formatRate(value: number, digits = 2): string {
   return value.toFixed(digits);
 }
 
+function formatLocalClockAt(date = new Date()): string {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+}
+
 function formatDuration(seconds: number | null): string {
   if (seconds === null || !Number.isFinite(seconds) || seconds < 0) {
     return "n/a";
@@ -730,18 +623,6 @@ function formatDuration(seconds: number | null): string {
     return `${minutes}m ${secs}s`;
   }
   return `${secs}s`;
-}
-
-function isSampleFresh(input: {
-  sampledAtMs: number | null;
-  nowMs: number;
-  maxAgeMs: number;
-}): boolean {
-  const sampledAtMs = input.sampledAtMs;
-  if (!Number.isFinite(sampledAtMs) || sampledAtMs === null) {
-    return false;
-  }
-  return input.nowMs - sampledAtMs <= Math.max(1, input.maxAgeMs);
 }
 
 function tail(
@@ -1117,7 +998,7 @@ async function main(): Promise<void> {
       includeRecentJobs15m: true,
       includeRecentJobs24h: true,
       includePerformanceRollups: true,
-      reconcileBullmqStatus: true,
+      reconcileBullmqStatus: false,
     });
     const startupRefreshElapsedMs = Date.now() - startupRefreshStartedAtMs;
     const startupRefreshIoAfter = readOpsRedisIoStats();
@@ -1172,6 +1053,7 @@ async function main(): Promise<void> {
     fallbackRefreshIntervalMs: initialIntervalMs,
     subscribeToSignals: true,
     enableCollectors: true,
+    ingestDerivedSamplesOnRefresh: false,
     collectors: ["db", "fly", "redis", "bullmq"],
     skipInitialRefresh: true,
     hydrateOnInit: false,
@@ -1262,6 +1144,8 @@ async function main(): Promise<void> {
       recentJobs15m: startupPipeline.snapshot.recentJobs15m,
       recentJobs24h: startupPipeline.snapshot.recentJobs24h,
       performanceRollups: startupPipeline.snapshot.performanceRollups,
+      metricSlices: startupPipeline.snapshot.metricSlices,
+      queueWindowAverages: startupPipeline.snapshot.queueWindowAverages,
       queuePaused: startupPipeline.snapshot.queuePaused ?? null,
       db: startupPipeline.snapshot.db,
       settings: startupPipeline.snapshot.settings,
@@ -1323,49 +1207,12 @@ async function main(): Promise<void> {
     collectorBootSamples,
     metricReferenceErrors: [],
     lockedYAxisMaxByChart: {},
-    queueWindowAverages: {
-      w15s: { pending: 0, active: 0 },
-      w1m: { pending: 0, active: 0 },
-      w15m: { pending: 0, active: 0 },
-      w60m: { pending: 0, active: 0 },
-      w24h: { pending: 0, active: 0 },
-    },
   };
   state.queueGloballyPaused = startupPipeline.snapshot.queuePaused ?? null;
   ingestTrendRows({
     state: state.metricState,
     trendRowsByMetric: state.snapshot.trendRowsByMetric,
   });
-  {
-    const nowMs = Date.now();
-    state.queueWindowAverages = {
-      w15s: queueWindowSummaryFromState({
-        metricState: state.metricState,
-        nowMs,
-        windowMs: 15 * 1000,
-      }),
-      w1m: queueWindowSummaryFromState({
-        metricState: state.metricState,
-        nowMs,
-        windowMs: 60 * 1000,
-      }),
-      w15m: queueWindowSummaryFromState({
-        metricState: state.metricState,
-        nowMs,
-        windowMs: 15 * 60 * 1000,
-      }),
-      w60m: queueWindowSummaryFromState({
-        metricState: state.metricState,
-        nowMs,
-        windowMs: 60 * 60 * 1000,
-      }),
-      w24h: queueWindowSummaryFromState({
-        metricState: state.metricState,
-        nowMs,
-        windowMs: 24 * 60 * 60 * 1000,
-      }),
-    };
-  }
 
   const app = await createApp({
     alwaysRender: false,
@@ -1448,6 +1295,9 @@ async function main(): Promise<void> {
         recentJobs24h: snapshot.recentJobs24h ?? previous.recentJobs24h,
         performanceRollups:
           snapshot.performanceRollups ?? previous.performanceRollups,
+        metricSlices: snapshot.metricSlices ?? previous.metricSlices,
+        queueWindowAverages:
+          snapshot.queueWindowAverages ?? previous.queueWindowAverages,
         queuePaused: snapshot.queuePaused ?? previous.queuePaused,
         db: snapshot.db ?? previous.db,
         settings: snapshot.settings ?? previous.settings,
@@ -1492,33 +1342,6 @@ async function main(): Promise<void> {
         state: state.metricState,
         trendRowsByMetric: merged.trendRowsByMetric,
       });
-      state.queueWindowAverages = {
-        w15s: queueWindowSummaryFromState({
-          metricState: state.metricState,
-          nowMs,
-          windowMs: 15 * 1000,
-        }),
-        w1m: queueWindowSummaryFromState({
-          metricState: state.metricState,
-          nowMs,
-          windowMs: 60 * 1000,
-        }),
-        w15m: queueWindowSummaryFromState({
-          metricState: state.metricState,
-          nowMs,
-          windowMs: 15 * 60 * 1000,
-        }),
-        w60m: queueWindowSummaryFromState({
-          metricState: state.metricState,
-          nowMs,
-          windowMs: 60 * 60 * 1000,
-        }),
-        w24h: queueWindowSummaryFromState({
-          metricState: state.metricState,
-          nowMs,
-          windowMs: 24 * 60 * 60 * 1000,
-        }),
-      };
 
       const nextSnapshotTrendLatestByName: Record<string, number | null> = {};
       const nextSnapshotTrendLatestAtMsByName: Record<string, number | null> =
@@ -1623,9 +1446,13 @@ async function main(): Promise<void> {
         merged.status?.throughputImagesPerMinute !== null
           ? Number(merged.status.throughputImagesPerMinute) / 60
           : null;
-      const rollupIpsSample = Number(
-        merged.performanceRollups?.rollup15s?.ips ?? 0,
-      );
+      const rollupIpsSample =
+        readOpsMetricSliceValue({
+          snapshot: merged,
+          metricName: "statusThroughputImagesPerMinute",
+          sliceId: "w15s",
+          valueType: "avg",
+        }) / 60;
       const projectionIpsSample =
         merged.projections.sampleCount > 0
           ? Number(merged.projections.headline.ipsSmoothedNow || 0)
@@ -2134,13 +1961,6 @@ async function main(): Promise<void> {
       state.runnerTrendLatestByName = {};
       state.runnerTrendLatestAtMsByName = {};
       state.lockedYAxisMaxByChart = {};
-      state.queueWindowAverages = {
-        w15s: { pending: 0, active: 0 },
-        w1m: { pending: 0, active: 0 },
-        w15m: { pending: 0, active: 0 },
-        w60m: { pending: 0, active: 0 },
-        w24h: { pending: 0, active: 0 },
-      };
       state.notice = "trends reset";
       app.invalidate();
       return;
@@ -2653,12 +2473,81 @@ async function main(): Promise<void> {
     const status = snapshot.status;
     const queue = snapshot.queue;
     const projection = snapshot.projections;
-    const perfRollups = snapshot.performanceRollups;
-    const rollup15s = perfRollups?.rollup15s;
-    const rollup1m = perfRollups?.rollup1m;
-    const rollup15m = perfRollups?.rollup15m;
-    const rollup60m = perfRollups?.rollup60m;
-    const rollup24h = perfRollups?.rollup24h;
+    const sliceValue = (
+      metricName: string,
+      sliceId: OpsMetricSliceId,
+      valueType: OpsMetricSliceValueType = "avg",
+    ): number =>
+      readOpsMetricSliceValue({
+        snapshot,
+        metricName,
+        sliceId,
+        valueType,
+      });
+    const readModuleMetricValue = (
+      metricName: string,
+      sliceId: OpsMetricSliceId = "w15s",
+      valueType: OpsMetricSliceValueType = "latest",
+    ): number => Math.max(0, sliceValue(metricName, sliceId, valueType));
+    const readModuleMetricInt = (
+      metricName: string,
+      sliceId: OpsMetricSliceId = "w15s",
+      valueType: OpsMetricSliceValueType = "latest",
+    ): number =>
+      Math.max(
+        0,
+        Math.round(readModuleMetricValue(metricName, sliceId, valueType)),
+      );
+    const buildSliceRollupView = (sliceId: OpsMetricSliceId) => {
+      const ipm = Math.max(
+        0,
+        sliceValue("statusThroughputImagesPerMinute", sliceId, "avg"),
+      );
+      const ips = ipm / 60;
+      const sampledAtMs =
+        snapshot.metricSlices?.statusThroughputImagesPerMinute?.[sliceId]
+          ?.sampledAtMs ?? null;
+      return {
+        ips,
+        ipm,
+        processedItems: Math.max(
+          0,
+          sliceValue("statusProcessedItems", sliceId, "latest"),
+        ),
+        failedItems: Math.max(
+          0,
+          sliceValue("statusFailedItems", sliceId, "latest"),
+        ),
+        completedJobs: Math.max(
+          0,
+          sliceValue("statusCompletedJobs", sliceId, "latest"),
+        ),
+        failedJobs: Math.max(
+          0,
+          sliceValue("statusFailedJobs", sliceId, "latest"),
+        ),
+        avgFetchMs: Math.max(0, sliceValue("avgFetchMs", sliceId, "avg")),
+        avgTransformMs: Math.max(
+          0,
+          sliceValue("avgTransformMs", sliceId, "avg"),
+        ),
+        avgUploadMs: Math.max(0, sliceValue("avgUploadMs", sliceId, "avg")),
+        avgEndToEndMs: Math.max(0, sliceValue("avgEndToEndMs", sliceId, "avg")),
+        metricJobElapsedMsAvg: Math.max(
+          0,
+          sliceValue("avgEndToEndMs", sliceId, "avg"),
+        ),
+        secPerImage: ips > 0 ? 1 / ips : null,
+        sampledAt: Number.isFinite(sampledAtMs)
+          ? new Date(Number(sampledAtMs)).toISOString()
+          : null,
+      };
+    };
+    const rollup15s = buildSliceRollupView("w15s");
+    const rollup1m = buildSliceRollupView("w1m");
+    const rollup15m = buildSliceRollupView("w15m");
+    const rollup60m = buildSliceRollupView("w60m");
+    const rollup24h = buildSliceRollupView("w24h");
     const trendPointLimit = trendPointLimitForWindow(state.trendWindowMs);
     const nowMs = state.lastSampleAtMs ?? Date.now();
     const queueBacklogRows = snapshot.trendRowsByMetric?.queueBacklogLive ?? [];
@@ -2768,46 +2657,25 @@ async function main(): Promise<void> {
         : 0;
     const statusIpsNow = Math.max(
       0,
-      Number(status?.throughputImagesPerMinute || 0) / 60,
+      readModuleMetricValue("statusThroughputImagesPerMinute", "w15s", "avg") /
+        60,
     );
     const projectionIpsNow =
       projection.sampleCount > 0
         ? Math.max(0, projection.headline.ipsSmoothedNow)
         : 0;
-    const rollup15sIpsNow = Math.max(0, Number(rollup15s?.ips || 0));
-    const rollup1mIpsNow = Math.max(0, Number(rollup1m?.ips || 0));
-    const rollup15mIpsNow = Math.max(0, Number(rollup15m?.ips || 0));
-    const statusUpdatedAtMs = status?.updatedAt
-      ? Date.parse(String(status.updatedAt))
-      : null;
-    const rollup15sSampledAtMs = rollup15s?.sampledAt
-      ? Date.parse(String(rollup15s.sampledAt))
-      : null;
-    const liveSliceStatusFresh = isSampleFresh({
-      sampledAtMs: statusUpdatedAtMs,
-      nowMs,
-      maxAgeMs: LIVE_SLICE_MAX_AGE_MS,
-    });
-    const liveSliceRollup15sFresh = isSampleFresh({
-      sampledAtMs: rollup15sSampledAtMs,
-      nowMs,
-      maxAgeMs: LIVE_SLICE_MAX_AGE_MS,
-    });
-    const liveSliceLocalFresh = isSampleFresh({
-      sampledAtMs: state.lastSampleAtMs,
-      nowMs,
-      maxAgeMs: LIVE_SLICE_MAX_AGE_MS,
-    });
-    const ipsLiveCandidates: number[] = [];
-    if (liveSliceStatusFresh) {
-      ipsLiveCandidates.push(statusIpsNow);
-    }
-    if (liveSliceRollup15sFresh) {
-      ipsLiveCandidates.push(rollup15sIpsNow);
-    }
-    if (liveSliceLocalFresh) {
-      ipsLiveCandidates.push(historyIpsNow);
-    }
+    const rollup15sIpsNow = Math.max(
+      0,
+      sliceValue("statusThroughputImagesPerMinute", "w15s", "avg") / 60,
+    );
+    const rollup1mIpsNow = Math.max(
+      0,
+      sliceValue("statusThroughputImagesPerMinute", "w1m", "avg") / 60,
+    );
+    const rollup15mIpsNow = Math.max(
+      0,
+      sliceValue("statusThroughputImagesPerMinute", "w15m", "avg") / 60,
+    );
     const ipsNow = Math.max(
       historyIpsNow,
       projectionIpsNow,
@@ -2816,14 +2684,12 @@ async function main(): Promise<void> {
       rollup1mIpsNow,
       rollup15mIpsNow,
     );
-    const processed5m = Math.max(
-      0,
-      Number(status?.processedItems ?? rollup15s?.processedItems ?? 0),
+    const processed5m = readModuleMetricInt(
+      "statusProcessedItems",
+      "w15s",
+      "latest",
     );
-    const failed5m = Math.max(
-      0,
-      Number(status?.failedItems ?? rollup15s?.failedItems ?? 0),
-    );
+    const failed5m = readModuleMetricInt("statusFailedItems", "w15s", "latest");
     const ips5m = Math.max(
       0,
       statusIpsNow,
@@ -2831,32 +2697,50 @@ async function main(): Promise<void> {
       projectionIpsNow,
       historyIpsNow,
     );
-    const ipm5m = Math.max(
-      0,
-      Number(status?.throughputImagesPerMinute ?? rollup15s?.ipm ?? ips5m * 60),
+    const ipm5m = readModuleMetricValue(
+      "statusThroughputImagesPerMinute",
+      "w15s",
+      "avg",
     );
-    const completedJobs5m = Math.max(
-      0,
-      Number(status?.completedJobs ?? rollup15s?.completedJobs ?? 0),
+    const completedJobs5m = readModuleMetricInt(
+      "statusCompletedJobs",
+      "w15s",
+      "latest",
     );
-    const failedJobs5m = Math.max(
-      0,
-      Number(status?.failedJobs ?? rollup15s?.failedJobs ?? 0),
+    const failedJobs5m = readModuleMetricInt(
+      "statusFailedJobs",
+      "w15s",
+      "latest",
     );
     const secPerImageNow = ipsNow > 0 ? 1 / ipsNow : null;
-    const backlog = queue?.backlog ?? 0;
+    const backlog = readModuleMetricInt("queueBacklogLive", "w15s", "latest");
     const etaQueueEmptySeconds =
       backlog === 0 ? 0 : ipsNow > 0 ? backlog / ipsNow : null;
     const maxBacklog = Math.max(1, settings?.maxQueueBacklog ?? 1);
     const backlogFillRatio = clamp(backlog / maxBacklog, 0, 1);
-    const queueWaiting = queue?.waiting ?? 0;
-    const queueActive = queue?.active ?? 0;
-    const queueDelayed = queue?.delayed ?? 0;
-    const queuePaused = queue?.paused ?? 0;
+    const queueWaiting = readModuleMetricInt(
+      "queueWaitingLive",
+      "w15s",
+      "latest",
+    );
+    const queueActive = readModuleMetricInt(
+      "queueActiveLive",
+      "w15s",
+      "latest",
+    );
+    const queueDelayed = readModuleMetricInt(
+      "queueDelayedLive",
+      "w15s",
+      "latest",
+    );
+    const queuePaused = readModuleMetricInt(
+      "queuePausedLive",
+      "w15s",
+      "latest",
+    );
     const queuePendingNonActive = queueWaiting + queueDelayed + queuePaused;
     const activeJobRatio = backlog > 0 ? queueActive / backlog : 0;
-    const ipsLive =
-      ipsLiveCandidates.length > 0 ? Math.max(0, ...ipsLiveCandidates) : 0;
+    const ipsLive = Math.max(0, rollup15sIpsNow);
     const ipsGaugeMax = Math.max(
       1,
       ipsLive,
@@ -2886,6 +2770,89 @@ async function main(): Promise<void> {
           ? "resume-system"
           : "pause-system";
     const moduleRole = snapshot.metricSystem?.role || "unknown";
+
+    const imageProcessingFields = (input: {
+      ips: number;
+      ipm: number;
+      processedItems?: number | null;
+      completedItems?: number | null;
+      failedItems?: number | null;
+      avgFetchMs?: number | null;
+      avgTransformMs?: number | null;
+      avgUploadMs?: number | null;
+      avgElapsedMs?: number | null;
+    }) => {
+      const processedItems = input.processedItems;
+      const completedItems = input.completedItems;
+      const failedItems = input.failedItems;
+      return [
+        {
+          label: UI_LABELS.image.processed,
+          value:
+            processedItems === null ||
+            processedItems === undefined ||
+            !Number.isFinite(processedItems)
+              ? "n/a"
+              : String(Math.max(0, Math.round(processedItems))),
+        },
+        {
+          label: UI_LABELS.image.completed,
+          value:
+            completedItems === null ||
+            completedItems === undefined ||
+            !Number.isFinite(completedItems)
+              ? "n/a"
+              : String(Math.max(0, Math.round(completedItems))),
+        },
+        {
+          label: UI_LABELS.image.failed,
+          value:
+            failedItems === null ||
+            failedItems === undefined ||
+            !Number.isFinite(failedItems)
+              ? "n/a"
+              : String(Math.max(0, Math.round(failedItems))),
+        },
+        { label: UI_LABELS.image.ips, value: formatRate(input.ips, 2) },
+        { label: UI_LABELS.image.ipm, value: formatRate(input.ipm, 2) },
+        {
+          label: UI_LABELS.image.avgFetchMs,
+          value:
+            input.avgFetchMs === null ||
+            input.avgFetchMs === undefined ||
+            !Number.isFinite(input.avgFetchMs)
+              ? "n/a"
+              : String(Math.max(0, Math.round(input.avgFetchMs))),
+        },
+        {
+          label: UI_LABELS.image.avgTransformMs,
+          value:
+            input.avgTransformMs === null ||
+            input.avgTransformMs === undefined ||
+            !Number.isFinite(input.avgTransformMs)
+              ? "n/a"
+              : String(Math.max(0, Math.round(input.avgTransformMs))),
+        },
+        {
+          label: UI_LABELS.image.avgUploadMs,
+          value:
+            input.avgUploadMs === null ||
+            input.avgUploadMs === undefined ||
+            !Number.isFinite(input.avgUploadMs)
+              ? "n/a"
+              : String(Math.max(0, Math.round(input.avgUploadMs))),
+        },
+        {
+          label: UI_LABELS.image.avgElapsedMs,
+          value:
+            input.avgElapsedMs === null ||
+            input.avgElapsedMs === undefined ||
+            !Number.isFinite(input.avgElapsedMs)
+              ? "n/a"
+              : String(Math.max(0, Math.round(input.avgElapsedMs))),
+        },
+      ];
+    };
 
     if (state.activeScreen === "summary") {
       ui.grid(
@@ -3075,40 +3042,19 @@ async function main(): Promise<void> {
           grid.panel(
             { title: "Image Processing (5m)", colSpan: 2 },
             (panel) => {
-              panel.keyValues([
-                {
-                  label: UI_LABELS.image.processed,
-                  value: String(processed5m),
-                },
-                {
-                  label: UI_LABELS.image.failed,
-                  value: String(failed5m),
-                },
-                {
-                  label: UI_LABELS.image.ips,
-                  value: formatRate(ips5m, 2),
-                },
-                {
-                  label: UI_LABELS.image.ipm,
-                  value: formatRate(ipm5m, 2),
-                },
-                {
-                  label: UI_LABELS.image.avgFetchMs,
-                  value: String(rollup15s?.avgFetchMs ?? 0),
-                },
-                {
-                  label: UI_LABELS.image.avgTransformMs,
-                  value: String(rollup15s?.avgTransformMs ?? 0),
-                },
-                {
-                  label: UI_LABELS.image.avgUploadMs,
-                  value: String(rollup15s?.avgUploadMs ?? 0),
-                },
-                {
-                  label: UI_LABELS.image.avgElapsedMs,
-                  value: String(rollup15s?.metricJobElapsedMsAvg ?? 0),
-                },
-              ]);
+              panel.keyValues(
+                imageProcessingFields({
+                  ips: Number(rollup15s?.ips ?? ips5m),
+                  ipm: Number(rollup15s?.ipm ?? ipm5m),
+                  processedItems: rollup15s?.processedItems ?? processed5m,
+                  completedItems: rollup15s?.completedJobs ?? null,
+                  failedItems: rollup15s?.failedItems ?? failed5m,
+                  avgFetchMs: rollup15s?.avgFetchMs ?? null,
+                  avgTransformMs: rollup15s?.avgTransformMs ?? null,
+                  avgUploadMs: rollup15s?.avgUploadMs ?? null,
+                  avgElapsedMs: rollup15s?.metricJobElapsedMsAvg ?? null,
+                }),
+              );
             },
           );
 
@@ -3193,40 +3139,19 @@ async function main(): Promise<void> {
           grid.panel(
             { title: "Image Processing (15m)", colSpan: 2 },
             (panel) => {
-              panel.keyValues([
-                {
-                  label: UI_LABELS.image.processed,
-                  value: String(rollup15m?.processedItems ?? 0),
-                },
-                {
-                  label: UI_LABELS.image.failed,
-                  value: String(rollup15m?.failedItems ?? 0),
-                },
-                {
-                  label: UI_LABELS.image.ips,
-                  value: formatRate(Number(rollup15m?.ips ?? 0), 2),
-                },
-                {
-                  label: UI_LABELS.image.ipm,
-                  value: formatRate(Number(rollup15m?.ipm ?? 0), 2),
-                },
-                {
-                  label: UI_LABELS.image.avgFetchMs,
-                  value: String(rollup15m?.avgFetchMs ?? 0),
-                },
-                {
-                  label: UI_LABELS.image.avgTransformMs,
-                  value: String(rollup15m?.avgTransformMs ?? 0),
-                },
-                {
-                  label: UI_LABELS.image.avgUploadMs,
-                  value: String(rollup15m?.avgUploadMs ?? 0),
-                },
-                {
-                  label: UI_LABELS.image.avgElapsedMs,
-                  value: String(rollup15m?.metricJobElapsedMsAvg ?? 0),
-                },
-              ]);
+              panel.keyValues(
+                imageProcessingFields({
+                  ips: Number(rollup15m?.ips ?? 0),
+                  ipm: Number(rollup15m?.ipm ?? 0),
+                  processedItems: rollup15m?.processedItems ?? null,
+                  completedItems: rollup15m?.completedJobs ?? null,
+                  failedItems: rollup15m?.failedItems ?? null,
+                  avgFetchMs: rollup15m?.avgFetchMs ?? null,
+                  avgTransformMs: rollup15m?.avgTransformMs ?? null,
+                  avgUploadMs: rollup15m?.avgUploadMs ?? null,
+                  avgElapsedMs: rollup15m?.metricJobElapsedMsAvg ?? null,
+                }),
+              );
             },
           );
 
@@ -3347,217 +3272,168 @@ async function main(): Promise<void> {
               padMissingCoverage: true,
             })
           : longIpsTrend;
-      const ipsSectionMax = lockYAxisMaxFromSeries({
+      const ipsProcessingTrendMax = lockYAxisMaxFromSeries({
         state,
         chartId: "processing.ipsTrendShared",
-        plottedValues: [...ips60mSeries, ...ips24hSeries],
+        plottedValues: [...longIpsTrend, ...ips60mSeries, ...ips24hSeries],
         minMax: 1,
       });
 
-      const imageProcessingFields = (input: {
-        ips: number;
-        ipm: number;
-        processedItems?: number | null;
-        failedItems?: number | null;
-        avgFetchMs?: number | null;
-        avgTransformMs?: number | null;
-        avgUploadMs?: number | null;
-        avgElapsedMs?: number | null;
-      }) => {
-        const processedItems = input.processedItems;
-        const failedItems = input.failedItems;
-        return [
-          {
-            label: UI_LABELS.image.processed,
-            value:
-              processedItems === null ||
-              processedItems === undefined ||
-              !Number.isFinite(processedItems)
-                ? "n/a"
-                : String(Math.max(0, Math.round(processedItems))),
-          },
-          {
-            label: UI_LABELS.image.failed,
-            value:
-              failedItems === null ||
-              failedItems === undefined ||
-              !Number.isFinite(failedItems)
-                ? "n/a"
-                : String(Math.max(0, Math.round(failedItems))),
-          },
-          { label: UI_LABELS.image.ips, value: formatRate(input.ips, 2) },
-          { label: UI_LABELS.image.ipm, value: formatRate(input.ipm, 2) },
-          {
-            label: UI_LABELS.image.avgFetchMs,
-            value:
-              input.avgFetchMs === null ||
-              input.avgFetchMs === undefined ||
-              !Number.isFinite(input.avgFetchMs)
-                ? "n/a"
-                : String(Math.max(0, Math.round(input.avgFetchMs))),
-          },
-          {
-            label: UI_LABELS.image.avgTransformMs,
-            value:
-              input.avgTransformMs === null ||
-              input.avgTransformMs === undefined ||
-              !Number.isFinite(input.avgTransformMs)
-                ? "n/a"
-                : String(Math.max(0, Math.round(input.avgTransformMs))),
-          },
-          {
-            label: UI_LABELS.image.avgUploadMs,
-            value:
-              input.avgUploadMs === null ||
-              input.avgUploadMs === undefined ||
-              !Number.isFinite(input.avgUploadMs)
-                ? "n/a"
-                : String(Math.max(0, Math.round(input.avgUploadMs))),
-          },
-          {
-            label: UI_LABELS.image.avgElapsedMs,
-            value:
-              input.avgElapsedMs === null ||
-              input.avgElapsedMs === undefined ||
-              !Number.isFinite(input.avgElapsedMs)
-                ? "n/a"
-                : String(Math.max(0, Math.round(input.avgElapsedMs))),
-          },
-        ];
-      };
-
       ui.grid(
         {
-          columns: ["1fr", "1fr", "1fr", "1fr", "1fr", "1fr"],
-          rows: [8, 8, 8, 10, 10],
+          columns: ["1fr", "1fr"],
+          rows: [11],
           gap: 1,
         },
         (grid) => {
-          grid.panel(
-            { title: "Image Processing - live", colSpan: 3 },
-            (panel) => {
-              panel.keyValues(
-                imageProcessingFields({
-                  ips: ipsLive,
-                  ipm: ipsLive * 60,
-                  processedItems: status?.processedItems ?? null,
-                  failedItems: status?.failedItems ?? null,
-                  avgFetchMs: status?.avgFetchMs ?? null,
-                  avgTransformMs: status?.avgTransformMs ?? null,
-                  avgUploadMs: status?.avgUploadMs ?? null,
-                  avgElapsedMs: status?.avgEndToEndMs ?? null,
-                }),
-              );
-            },
-          );
+          grid.panel({ title: "Image Processing - live" }, (panel) => {
+            panel.keyValues(
+              imageProcessingFields({
+                ips: ipsLive,
+                ipm: ipsLive * 60,
+                processedItems: readModuleMetricInt(
+                  "statusProcessedItems",
+                  "w15s",
+                  "latest",
+                ),
+                completedItems: readModuleMetricInt(
+                  "statusCompletedJobs",
+                  "w15s",
+                  "latest",
+                ),
+                failedItems: readModuleMetricInt(
+                  "statusFailedItems",
+                  "w15s",
+                  "latest",
+                ),
+                avgFetchMs: readModuleMetricValue("avgFetchMs", "w15s", "avg"),
+                avgTransformMs: readModuleMetricValue(
+                  "avgTransformMs",
+                  "w15s",
+                  "avg",
+                ),
+                avgUploadMs: readModuleMetricValue("avgUploadMs", "w15s", "avg"),
+                avgElapsedMs: readModuleMetricValue(
+                  "avgEndToEndMs",
+                  "w15s",
+                  "avg",
+                ),
+              }),
+            );
+          });
 
-          grid.panel({ title: "Live IPS Gauge", colSpan: 3 }, (panel) => {
+          grid.panel({ title: "Live IPS Gauge" }, (panel) => {
             panel.gauge({
               value: ipsGaugeValue,
               label: `ips_live ${formatRate(ipsLive, 2)}`,
             });
           });
+        },
+      );
 
-          grid.panel(
-            { title: "Image Processing - 15s", colSpan: 3 },
-            (panel) => {
-              panel.keyValues(
-                imageProcessingFields({
-                  ips: Number(rollup15s?.ips || 0),
-                  ipm: Number(rollup15s?.ipm || 0),
-                  processedItems: rollup15s?.processedItems ?? null,
-                  failedItems: rollup15s?.failedItems ?? null,
-                  avgFetchMs: rollup15s?.avgFetchMs ?? null,
-                  avgTransformMs: rollup15s?.avgTransformMs ?? null,
-                  avgUploadMs: rollup15s?.avgUploadMs ?? null,
-                  avgElapsedMs: rollup15s?.metricJobElapsedMsAvg ?? null,
-                }),
-              );
-            },
-          );
+      ui.grid(
+        {
+          columns: Array.from({ length: 5 }, () => "1fr"),
+          rows: [11],
+          gap: 1,
+        },
+        (grid) => {
+          grid.panel({ title: "Image Processing - 15s" }, (panel) => {
+            panel.keyValues(
+              imageProcessingFields({
+                ips: Number(rollup15s?.ips || 0),
+                ipm: Number(rollup15s?.ipm || 0),
+                processedItems: rollup15s?.processedItems ?? null,
+                completedItems: rollup15s?.completedJobs ?? null,
+                failedItems: rollup15s?.failedItems ?? null,
+                avgFetchMs: rollup15s?.avgFetchMs ?? null,
+                avgTransformMs: rollup15s?.avgTransformMs ?? null,
+                avgUploadMs: rollup15s?.avgUploadMs ?? null,
+                avgElapsedMs: rollup15s?.metricJobElapsedMsAvg ?? null,
+              }),
+            );
+          });
 
-          grid.panel(
-            { title: "Image Processing - 1m", colSpan: 3 },
-            (panel) => {
-              panel.keyValues(
-                imageProcessingFields({
-                  ips: Number(rollup1m?.ips || 0),
-                  ipm: Number(rollup1m?.ipm || 0),
-                  processedItems: rollup1m?.processedItems ?? null,
-                  failedItems: rollup1m?.failedItems ?? null,
-                  avgFetchMs: rollup1m?.avgFetchMs ?? null,
-                  avgTransformMs: rollup1m?.avgTransformMs ?? null,
-                  avgUploadMs: rollup1m?.avgUploadMs ?? null,
-                  avgElapsedMs: rollup1m?.metricJobElapsedMsAvg ?? null,
-                }),
-              );
-            },
-          );
+          grid.panel({ title: "Image Processing - 1m" }, (panel) => {
+            panel.keyValues(
+              imageProcessingFields({
+                ips: Number(rollup1m?.ips || 0),
+                ipm: Number(rollup1m?.ipm || 0),
+                processedItems: rollup1m?.processedItems ?? null,
+                completedItems: rollup1m?.completedJobs ?? null,
+                failedItems: rollup1m?.failedItems ?? null,
+                avgFetchMs: rollup1m?.avgFetchMs ?? null,
+                avgTransformMs: rollup1m?.avgTransformMs ?? null,
+                avgUploadMs: rollup1m?.avgUploadMs ?? null,
+                avgElapsedMs: rollup1m?.metricJobElapsedMsAvg ?? null,
+              }),
+            );
+          });
 
-          grid.panel(
-            { title: "Image Processing - 15m", colSpan: 2 },
-            (panel) => {
-              panel.keyValues(
-                imageProcessingFields({
-                  ips: Number(rollup15m?.ips || 0),
-                  ipm: Number(rollup15m?.ipm || 0),
-                  processedItems: rollup15m?.processedItems ?? null,
-                  failedItems: rollup15m?.failedItems ?? null,
-                  avgFetchMs: rollup15m?.avgFetchMs ?? null,
-                  avgTransformMs: rollup15m?.avgTransformMs ?? null,
-                  avgUploadMs: rollup15m?.avgUploadMs ?? null,
-                  avgElapsedMs: rollup15m?.metricJobElapsedMsAvg ?? null,
-                }),
-              );
-            },
-          );
+          grid.panel({ title: "Image Processing - 15m" }, (panel) => {
+            panel.keyValues(
+              imageProcessingFields({
+                ips: Number(rollup15m?.ips || 0),
+                ipm: Number(rollup15m?.ipm || 0),
+                processedItems: rollup15m?.processedItems ?? null,
+                completedItems: rollup15m?.completedJobs ?? null,
+                failedItems: rollup15m?.failedItems ?? null,
+                avgFetchMs: rollup15m?.avgFetchMs ?? null,
+                avgTransformMs: rollup15m?.avgTransformMs ?? null,
+                avgUploadMs: rollup15m?.avgUploadMs ?? null,
+                avgElapsedMs: rollup15m?.metricJobElapsedMsAvg ?? null,
+              }),
+            );
+          });
 
-          grid.panel(
-            { title: "Image Processing - 60m", colSpan: 2 },
-            (panel) => {
-              panel.keyValues(
-                imageProcessingFields({
-                  ips: Number(rollup60m?.ips || 0),
-                  ipm: Number(rollup60m?.ipm || 0),
-                  processedItems: rollup60m?.processedItems ?? null,
-                  failedItems: rollup60m?.failedItems ?? null,
-                  avgFetchMs: rollup60m?.avgFetchMs ?? null,
-                  avgTransformMs: rollup60m?.avgTransformMs ?? null,
-                  avgUploadMs: rollup60m?.avgUploadMs ?? null,
-                  avgElapsedMs: rollup60m?.metricJobElapsedMsAvg ?? null,
-                }),
-              );
-            },
-          );
+          grid.panel({ title: "Image Processing - 60m" }, (panel) => {
+            panel.keyValues(
+              imageProcessingFields({
+                ips: Number(rollup60m?.ips || 0),
+                ipm: Number(rollup60m?.ipm || 0),
+                processedItems: rollup60m?.processedItems ?? null,
+                completedItems: rollup60m?.completedJobs ?? null,
+                failedItems: rollup60m?.failedItems ?? null,
+                avgFetchMs: rollup60m?.avgFetchMs ?? null,
+                avgTransformMs: rollup60m?.avgTransformMs ?? null,
+                avgUploadMs: rollup60m?.avgUploadMs ?? null,
+                avgElapsedMs: rollup60m?.metricJobElapsedMsAvg ?? null,
+              }),
+            );
+          });
 
-          grid.panel(
-            { title: "Image Processing - 24h", colSpan: 2 },
-            (panel) => {
-              panel.keyValues(
-                imageProcessingFields({
-                  ips: Number(rollup24h?.ips || 0),
-                  ipm: Number(rollup24h?.ipm || 0),
-                  processedItems: rollup24h?.processedItems ?? null,
-                  failedItems: rollup24h?.failedItems ?? null,
-                  avgFetchMs: rollup24h?.avgFetchMs ?? null,
-                  avgTransformMs: rollup24h?.avgTransformMs ?? null,
-                  avgUploadMs: rollup24h?.avgUploadMs ?? null,
-                  avgElapsedMs: rollup24h?.metricJobElapsedMsAvg ?? null,
-                }),
-              );
-            },
-          );
+          grid.panel({ title: "Image Processing - 24h" }, (panel) => {
+            panel.keyValues(
+              imageProcessingFields({
+                ips: Number(rollup24h?.ips || 0),
+                ipm: Number(rollup24h?.ipm || 0),
+                processedItems: rollup24h?.processedItems ?? null,
+                completedItems: rollup24h?.completedJobs ?? null,
+                failedItems: rollup24h?.failedItems ?? null,
+                avgFetchMs: rollup24h?.avgFetchMs ?? null,
+                avgTransformMs: rollup24h?.avgTransformMs ?? null,
+                avgUploadMs: rollup24h?.avgUploadMs ?? null,
+                avgElapsedMs: rollup24h?.metricJobElapsedMsAvg ?? null,
+              }),
+            );
+          });
+        },
+      );
 
+      ui.grid(
+        {
+          columns: ["1fr", "1fr", "1fr"],
+          rows: [10],
+          gap: 1,
+        },
+        (grid) => {
           grid.panel(
-            {
-              title: `IPS Trend 60m (0-${ipsSectionMax.toFixed(1)})`,
-              colSpan: 6,
-            },
+            { title: `IPS Trend 15m (0-${ipsProcessingTrendMax.toFixed(1)})` },
             (panel) => {
               panel.graph({
-                values: ips60mSeries.length > 0 ? ips60mSeries : [0],
+                values: longIpsTrend.length > 0 ? longIpsTrend : [0],
                 min: 0,
-                max: ipsSectionMax,
+                max: ipsProcessingTrendMax,
                 axis: false,
                 color: theme.success,
               });
@@ -3565,15 +3441,25 @@ async function main(): Promise<void> {
           );
 
           grid.panel(
-            {
-              title: `IPS Trend 24h (0-${ipsSectionMax.toFixed(1)})`,
-              colSpan: 6,
+            { title: `IPS Trend 60m (0-${ipsProcessingTrendMax.toFixed(1)})` },
+            (panel) => {
+              panel.graph({
+                values: ips60mSeries.length > 0 ? ips60mSeries : [0],
+                min: 0,
+                max: ipsProcessingTrendMax,
+                axis: false,
+                color: theme.success,
+              });
             },
+          );
+
+          grid.panel(
+            { title: `IPS Trend 24h (0-${ipsProcessingTrendMax.toFixed(1)})` },
             (panel) => {
               panel.graph({
                 values: ips24hSeries.length > 0 ? ips24hSeries : [0],
                 min: 0,
-                max: ipsSectionMax,
+                max: ipsProcessingTrendMax,
                 axis: false,
                 color: theme.info,
               });
@@ -3622,16 +3508,24 @@ async function main(): Promise<void> {
       });
       const queue24hMax = Math.max(1, seriesMax(queue24hSeries));
 
-      const queueCompletedLive =
-        snapshot.queue?.completed ?? status?.queueCompleted ?? 0;
-      const queueFailedLive =
-        snapshot.queue?.failed ?? status?.queueFailed ?? 0;
+      const queueCompletedLive = readModuleMetricInt(
+        "queueCompletedLive",
+        "w15s",
+        "latest",
+      );
+      const queueFailedLive = readModuleMetricInt(
+        "queueFailedLive",
+        "w15s",
+        "latest",
+      );
 
-      const queue15sSummary = state.queueWindowAverages.w15s;
-      const queue1mSummary = state.queueWindowAverages.w1m;
-      const queue15mSummary = state.queueWindowAverages.w15m;
-      const queue60mSummary = state.queueWindowAverages.w60m;
-      const queue24hSummary = state.queueWindowAverages.w24h;
+      const queueWindowAverages =
+        snapshot.queueWindowAverages ?? ZERO_QUEUE_WINDOW_AVERAGES;
+      const queue15sSummary = queueWindowAverages.w15s;
+      const queue1mSummary = queueWindowAverages.w1m;
+      const queue15mSummary = queueWindowAverages.w15m;
+      const queue60mSummary = queueWindowAverages.w60m;
+      const queue24hSummary = queueWindowAverages.w24h;
 
       ui.grid(
         {
@@ -4219,6 +4113,22 @@ async function main(): Promise<void> {
         if (typeof value === "boolean") {
           return value ? "true" : "false";
         }
+        if (typeof value === "number") {
+          if (!Number.isFinite(value)) {
+            return "n/a";
+          }
+          if (Number.isInteger(value)) {
+            return String(value);
+          }
+          const abs = Math.abs(value);
+          if (abs >= 1000) {
+            return value.toFixed(1);
+          }
+          if (abs >= 1) {
+            return value.toFixed(2);
+          }
+          return value.toFixed(4);
+        }
         return String(value);
       };
 
@@ -4230,6 +4140,11 @@ async function main(): Promise<void> {
         return snake;
       };
 
+      const toCanonicalMetricLabel = (metricName: string): string => {
+        const snake = toSnakeReferenceName(metricName);
+        return snake.replace(/^status_/, "").replace(/_live$/, "");
+      };
+
       const invalidMetricRefs: string[] = [];
 
       const readSnapshotMetricStrict = (metricName: string): number | null => {
@@ -4239,51 +4154,36 @@ async function main(): Promise<void> {
           invalidMetricRefs.push(metricRefError);
           return null;
         }
-        return state.snapshotTrendLatestByName[metricName] ?? null;
-      };
-
-      const readRunnerMetricStrict = (metricName: string): number | null => {
-        const metricId = `runner.${metricName}`;
-        const metricRefError = validateRunnerMetricId(metricId);
-        if (metricRefError) {
-          invalidMetricRefs.push(metricRefError);
-          return null;
-        }
-        return state.runnerTrendLatestByName[metricName] ?? null;
+        return readModuleMetricValue(metricName, "w15s", "latest");
       };
 
       const snapshotMetricRows = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map(
         (metric) => {
           const latestValue = readSnapshotMetricStrict(metric.name);
           return {
-            label: toSnakeReferenceName(metric.name),
+            label: toCanonicalMetricLabel(metric.name),
             value: formatMetricValue(metric.name, latestValue),
           };
         },
       );
-
-      const runnerMetricRows = OPS_TREND_METRIC_REGISTRY.map((metric) => {
-        const latestValue = readRunnerMetricStrict(metric.name);
-        return {
-          label: toSnakeReferenceName(metric.name),
-          value: formatMetricValue(metric.name, latestValue, {
-            preserveSign: true,
-          }),
-        };
-      });
-      const liveMetricRows = [...snapshotMetricRows, ...runnerMetricRows];
-
-      const rollup15m = snapshot.performanceRollups?.rollup15m;
+      const liveMetricRows = [...snapshotMetricRows];
 
       const resolvedIps =
-        status?.throughputImagesPerMinute !== undefined &&
-        status?.throughputImagesPerMinute !== null
-          ? Number(status.throughputImagesPerMinute) / 60
-          : (rollup15m?.ips ?? null);
-      const resolvedIpm =
-        status?.throughputImagesPerMinute ?? rollup15m?.ipm ?? null;
-      const resolvedAvgEndToEndMs =
-        status?.avgEndToEndMs ?? rollup15m?.avgEndToEndMs ?? null;
+        readModuleMetricValue(
+          "statusThroughputImagesPerMinute",
+          "w15s",
+          "avg",
+        ) / 60;
+      const resolvedIpm = readModuleMetricValue(
+        "statusThroughputImagesPerMinute",
+        "w15s",
+        "avg",
+      );
+      const resolvedAvgEndToEndMs = readModuleMetricValue(
+        "avgEndToEndMs",
+        "w15s",
+        "avg",
+      );
 
       const queueBacklogMetricRefError = validateSnapshotMetricId(
         "snapshot.queueBacklogLive",
@@ -4306,10 +4206,10 @@ async function main(): Promise<void> {
           label: "trend_queue_rows",
           value: formatTrackedValue(queueBacklogTrendRows.length),
         },
-        { label: "ips_live", value: formatMetricValue("ips", resolvedIps) },
-        { label: "ipm_live", value: formatMetricValue("ipm", resolvedIpm) },
+        { label: "ips", value: formatMetricValue("ips", resolvedIps) },
+        { label: "ipm", value: formatMetricValue("ipm", resolvedIpm) },
         {
-          label: "avg_end_to_end_ms_live",
+          label: "avg_end_to_end_ms",
           value: formatMetricValue("avgEndToEndMs", resolvedAvgEndToEndMs),
         },
         {
@@ -4326,7 +4226,7 @@ async function main(): Promise<void> {
                 : "running",
         },
         {
-          label: "errors_total",
+          label: "system_error_fields_total",
           value: String(Object.keys(snapshot.errors).length),
         },
         {
@@ -4408,98 +4308,6 @@ async function main(): Promise<void> {
           value: formatTrackedValue(status?.gateReason),
         },
         {
-          label: "status_workers_running",
-          value: formatTrackedValue(status?.workersRunning),
-        },
-        {
-          label: "status_claimed_count",
-          value: formatTrackedValue(status?.claimedCount),
-        },
-        {
-          label: "status_queued_count",
-          value: formatTrackedValue(status?.queuedCount),
-        },
-        {
-          label: "status_completed_jobs",
-          value: formatTrackedValue(status?.completedJobs),
-        },
-        {
-          label: "status_failed_jobs",
-          value: formatTrackedValue(status?.failedJobs),
-        },
-        {
-          label: "status_processed_items",
-          value: formatTrackedValue(status?.processedItems),
-        },
-        {
-          label: "status_failed_items",
-          value: formatTrackedValue(status?.failedItems),
-        },
-        {
-          label: "status_queue_waiting",
-          value: formatTrackedValue(status?.queueWaiting),
-        },
-        {
-          label: "status_queue_active",
-          value: formatTrackedValue(status?.queueActive),
-        },
-        {
-          label: "status_queue_completed",
-          value: formatTrackedValue(status?.queueCompleted),
-        },
-        {
-          label: "status_queue_failed",
-          value: formatTrackedValue(status?.queueFailed),
-        },
-        {
-          label: "status_queue_delayed",
-          value: formatTrackedValue(status?.queueDelayed),
-        },
-        {
-          label: "status_queue_paused",
-          value: formatTrackedValue(status?.queuePaused),
-        },
-        {
-          label: "status_queue_backlog",
-          value: formatTrackedValue(status?.queueBacklog),
-        },
-        {
-          label: "status_last_flush_at",
-          value: formatTrackedValue(status?.lastFlushAt),
-        },
-        {
-          label: "status_flush_batch_count",
-          value: formatTrackedValue(status?.flushBatchCount),
-        },
-        {
-          label: "status_pending_success_buffer",
-          value: formatTrackedValue(status?.pendingSuccessBuffer),
-        },
-        {
-          label: "status_pending_error_buffer",
-          value: formatTrackedValue(status?.pendingErrorBuffer),
-        },
-        {
-          label: "status_throughput_images_per_minute",
-          value: formatTrackedValue(status?.throughputImagesPerMinute),
-        },
-        {
-          label: "status_avg_fetch_ms",
-          value: formatTrackedValue(status?.avgFetchMs),
-        },
-        {
-          label: "status_avg_transform_ms",
-          value: formatTrackedValue(status?.avgTransformMs),
-        },
-        {
-          label: "status_avg_upload_ms",
-          value: formatTrackedValue(status?.avgUploadMs),
-        },
-        {
-          label: "status_avg_end_to_end_ms",
-          value: formatTrackedValue(status?.avgEndToEndMs),
-        },
-        {
           label: "status_updated_at",
           value: formatTrackedValue(status?.updatedAt),
         },
@@ -4508,7 +4316,9 @@ async function main(): Promise<void> {
       const infraRows: Array<{ label: string; value: string }> = [
         {
           label: "infra_workers_running",
-          value: formatTrackedValue(snapshot.infra?.workersRunning),
+          value: formatTrackedValue(
+            readModuleMetricInt("workersRunningLive", "w15s", "latest"),
+          ),
         },
         {
           label: "infra_source",
@@ -4523,46 +4333,73 @@ async function main(): Promise<void> {
       const queueRows: Array<{ label: string; value: string }> = [
         {
           label: "queue_waiting",
-          value: formatTrackedValue(snapshot.queue?.waiting),
+          value: formatTrackedValue(
+            readModuleMetricInt("queueWaitingLive", "w15s", "latest"),
+          ),
         },
         {
           label: "queue_active",
-          value: formatTrackedValue(snapshot.queue?.active),
+          value: formatTrackedValue(
+            readModuleMetricInt("queueActiveLive", "w15s", "latest"),
+          ),
         },
         {
           label: "queue_completed",
-          value: formatTrackedValue(snapshot.queue?.completed),
+          value: formatTrackedValue(
+            readModuleMetricInt("queueCompletedLive", "w15s", "latest"),
+          ),
         },
         {
           label: "queue_failed",
-          value: formatTrackedValue(snapshot.queue?.failed),
+          value: formatTrackedValue(
+            readModuleMetricInt("queueFailedLive", "w15s", "latest"),
+          ),
         },
         {
           label: "queue_delayed",
-          value: formatTrackedValue(snapshot.queue?.delayed),
+          value: formatTrackedValue(
+            readModuleMetricInt("queueDelayedLive", "w15s", "latest"),
+          ),
         },
         {
           label: "queue_paused",
-          value: formatTrackedValue(snapshot.queue?.paused),
+          value: formatTrackedValue(
+            readModuleMetricInt("queuePausedLive", "w15s", "latest"),
+          ),
         },
         {
           label: "queue_backlog",
-          value: formatTrackedValue(snapshot.queue?.backlog),
+          value: formatTrackedValue(
+            readModuleMetricInt("queueBacklogLive", "w15s", "latest"),
+          ),
         },
       ];
 
       const dbRows: Array<{ label: string; value: string }> = [
         {
           label: "db_processed",
-          value: formatTrackedValue(snapshot.db?.processed),
+          value: formatTrackedValue(
+            readModuleMetricInt("dbProcessed", "w15s", "latest"),
+          ),
         },
         {
           label: "db_pending",
-          value: formatTrackedValue(snapshot.db?.pending),
+          value: formatTrackedValue(
+            readModuleMetricInt("dbPending", "w15s", "latest"),
+          ),
         },
-        { label: "db_failed", value: formatTrackedValue(snapshot.db?.failed) },
-        { label: "db_total", value: formatTrackedValue(snapshot.db?.total) },
-        { label: "db_pct", value: formatTrackedValue(snapshot.db?.pct) },
+        {
+          label: "db_total",
+          value: formatTrackedValue(
+            readModuleMetricInt("dbTotal", "w15s", "latest"),
+          ),
+        },
+        {
+          label: "db_pct",
+          value: formatTrackedValue(
+            readModuleMetricValue("dbProgressPct", "w15s", "avg"),
+          ),
+        },
       ];
 
       const metricSystemRows: Array<{ label: string; value: string }> = [
@@ -4752,25 +4589,6 @@ async function main(): Promise<void> {
         );
       }
 
-      const collectorRows: Array<{ label: string; value: string }> = [
-        {
-          label: "collector_db_samples",
-          value: formatTrackedValue(state.collectorBootSamples.db),
-        },
-        {
-          label: "collector_fly_samples",
-          value: formatTrackedValue(state.collectorBootSamples.fly),
-        },
-        {
-          label: "collector_redis_samples",
-          value: formatTrackedValue(state.collectorBootSamples.redis),
-        },
-        {
-          label: "collector_bullmq_samples",
-          value: formatTrackedValue(state.collectorBootSamples.bullmq),
-        },
-      ];
-
       const groupOrder = [
         "images",
         "queue_jobs",
@@ -4811,6 +4629,9 @@ async function main(): Promise<void> {
       const classifyMetricGroup = (
         label: string,
       ): (typeof groupOrder)[number] => {
+        if (label.startsWith("db_") || label.includes("db")) {
+          return "database";
+        }
         if (
           label.includes("fetch") ||
           label.includes("transform") ||
@@ -4833,9 +4654,6 @@ async function main(): Promise<void> {
         ) {
           return "queue_jobs";
         }
-        if (label.includes("db")) {
-          return "database";
-        }
         if (
           label.includes("redis") ||
           label.includes("worker") ||
@@ -4857,7 +4675,6 @@ async function main(): Promise<void> {
       pushGroupRows("infra_redis", metricSystemRows);
       pushGroupRows("infra_redis", redisRows);
       pushGroupRows("infra_redis", redisInstanceRows);
-      pushGroupRows("infra_redis", collectorRows);
       for (const row of liveMetricRows) {
         pushGroupRows(classifyMetricGroup(row.label), [row]);
       }
