@@ -398,6 +398,7 @@ export type OpsMetricSample = {
   key: string;
   value: number;
   atMs?: number;
+  id?: string;
 };
 
 export type OpsSampleCollectorKey = "db" | "fly" | "redis" | "bullmq";
@@ -487,7 +488,8 @@ const OPS_TREND_REDIS_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const OPS_TREND_PROJECTION_DEFAULT_LIMIT = 50;
 const OPS_LIVE_STATUS_STALE_THRESHOLD_MS = 10_000;
 const OPS_LIVE_STATUS_PUBLISH_MIN_INTERVAL_MS = 2_000;
-const OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS = 15_000;
+const OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS = 30_000;
+const OPS_5S_METRICS_WINDOW_MS = 5_000;
 const OPS_15S_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["15s"];
 const OPS_1M_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["1m"];
 const OPS_BULLMQ_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["15m"];
@@ -496,6 +498,7 @@ const OPS_DAILY_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS["24h"];
 const OPS_DEEP_METRICS_WINDOW_MS = IMAGE_SLICE_WINDOW_MS.deep;
 const OPS_RECENT_15M_REFRESH_MIN_INTERVAL_MS = 5_000;
 const OPS_METRIC_SLICE_WINDOW_MS_BY_ID = {
+  w5s: OPS_5S_METRICS_WINDOW_MS,
   w15s: OPS_15S_METRICS_WINDOW_MS,
   w1m: OPS_1M_METRICS_WINDOW_MS,
   w15m: OPS_BULLMQ_METRICS_WINDOW_MS,
@@ -510,7 +513,10 @@ const OPS_REDIS_IO_INSTANCE_TTL_SECONDS = 45;
 const OPS_REDIS_IO_PUBLISH_MIN_INTERVAL_MS = 5_000;
 const OPS_METRIC_OWNER_REFRESH_MIN_INTERVAL_MS = 5_000;
 const OPS_SAMPLE_FLUSH_INTERVAL_MS_DEFAULT = 1_000;
+const OPS_SAMPLE_FLUSH_BATCH_SIZE_DEFAULT = 2_000;
+const OPS_EVENT_DRIVEN_COLLECTOR_MIN_INTERVAL_MS = 250;
 const OPS_PIPELINE_TRACE_MAX_CHARS = 1200;
+const OPS_BULLMQ_SEED_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 type OpsStagedMetricSample = {
   key: string;
@@ -529,6 +535,15 @@ function opsSampleFlushIntervalMs(): number {
     return OPS_SAMPLE_FLUSH_INTERVAL_MS_DEFAULT;
   }
   return Math.max(1000, Math.min(60_000, parsed));
+}
+
+function opsSampleFlushBatchSize(): number {
+  const raw = process.env.IMAGE_OPS_SAMPLE_FLUSH_BATCH_SIZE;
+  const parsed = Number.parseInt(String(raw || "").trim(), 10);
+  if (!Number.isFinite(parsed)) {
+    return OPS_SAMPLE_FLUSH_BATCH_SIZE_DEFAULT;
+  }
+  return Math.max(250, Math.min(20_000, parsed));
 }
 
 function inferOpsRedisIoProcessRole(): OpsReactiveProfile {
@@ -595,6 +610,129 @@ type OpsTrendMetricName =
   | "avgTransformMs"
   | "avgUploadMs"
   | "avgEndToEndMs";
+
+type OpsBullmqEventCounterLedger = {
+  initialized: boolean;
+  completedTotal: number;
+  failedTotal: number;
+  processedItemsTotal: number;
+  failedItemsTotal: number;
+  seenCompletedEventKeys: Set<string>;
+  seenFailedEventKeys: Set<string>;
+};
+
+const opsBullmqEventCounterLedger: OpsBullmqEventCounterLedger = {
+  initialized: false,
+  completedTotal: 0,
+  failedTotal: 0,
+  processedItemsTotal: 0,
+  failedItemsTotal: 0,
+  seenCompletedEventKeys: new Set<string>(),
+  seenFailedEventKeys: new Set<string>(),
+};
+
+function seedOpsBullmqEventCounterLedgerFromQueue(
+  queue: ImageQueueCounts,
+): void {
+  const queueCompleted = Math.max(0, Math.floor(Number(queue.completed) || 0));
+  const queueFailed = Math.max(0, Math.floor(Number(queue.failed) || 0));
+
+  if (!opsBullmqEventCounterLedger.initialized) {
+    opsBullmqEventCounterLedger.initialized = true;
+    opsBullmqEventCounterLedger.completedTotal = queueCompleted;
+    opsBullmqEventCounterLedger.failedTotal = queueFailed;
+    opsBullmqEventCounterLedger.processedItemsTotal = queueCompleted;
+    opsBullmqEventCounterLedger.failedItemsTotal = queueFailed;
+    return;
+  }
+
+  // Never move backward; seed only as a floor at startup/reconnect boundaries.
+  opsBullmqEventCounterLedger.completedTotal = Math.max(
+    opsBullmqEventCounterLedger.completedTotal,
+    queueCompleted,
+  );
+  opsBullmqEventCounterLedger.failedTotal = Math.max(
+    opsBullmqEventCounterLedger.failedTotal,
+    queueFailed,
+  );
+  opsBullmqEventCounterLedger.processedItemsTotal = Math.max(
+    opsBullmqEventCounterLedger.processedItemsTotal,
+    queueCompleted,
+  );
+  opsBullmqEventCounterLedger.failedItemsTotal = Math.max(
+    opsBullmqEventCounterLedger.failedItemsTotal,
+    queueFailed,
+  );
+}
+
+function trimLedgerEventKeySets(): void {
+  const maxKeys = 20_000;
+  if (opsBullmqEventCounterLedger.seenCompletedEventKeys.size > maxKeys) {
+    opsBullmqEventCounterLedger.seenCompletedEventKeys.clear();
+  }
+  if (opsBullmqEventCounterLedger.seenFailedEventKeys.size > maxKeys) {
+    opsBullmqEventCounterLedger.seenFailedEventKeys.clear();
+  }
+}
+
+function applyOpsBullmqCompletedEvent(input: {
+  eventKey: string;
+  processedCount?: number;
+  failedCount?: number;
+}): void {
+  const key = String(input.eventKey || "");
+  if (!key || opsBullmqEventCounterLedger.seenCompletedEventKeys.has(key)) {
+    return;
+  }
+
+  opsBullmqEventCounterLedger.seenCompletedEventKeys.add(key);
+  trimLedgerEventKeySets();
+
+  const processedCount = Math.max(
+    0,
+    Math.floor(Number(input.processedCount) || 1),
+  );
+  const failedCount = Math.max(0, Math.floor(Number(input.failedCount) || 0));
+
+  opsBullmqEventCounterLedger.completedTotal += 1;
+  opsBullmqEventCounterLedger.processedItemsTotal += processedCount;
+  opsBullmqEventCounterLedger.failedItemsTotal += failedCount;
+}
+
+function applyOpsBullmqFailedEvent(input: {
+  eventKey: string;
+  failedCount?: number;
+}): void {
+  const key = String(input.eventKey || "");
+  if (!key || opsBullmqEventCounterLedger.seenFailedEventKeys.has(key)) {
+    return;
+  }
+
+  opsBullmqEventCounterLedger.seenFailedEventKeys.add(key);
+  trimLedgerEventKeySets();
+
+  const failedCount = Math.max(0, Math.floor(Number(input.failedCount) || 1));
+
+  opsBullmqEventCounterLedger.failedTotal += 1;
+  opsBullmqEventCounterLedger.failedItemsTotal += failedCount;
+}
+
+function readOpsBullmqEventCounterLedger(): {
+  completedTotal: number;
+  failedTotal: number;
+  processedItemsTotal: number;
+  failedItemsTotal: number;
+} {
+  return {
+    completedTotal: Math.max(0, opsBullmqEventCounterLedger.completedTotal),
+    failedTotal: Math.max(0, opsBullmqEventCounterLedger.failedTotal),
+    processedItemsTotal: Math.max(
+      0,
+      opsBullmqEventCounterLedger.processedItemsTotal,
+    ),
+    failedItemsTotal: Math.max(0, opsBullmqEventCounterLedger.failedItemsTotal),
+  };
+}
 
 export type OpsTrendMetricDescriptor = {
   name: OpsTrendMetricName;
@@ -733,50 +871,53 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
     {
       name: "workersRunningLive",
       key: imageMetricTrendKey(IMAGE_GROUP_INFRA, "workers_running_live"),
-      getValue: (snapshot) =>
-        snapshot.infra?.workersRunning ?? snapshot.status?.workersRunning ?? 0,
+      getValue: (snapshot) => snapshot.infra?.workersRunning ?? 0,
     },
     {
       name: "queueWaitingLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_waiting_live"),
-      getValue: (snapshot) =>
-        snapshot.status?.queueWaiting ?? snapshot.queue?.waiting ?? 0,
+      getValue: (snapshot) => snapshot.queue?.waiting ?? 0,
     },
     {
       name: "queueActiveLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_active_live"),
-      getValue: (snapshot) =>
-        snapshot.status?.queueActive ?? snapshot.queue?.active ?? 0,
+      getValue: (snapshot) => snapshot.queue?.active ?? 0,
     },
     {
       name: "queueDelayedLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_delayed_live"),
-      getValue: (snapshot) =>
-        snapshot.status?.queueDelayed ?? snapshot.queue?.delayed ?? 0,
+      getValue: (snapshot) => snapshot.queue?.delayed ?? 0,
     },
     {
       name: "queuePausedLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_paused_live"),
+      getValue: (snapshot) => snapshot.queue?.paused ?? 0,
+    },
+    {
+      name: "queuePendingLive",
+      key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_pending_live"),
       getValue: (snapshot) =>
-        snapshot.queue?.paused ?? snapshot.status?.queuePaused ?? 0,
+        Math.max(
+          0,
+          (snapshot.queue?.waiting ?? 0) +
+            (snapshot.queue?.delayed ?? 0) +
+            (snapshot.queue?.paused ?? 0),
+        ),
     },
     {
       name: "queueCompletedLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_completed_live"),
-      getValue: (snapshot) =>
-        snapshot.status?.queueCompleted ?? snapshot.queue?.completed ?? 0,
+      getValue: (snapshot) => snapshot.queue?.completed ?? 0,
     },
     {
       name: "queueFailedLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_failed_live"),
-      getValue: (snapshot) =>
-        snapshot.status?.queueFailed ?? snapshot.queue?.failed ?? 0,
+      getValue: (snapshot) => snapshot.queue?.failed ?? 0,
     },
     {
       name: "queueBacklogLive",
       key: imageMetricTrendKey(IMAGE_GROUP_QUEUE, "queue_backlog_live"),
-      getValue: (snapshot) =>
-        snapshot.status?.queueBacklog ?? snapshot.queue?.backlog ?? 0,
+      getValue: (snapshot) => snapshot.queue?.backlog ?? 0,
     },
     {
       name: "statusProcessedItems",
@@ -815,6 +956,15 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
       name: "statusFlushBatchCount",
       key: imageMetricTrendKey(IMAGE_GROUP_JOBS, "status_flush_batch_count"),
       getValue: (snapshot) => snapshot.status?.flushBatchCount ?? 0,
+    },
+    {
+      name: "statusThroughputImagesPerSecond",
+      key: imageMetricTrendKey(
+        IMAGE_GROUP_IMAGES,
+        "status_throughput_images_per_second",
+      ),
+      getValue: (snapshot) =>
+        Math.max(0, snapshot.status?.throughputImagesPerMinute ?? 0) / 60,
     },
     {
       name: "statusThroughputImagesPerMinute",
@@ -889,6 +1039,11 @@ export const OPS_SNAPSHOT_TREND_METRIC_REGISTRY: OpsSnapshotTrendMetricDescripto
       getValue: (snapshot) => snapshot.db?.pending ?? 0,
     },
     {
+      name: "dbFailed",
+      key: imageMetricTrendKey(IMAGE_GROUP_DB, "db_failed"),
+      getValue: (snapshot) => snapshot.db?.failed ?? 0,
+    },
+    {
       name: "dbTotal",
       key: imageMetricTrendKey(IMAGE_GROUP_DB, "db_total"),
       getValue: (snapshot) => snapshot.db?.total ?? 0,
@@ -951,10 +1106,10 @@ const OPS_COLLECTOR_DEFAULT_INTERVALS_MS: Record<
   OpsSampleCollectorKey,
   number
 > = {
-  db: 60_000,
+  db: 5_000,
   fly: 15_000,
   redis: 15_000,
-  bullmq: 15_000,
+  bullmq: 1_000,
 };
 
 const OPS_TREND_METRIC_KEYS = {
@@ -1446,6 +1601,12 @@ function resolveOpsMetricSystemOwnership(
       return roleDelta;
     }
 
+    const updatedDelta =
+      parseIsoToMs(right.updatedAt) - parseIsoToMs(left.updatedAt);
+    if (updatedDelta !== 0) {
+      return updatedDelta;
+    }
+
     const startedDelta =
       parseIsoToMs(left.startedAt) - parseIsoToMs(right.startedAt);
     if (startedDelta !== 0) {
@@ -1866,8 +2027,17 @@ function average(values: number[]): number {
   return total / values.length;
 }
 
-function encodeTrendMetricMember(value: number, atMs: number): string {
-  return encodeImageTrendPoint({ atMs, value });
+function encodeTrendMetricMember(
+  value: number,
+  atMs: number,
+  id?: string,
+): string {
+  const sampleId = typeof id === "string" ? id.trim() : "";
+  return encodeImageTrendPoint({
+    atMs,
+    value,
+    ...(sampleId ? { id: sampleId } : {}),
+  });
 }
 
 function parseTrendMetricValue(member: string): number | null {
@@ -1908,6 +2078,8 @@ function buildTrendSamplesFromUiSnapshot(
   options?: {
     nowMs?: number;
     statusMaxAgeMs?: number;
+    includeStatusCounterMetrics?: boolean;
+    includeStatusLatencyMetrics?: boolean;
   },
 ): OpsMetricSample[] {
   const nowMs = Number.isFinite(options?.nowMs)
@@ -1916,6 +2088,10 @@ function buildTrendSamplesFromUiSnapshot(
   const statusMaxAgeMs = Number.isFinite(options?.statusMaxAgeMs)
     ? Math.max(1, Number(options?.statusMaxAgeMs))
     : OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS;
+  const includeStatusCounterMetrics =
+    options?.includeStatusCounterMetrics === true;
+  const includeStatusLatencyMetrics =
+    options?.includeStatusLatencyMetrics !== false;
   const statusUpdatedAtMs = runnerStatusUpdatedAtMs(snapshot.status);
   const statusIsFresh =
     statusUpdatedAtMs > 0 && nowMs - statusUpdatedAtMs <= statusMaxAgeMs;
@@ -1925,15 +2101,71 @@ function buildTrendSamplesFromUiSnapshot(
     metricName === "avgTransformMs" ||
     metricName === "avgUploadMs" ||
     metricName === "avgEndToEndMs";
+  const isStatusCounterMetric = (metricName: string): boolean =>
+    metricName === "statusProcessedItems" ||
+    metricName === "statusFailedItems" ||
+    metricName === "statusCompletedJobs" ||
+    metricName === "statusFailedJobs";
+  const isStatusLatencyMetric = (metricName: string): boolean =>
+    metricName === "avgFetchMs" ||
+    metricName === "avgTransformMs" ||
+    metricName === "avgUploadMs" ||
+    metricName === "avgEndToEndMs";
 
-  return descriptors.map((metric) => ({
-    key: metric.key,
-    value: normalizeSampleValue(
-      !statusIsFresh && isStatusDerivedSnapshotMetric(metric.name)
-        ? 0
-        : metric.getValue(snapshot),
-    ),
-  }));
+  const processed15sSlice = snapshot.metricSlices?.statusProcessedItems?.w15s;
+  const hasProcessedWindowSlices = Boolean(processed15sSlice);
+  const processedDelta = hasProcessedWindowSlices
+    ? Math.max(0, Number(processed15sSlice?.delta ?? 0))
+    : 0;
+  const sliceSeconds = Math.max(
+    1,
+    Math.floor(OPS_METRIC_SLICE_WINDOW_MS_BY_ID.w15s / 1000),
+  );
+  const derivedIps = Math.max(0, processedDelta / sliceSeconds);
+  const derivedIpm = Math.max(0, derivedIps * 60);
+
+  const samples: OpsMetricSample[] = [];
+  for (const metric of descriptors) {
+    // Counter streams are collector-owned; avoid mixed semantic writes from status snapshots.
+    if (isStatusCounterMetric(metric.name) && !includeStatusCounterMetrics) {
+      continue;
+    }
+    if (isStatusLatencyMetric(metric.name) && !includeStatusLatencyMetrics) {
+      continue;
+    }
+
+    // Do not inject synthetic zero points for stale status-derived metrics.
+    // Skipping the sample prevents 15s/1m slices from oscillating to zero.
+    if (!statusIsFresh && isStatusDerivedSnapshotMetric(metric.name)) {
+      continue;
+    }
+
+    const isThroughputMetric =
+      metric.name === "statusThroughputImagesPerSecond" ||
+      metric.name === "statusThroughputImagesPerMinute";
+    if (isThroughputMetric && !hasProcessedWindowSlices) {
+      continue;
+    }
+
+    let sampleValue = metric.getValue(snapshot);
+    if (
+      hasProcessedWindowSlices &&
+      metric.name === "statusThroughputImagesPerSecond"
+    ) {
+      sampleValue = derivedIps;
+    } else if (
+      hasProcessedWindowSlices &&
+      metric.name === "statusThroughputImagesPerMinute"
+    ) {
+      sampleValue = derivedIpm;
+    }
+
+    samples.push({
+      key: metric.key,
+      value: normalizeSampleValue(sampleValue),
+    });
+  }
+  return samples;
 }
 
 function inferSnapshotMetricCollectors(
@@ -1982,6 +2214,16 @@ function buildCollectorSnapshotSeed(
     errors: {},
     ...seed,
   };
+}
+
+function snapshotMetricKeyByName(metricName: string): string {
+  const descriptor = OPS_SNAPSHOT_TREND_METRIC_REGISTRY.find(
+    (metric) => metric.name === metricName,
+  );
+  if (!descriptor) {
+    throw new Error(`missing snapshot metric descriptor for ${metricName}`);
+  }
+  return descriptor.key;
 }
 
 const OPS_SNAPSHOT_TREND_METRICS_BY_COLLECTOR: Record<
@@ -2066,11 +2308,40 @@ async function collectRedisMetricSamples(
 }
 
 async function collectBullmqMetricSamples(): Promise<OpsMetricSample[]> {
-  const [queue, control] = await Promise.all([
+  const [queue, control, recentWindow] = await Promise.all([
     readOpsQueueSnapshot(),
     readOpsControlSnapshot(),
+    readImageQueueRecentJobWindow(OPS_BULLMQ_METRICS_WINDOW_MS).catch(
+      () => null,
+    ),
   ]);
-  const status = control.status;
+  const nowMs = Date.now();
+  seedOpsBullmqEventCounterLedgerFromQueue(queue);
+  const counters = readOpsBullmqEventCounterLedger();
+  const status = shouldReconcileBullmqStatus({
+    status: control.status,
+    queue,
+    recentWindow,
+    nowMs,
+    lastPublishAtMs: 0,
+  })
+    ? buildBullmqRepresentativeStatus({
+        status: control.status,
+        settings: control.settings,
+        infra: control.infra,
+        queue,
+        recentWindow,
+        counters,
+      })
+    : buildBullmqRepresentativeStatus({
+        status: control.status,
+        settings: control.settings,
+        infra: control.infra,
+        queue,
+        recentWindow,
+        counters,
+      });
+
   return buildTrendSamplesFromUiSnapshot(
     buildCollectorSnapshotSeed({
       queue,
@@ -2080,8 +2351,10 @@ async function collectBullmqMetricSamples(): Promise<OpsMetricSample[]> {
     }),
     OPS_SNAPSHOT_TREND_METRICS_BY_COLLECTOR.bullmq,
     {
-      nowMs: Date.now(),
+      nowMs,
       statusMaxAgeMs: OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS,
+      includeStatusCounterMetrics: false,
+      includeStatusLatencyMetrics: false,
     },
   );
 }
@@ -2165,45 +2438,72 @@ async function appendTrendMetricBatch(
   }
 
   const sharedAtMs = input.atMs ?? nextTrendTimestampMs();
-  const pipeline = connection.pipeline();
+  const batchSize = opsSampleFlushBatchSize();
+  const latestAtMsByKey = new Map<string, number>();
   let requestBytes = 0;
+  let responseBytes = 0;
+  let elapsedMsTotal = 0;
 
-  for (const sample of samples) {
-    const atMs = Number.isFinite(sample.atMs)
-      ? Number(sample.atMs)
-      : sharedAtMs;
-    const value = normalizeSampleValue(sample.value);
-    const pruneBeforeMs = Math.max(0, atMs - OPS_TREND_REDIS_RETENTION_MS);
-    const member = encodeTrendMetricMember(value, atMs);
+  for (let start = 0; start < samples.length; start += batchSize) {
+    const pipeline = connection.pipeline();
+    const batch = samples.slice(start, start + batchSize);
+    for (const sample of batch) {
+      const atMs = Number.isFinite(sample.atMs)
+        ? Number(sample.atMs)
+        : sharedAtMs;
+      const value = normalizeSampleValue(sample.value);
+      const member = encodeTrendMetricMember(value, atMs, sample.id);
 
-    pipeline.zadd(sample.key, atMs, member);
-    pipeline.zremrangebyscore(sample.key, "0", String(pruneBeforeMs));
+      pipeline.zadd(sample.key, atMs, member);
+      requestBytes += redisCommandPayloadBytes([
+        "ZADD",
+        sample.key,
+        String(atMs),
+        member,
+      ]);
 
-    requestBytes += redisCommandPayloadBytes([
-      "ZADD",
-      sample.key,
-      String(atMs),
-      member,
-    ]);
-    requestBytes += redisCommandPayloadBytes([
-      "ZREMRANGEBYSCORE",
-      sample.key,
-      "0",
-      String(pruneBeforeMs),
-    ]);
+      const latestAtMs = latestAtMsByKey.get(sample.key) ?? 0;
+      if (atMs > latestAtMs) {
+        latestAtMsByKey.set(sample.key, atMs);
+      }
+    }
+
+    const startedAtMs = Date.now();
+    const result = await pipeline.exec();
+    responseBytes += Array.isArray(result)
+      ? result.reduce((sum, row) => sum + redisReplyPayloadBytes(row?.[1]), 0)
+      : 0;
+    elapsedMsTotal += Math.max(0, Date.now() - startedAtMs);
   }
 
-  const startedAtMs = Date.now();
-  const result = await pipeline.exec();
-  const responseBytes = Array.isArray(result)
-    ? result.reduce((sum, row) => sum + redisReplyPayloadBytes(row?.[1]), 0)
-    : 0;
+  if (latestAtMsByKey.size > 0) {
+    const prunePipeline = connection.pipeline();
+    for (const [metricKey, latestAtMs] of latestAtMsByKey.entries()) {
+      const pruneBeforeMs = Math.max(
+        0,
+        latestAtMs - OPS_TREND_REDIS_RETENTION_MS,
+      );
+      prunePipeline.zremrangebyscore(metricKey, "0", String(pruneBeforeMs));
+      requestBytes += redisCommandPayloadBytes([
+        "ZREMRANGEBYSCORE",
+        metricKey,
+        "0",
+        String(pruneBeforeMs),
+      ]);
+    }
 
-  trackRedisWriteIo(
-    requestBytes,
-    responseBytes,
-    Math.max(0, Date.now() - startedAtMs),
-  );
+    const pruneStartedAtMs = Date.now();
+    const pruneResult = await prunePipeline.exec();
+    responseBytes += Array.isArray(pruneResult)
+      ? pruneResult.reduce(
+          (sum, row) => sum + redisReplyPayloadBytes(row?.[1]),
+          0,
+        )
+      : 0;
+    elapsedMsTotal += Math.max(0, Date.now() - pruneStartedAtMs);
+  }
+
+  trackRedisWriteIo(requestBytes, responseBytes, elapsedMsTotal);
 }
 
 async function flushOpsStagedMetricSamples(input?: {
@@ -3444,6 +3744,7 @@ export async function createOpsUiStateWatcher(input: {
   trendSampleMaxGapMs?: number;
   enableCollectors?: boolean;
   ingestDerivedSamplesOnRefresh?: boolean;
+  pollEventDrivenCollectorsOnInterval?: boolean;
   collectorIntervalsMs?: OpsSampleCollectorIntervalsMs;
   collectors?: OpsSampleCollectorKey[];
 }): Promise<OpsUiStateWatcher> {
@@ -3454,11 +3755,17 @@ export async function createOpsUiStateWatcher(input: {
           minRefreshIntervalMs: 5000,
           fallbackRefreshIntervalMs: 15000,
           subscribeToSignals: false,
+          seedCollectorsOnInit: false,
+          enableCollectors: false,
+          ingestDerivedSamplesOnRefresh: false,
         }
       : {
           minRefreshIntervalMs: 5000,
           fallbackRefreshIntervalMs: 15000,
           subscribeToSignals: false,
+          seedCollectorsOnInit: true,
+          enableCollectors: true,
+          ingestDerivedSamplesOnRefresh: true,
         };
 
   const minRefreshIntervalMs = Math.max(
@@ -3471,7 +3778,8 @@ export async function createOpsUiStateWatcher(input: {
   const hydrateOnInit = input.hydrateOnInit ?? true;
   const waitForQueueEventsReadyOnInit =
     input.waitForQueueEventsReadyOnInit ?? true;
-  const seedCollectorsOnInit = input.seedCollectorsOnInit ?? true;
+  const seedCollectorsOnInit =
+    input.seedCollectorsOnInit ?? profileDefaults.seedCollectorsOnInit;
   const trendProjectionLimit = Math.max(
     1,
     Math.min(
@@ -3490,22 +3798,29 @@ export async function createOpsUiStateWatcher(input: {
     (input.trendSampleMaxGapMs || 0) > 0
       ? Number(input.trendSampleMaxGapMs)
       : undefined;
-  const collectorsEnabled = input.enableCollectors ?? true;
+  const collectorsEnabled =
+    input.enableCollectors ?? profileDefaults.enableCollectors;
   const ingestDerivedSamplesOnRefresh =
-    input.ingestDerivedSamplesOnRefresh ?? true;
+    input.ingestDerivedSamplesOnRefresh ??
+    profileDefaults.ingestDerivedSamplesOnRefresh;
+  const pollEventDrivenCollectorsOnInterval =
+    input.pollEventDrivenCollectorsOnInterval ?? true;
+  const allowBullmqCollectorsInStandby = profile === "cli";
   const collectorIntervalsMs = resolveCollectorIntervalsMs(
     input.collectorIntervalsMs,
   );
   const configuredCollectors: OpsSampleCollectorKey[] =
     input.collectors && input.collectors.length > 0
       ? input.collectors
-      : ["db", "fly"];
+      : ["db", "fly", "redis", "bullmq"];
+  const wantsQueueEventSignals =
+    collectorsEnabled && configuredCollectors.some(isEventDrivenCollector);
 
   const subscriber = subscribeToSignals
     ? await createOpsStateUpdatesSubscriber().catch(() => null)
     : null;
   const refreshRedisConnection = createRedisConnection();
-  const queueEventsConnection = subscribeToSignals
+  const queueEventsConnection = wantsQueueEventSignals
     ? createRedisConnection()
     : null;
   const queueEvents = queueEventsConnection
@@ -3540,8 +3855,570 @@ export async function createOpsUiStateWatcher(input: {
   let lastMetricOwnershipRefreshAtMs = 0;
   const collectorLastRunAtMs: Partial<Record<OpsSampleCollectorKey, number>> =
     {};
+  let bullmqEventCollectorInFlight: Promise<void> | null = null;
+  let bullmqEventCollectorPending = false;
+  let bullmqLegacyCounterSeeded = false;
+  let bullmqHistoricalSeedReady = false;
+  let bullmqBootstrapSampleWritten = false;
+  let bullmqWritesEnabled = false;
+  let bullmqEventSampleChain: Promise<void> = Promise.resolve();
+  const queueReadConnection = wantsQueueEventSignals
+    ? createRedisConnection()
+    : null;
+  const queueReadQueue = queueReadConnection
+    ? createImageQueue(queueReadConnection)
+    : null;
   const stateWaiters = new Set<() => void>();
   const listeners = new Set<() => void>();
+
+  const statusProcessedItemsMetricKey = snapshotMetricKeyByName(
+    "statusProcessedItems",
+  );
+  const statusCompletedJobsMetricKey = snapshotMetricKeyByName(
+    "statusCompletedJobs",
+  );
+  const statusFailedItemsMetricKey =
+    snapshotMetricKeyByName("statusFailedItems");
+  const statusFailedJobsMetricKey = snapshotMetricKeyByName("statusFailedJobs");
+  const statusAvgFetchMsMetricKey = snapshotMetricKeyByName("avgFetchMs");
+  const statusAvgTransformMsMetricKey =
+    snapshotMetricKeyByName("avgTransformMs");
+  const statusAvgUploadMsMetricKey = snapshotMetricKeyByName("avgUploadMs");
+  const statusAvgEndToEndMsMetricKey = snapshotMetricKeyByName("avgEndToEndMs");
+
+  const parseCountsFromReturnValue = (
+    returnValueRaw: unknown,
+  ): {
+    processedCount: number;
+    failedCount: number;
+    completedAtMs: number | null;
+    avgFetchMs: number | null;
+    avgTransformMs: number | null;
+    avgUploadMs: number | null;
+    avgEndToEndMs: number | null;
+  } => {
+    const toFiniteNonNegative = (value: unknown): number | null => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return null;
+      }
+      return Math.max(0, numeric);
+    };
+
+    let parsed: unknown = null;
+    if (typeof returnValueRaw === "string") {
+      try {
+        parsed = JSON.parse(returnValueRaw);
+      } catch {
+        parsed = null;
+      }
+    } else if (returnValueRaw && typeof returnValueRaw === "object") {
+      parsed = returnValueRaw;
+    }
+
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      return {
+        processedCount: 1,
+        failedCount: 0,
+        completedAtMs: null,
+        avgFetchMs: null,
+        avgTransformMs: null,
+        avgUploadMs: null,
+        avgEndToEndMs: null,
+      };
+    }
+
+    const payload = parsed as Record<string, unknown>;
+    const processedCount = Math.max(
+      0,
+      Math.floor(
+        Number(payload.processed_count) || Number(payload.processed) || 1,
+      ),
+    );
+    const failedCount = Math.max(
+      0,
+      Math.floor(Number(payload.failed_count) || Number(payload.failed) || 0),
+    );
+    const completedAtIso =
+      typeof payload.completed_at === "string" ? payload.completed_at : null;
+    const completedAtMs = completedAtIso ? Date.parse(completedAtIso) : NaN;
+
+    const items = Array.isArray(payload.items)
+      ? (payload.items as Array<Record<string, unknown>>)
+      : [];
+    const avgFromItems = (
+      selector: (item: Record<string, unknown>) => number | null,
+    ): number | null => {
+      let sum = 0;
+      let count = 0;
+      for (const item of items) {
+        const value = selector(item);
+        if (value === null || !Number.isFinite(value)) {
+          continue;
+        }
+        sum += value;
+        count += 1;
+      }
+      if (count <= 0) {
+        return null;
+      }
+      return sum / count;
+    };
+
+    const avgFetchMs =
+      avgFromItems((item) => toFiniteNonNegative(item.fetch_elapsed_ms)) ??
+      toFiniteNonNegative(payload.avg_fetch_ms) ??
+      toFiniteNonNegative(payload.fetch_ms);
+    const avgTransformMs =
+      avgFromItems((item) => toFiniteNonNegative(item.transform_elapsed_ms)) ??
+      toFiniteNonNegative(payload.avg_transform_ms) ??
+      toFiniteNonNegative(payload.transform_ms);
+    const avgUploadMs =
+      avgFromItems((item) => toFiniteNonNegative(item.upload_elapsed_ms)) ??
+      toFiniteNonNegative(payload.avg_upload_ms) ??
+      toFiniteNonNegative(payload.upload_ms);
+    const avgEndToEndMs =
+      avgFromItems((item) => {
+        const fetchMs = toFiniteNonNegative(item.fetch_elapsed_ms) ?? 0;
+        const transformMs = toFiniteNonNegative(item.transform_elapsed_ms) ?? 0;
+        const uploadMs = toFiniteNonNegative(item.upload_elapsed_ms) ?? 0;
+        const combined = fetchMs + transformMs + uploadMs;
+        return combined > 0 ? combined : null;
+      }) ??
+      toFiniteNonNegative(payload.avg_end_to_end_ms) ??
+      toFiniteNonNegative(payload.end_to_end_ms) ??
+      toFiniteNonNegative(payload.elapsed_ms);
+
+    return {
+      processedCount,
+      failedCount,
+      completedAtMs: Number.isFinite(completedAtMs) ? completedAtMs : null,
+      avgFetchMs,
+      avgTransformMs,
+      avgUploadMs,
+      avgEndToEndMs,
+    };
+  };
+
+  const writeBullmqEventSampleAt = async (inputSample: {
+    atMs: number;
+    processedValue: number;
+    completedValue: number;
+    failedItemsValue: number;
+    failedJobsValue: number;
+    avgFetchMs?: number | null;
+    avgTransformMs?: number | null;
+    avgUploadMs?: number | null;
+    avgEndToEndMs?: number | null;
+    sampleId?: string;
+  }): Promise<void> => {
+    const sampleId =
+      typeof inputSample.sampleId === "string"
+        ? inputSample.sampleId.trim()
+        : "";
+    const samples: OpsMetricSample[] = [
+      {
+        key: statusProcessedItemsMetricKey,
+        value: Math.max(0, Number(inputSample.processedValue) || 0),
+        id: sampleId || undefined,
+      },
+      {
+        key: statusCompletedJobsMetricKey,
+        value: Math.max(0, Number(inputSample.completedValue) || 0),
+        id: sampleId || undefined,
+      },
+      {
+        key: statusFailedItemsMetricKey,
+        value: Math.max(0, Number(inputSample.failedItemsValue) || 0),
+        id: sampleId || undefined,
+      },
+      {
+        key: statusFailedJobsMetricKey,
+        value: Math.max(0, Number(inputSample.failedJobsValue) || 0),
+        id: sampleId || undefined,
+      },
+    ];
+
+    const maybePushLatencySample = (
+      key: string,
+      value: number | null | undefined,
+    ): void => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        return;
+      }
+      samples.push({
+        key,
+        value: Math.max(0, numeric),
+        id: sampleId || undefined,
+      });
+    };
+
+    maybePushLatencySample(statusAvgFetchMsMetricKey, inputSample.avgFetchMs);
+    maybePushLatencySample(
+      statusAvgTransformMsMetricKey,
+      inputSample.avgTransformMs,
+    );
+    maybePushLatencySample(statusAvgUploadMsMetricKey, inputSample.avgUploadMs);
+    maybePushLatencySample(
+      statusAvgEndToEndMsMetricKey,
+      inputSample.avgEndToEndMs,
+    );
+
+    await ingestOpsMetricSamples({
+      redis: refreshRedisConnection,
+      atMs: Math.max(1, Math.floor(inputSample.atMs)),
+      samples,
+      flushNow: true,
+    });
+  };
+
+  const seedBullmqCounterSamplesFromLegacyJobs = async (): Promise<void> => {
+    if (
+      bullmqLegacyCounterSeeded ||
+      !collectorsEnabled ||
+      !configuredCollectors.includes("bullmq") ||
+      !queueReadQueue
+    ) {
+      return;
+    }
+    bullmqLegacyCounterSeeded = true;
+
+    const seedStartedAtMs = Date.now();
+    const seedLog = (message: string): void => {
+      process.stdout.write(`[image-ops seed] ${message}\n`);
+    };
+    seedLog("start source=bullmq");
+
+    const queueCounts = await readOpsQueueSnapshot().catch(() => null);
+    if (!queueCounts) {
+      seedLog("skip queue_counts_unavailable=true");
+      return;
+    }
+    seedLog(
+      `queue waiting=${queueCounts.waiting} active=${queueCounts.active} completed=${queueCounts.completed} failed=${queueCounts.failed}`,
+    );
+
+    // Remove any legacy cumulative status trend rows before rebuilding this
+    // event-sampled stream from historical jobs.
+    await refreshRedisConnection
+      .del(
+        statusProcessedItemsMetricKey,
+        statusCompletedJobsMetricKey,
+        statusFailedItemsMetricKey,
+        statusAvgFetchMsMetricKey,
+        statusAvgTransformMsMetricKey,
+        statusAvgUploadMsMetricKey,
+        statusAvgEndToEndMsMetricKey,
+      )
+      .catch(() => undefined);
+
+    seedOpsBullmqEventCounterLedgerFromQueue(queueCounts);
+
+    const completedKey = queueReadQueue.toKey("completed");
+    const failedKey = queueReadQueue.toKey("failed");
+    const seedNowMs = Date.now();
+    const seedWindowStartMs = Math.max(
+      0,
+      seedNowMs - OPS_BULLMQ_SEED_LOOKBACK_MS,
+    );
+    seedLog(
+      `seed_window lookback_ms=${OPS_BULLMQ_SEED_LOOKBACK_MS} start_at=${new Date(seedWindowStartMs).toISOString()} end_at=${new Date(seedNowMs).toISOString()}`,
+    );
+    seedLog("phase=read_zsets status=pending");
+    const completedRaw = await refreshRedisConnection.zrevrangebyscore(
+      completedKey,
+      String(seedNowMs),
+      String(seedWindowStartMs),
+      "WITHSCORES",
+    );
+    const failedRaw = await refreshRedisConnection.zrevrangebyscore(
+      failedKey,
+      String(seedNowMs),
+      String(seedWindowStartMs),
+      "WITHSCORES",
+    );
+    seedLog(
+      `phase=read_zsets status=done completed_rows=${Math.floor(completedRaw.length / 2)} failed_rows=${Math.floor(failedRaw.length / 2)}`,
+    );
+
+    const completedRows: Array<{ jobId: string; atMs: number }> = [];
+    for (let index = 0; index + 1 < completedRaw.length; index += 2) {
+      const jobId = String(completedRaw[index] || "");
+      const atMs = Number(completedRaw[index + 1]);
+      if (!jobId || !Number.isFinite(atMs)) {
+        continue;
+      }
+      completedRows.push({ jobId, atMs: Math.floor(atMs) });
+    }
+    completedRows.reverse();
+    seedLog(`phase=parse_completed status=done rows=${completedRows.length}`);
+
+    seedLog(
+      `phase=read_payloads status=pending mode=pipeline rows=${completedRows.length}`,
+    );
+    const completedPayloadRead = refreshRedisConnection.pipeline();
+    for (const row of completedRows) {
+      completedPayloadRead.hget(queueReadQueue.toKey(row.jobId), "returnvalue");
+    }
+    const completedPayloadRows =
+      completedRows.length > 0 ? await completedPayloadRead.exec() : [];
+    seedLog(
+      `phase=read_payloads status=done rows=${completedPayloadRows?.length || 0}`,
+    );
+
+    const events: Array<{
+      atMs: number;
+      sampleId: string;
+      completedDelta: number;
+      failedJobsDelta: number;
+      processedDelta: number;
+      failedItemsDelta: number;
+      avgFetchMs: number | null;
+      avgTransformMs: number | null;
+      avgUploadMs: number | null;
+      avgEndToEndMs: number | null;
+    }> = [];
+
+    seedLog("phase=build_events status=pending");
+    for (let index = 0; index < completedRows.length; index += 1) {
+      const payloadRow = completedPayloadRows?.[index];
+      const payload =
+        payloadRow && payloadRow[0] === null
+          ? (payloadRow[1] as string | null)
+          : null;
+      const parsed = parseCountsFromReturnValue(payload);
+      events.push({
+        atMs: parsed.completedAtMs ?? completedRows[index].atMs,
+        sampleId: `legacy:completed:${completedRows[index].jobId}`,
+        completedDelta: Math.max(0, parsed.processedCount || 0),
+        failedJobsDelta: 0,
+        processedDelta: Math.max(0, parsed.processedCount || 0),
+        failedItemsDelta: Math.max(0, parsed.failedCount || 0),
+        avgFetchMs: parsed.avgFetchMs,
+        avgTransformMs: parsed.avgTransformMs,
+        avgUploadMs: parsed.avgUploadMs,
+        avgEndToEndMs: parsed.avgEndToEndMs,
+      });
+      if ((index + 1) % 10_000 === 0) {
+        seedLog(
+          `phase=build_events status=progress completed_jobs=${index + 1}/${completedRows.length}`,
+        );
+      }
+    }
+
+    for (let index = 0; index + 1 < failedRaw.length; index += 2) {
+      const jobId = String(failedRaw[index] || "");
+      const atMs = Number(failedRaw[index + 1]);
+      if (!jobId || !Number.isFinite(atMs)) {
+        continue;
+      }
+      events.push({
+        atMs: Math.floor(atMs),
+        sampleId: `legacy:failed:${jobId}`,
+        completedDelta: 0,
+        failedJobsDelta: 1,
+        processedDelta: 0,
+        failedItemsDelta: 1,
+        avgFetchMs: null,
+        avgTransformMs: null,
+        avgUploadMs: null,
+        avgEndToEndMs: null,
+      });
+      if ((index / 2 + 1) % 10_000 === 0) {
+        seedLog(
+          `phase=build_events status=progress failed_jobs=${Math.floor(index / 2) + 1}/${Math.floor(failedRaw.length / 2)}`,
+        );
+      }
+    }
+
+    if (events.length <= 0) {
+      seedLog(
+        `complete events=0 samples=0 elapsed_ms=${Date.now() - seedStartedAtMs}`,
+      );
+      return;
+    }
+    seedLog(`phase=build_events status=done events=${events.length}`);
+
+    events.sort((left, right) => left.atMs - right.atMs);
+    seedLog("phase=sort_events status=done");
+
+    const seedSamples: OpsMetricSample[] = [];
+    let currentAtMs = 0;
+    for (const event of events) {
+      const atMs = Math.max(1, Math.floor(event.atMs));
+      const sampleAtMs = atMs <= currentAtMs ? currentAtMs + 1 : atMs;
+      currentAtMs = sampleAtMs;
+
+      seedSamples.push(
+        {
+          key: statusProcessedItemsMetricKey,
+          value: event.processedDelta,
+          atMs: sampleAtMs,
+          id: event.sampleId,
+        },
+        {
+          key: statusCompletedJobsMetricKey,
+          value: event.completedDelta,
+          atMs: sampleAtMs,
+          id: event.sampleId,
+        },
+        {
+          key: statusFailedItemsMetricKey,
+          value: event.failedItemsDelta,
+          atMs: sampleAtMs,
+          id: event.sampleId,
+        },
+        {
+          key: statusFailedJobsMetricKey,
+          value: event.failedJobsDelta,
+          atMs: sampleAtMs,
+          id: event.sampleId,
+        },
+      );
+
+      if (event.avgFetchMs !== null) {
+        seedSamples.push({
+          key: statusAvgFetchMsMetricKey,
+          value: event.avgFetchMs,
+          atMs: sampleAtMs,
+          id: event.sampleId,
+        });
+      }
+      if (event.avgTransformMs !== null) {
+        seedSamples.push({
+          key: statusAvgTransformMsMetricKey,
+          value: event.avgTransformMs,
+          atMs: sampleAtMs,
+          id: event.sampleId,
+        });
+      }
+      if (event.avgUploadMs !== null) {
+        seedSamples.push({
+          key: statusAvgUploadMsMetricKey,
+          value: event.avgUploadMs,
+          atMs: sampleAtMs,
+          id: event.sampleId,
+        });
+      }
+      if (event.avgEndToEndMs !== null) {
+        seedSamples.push({
+          key: statusAvgEndToEndMsMetricKey,
+          value: event.avgEndToEndMs,
+          atMs: sampleAtMs,
+          id: event.sampleId,
+        });
+      }
+    }
+    seedLog(`phase=build_samples status=done samples=${seedSamples.length}`);
+
+    if (seedSamples.length > 0) {
+      seedLog(
+        `phase=ingest_samples status=pending samples=${seedSamples.length}`,
+      );
+      const seedBatchSize = Math.max(500, opsSampleFlushBatchSize());
+      for (let start = 0; start < seedSamples.length; start += seedBatchSize) {
+        const batch = seedSamples.slice(start, start + seedBatchSize);
+        await ingestOpsMetricSamples({
+          redis: refreshRedisConnection,
+          samples: batch,
+          flushNow: true,
+        });
+        const done = Math.min(start + batch.length, seedSamples.length);
+        seedLog(
+          `phase=ingest_samples status=progress done=${done}/${seedSamples.length}`,
+        );
+      }
+      seedLog("phase=ingest_samples status=done");
+    }
+
+    // Keep ledger aligned to queue-floor after backfill to avoid regressions.
+    seedOpsBullmqEventCounterLedgerFromQueue(queueCounts);
+    seedLog(
+      `complete events=${events.length} samples=${seedSamples.length} elapsed_ms=${Date.now() - seedStartedAtMs}`,
+    );
+  };
+
+  const enqueueBullmqEventSample = (work: () => Promise<void>): void => {
+    bullmqEventSampleChain = bullmqEventSampleChain
+      .then(work)
+      .catch(() => undefined);
+  };
+
+  const ingestBullmqCounterSampleFromEvent = async (inputEvent: {
+    eventKey: string;
+    jobId: string;
+    type: "completed" | "failed";
+    returnValueRaw?: unknown;
+  }): Promise<void> => {
+    if (!queueReadQueue) {
+      return;
+    }
+
+    const nowAtMs = Date.now();
+    let atMs = nowAtMs;
+    let processedCount = inputEvent.type === "completed" ? 1 : 0;
+    let failedCount = inputEvent.type === "failed" ? 1 : 0;
+
+    const job = await readOpsQueueJobById(
+      queueReadQueue,
+      inputEvent.jobId,
+    ).catch(() => null);
+    const parsedFromPayload = parseCountsFromReturnValue(
+      job?.returnvalue ?? inputEvent.returnValueRaw,
+    );
+    if (inputEvent.type === "completed") {
+      processedCount = Math.max(0, parsedFromPayload.processedCount || 0);
+      failedCount = Math.max(0, parsedFromPayload.failedCount || 0);
+    } else {
+      failedCount = Math.max(1, failedCount);
+    }
+
+    const finishedOn = Number(job?.finishedOn || 0);
+    if (Number.isFinite(finishedOn) && finishedOn > 0) {
+      atMs = Math.floor(finishedOn);
+    } else if (
+      parsedFromPayload.completedAtMs &&
+      parsedFromPayload.completedAtMs > 0
+    ) {
+      atMs = Math.floor(parsedFromPayload.completedAtMs);
+    }
+
+    if (inputEvent.type === "completed") {
+      applyOpsBullmqCompletedEvent({
+        eventKey: inputEvent.eventKey,
+        processedCount,
+        failedCount,
+      });
+    } else {
+      applyOpsBullmqFailedEvent({
+        eventKey: inputEvent.eventKey,
+        failedCount,
+      });
+    }
+
+    await writeBullmqEventSampleAt({
+      atMs,
+      sampleId: `live:${inputEvent.eventKey}`,
+      processedValue: inputEvent.type === "completed" ? processedCount : 0,
+      completedValue: inputEvent.type === "completed" ? processedCount : 0,
+      failedItemsValue: inputEvent.type === "failed" ? 1 : failedCount,
+      failedJobsValue: inputEvent.type === "failed" ? 1 : 0,
+      avgFetchMs:
+        inputEvent.type === "completed" ? parsedFromPayload.avgFetchMs : null,
+      avgTransformMs:
+        inputEvent.type === "completed"
+          ? parsedFromPayload.avgTransformMs
+          : null,
+      avgUploadMs:
+        inputEvent.type === "completed" ? parsedFromPayload.avgUploadMs : null,
+      avgEndToEndMs:
+        inputEvent.type === "completed"
+          ? parsedFromPayload.avgEndToEndMs
+          : null,
+    });
+    triggerBullmqEventCollector();
+  };
 
   const readMetricOwnership = async (
     nowMs: number,
@@ -3554,7 +4431,13 @@ export async function createOpsUiStateWatcher(input: {
       return metricOwnershipCache;
     }
 
-    const ownership = defaultOpsMetricSystemOwnership();
+    const instances = await readOpsRedisIoInstanceStats(
+      refreshRedisConnection,
+    ).catch(() => []);
+    const ownership =
+      instances.length > 0
+        ? resolveOpsMetricSystemOwnership(instances)
+        : defaultOpsMetricSystemOwnership();
 
     metricOwnershipCache = ownership;
     lastMetricOwnershipRefreshAtMs = nowMs;
@@ -3576,11 +4459,31 @@ export async function createOpsUiStateWatcher(input: {
       if (runInput?.force) {
         return true;
       }
+
+      if (collector === "bullmq") {
+        if (!bullmqWritesEnabled && !allowBullmqCollectorsInStandby) {
+          return false;
+        }
+        const lastAt = collectorLastRunAtMs[collector] ?? 0;
+        if (runInput?.eventDriven === true) {
+          return nowMs - lastAt >= OPS_EVENT_DRIVEN_COLLECTOR_MIN_INTERVAL_MS;
+        }
+        if (!pollEventDrivenCollectorsOnInterval) {
+          return false;
+        }
+        const intervalMs = collectorIntervalsMs[collector];
+        return nowMs - lastAt >= intervalMs;
+      }
+
       const eventDriven = isEventDrivenCollector(collector);
       if (runInput?.eventDriven === true) {
-        return eventDriven;
+        if (!eventDriven) {
+          return false;
+        }
+        const lastAt = collectorLastRunAtMs[collector] ?? 0;
+        return nowMs - lastAt >= OPS_EVENT_DRIVEN_COLLECTOR_MIN_INTERVAL_MS;
       }
-      if (eventDriven) {
+      if (eventDriven && !pollEventDrivenCollectorsOnInterval) {
         return false;
       }
       const lastAt = collectorLastRunAtMs[collector] ?? 0;
@@ -3601,6 +4504,37 @@ export async function createOpsUiStateWatcher(input: {
     for (const collector of dueCollectors) {
       collectorLastRunAtMs[collector] = nowMs;
     }
+  };
+
+  const triggerBullmqEventCollector = (): void => {
+    if (
+      closed ||
+      (!bullmqWritesEnabled && !allowBullmqCollectorsInStandby) ||
+      !collectorsEnabled ||
+      !configuredCollectors.includes("bullmq")
+    ) {
+      return;
+    }
+
+    bullmqEventCollectorPending = true;
+    if (bullmqEventCollectorInFlight) {
+      return;
+    }
+
+    bullmqEventCollectorInFlight = (async () => {
+      while (bullmqEventCollectorPending && !closed) {
+        bullmqEventCollectorPending = false;
+        await runOpsCollectorsAndIngestSamples({
+          appName: input.appName,
+          collectors: ["bullmq"],
+          atMs: nextTrendTimestampMs(),
+          redis: refreshRedisConnection,
+        }).catch(() => undefined);
+        collectorLastRunAtMs.bullmq = Date.now();
+      }
+    })().finally(() => {
+      bullmqEventCollectorInFlight = null;
+    });
   };
 
   const recomputeDerivedCaches = (nowMs: number): void => {
@@ -3627,8 +4561,14 @@ export async function createOpsUiStateWatcher(input: {
       metricNames,
       nowMs,
       windowMsById: OPS_METRIC_SLICE_WINDOW_MS_BY_ID,
+      // Keep w5s as the only single-sample live slice; w15s+ should represent
+      // true in-window behavior (avg/delta/sum) for queue and other live gauges.
+      liveSliceIds: ["w5s"],
       isLiveMetric: (metricName) =>
-        metricName.endsWith("Live") || metricName.startsWith("db"),
+        metricName.endsWith("Live") ||
+        metricName.startsWith("db") ||
+        metricName === "statusThroughputImagesPerSecond" ||
+        metricName === "statusThroughputImagesPerMinute",
       resolveLiveMetricMaxAgeMs: (metricName) => {
         const collectors = inferSnapshotMetricCollectors(metricName);
         if (collectors.length <= 0) {
@@ -3643,6 +4583,8 @@ export async function createOpsUiStateWatcher(input: {
           slowestIntervalMs * 2,
         );
       },
+      isCounterMetric: (metricName) =>
+        metricName === "queueCompletedLive" || metricName === "queueFailedLive",
     });
 
     performanceRollupsCache = rollups;
@@ -3669,14 +4611,7 @@ export async function createOpsUiStateWatcher(input: {
     };
 
     const pendingForSlice = (sliceId: OpsMetricSliceId): number =>
-      Math.max(
-        0,
-        Math.round(
-          value("queueWaitingLive", sliceId) +
-            value("queueDelayedLive", sliceId) +
-            value("queuePausedLive", sliceId),
-        ),
-      );
+      Math.max(0, Math.round(value("queuePendingLive", sliceId)));
     const activeForSlice = (sliceId: OpsMetricSliceId): number =>
       Math.max(0, Math.round(value("queueActiveLive", sliceId)));
 
@@ -3705,17 +4640,97 @@ export async function createOpsUiStateWatcher(input: {
   };
 
   const onQueueSignal = (): void => {
+    if (
+      (!bullmqWritesEnabled && !allowBullmqCollectorsInStandby) ||
+      !bullmqHistoricalSeedReady
+    ) {
+      return;
+    }
     queueSignalPending = true;
+    triggerBullmqEventCollector();
   };
 
-  if (queueEvents) {
+  const onQueueCompleted = (event: {
+    jobId?: string;
+    returnvalue?: unknown;
+  }) => {
+    if (
+      (!bullmqWritesEnabled && !allowBullmqCollectorsInStandby) ||
+      !bullmqHistoricalSeedReady
+    ) {
+      return;
+    }
+    const jobId = String(event?.jobId || "unknown");
+    enqueueBullmqEventSample(() =>
+      ingestBullmqCounterSampleFromEvent({
+        eventKey: `${jobId}:completed`,
+        jobId,
+        type: "completed",
+        returnValueRaw: event?.returnvalue,
+      }),
+    );
+    onQueueSignal();
+  };
+
+  const onQueueFailed = (event: { jobId?: string }) => {
+    if (
+      (!bullmqWritesEnabled && !allowBullmqCollectorsInStandby) ||
+      !bullmqHistoricalSeedReady
+    ) {
+      return;
+    }
+    const jobId = String(event?.jobId || "unknown");
+    enqueueBullmqEventSample(() =>
+      ingestBullmqCounterSampleFromEvent({
+        eventKey: `${jobId}:failed`,
+        jobId,
+        type: "failed",
+      }),
+    );
+    onQueueSignal();
+  };
+
+  let queueEventsBound = false;
+  const bindQueueEventHandlers = (): void => {
+    if (!queueEvents || queueEventsBound) {
+      return;
+    }
     queueEvents.on("active", onQueueSignal);
-    queueEvents.on("completed", onQueueSignal);
-    queueEvents.on("failed", onQueueSignal);
+    queueEvents.on("completed", onQueueCompleted);
+    queueEvents.on("failed", onQueueFailed);
     queueEvents.on("waiting", onQueueSignal);
     queueEvents.on("delayed", onQueueSignal);
     queueEvents.on("progress", onQueueSignal);
-  }
+    queueEventsBound = true;
+  };
+
+  const ensureBullmqMasterSeedAndEvents = async (): Promise<void> => {
+    if (profile !== "cli" || bullmqHistoricalSeedReady) {
+      return;
+    }
+
+    const ownership = await readMetricOwnership(Date.now()).catch(() =>
+      defaultOpsMetricSystemOwnership(),
+    );
+    bullmqWritesEnabled = ownership.isOwner;
+    if (!bullmqWritesEnabled) {
+      return;
+    }
+    await seedBullmqCounterSamplesFromLegacyJobs().catch(() => undefined);
+    bullmqHistoricalSeedReady = true;
+    if (!bullmqBootstrapSampleWritten) {
+      await writeBullmqEventSampleAt({
+        atMs: Date.now(),
+        processedValue: 0,
+        completedValue: 0,
+        failedItemsValue: 0,
+        failedJobsValue: 0,
+      }).catch(() => undefined);
+      bullmqBootstrapSampleWritten = true;
+    }
+    bindQueueEventHandlers();
+    triggerBullmqEventCollector();
+  };
 
   const notifyState = (): void => {
     stateVersion += 1;
@@ -3972,7 +4987,7 @@ export async function createOpsUiStateWatcher(input: {
       db: {
         processed: Math.max(0, Math.floor(latestMetricValue("dbProcessed"))),
         pending: Math.max(0, Math.floor(latestMetricValue("dbPending"))),
-        failed: snapshot?.db?.failed ?? 0,
+        failed: Math.max(0, Math.floor(latestMetricValue("dbFailed"))),
         total: Math.max(0, Math.floor(latestMetricValue("dbTotal"))),
         pct: Math.max(0, latestMetricValue("dbProgressPct")),
       },
@@ -4144,6 +5159,8 @@ export async function createOpsUiStateWatcher(input: {
       while (!closed) {
         let touchedState = false;
 
+        await ensureBullmqMasterSeedAndEvents().catch(() => undefined);
+
         await runDueCollectors({ nowMs: Date.now() });
 
         if (subscriber) {
@@ -4161,7 +5178,6 @@ export async function createOpsUiStateWatcher(input: {
 
         if (queueSignalPending) {
           queueSignalPending = false;
-          await runDueCollectors({ nowMs: Date.now(), eventDriven: true });
           await refresh(false);
           touchedState = true;
         }
@@ -4185,10 +5201,14 @@ export async function createOpsUiStateWatcher(input: {
   };
 
   if (!skipInitialRefresh) {
+    await ensureBullmqMasterSeedAndEvents().catch(() => undefined);
     await seedTrendPointsFromRedis().catch(() => undefined);
     await refresh(true);
   } else if (hydrateOnInit) {
+    await ensureBullmqMasterSeedAndEvents().catch(() => undefined);
     await hydrateFromStateStore().catch(() => undefined);
+  } else {
+    await ensureBullmqMasterSeedAndEvents().catch(() => undefined);
   }
   if (seedCollectorsOnInit) {
     await runDueCollectors({ force: true, nowMs: Date.now() });
@@ -4244,18 +5264,30 @@ export async function createOpsUiStateWatcher(input: {
         await subscriber.close();
       }
       if (queueEvents) {
-        queueEvents.off("active", onQueueSignal);
-        queueEvents.off("completed", onQueueSignal);
-        queueEvents.off("failed", onQueueSignal);
-        queueEvents.off("waiting", onQueueSignal);
-        queueEvents.off("delayed", onQueueSignal);
-        queueEvents.off("progress", onQueueSignal);
+        if (queueEventsBound) {
+          queueEvents.off("active", onQueueSignal);
+          queueEvents.off("completed", onQueueCompleted);
+          queueEvents.off("failed", onQueueFailed);
+          queueEvents.off("waiting", onQueueSignal);
+          queueEvents.off("delayed", onQueueSignal);
+          queueEvents.off("progress", onQueueSignal);
+        }
         await queueEvents.close().catch(() => undefined);
       }
       if (queueEventsConnection) {
         await queueEventsConnection.quit().catch(() => undefined);
       }
       await refreshRedisConnection.quit().catch(() => undefined);
+      if (queueReadQueue) {
+        await queueReadQueue.close().catch(() => undefined);
+      }
+      if (queueReadConnection) {
+        await queueReadConnection.quit().catch(() => undefined);
+      }
+      if (bullmqEventCollectorInFlight) {
+        await bullmqEventCollectorInFlight;
+      }
+      await bullmqEventSampleChain.catch(() => undefined);
       if (loopInFlight) {
         await loopInFlight;
       }
@@ -4307,7 +5339,14 @@ export async function waitForOpsRunCompletion(input: {
   queueEvents: QueueEvents;
   queueName: string;
   expectedJobs: number;
+  expectedJobsProvider?: () => number;
   timeoutMs: number;
+  reconcileIntervalMs?: number;
+  reconcile?: () => Promise<{
+    completedJobIds?: string[];
+    failedJobIds?: string[];
+    done?: boolean;
+  } | null>;
   onProgress: (state: {
     completed: number;
     failed: number;
@@ -4348,28 +5387,44 @@ export async function waitForOpsRunCompletion(input: {
   };
 
   return await new Promise((resolve, reject) => {
+    const resolveExpectedJobs = (): number => {
+      const provided = input.expectedJobsProvider?.();
+      const expected = Number.isFinite(provided)
+        ? Math.floor(Number(provided))
+        : input.expectedJobs;
+      return Math.max(input.expectedJobs, expected, 0);
+    };
+
+    const reconcileIntervalMs = Math.max(
+      250,
+      Math.min(5000, input.reconcileIntervalMs ?? 1000),
+    );
+    let reconcileTimer: NodeJS.Timeout | null = null;
+    let reconcileInFlight = false;
+
     const timeout = setTimeout(() => {
       cleanup();
       reject(
         new Error(
-          `timeout waiting for queue completion queue=${input.queueName} completed=${completedSet.size} failed=${failedSet.size} expected=${input.expectedJobs}`,
+          `timeout waiting for queue completion queue=${input.queueName} completed=${completedSet.size} failed=${failedSet.size} expected=${resolveExpectedJobs()}`,
         ),
       );
     }, input.timeoutMs);
 
     const maybeDone = (): void => {
+      const expectedJobs = resolveExpectedJobs();
       const liveItems = summarizeLiveItems();
       input.onProgress({
         completed: completedSet.size,
         failed: failedSet.size,
-        expected: input.expectedJobs,
+        expected: expectedJobs,
         processedItems: liveItems.processedItems,
         failedItems: liveItems.failedItems,
         completedJobIds: [...completedSet],
         failedJobIds: [...failedSet],
       });
 
-      if (completedSet.size + failedSet.size >= input.expectedJobs) {
+      if (completedSet.size + failedSet.size >= expectedJobs) {
         cleanup();
         resolve({
           completedJobIds: [...completedSet],
@@ -4420,14 +5475,58 @@ export async function waitForOpsRunCompletion(input: {
 
     const cleanup = (): void => {
       clearTimeout(timeout);
+      if (reconcileTimer) {
+        clearInterval(reconcileTimer);
+      }
       input.queueEvents.off("completed", onCompleted);
       input.queueEvents.off("failed", onFailed);
       input.queueEvents.off("progress", onProgressEvent);
     };
 
+    const runReconcile = async (): Promise<void> => {
+      if (!input.reconcile || reconcileInFlight) {
+        return;
+      }
+
+      reconcileInFlight = true;
+      try {
+        const reconcileResult = await input.reconcile();
+        if (!reconcileResult) {
+          return;
+        }
+
+        for (const jobId of reconcileResult.completedJobIds || []) {
+          completedSet.add(String(jobId));
+        }
+        for (const jobId of reconcileResult.failedJobIds || []) {
+          failedSet.add(String(jobId));
+        }
+
+        maybeDone();
+        if (reconcileResult.done) {
+          cleanup();
+          resolve({
+            completedJobIds: [...completedSet],
+            failedJobIds: [...failedSet],
+          });
+        }
+      } finally {
+        reconcileInFlight = false;
+      }
+    };
+
     input.queueEvents.on("completed", onCompleted);
     input.queueEvents.on("failed", onFailed);
     input.queueEvents.on("progress", onProgressEvent);
+
+    if (input.reconcile) {
+      reconcileTimer = setInterval(() => {
+        void runReconcile().catch(() => undefined);
+      }, reconcileIntervalMs);
+      void runReconcile().catch(() => undefined);
+    }
+
+    maybeDone();
   });
 }
 
@@ -4504,8 +5603,8 @@ export async function setOpsBacklogForOperation(input: {
           "sim-image-job",
           makeSimJob(input.operationId, input.nextIndex + idx),
           {
-            removeOnComplete: 200,
-            removeOnFail: 200,
+            removeOnComplete: 10000,
+            removeOnFail: 10000,
           },
         ),
       ),
@@ -4670,22 +5769,22 @@ function buildBullmqRepresentativeStatus(input: {
   infra: RunnerInfraSnapshot | null;
   queue: ImageQueueCounts;
   recentWindow?: ImageQueueRecentJobWindow | null;
+  counters?: {
+    completedTotal: number;
+    failedTotal: number;
+    processedItemsTotal: number;
+    failedItemsTotal: number;
+  };
 }): RunnerStatusSnapshot {
-  const { status, settings, infra, queue, recentWindow } = input;
+  const { status, settings, infra, queue, recentWindow, counters } = input;
   const nowIso = new Date().toISOString();
   const completedJobsWindow = Math.max(
     0,
     Number(recentWindow?.completedJobs || 0),
   );
   const failedJobsWindow = Math.max(0, Number(recentWindow?.failedJobs || 0));
-  const processedItemsWindow = Math.max(
-    0,
-    Number(recentWindow?.processedItems || completedJobsWindow),
-  );
-  const failedItemsWindow = Math.max(
-    0,
-    Number(recentWindow?.failedItems || failedJobsWindow),
-  );
+  const queueCompletedTotal = Math.max(0, Number(queue.completed || 0));
+  const queueFailedTotal = Math.max(0, Number(queue.failed || 0));
   const queuedCountLive =
     queue.waiting +
     queue.active +
@@ -4698,10 +5797,22 @@ function buildBullmqRepresentativeStatus(input: {
     Number(infra?.workersRunning || 0),
     Number(status?.workersRunning || 0),
   );
-  const completedJobs = completedJobsWindow;
-  const failedJobs = failedJobsWindow;
-  const processedItems = processedItemsWindow;
-  const failedItems = failedItemsWindow;
+  const completedJobs = Math.max(
+    0,
+    Number(counters?.completedTotal ?? queueCompletedTotal),
+  );
+  const failedJobs = Math.max(
+    0,
+    Number(counters?.failedTotal ?? queueFailedTotal),
+  );
+  const processedItems = Math.max(
+    0,
+    Number(counters?.processedItemsTotal ?? queueCompletedTotal),
+  );
+  const failedItems = Math.max(
+    0,
+    Number(counters?.failedItemsTotal ?? queueFailedTotal),
+  );
   const claimedCount = queuedCountLive;
   const queuedCount = queuedCountLive;
   const mode: RunnerStatusSnapshot["mode"] =
@@ -5166,6 +6277,7 @@ export type OpsOneShotPipelineOptions = {
   includeRecentJobs24h?: boolean;
   includePerformanceRollups?: boolean;
   reconcileBullmqStatus?: boolean;
+  writeTrendSamples?: boolean;
 };
 
 export type OpsOneShotPipelineResult = {
@@ -5216,7 +6328,9 @@ export async function runOpsOneShotPipeline(
     }
   }
 
-  await writeOpsSnapshotTrendMetrics(snapshot);
+  if (input.writeTrendSamples !== false) {
+    await writeOpsSnapshotTrendMetrics(snapshot);
+  }
 
   return {
     snapshot,
@@ -5375,9 +6489,16 @@ export async function claimPendingImageRows(
 export async function applySuccessRows(
   pool: Pool,
   items: ImageProcessingItemResult[],
-): Promise<{ uploadedCount: number; notUploadedCount: number }> {
+): Promise<{
+  uploadedCount: number;
+  notUploadedCount: number;
+  missingCount: number;
+  missingWorkIds: string[];
+}> {
   let uploadedCount = 0;
   let notUploadedCount = 0;
+  let missingCount = 0;
+  const missingWorkIds: string[] = [];
 
   for (const item of items) {
     const storedStatus = String(item.stored_status_on_s3 || "unknown");
@@ -5407,7 +6528,7 @@ export async function applySuccessRows(
     };
 
     if (isUploaded) {
-      await pool.query(
+      const result = await pool.query(
         `
         update listing_source_image
         set
@@ -5425,7 +6546,12 @@ export async function applySuccessRows(
           JSON.stringify(info),
         ],
       );
-      uploadedCount += 1;
+      if ((result.rowCount || 0) > 0) {
+        uploadedCount += 1;
+      } else {
+        missingCount += 1;
+        missingWorkIds.push(String(item.work_id || ""));
+      }
     } else {
       const notUploadedPayload = {
         ...info,
@@ -5435,7 +6561,7 @@ export async function applySuccessRows(
           "worker item did not reach definitive uploaded S3 status; completion withheld",
       };
 
-      await pool.query(
+      const result = await pool.query(
         `
         update listing_source_image
         set
@@ -5446,18 +6572,31 @@ export async function applySuccessRows(
         `,
         [String(item.work_id), JSON.stringify(notUploadedPayload)],
       );
-      notUploadedCount += 1;
+      if ((result.rowCount || 0) > 0) {
+        notUploadedCount += 1;
+      } else {
+        missingCount += 1;
+        missingWorkIds.push(String(item.work_id || ""));
+      }
     }
   }
 
-  return { uploadedCount, notUploadedCount };
+  return {
+    uploadedCount,
+    notUploadedCount,
+    missingCount,
+    missingWorkIds,
+  };
 }
 
 export async function applyFailureRows(
   pool: Pool,
   rows: ImageProcessingTaskError[],
   marker: string,
-): Promise<void> {
+): Promise<{ missingCount: number; missingWorkIds: string[] }> {
+  let missingCount = 0;
+  const missingWorkIds: string[] = [];
+
   for (const errorRow of rows) {
     const code = String(errorRow.code || "worker_error");
     const status = sourceStatusForErrorCode(code);
@@ -5471,7 +6610,7 @@ export async function applyFailureRows(
       pipeline: "queue",
     };
 
-    await pool.query(
+    const result = await pool.query(
       `
       update listing_source_image
       set
@@ -5482,7 +6621,14 @@ export async function applyFailureRows(
       `,
       [String(errorRow.work_id), status, JSON.stringify(payload)],
     );
+
+    if ((result.rowCount || 0) <= 0) {
+      missingCount += 1;
+      missingWorkIds.push(String(errorRow.work_id || ""));
+    }
   }
+
+  return { missingCount, missingWorkIds };
 }
 
 export async function writeOpsInfraSnapshot(
@@ -5506,21 +6652,27 @@ export async function writeOpsInfraSnapshot(
 export async function writeOpsRunnerStatus(
   status: RunnerStatusSnapshot,
   redis?: IORedis,
+  options?: {
+    ingestTrendSamples?: boolean;
+  },
 ): Promise<void> {
+  const ingestTrendSamples = options?.ingestTrendSamples ?? true;
   await withControlRedis(redis, async (connection) => {
     await writeRunnerStatus(connection, status);
-    await ingestOpsMetricSamples({
-      redis: connection,
-      atMs: nextTrendTimestampMs(),
-      samples: buildTrendSamplesFromRunnerStatus(status),
-      flushNow: Boolean(redis),
-    });
+    if (ingestTrendSamples) {
+      await ingestOpsMetricSamples({
+        redis: connection,
+        atMs: nextTrendTimestampMs(),
+        samples: buildTrendSamplesFromRunnerStatus(status),
+        flushNow: Boolean(redis),
+      });
+    }
     await publishOpsStateUpdate(
       connection,
       {
         at: new Date().toISOString(),
         source: "writeOpsRunnerStatus",
-        fields: ["status", "trend"],
+        fields: ingestTrendSamples ? ["status", "trend"] : ["status"],
       },
       { minIntervalMs: opsStateUpdatesMinIntervalMs() },
     );

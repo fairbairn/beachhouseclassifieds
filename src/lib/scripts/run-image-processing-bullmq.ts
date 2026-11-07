@@ -45,6 +45,7 @@ type RunnerOptions = {
   redisTarget: RedisTarget;
   appName: string;
   targetCount: number | null;
+  continuous: boolean;
   fetchTimeoutMs: number;
   fetchRetryCount: number;
   dryRunCloud: boolean;
@@ -85,13 +86,6 @@ type RunnerReport = {
   jobs: ReportBatchRow[];
 };
 
-type CycleFeedback = {
-  claimedCount: number;
-  processedItems: number;
-  failedItems: number;
-  durationSec: number;
-};
-
 function parsePositiveInt(
   rawValue: string | undefined,
   fallback: number,
@@ -125,7 +119,7 @@ function deriveRefillPolicy(settings: RunnerControlSettings): {
   notes: string[];
 } {
   const notes: string[] = [];
-  const maxBacklog = Math.max(10, Number(settings.maxQueueBacklog) || 10);
+  const maxBacklog = Math.max(500, Number(settings.maxQueueBacklog) || 10);
 
   let refillTarget = Math.max(0, Number(settings.refillTargetBacklog) || 0);
   if (refillTarget <= 0) {
@@ -149,267 +143,6 @@ function deriveRefillPolicy(settings: RunnerControlSettings): {
     refillTarget,
     maxBacklog,
     notes,
-  };
-}
-
-function deriveAutonomousQueueBand(input: {
-  settings: RunnerControlSettings;
-  workersRunning: number;
-  lastCycleFeedback: CycleFeedback | null;
-}): {
-  refillLow: number;
-  refillTarget: number;
-  maxBacklog: number;
-  notes: string[];
-} {
-  const safety = deriveRefillPolicy(input.settings);
-  const notes: string[] = [];
-  const workers = Math.max(1, Math.floor(input.workersRunning));
-
-  const minTarget = Math.max(8, workers * 3);
-  const softMaxTarget = Math.max(minTarget, workers * 10);
-  let refillTarget = workers * 6;
-
-  if (input.lastCycleFeedback) {
-    const processed = Math.max(0, input.lastCycleFeedback.processedItems);
-    const failed = Math.max(0, input.lastCycleFeedback.failedItems);
-    const attempted = processed + failed;
-    const failureRate = attempted > 0 ? failed / attempted : 0;
-    const throughputPerSec =
-      input.lastCycleFeedback.durationSec > 0
-        ? processed / input.lastCycleFeedback.durationSec
-        : 0;
-    const throughputPerWorker = throughputPerSec / workers;
-
-    if (failureRate >= 0.15) {
-      refillTarget = Math.floor(refillTarget * 0.7);
-      notes.push("band_backoff_failure_high");
-    } else if (failureRate >= 0.05) {
-      refillTarget = Math.floor(refillTarget * 0.85);
-      notes.push("band_backoff_failure_moderate");
-    }
-
-    if (throughputPerWorker >= 0.8) {
-      refillTarget = Math.floor(refillTarget * 1.15);
-      notes.push("band_expand_throughput_strong");
-    } else if (throughputPerWorker < 0.2) {
-      refillTarget = Math.floor(refillTarget * 0.85);
-      notes.push("band_contract_throughput_soft");
-    }
-  }
-
-  refillTarget = clampInt(refillTarget, minTarget, softMaxTarget);
-  refillTarget = Math.min(refillTarget, safety.maxBacklog);
-  const refillLow = clampInt(
-    Math.floor(refillTarget * 0.6),
-    1,
-    refillTarget - 1,
-  );
-
-  notes.push(
-    `band_workers=${workers}`,
-    `band_min_target=${minTarget}`,
-    `band_soft_max_target=${softMaxTarget}`,
-  );
-
-  return {
-    refillLow,
-    refillTarget,
-    maxBacklog: safety.maxBacklog,
-    notes,
-  };
-}
-
-function deriveAdaptiveClaimCap(input: {
-  workersRunning: number;
-  safetyMaxClaimCap: number;
-  queueBacklog: number;
-  queueActive: number;
-  queueWaiting: number;
-  queueDelayed: number;
-  queuePaused: number;
-  refillGap: number;
-  startupRampActive: boolean;
-  startupRampMultiplier: number;
-  previousTarget: number | null;
-  lastCycleFeedback: CycleFeedback | null;
-}): {
-  target: number;
-  baseTarget: number;
-  adjustedTarget: number;
-  safetyCapApplied: boolean;
-  reason: string;
-} {
-  const workerCount = Math.max(1, Math.floor(input.workersRunning));
-  const pendingVisible = Math.max(
-    0,
-    input.queueWaiting + input.queueDelayed + input.queuePaused,
-  );
-  const activePerWorker = input.queueActive / workerCount;
-
-  const reasons: string[] = [];
-  let perWorkerBudget = 5;
-  if (activePerWorker === 0 && pendingVisible === 0) {
-    perWorkerBudget = 6;
-    reasons.push("bootstrap_light_queue");
-  } else if (activePerWorker >= 2) {
-    perWorkerBudget = 3;
-    reasons.push("high_active_pressure");
-  } else if (activePerWorker >= 1) {
-    perWorkerBudget = 4;
-    reasons.push("moderate_active_pressure");
-  }
-
-  if (pendingVisible > workerCount * 4) {
-    perWorkerBudget = Math.max(2, perWorkerBudget - 2);
-    reasons.push("visible_pending_high");
-  } else if (pendingVisible > workerCount * 2) {
-    perWorkerBudget = Math.max(2, perWorkerBudget - 1);
-    reasons.push("visible_pending_moderate");
-  }
-
-  const baseTarget = Math.max(1, workerCount * perWorkerBudget);
-  let adjustedTarget = baseTarget;
-
-  if (input.lastCycleFeedback) {
-    const completed = Math.max(0, input.lastCycleFeedback.processedItems);
-    const failed = Math.max(0, input.lastCycleFeedback.failedItems);
-    const attempted = completed + failed;
-    const failureRate = attempted > 0 ? failed / attempted : 0;
-    const throughputPerSec =
-      input.lastCycleFeedback.durationSec > 0
-        ? completed / input.lastCycleFeedback.durationSec
-        : 0;
-    const throughputPerWorker = throughputPerSec / workerCount;
-
-    let feedbackMultiplier = 1;
-    if (failureRate >= 0.15) {
-      feedbackMultiplier *= 0.6;
-      reasons.push("failure_rate_high");
-    } else if (failureRate >= 0.05) {
-      feedbackMultiplier *= 0.8;
-      reasons.push("failure_rate_moderate");
-    }
-
-    if (
-      throughputPerWorker >= 1.2 &&
-      activePerWorker < 1 &&
-      pendingVisible < workerCount * 2
-    ) {
-      feedbackMultiplier *= 1.2;
-      reasons.push("throughput_strong");
-    } else if (throughputPerWorker < 0.2 && pendingVisible > workerCount) {
-      feedbackMultiplier *= 0.85;
-      reasons.push("throughput_soft");
-    }
-
-    adjustedTarget = Math.max(
-      1,
-      Math.floor(adjustedTarget * feedbackMultiplier),
-    );
-  }
-
-  if (input.previousTarget !== null) {
-    const maxStepUp = Math.max(1, Math.floor(input.previousTarget * 1.35));
-    const minStepDown = Math.max(1, Math.ceil(input.previousTarget * 0.65));
-    adjustedTarget = Math.min(adjustedTarget, maxStepUp);
-    adjustedTarget = Math.max(adjustedTarget, minStepDown);
-    reasons.push("step_limited");
-  }
-
-  if (input.startupRampActive) {
-    adjustedTarget = Math.max(
-      1,
-      Math.floor(adjustedTarget * input.startupRampMultiplier),
-    );
-    reasons.push("startup_ramp_applied");
-  }
-
-  adjustedTarget = Math.max(1, Math.min(adjustedTarget, input.refillGap));
-  const safetyCappedTarget = Math.max(
-    1,
-    Math.min(adjustedTarget, input.safetyMaxClaimCap),
-  );
-
-  return {
-    target: safetyCappedTarget,
-    baseTarget,
-    adjustedTarget,
-    safetyCapApplied: safetyCappedTarget !== adjustedTarget,
-    reason: reasons.join(",") || "balanced_default",
-  };
-}
-
-type StartupProbeSample = {
-  gateReason: string;
-  workersRunning: number;
-  queueBacklog: number;
-  queueActive: number;
-  queueWaiting: number;
-};
-
-type StartupRampPlan = {
-  rampCycles: number;
-  claimCapMultiplier: number;
-  reason: string;
-};
-
-function deriveStartupRampPlan(input: {
-  settings: RunnerControlSettings;
-  samples: StartupProbeSample[];
-}): StartupRampPlan {
-  if (input.samples.length === 0) {
-    return {
-      rampCycles: 1,
-      claimCapMultiplier: 0.5,
-      reason: "no_startup_samples",
-    };
-  }
-
-  const latest = input.samples[input.samples.length - 1];
-  if (latest.gateReason !== "gate=open") {
-    return {
-      rampCycles: 1,
-      claimCapMultiplier: 0.35,
-      reason: `gate_not_open:${latest.gateReason}`,
-    };
-  }
-
-  const workersMin = Math.max(1, input.settings.minWorkersToEnqueue);
-  const workersRatio = latest.workersRunning / workersMin;
-  const workerPressure =
-    latest.workersRunning > 0
-      ? latest.queueActive / Math.max(1, latest.workersRunning)
-      : 0;
-
-  if (latest.workersRunning <= 0) {
-    return {
-      rampCycles: 2,
-      claimCapMultiplier: 0.25,
-      reason: "no_workers_visible",
-    };
-  }
-
-  if (workersRatio < 1 || workerPressure >= 2) {
-    return {
-      rampCycles: 2,
-      claimCapMultiplier: 0.5,
-      reason: "workers_below_expected_or_high_active_pressure",
-    };
-  }
-
-  if (workerPressure >= 1 || latest.queueWaiting > 0) {
-    return {
-      rampCycles: 1,
-      claimCapMultiplier: 0.75,
-      reason: "moderate_startup_pressure",
-    };
-  }
-
-  return {
-    rampCycles: 0,
-    claimCapMultiplier: 1,
-    reason: "steady_start",
   };
 }
 
@@ -516,6 +249,7 @@ function usage(): string {
     "  --redis-target local|cloud  Redis target selector (default local; cloud uses FLY_REDIS)",
     "  --app <flyApp>               Fly worker app name for cloud infra refresh (default beachhouseclassifieds-image-worker)",
     "  --target-count <n>            Optional hard cap on claims for this run",
+    "  --continuous true|false      Keep cycling and refilling as queue depletes (default true)",
     "  --fetch-timeout-ms <n>        Source fetch timeout (default 8000)",
     "  --fetch-retry-count <n>       Source fetch retries (default 2)",
     "  --dry-run-cloud true|false    Skip upload and DB final image writes when true (default false)",
@@ -578,7 +312,14 @@ function parseArgs(argv: string[]): RunnerOptions {
   return {
     redisTarget,
     appName: values.get("app")?.trim() || DEFAULT_FLY_WORKER_APP,
-    targetCount: parseOptionalPositiveInt(values.get("target-count")),
+    targetCount: (() => {
+      const parsed = parseOptionalPositiveInt(values.get("target-count"));
+      if (parsed === null) {
+        return null;
+      }
+      return Math.max(1, parsed);
+    })(),
+    continuous: parseBoolean(values.get("continuous"), true),
     fetchTimeoutMs: parsePositiveInt(
       values.get("fetch-timeout-ms"),
       parsePositiveInt(
@@ -625,7 +366,12 @@ async function claimPendingRows(
 async function updateSuccessRows(
   pool: Pool,
   items: ImageProcessingItemResult[],
-): Promise<{ uploadedCount: number; notUploadedCount: number }> {
+): Promise<{
+  uploadedCount: number;
+  notUploadedCount: number;
+  missingCount: number;
+  missingWorkIds: string[];
+}> {
   return applySuccessRows(pool, items);
 }
 
@@ -633,8 +379,8 @@ async function updateFailureRows(
   pool: Pool,
   errors: ImageProcessingTaskError[],
   marker: string,
-): Promise<void> {
-  await applyFailureRows(pool, errors, marker);
+): Promise<{ missingCount: number; missingWorkIds: string[] }> {
+  return applyFailureRows(pool, errors, marker);
 }
 
 function countErrorsByCode(
@@ -798,10 +544,23 @@ async function main(): Promise<void> {
     jobs: [],
   };
 
+  if (options.targetCount !== null && options.targetCount < 500) {
+    progress.warn(
+      `target_count_cap_active value=${options.targetCount} (this hard cap limits enqueue depth per refill cycle)`,
+    );
+  }
+
   const allErrors: ImageProcessingTaskError[] = [];
   const allSuccessItems: ImageProcessingItemResult[] = [];
+  const legacyReconciledJobIds = new Set<string>();
+  let legacyWritebackBatchCount = 0;
   let flushBatchCount = 0;
   let lastFlushAt: string | null = null;
+  let pendingSuccessBufferCount = 0;
+  let pendingErrorBufferCount = 0;
+  let throughputLastSampleAtMs = startedAtMs;
+  let throughputLastProcessedItems = 0;
+  let throughputEwmaIpm = 0;
 
   const summarizeLivePerformance = (): {
     throughputImagesPerMinute: number;
@@ -810,9 +569,24 @@ async function main(): Promise<void> {
     avgUploadMs: number;
     avgEndToEndMs: number;
   } => {
-    const elapsedMinutes = Math.max(1 / 60, (Date.now() - startedAtMs) / 60000);
+    const nowMs = Date.now();
+    const elapsedSeconds = Math.max(
+      0.001,
+      (nowMs - throughputLastSampleAtMs) / 1000,
+    );
+    const processedDelta = Math.max(
+      0,
+      report.processed_items - throughputLastProcessedItems,
+    );
+    const instantIpm = (processedDelta / elapsedSeconds) * 60;
+    throughputEwmaIpm =
+      throughputEwmaIpm <= 0
+        ? instantIpm
+        : throughputEwmaIpm * 0.65 + instantIpm * 0.35;
+    throughputLastSampleAtMs = nowMs;
+    throughputLastProcessedItems = report.processed_items;
     const throughputImagesPerMinute =
-      Math.round((report.processed_items / elapsedMinutes) * 100) / 100;
+      Math.round(Math.max(0, throughputEwmaIpm) * 100) / 100;
 
     if (allSuccessItems.length === 0) {
       return {
@@ -860,6 +634,160 @@ async function main(): Promise<void> {
     return readOpsQueueSnapshot();
   };
 
+  const reconcileLegacyQueueJobs = async (
+    reason: string,
+    maxPages: number,
+  ): Promise<void> => {
+    const pageSize = 200;
+    const scanParallelPages = 5;
+    const dbBatchSize = 100;
+    const successItems: ImageProcessingItemResult[] = [];
+    const failedItems: ImageProcessingTaskError[] = [];
+    let scannedJobs = 0;
+    let reconciledJobs = 0;
+
+    progress.info(
+      `writeback_legacy_scan_start reason=${reason} max_pages=${Math.max(1, maxPages)} page_size=${pageSize}`,
+    );
+
+    const totalPages = Math.max(1, maxPages);
+    let reachedEnd = false;
+    for (
+      let pageStart = 0;
+      pageStart < totalPages && !reachedEnd;
+      pageStart += scanParallelPages
+    ) {
+      const pageIndexes = Array.from(
+        { length: Math.min(scanParallelPages, totalPages - pageStart) },
+        (_, offset) => pageStart + offset,
+      );
+
+      const pagePayloads = await Promise.all(
+        pageIndexes.map(async (pageIndex) => {
+          const start = pageIndex * pageSize;
+          const end = start + pageSize - 1;
+          const [completedJobs, failedJobs] = await Promise.all([
+            queue.getJobs(["completed"], start, end),
+            queue.getJobs(["failed"], start, end),
+          ]);
+          return { pageIndex, start, end, completedJobs, failedJobs };
+        }),
+      );
+
+      pagePayloads.sort((left, right) => left.pageIndex - right.pageIndex);
+
+      for (const payload of pagePayloads) {
+        const { pageIndex, start, end, completedJobs, failedJobs } = payload;
+
+        progress.info(
+          `writeback_legacy_scan_page reason=${reason} page=${pageIndex + 1} range=${start}-${end} completed_rows=${completedJobs.length} failed_rows=${failedJobs.length}`,
+        );
+
+        if (completedJobs.length === 0 && failedJobs.length === 0) {
+          if (scannedJobs >= 1000) {
+            progress.warn(
+              `writeback_legacy_scan_retention_cap reason=${reason} scanned_jobs=${scannedJobs} note=redis_history_likely_trimmed_older_completed_jobs_unrecoverable`,
+            );
+          }
+          reachedEnd = true;
+          break;
+        }
+
+        scannedJobs += completedJobs.length + failedJobs.length;
+
+        for (const job of completedJobs) {
+          const jobId = String(job.id || "");
+          if (!jobId || legacyReconciledJobIds.has(jobId)) {
+            continue;
+          }
+
+          const result = (job.returnvalue || {}) as {
+            items?: ImageProcessingItemResult[];
+            errors?: ImageProcessingTaskError[];
+          };
+          const items = Array.isArray(result.items) ? result.items : [];
+          const errors = Array.isArray(result.errors) ? result.errors : [];
+          successItems.push(...items);
+          failedItems.push(...errors);
+          legacyReconciledJobIds.add(jobId);
+          reconciledJobs += 1;
+        }
+
+        for (const job of failedJobs) {
+          const jobId = String(job.id || "");
+          if (!jobId || legacyReconciledJobIds.has(jobId)) {
+            continue;
+          }
+
+          failedItems.push({
+            work_id: String(job.data?.workId || ""),
+            source_image_url: String(job.data?.sourceImageUrl || ""),
+            code: "worker_error",
+            message: String(job.failedReason || "job failed without reason"),
+          });
+          legacyReconciledJobIds.add(jobId);
+          reconciledJobs += 1;
+        }
+      }
+    }
+
+    if (successItems.length === 0 && failedItems.length === 0) {
+      progress.info(
+        `writeback_legacy_scan reason=${reason} scanned_jobs=${scannedJobs} reconciled_jobs=${reconciledJobs} success_items=0 errors=0 status=noop`,
+      );
+      return;
+    }
+
+    const maxRows = Math.max(successItems.length, failedItems.length);
+    for (let index = 0; index < maxRows; index += dbBatchSize) {
+      const successBatch = successItems.slice(index, index + dbBatchSize);
+      const failedBatch = failedItems.slice(index, index + dbBatchSize);
+
+      let writeStats: {
+        uploadedCount: number;
+        notUploadedCount: number;
+        missingCount: number;
+        missingWorkIds: string[];
+      } = {
+        uploadedCount: 0,
+        notUploadedCount: 0,
+        missingCount: 0,
+        missingWorkIds: [],
+      };
+      if (!options.dryRunCloud) {
+        writeStats = await updateSuccessRows(pool, successBatch);
+        const failureStats = await updateFailureRows(
+          pool,
+          failedBatch,
+          "bullmq_legacy_reconcile",
+        );
+        writeStats.missingCount += failureStats.missingCount;
+        writeStats.missingWorkIds.push(...failureStats.missingWorkIds);
+      }
+
+      allSuccessItems.push(...successBatch);
+      allErrors.push(...failedBatch);
+      report.processed_items += successBatch.length;
+      report.failed_items += failedBatch.length;
+      legacyWritebackBatchCount += 1;
+      lastFlushAt = new Date().toISOString();
+
+      progress.info(
+        `writeback_legacy_batch reason=${reason} batch=${legacyWritebackBatchCount} chunk_size=${dbBatchSize} success_items=${successBatch.length} errors=${failedBatch.length} uploaded=${writeStats.uploadedCount} withheld=${writeStats.notUploadedCount} missing=${writeStats.missingCount}`,
+      );
+      if (writeStats.missingCount > 0) {
+        const sample = writeStats.missingWorkIds.slice(0, 5).join(",") || "n/a";
+        progress.warn(
+          `writeback_legacy_missing_ids reason=${reason} batch=${legacyWritebackBatchCount} count=${writeStats.missingCount} sample=${sample}`,
+        );
+      }
+    }
+
+    progress.info(
+      `writeback_legacy_scan reason=${reason} scanned_jobs=${scannedJobs} reconciled_jobs=${reconciledJobs} success_items=${successItems.length} errors=${failedItems.length} status=flushed`,
+    );
+  };
+
   const controlSnapshot = await readOpsControlSnapshot();
   let controlSettings: RunnerControlSettings = controlSnapshot.settings;
   const inferredWorkersRunning = Number(controlSnapshot.infra?.workersRunning);
@@ -876,36 +804,42 @@ async function main(): Promise<void> {
   }): Promise<void> => {
     const queueSnapshot = await readQueueSnapshot();
     const perf = summarizeLivePerformance();
-    await writeOpsRunnerStatus({
-      operationId,
-      mode: params.mode,
-      desiredMode: controlSettings.desiredMode,
-      gateReason: params.gateReason,
-      workersRunning,
-      claimedCount: report.claimed_count,
-      queuedCount: report.queued_count,
-      completedJobs: report.completed_jobs,
-      failedJobs: report.failed_jobs,
-      processedItems: report.processed_items,
-      failedItems: report.failed_items,
-      queueWaiting: queueSnapshot.waiting,
-      queueActive: queueSnapshot.active,
-      queueCompleted: queueSnapshot.completed,
-      queueFailed: queueSnapshot.failed,
-      queueDelayed: queueSnapshot.delayed,
-      queuePaused: queueSnapshot.paused,
-      queueBacklog: queueSnapshot.backlog,
-      lastFlushAt,
-      flushBatchCount,
-      pendingSuccessBuffer: Math.max(0, params.pendingSuccessBuffer ?? 0),
-      pendingErrorBuffer: Math.max(0, params.pendingErrorBuffer ?? 0),
-      throughputImagesPerMinute: perf.throughputImagesPerMinute,
-      avgFetchMs: perf.avgFetchMs,
-      avgTransformMs: perf.avgTransformMs,
-      avgUploadMs: perf.avgUploadMs,
-      avgEndToEndMs: perf.avgEndToEndMs,
-      updatedAt: new Date().toISOString(),
-    });
+    await writeOpsRunnerStatus(
+      {
+        operationId,
+        mode: params.mode,
+        desiredMode: controlSettings.desiredMode,
+        gateReason: params.gateReason,
+        workersRunning,
+        claimedCount: report.claimed_count,
+        queuedCount: report.queued_count,
+        completedJobs: report.completed_jobs,
+        failedJobs: report.failed_jobs,
+        processedItems: report.processed_items,
+        failedItems: report.failed_items,
+        queueWaiting: queueSnapshot.waiting,
+        queueActive: queueSnapshot.active,
+        queueCompleted: queueSnapshot.completed,
+        queueFailed: queueSnapshot.failed,
+        queueDelayed: queueSnapshot.delayed,
+        queuePaused: queueSnapshot.paused,
+        queueBacklog: queueSnapshot.backlog,
+        lastFlushAt,
+        flushBatchCount,
+        pendingSuccessBuffer: Math.max(0, params.pendingSuccessBuffer ?? 0),
+        pendingErrorBuffer: Math.max(0, params.pendingErrorBuffer ?? 0),
+        throughputImagesPerMinute: perf.throughputImagesPerMinute,
+        avgFetchMs: perf.avgFetchMs,
+        avgTransformMs: perf.avgTransformMs,
+        avgUploadMs: perf.avgUploadMs,
+        avgEndToEndMs: perf.avgEndToEndMs,
+        updatedAt: new Date().toISOString(),
+      },
+      undefined,
+      {
+        ingestTrendSamples: false,
+      },
+    );
   };
 
   const computeGateState = async (): Promise<{
@@ -968,6 +902,13 @@ async function main(): Promise<void> {
 
     // Gate decisions should use the live queue paused signal, not stale snapshots.
     const moduleVisiblePaused = pausedState;
+    const workerGateBlocked = liveGate.startsWith("live=workers_running=");
+    const allowOptimisticRefillWhenQueueEmpty =
+      workerGateBlocked &&
+      controlSettings.desiredMode === "run" &&
+      controlSettings.enqueueEnabled &&
+      !moduleVisiblePaused &&
+      queueSnapshot.backlog <= 0;
     const blockers: string[] = [];
     if (controlSettings.desiredMode !== "run") {
       blockers.push(`desired_mode=${controlSettings.desiredMode} not run`);
@@ -978,7 +919,7 @@ async function main(): Promise<void> {
     if (moduleVisiblePaused) {
       blockers.push("queue_globally_paused");
     }
-    if (liveGate !== "live=gate_open") {
+    if (liveGate !== "live=gate_open" && !allowOptimisticRefillWhenQueueEmpty) {
       blockers.push(liveGate.replace(/^live=/, ""));
     }
 
@@ -1005,97 +946,56 @@ async function main(): Promise<void> {
     };
   };
 
-  progress.phase("runner startup telemetry warmup");
-  const startupSamples: StartupProbeSample[] = [];
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const startupGateState = await computeGateState();
-    startupSamples.push({
-      gateReason: startupGateState.gateReason,
-      workersRunning,
-      queueBacklog: startupGateState.queueSnapshot.backlog,
-      queueActive: startupGateState.queueSnapshot.active,
-      queueWaiting: startupGateState.queueSnapshot.waiting,
-    });
-    if (attempt < 2) {
-      await sleepMs(1000);
-    }
-  }
-
-  const startupRampPlan = deriveStartupRampPlan({
-    settings: controlSettings,
-    samples: startupSamples,
+  progress.phase("runner telemetry warmup: pre-run db catch-up");
+  await reconcileLegacyQueueJobs("pre-run", 200).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    progress.warn(`writeback_legacy_failed reason=pre-run message=${message}`);
   });
-  let rampCyclesRemaining = startupRampPlan.rampCycles;
 
-  let {
-    queueSnapshot: initialQueueSnapshot,
-    queueGloballyPaused,
-    gateReason,
-    gateInputs,
-  } = await computeGateState();
+  progress.phase("runner startup telemetry warmup");
+  let { queueSnapshot: initialQueueSnapshot, gateReason } =
+    await computeGateState();
 
   progress.info(
-    `startup_stats queue_waiting=${initialQueueSnapshot.waiting} queue_active=${initialQueueSnapshot.active} queue_delayed=${initialQueueSnapshot.delayed} queue_paused=${initialQueueSnapshot.paused} queue_backlog=${initialQueueSnapshot.backlog} workers_running=${workersRunning} desired_mode=${controlSettings.desiredMode} queue_globally_paused=${queueGloballyPaused} startup_samples=${startupSamples.length} startup_ramp_cycles=${startupRampPlan.rampCycles} startup_claim_cap_multiplier=${startupRampPlan.claimCapMultiplier} startup_reason=${startupRampPlan.reason}`,
-  );
-  progress.info(
-    `startup_gate_inputs paused_live=${gateInputs.pausedStateLive} snapshot_queue_paused=${gateInputs.snapshotQueuePaused} queue_paused_count=${gateInputs.queuePausedCount} desired_mode=${gateInputs.desiredMode} enqueue_enabled=${gateInputs.enqueueEnabled} require_workers_for_enqueue=${gateInputs.requireWorkersForEnqueue} min_workers_to_enqueue=${gateInputs.minWorkersToEnqueue} workers_infra=${gateInputs.workersFromInfraSnapshot} workers_live=${gateInputs.workersFromLiveRead} workers_effective=${gateInputs.workersEffective} queue_backlog=${gateInputs.queueBacklog}`,
+    `startup backlog=${initialQueueSnapshot.backlog} waiting=${initialQueueSnapshot.waiting} active=${initialQueueSnapshot.active} workers=${workersRunning} mode=${controlSettings.desiredMode}`,
   );
   await publishRunnerStatus({ mode: "idle", gateReason });
-
-  const gatePollMs = Math.max(3000, options.heartbeatSeconds * 1000);
-  while (gateReason !== "gate=open") {
-    progress.warn(`runner gate blocked: ${gateReason}`);
-    progress.info(
-      `gate_monitor queue_backlog=${initialQueueSnapshot.backlog} workers_running=${workersRunning} desired_mode=${controlSettings.desiredMode} poll_ms=${gatePollMs}`,
+  if (gateReason !== "gate=open") {
+    progress.warn(
+      `enqueue_state state=gated reason=${gateReason} backlog=${initialQueueSnapshot.backlog}`,
     );
-    await sleepMs(gatePollMs);
-    const nextGateState = await computeGateState();
-    initialQueueSnapshot = nextGateState.queueSnapshot;
-    queueGloballyPaused = nextGateState.queueGloballyPaused;
-    gateReason = nextGateState.gateReason;
-    gateInputs = nextGateState.gateInputs;
-    progress.info(
-      `gate_inputs paused_live=${gateInputs.pausedStateLive} snapshot_queue_paused=${gateInputs.snapshotQueuePaused} queue_paused_count=${gateInputs.queuePausedCount} desired_mode=${gateInputs.desiredMode} enqueue_enabled=${gateInputs.enqueueEnabled} require_workers_for_enqueue=${gateInputs.requireWorkersForEnqueue} min_workers_to_enqueue=${gateInputs.minWorkersToEnqueue} workers_infra=${gateInputs.workersFromInfraSnapshot} workers_live=${gateInputs.workersFromLiveRead} workers_effective=${gateInputs.workersEffective} queue_backlog=${gateInputs.queueBacklog}`,
+  } else {
+    progress.done(
+      `enqueue_state state=open backlog=${initialQueueSnapshot.backlog}`,
     );
-    await publishRunnerStatus({ mode: "idle", gateReason });
   }
-
-  progress.done(
-    `runner gate opened queue_backlog=${initialQueueSnapshot.backlog} workers_running=${workersRunning}`,
-  );
+  const openGateReason = options.dryRunCloud
+    ? "gate=open:dry-run-cloud:db-writeback-skipped"
+    : "gate=open";
 
   const heartbeat = setInterval(
     () => {
-      const finalized = report.completed_jobs + report.failed_jobs;
-      const total = Math.max(report.queued_count, report.claimed_count);
       void Promise.allSettled([readQueueSnapshot()])
         .then((results) => {
           const queueResult = results[0];
           const snapshot =
             queueResult.status === "fulfilled" ? queueResult.value : null;
-          const line = formatModeProgressLine({
-            mode: "desktop-bullmq",
-            completed: finalized,
-            total,
-            startedAtMs,
-            text:
-              `op_images_processed=${report.processed_items}/${report.claimed_count} ` +
-              `system_images_processed=n/a ` +
-              `jobs_completed=${report.completed_jobs} jobs_failed=${report.failed_jobs} ` +
-              `items_failed=${report.failed_items}`,
-          });
+          const pendingWriteback =
+            pendingCompletedEventJobIds.size + pendingFailedEventJobIds.size;
           if (snapshot) {
             progress.progress(
-              `heartbeat ${line} live_queue_backlog=${snapshot.backlog}`,
+              `heartbeat backlog=${snapshot.backlog} waiting=${snapshot.waiting} active=${snapshot.active} workers=${workersRunning} processed=${report.processed_items} failed_items=${report.failed_items} pending_writeback=${pendingWriteback}`,
             );
           } else {
-            progress.progress(`heartbeat ${line} live_queue_backlog=n/a`);
+            progress.progress(
+              `heartbeat backlog=n/a workers=${workersRunning} processed=${report.processed_items} failed_items=${report.failed_items} pending_writeback=${pendingWriteback}`,
+            );
           }
           void publishRunnerStatus({
             mode: "running",
-            gateReason: "gate=open",
-            pendingSuccessBuffer: pendingSuccessItems.length,
-            pendingErrorBuffer: pendingErrors.length,
+            gateReason: openGateReason,
+            pendingSuccessBuffer: pendingSuccessBufferCount,
+            pendingErrorBuffer: pendingErrorBufferCount,
           }).catch((error: unknown) => {
             const message =
               error instanceof Error ? error.message : String(error);
@@ -1109,106 +1009,294 @@ async function main(): Promise<void> {
     Math.max(5, options.heartbeatSeconds) * 1000,
   );
 
-  const continuousMode = options.targetCount === null;
-  const idleSleepMs = Math.max(3000, options.heartbeatSeconds * 1000);
-  let autonomousTargetPrevious: number | null = null;
-  let lastCycleFeedback: CycleFeedback | null = null;
+  const continuousMode = options.continuous;
+  const idleSleepMs = Math.max(
+    750,
+    Math.min(3000, options.heartbeatSeconds * 400),
+  );
+
+  const pendingCompletedEventJobIds = new Set<string>();
+  const pendingFailedEventJobIds = new Set<string>();
+  const handledEventJobIds = new Set<string>();
+  let eventWritebackBatchCount = 0;
+  const enableEventSweepFallback =
+    String(process.env.IMAGE_WRITEBACK_EVENT_SWEEP || "")
+      .trim()
+      .toLowerCase() === "true";
+  let lastEnqueueGateOpen: boolean | null = null;
+
+  const onCompletedEvent = (event: { jobId: string }): void => {
+    const jobId = String(event?.jobId || "");
+    if (!jobId) {
+      return;
+    }
+    pendingCompletedEventJobIds.add(jobId);
+    progress.info(
+      `completion_detected state=completed job_id=${jobId} pending_writeback=${pendingCompletedEventJobIds.size + pendingFailedEventJobIds.size}`,
+    );
+  };
+
+  const onFailedEvent = (event: { jobId: string }): void => {
+    const jobId = String(event?.jobId || "");
+    if (!jobId) {
+      return;
+    }
+    pendingFailedEventJobIds.add(jobId);
+    progress.info(
+      `completion_detected state=failed job_id=${jobId} pending_writeback=${pendingCompletedEventJobIds.size + pendingFailedEventJobIds.size}`,
+    );
+  };
+
+  queueEvents.on("completed", onCompletedEvent);
+  queueEvents.on("failed", onFailedEvent);
+
+  const sweepRecentFinalizedJobsForWriteback = async (
+    reason: string,
+  ): Promise<void> => {
+    const pageSize = 200;
+    const [completedJobs, failedJobs] = await Promise.all([
+      queue.getJobs(["completed"], 0, pageSize - 1),
+      queue.getJobs(["failed"], 0, pageSize - 1),
+    ]);
+
+    let addedCompleted = 0;
+    let addedFailed = 0;
+
+    for (const job of completedJobs) {
+      const jobId = String(job.id || "");
+      if (!jobId || handledEventJobIds.has(jobId)) {
+        continue;
+      }
+      if (!pendingCompletedEventJobIds.has(jobId)) {
+        pendingCompletedEventJobIds.add(jobId);
+        addedCompleted += 1;
+      }
+    }
+
+    for (const job of failedJobs) {
+      const jobId = String(job.id || "");
+      if (!jobId || handledEventJobIds.has(jobId)) {
+        continue;
+      }
+      if (!pendingFailedEventJobIds.has(jobId)) {
+        pendingFailedEventJobIds.add(jobId);
+        addedFailed += 1;
+      }
+    }
+
+    if (addedCompleted > 0 || addedFailed > 0) {
+      progress.info(
+        `writeback_event_sweep reason=${reason} added_completed=${addedCompleted} added_failed=${addedFailed} pending_completed=${pendingCompletedEventJobIds.size} pending_failed=${pendingFailedEventJobIds.size}`,
+      );
+    }
+  };
+
+  const processEventWriteback = async (reason: string): Promise<void> => {
+    let candidateIds = [
+      ...pendingCompletedEventJobIds,
+      ...pendingFailedEventJobIds,
+    ].filter((jobId) => !handledEventJobIds.has(jobId));
+
+    if (enableEventSweepFallback && candidateIds.length === 0) {
+      await sweepRecentFinalizedJobsForWriteback(reason).catch(
+        (error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          progress.warn(
+            `writeback_event_sweep_failed reason=${reason} message=${message}`,
+          );
+        },
+      );
+      candidateIds = [
+        ...pendingCompletedEventJobIds,
+        ...pendingFailedEventJobIds,
+      ].filter((jobId) => !handledEventJobIds.has(jobId));
+    }
+
+    if (candidateIds.length === 0) {
+      return;
+    }
+
+    const successItems: ImageProcessingItemResult[] = [];
+    const failedItems: ImageProcessingTaskError[] = [];
+
+    for (const jobId of candidateIds) {
+      const job = await readOpsQueueJobById(queue, jobId);
+      if (!job) {
+        handledEventJobIds.add(jobId);
+        continue;
+      }
+
+      const state = await job.getState();
+      if (state === "completed") {
+        const result = (job.returnvalue || {}) as {
+          items?: ImageProcessingItemResult[];
+          errors?: ImageProcessingTaskError[];
+        };
+        const items = Array.isArray(result.items) ? result.items : [];
+        const errors = Array.isArray(result.errors) ? result.errors : [];
+        successItems.push(...items);
+        failedItems.push(...errors);
+        handledEventJobIds.add(jobId);
+        continue;
+      }
+
+      if (state === "failed") {
+        failedItems.push({
+          work_id: String(job.data?.workId || ""),
+          source_image_url: String(job.data?.sourceImageUrl || ""),
+          code: "worker_error",
+          message: String(job.failedReason || "job failed without reason"),
+        });
+        handledEventJobIds.add(jobId);
+      }
+    }
+
+    const batchSize = 100;
+    const maxRows = Math.max(successItems.length, failedItems.length);
+    const flushStartBatch = eventWritebackBatchCount;
+    let flushUploadedCount = 0;
+    let flushWithheldCount = 0;
+    let flushMissingCount = 0;
+    for (let index = 0; index < maxRows; index += batchSize) {
+      const successBatch = successItems.slice(index, index + batchSize);
+      const failedBatch = failedItems.slice(index, index + batchSize);
+
+      let writeStats: {
+        uploadedCount: number;
+        notUploadedCount: number;
+        missingCount: number;
+        missingWorkIds: string[];
+      } = {
+        uploadedCount: 0,
+        notUploadedCount: 0,
+        missingCount: 0,
+        missingWorkIds: [],
+      };
+      if (!options.dryRunCloud) {
+        writeStats = await updateSuccessRows(pool, successBatch);
+        const failureStats = await updateFailureRows(
+          pool,
+          failedBatch,
+          "bullmq_event_writeback",
+        );
+        writeStats.missingCount += failureStats.missingCount;
+        writeStats.missingWorkIds.push(...failureStats.missingWorkIds);
+      }
+
+      allSuccessItems.push(...successBatch);
+      allErrors.push(...failedBatch);
+      report.processed_items += successBatch.length;
+      report.failed_items += failedBatch.length;
+      flushUploadedCount += writeStats.uploadedCount;
+      flushWithheldCount += writeStats.notUploadedCount;
+      flushMissingCount += writeStats.missingCount;
+      eventWritebackBatchCount += 1;
+      lastFlushAt = new Date().toISOString();
+
+      if (writeStats.missingCount > 0) {
+        const sample = writeStats.missingWorkIds.slice(0, 5).join(",") || "n/a";
+        progress.warn(
+          `writeback_event_missing_ids reason=${reason} batch=${eventWritebackBatchCount} count=${writeStats.missingCount} sample=${sample}`,
+        );
+      }
+    }
+
+    const flushedBatches = eventWritebackBatchCount - flushStartBatch;
+    progress.info(
+      `writeback_applied reason=${reason} jobs=${candidateIds.length} batches=${flushedBatches} success_items=${successItems.length} errors=${failedItems.length} uploaded=${flushUploadedCount} withheld=${flushWithheldCount} missing=${flushMissingCount}`,
+    );
+  };
 
   try {
     while (true) {
       const nextGateState = await computeGateState();
       initialQueueSnapshot = nextGateState.queueSnapshot;
-      queueGloballyPaused = nextGateState.queueGloballyPaused;
       gateReason = nextGateState.gateReason;
-      gateInputs = nextGateState.gateInputs;
-
-      if (gateReason !== "gate=open") {
-        await publishRunnerStatus({ mode: "idle", gateReason });
+      const enqueueGateOpen = gateReason === "gate=open";
+      if (
+        lastEnqueueGateOpen === null ||
+        lastEnqueueGateOpen !== enqueueGateOpen
+      ) {
         progress.info(
-          `cycle_idle gate=${gateReason} queue_backlog=${initialQueueSnapshot.backlog} workers_running=${workersRunning} desired_mode=${controlSettings.desiredMode} sleep_ms=${idleSleepMs}`,
+          `enqueue_state state=${enqueueGateOpen ? "open" : "gated"} reason=${gateReason} backlog=${initialQueueSnapshot.backlog}`,
         );
-        progress.info(
-          `cycle_gate_inputs paused_live=${gateInputs.pausedStateLive} snapshot_queue_paused=${gateInputs.snapshotQueuePaused} queue_paused_count=${gateInputs.queuePausedCount} desired_mode=${gateInputs.desiredMode} enqueue_enabled=${gateInputs.enqueueEnabled} require_workers_for_enqueue=${gateInputs.requireWorkersForEnqueue} min_workers_to_enqueue=${gateInputs.minWorkersToEnqueue} workers_infra=${gateInputs.workersFromInfraSnapshot} workers_live=${gateInputs.workersFromLiveRead} workers_effective=${gateInputs.workersEffective} queue_backlog=${gateInputs.queueBacklog}`,
-        );
-        await sleepMs(idleSleepMs);
-        continue;
+        lastEnqueueGateOpen = enqueueGateOpen;
+      }
+      if (!enqueueGateOpen) {
+        await processEventWriteback("enqueue-gated").catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          progress.warn(
+            `writeback_event_failed reason=enqueue-gated message=${message}`,
+          );
+        });
       }
 
       const requestedTargetCap = options.targetCount;
       const liveQueueBacklog = initialQueueSnapshot.backlog;
-      const refillPolicy = deriveAutonomousQueueBand({
-        settings: controlSettings,
-        workersRunning,
-        lastCycleFeedback,
-      });
       const workerCount = Math.max(1, workersRunning);
-      const queueCoverageNow = liveQueueBacklog / workerCount;
-      const queueCoverageTarget = Math.max(
-        1.5,
-        Math.min(4, refillPolicy.refillTarget / workerCount),
-      );
-      const workersSaturated = initialQueueSnapshot.active >= workerCount;
-      const shouldRefillByLow = liveQueueBacklog < refillPolicy.refillLow;
-      const shouldRefillByCoverage =
-        queueCoverageNow < queueCoverageTarget && !workersSaturated;
-      const shouldRefill = shouldRefillByLow || shouldRefillByCoverage;
+      const fixedBatchMode = requestedTargetCap !== null;
+      const basePolicy = deriveRefillPolicy(controlSettings);
+      const workerTargetBacklog = Math.max(100, workerCount * 20);
+      const refillTarget = fixedBatchMode
+        ? Math.max(1, requestedTargetCap)
+        : clampInt(
+            Math.max(basePolicy.refillTarget, workerTargetBacklog),
+            1,
+            basePolicy.maxBacklog,
+          );
+      const refillLow = fixedBatchMode
+        ? Math.max(1, Math.floor(refillTarget / 2))
+        : clampInt(
+            Math.max(basePolicy.refillLow, Math.floor(refillTarget * 0.6)),
+            1,
+            refillTarget - 1,
+          );
+      const shouldRefill = liveQueueBacklog < refillLow;
       const refillGap = shouldRefill
-        ? Math.max(0, refillPolicy.refillTarget - liveQueueBacklog)
+        ? fixedBatchMode
+          ? refillTarget
+          : Math.max(0, refillTarget - liveQueueBacklog)
         : 0;
-      const safetyMaxClaimCap = Math.max(1, controlSettings.maxClaimPerCycle);
-      const startupRampActive = rampCyclesRemaining > 0;
-      const autonomousDecision = deriveAdaptiveClaimCap({
-        workersRunning,
-        safetyMaxClaimCap,
-        queueBacklog: liveQueueBacklog,
-        queueActive: initialQueueSnapshot.active,
-        queueWaiting: initialQueueSnapshot.waiting,
-        queueDelayed: initialQueueSnapshot.delayed,
-        queuePaused: initialQueueSnapshot.paused,
-        refillGap,
-        startupRampActive,
-        startupRampMultiplier: startupRampPlan.claimCapMultiplier,
-        previousTarget: autonomousTargetPrevious,
-        lastCycleFeedback,
-      });
-      const policyTargetCount = Math.min(refillGap, autonomousDecision.target);
-      const effectiveTargetCount =
+      const safetyMaxClaimCap = Math.max(500, controlSettings.maxClaimPerCycle);
+      const policyTargetCount = fixedBatchMode
+        ? refillGap
+        : Math.min(refillGap, safetyMaxClaimCap);
+      const computedEffectiveTargetCount =
         requestedTargetCap === null
           ? policyTargetCount
-          : Math.max(0, Math.min(requestedTargetCap, policyTargetCount));
-
-      progress.info(
-        `queue_preflight waiting=${initialQueueSnapshot.waiting} active=${initialQueueSnapshot.active} delayed=${initialQueueSnapshot.delayed} paused=${initialQueueSnapshot.paused} backlog=${liveQueueBacklog}`,
-      );
-      progress.info(
-        `claim_policy target_cap=${requestedTargetCap === null ? "none" : String(requestedTargetCap)} refill_low=${refillPolicy.refillLow} refill_target=${refillPolicy.refillTarget} queue_capacity_max=${refillPolicy.maxBacklog} should_refill=${shouldRefill} should_refill_low=${shouldRefillByLow} should_refill_coverage=${shouldRefillByCoverage} refill_gap=${refillGap} worker_count=${workerCount} workers_saturated=${workersSaturated} queue_coverage_now=${roundToOne(queueCoverageNow)} queue_coverage_target=${roundToOne(queueCoverageTarget)} safety_max_claim_cycle=${safetyMaxClaimCap} startup_ramp_active=${startupRampActive} startup_ramp_cycles_remaining=${rampCyclesRemaining} startup_ramp_multiplier=${startupRampPlan.claimCapMultiplier} autonomous_base_target=${autonomousDecision.baseTarget} autonomous_adjusted_target=${autonomousDecision.adjustedTarget} autonomous_target=${autonomousDecision.target} autonomous_safety_capped=${autonomousDecision.safetyCapApplied} autonomous_reason=${autonomousDecision.reason} workers_running=${workersRunning} previous_target=${autonomousTargetPrevious === null ? "none" : String(autonomousTargetPrevious)} policy_target=${policyTargetCount} effective_target=${effectiveTargetCount} notes=${refillPolicy.notes.join(",") || "none"}`,
-      );
-      progress.info(
-        `feedback_loop queue_waiting=${initialQueueSnapshot.waiting} queue_active=${initialQueueSnapshot.active} queue_delayed=${initialQueueSnapshot.delayed} queue_paused=${initialQueueSnapshot.paused} queue_backlog=${liveQueueBacklog} workers_running=${workersRunning}`,
-      );
+          : shouldRefill
+            ? requestedTargetCap
+            : 0;
+      const effectiveTargetCount = enqueueGateOpen
+        ? computedEffectiveTargetCount
+        : 0;
 
       if (effectiveTargetCount <= 0) {
-        const skipReason = shouldRefill
-          ? "refill_blocked_by_target_cap"
-          : "queue_at_or_above_refill_low";
+        const skipReason = !enqueueGateOpen
+          ? `enqueue_gated:${gateReason}`
+          : shouldRefill
+            ? "refill_blocked_by_target_cap"
+            : "queue_at_or_above_refill_low";
+        await processEventWriteback("no-claim").catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          progress.warn(
+            `writeback_event_failed reason=no-claim message=${message}`,
+          );
+        });
         await publishRunnerStatus({ mode: "idle", gateReason: skipReason });
-        progress.done(
-          `cycle_no_claim reason=${skipReason} backlog=${liveQueueBacklog} refill_low=${refillPolicy.refillLow} refill_target=${refillPolicy.refillTarget}`,
-        );
-        await sleepMs(idleSleepMs);
+        const refillProbeSleepMs = shouldRefill ? 500 : idleSleepMs;
+        await sleepMs(refillProbeSleepMs);
         if (!continuousMode) {
           break;
-        }
-        if (startupRampActive) {
-          rampCyclesRemaining = Math.max(0, rampCyclesRemaining - 1);
         }
         continue;
       }
 
       progress.phase("claiming rows from postgres");
       const cycleStartedAtMs = Date.now();
-      const cycleProcessedStart = report.processed_items;
-      const cycleFailedStart = report.failed_items;
       const claimPoolSize = Math.max(
         effectiveTargetCount,
         Math.min(
@@ -1222,20 +1310,21 @@ async function main(): Promise<void> {
         claimPoolSize,
       );
       report.claimed_count += claimedItems.length;
-      autonomousTargetPrevious = effectiveTargetCount;
 
       if (claimedItems.length === 0) {
-        lastCycleFeedback = {
-          claimedCount: 0,
-          processedItems: 0,
-          failedItems: 0,
-          durationSec: Math.max(1, (Date.now() - cycleStartedAtMs) / 1000),
-        };
+        await processEventWriteback("no-rows-claimed").catch(
+          (error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            progress.warn(
+              `writeback_event_failed reason=no-rows-claimed message=${message}`,
+            );
+          },
+        );
         await publishRunnerStatus({
           mode: "idle",
           gateReason: "no_rows_claimed",
         });
-        progress.done("cycle_no_claim reason=no_rows_claimed");
         await sleepMs(idleSleepMs);
         if (!continuousMode) {
           break;
@@ -1244,7 +1333,7 @@ async function main(): Promise<void> {
       }
 
       progress.phase("enqueueing bullmq jobs");
-      const jobRetentionCount = Math.max(1000, effectiveTargetCount * 2);
+      const jobRetentionCount = Math.max(10000, effectiveTargetCount * 20);
       const queuedJobs = await enqueueOpsImageJobsForOperation({
         queue,
         operationId,
@@ -1260,7 +1349,7 @@ async function main(): Promise<void> {
       report.queued_count += queuedJobs.length;
       const postEnqueueSnapshot = await readQueueSnapshot();
       progress.info(
-        `queued_jobs=${queuedJobs.length} queue=${IMAGE_QUEUE_NAME} operation_target_images=${claimedItems.length} queue_pending_after_enqueue=${postEnqueueSnapshot.backlog} retention=${jobRetentionCount}`,
+        `enqueue_performed jobs=${queuedJobs.length} claimed=${claimedItems.length} backlog_after=${postEnqueueSnapshot.backlog}`,
       );
 
       const jobsById = new Map<string, Job<ImageProcessingQueueJob>>();
@@ -1276,14 +1365,163 @@ async function main(): Promise<void> {
       const seenFailedJobIds = new Set<string>();
       const handledJobIds = new Set<string>();
       const jobMissingReloadCount = new Map<string, number>();
+      let expectedJobsInCycle = queuedJobs.length;
+      let cycleClaimedCount = claimedItems.length;
+      let lastTopUpAtMs = 0;
+      let completedAtLastTopUp = 0;
 
       const pendingSuccessItems: ImageProcessingItemResult[] = [];
       const pendingErrors: ImageProcessingTaskError[] = [];
+      pendingSuccessBufferCount = 0;
+      pendingErrorBufferCount = 0;
+      const cycleProcessedStartTotal = report.processed_items;
+      const cycleFailedStartTotal = report.failed_items;
       let flushedProcessedItems = 0;
       let flushedFailedItems = 0;
       const cycleCompletedBase = report.completed_jobs;
       const cycleFailedBase = report.failed_jobs;
       let flushedWithheldItems = 0;
+
+      const remainingCycleClaimBudget = (): number => {
+        if (requestedTargetCap !== null) {
+          return Number.MAX_SAFE_INTEGER;
+        }
+        return Math.max(0, safetyMaxClaimCap - cycleClaimedCount);
+      };
+
+      async function maybeTopUpQueue(reason: string): Promise<void> {
+        if (!continuousMode) {
+          return;
+        }
+
+        const nowMs = Date.now();
+        const topUpCheckMs = 5000;
+        const refillCooldownMs = 30_000;
+        if (nowMs - lastTopUpAtMs < topUpCheckMs) {
+          return;
+        }
+
+        if (lastTopUpAtMs > 0 && nowMs - lastTopUpAtMs < refillCooldownMs) {
+          return;
+        }
+
+        const finalizedCount = seenCompletedJobIds.size + seenFailedJobIds.size;
+        const outstandingCount = Math.max(
+          0,
+          expectedJobsInCycle - finalizedCount,
+        );
+
+        if (requestedTargetCap !== null) {
+          const refillChunk = Math.max(1, requestedTargetCap);
+          const completionGate = Math.max(1, Math.floor(refillChunk / 2));
+          const completedSinceLastTopUp = Math.max(
+            0,
+            finalizedCount - completedAtLastTopUp,
+          );
+          const maxOutstanding = refillChunk * 2;
+
+          if (completedSinceLastTopUp < completionGate) {
+            return;
+          }
+
+          if (outstandingCount >= maxOutstanding) {
+            progress.info(
+              `queue_topup_skipped reason=${reason} mode=fixed_batch outstanding=${outstandingCount} max_outstanding=${maxOutstanding} completed_since_last=${completedSinceLastTopUp} required_completed=${completionGate}`,
+            );
+            return;
+          }
+        }
+
+        if (
+          controlSettings.desiredMode !== "run" ||
+          !controlSettings.enqueueEnabled
+        ) {
+          return;
+        }
+
+        if (
+          controlSettings.requireWorkersForEnqueue &&
+          workersRunning < controlSettings.minWorkersToEnqueue
+        ) {
+          return;
+        }
+
+        const snapshot = await readQueueSnapshot();
+        if (snapshot.paused > 0) {
+          return;
+        }
+
+        if (snapshot.backlog >= refillLow) {
+          return;
+        }
+
+        const claimBudget = remainingCycleClaimBudget();
+        if (claimBudget <= 0) {
+          return;
+        }
+
+        const refillGap = Math.max(0, refillTarget - snapshot.backlog);
+        const targetClaimCount = Math.max(
+          0,
+          requestedTargetCap !== null
+            ? Math.min(requestedTargetCap, refillGap, claimBudget)
+            : Math.min(refillGap, claimBudget),
+        );
+        if (targetClaimCount <= 0) {
+          return;
+        }
+
+        const claimPoolSize = Math.max(
+          targetClaimCount,
+          Math.min(
+            options.claimPoolMax,
+            targetClaimCount * options.claimPoolMultiplier,
+          ),
+        );
+
+        const topUpClaims = await claimPendingRows(
+          pool,
+          targetClaimCount,
+          claimPoolSize,
+        );
+        if (topUpClaims.length === 0) {
+          lastTopUpAtMs = nowMs;
+          return;
+        }
+
+        const topUpRetention = Math.max(10000, topUpClaims.length * 20);
+        const topUpJobs = await enqueueOpsImageJobsForOperation({
+          queue,
+          operationId,
+          claimedItems: topUpClaims,
+          options: {
+            fetchTimeoutMs: options.fetchTimeoutMs,
+            fetchRetryCount: options.fetchRetryCount,
+            dryRunCloud: options.dryRunCloud,
+            uploadPrefix: options.uploadPrefix,
+            jobRetentionCount: topUpRetention,
+          },
+        });
+
+        cycleClaimedCount += topUpClaims.length;
+        expectedJobsInCycle += topUpJobs.length;
+        report.claimed_count += topUpClaims.length;
+        report.queued_count += topUpJobs.length;
+        completedAtLastTopUp = finalizedCount;
+
+        for (const job of topUpJobs) {
+          const jobId = String(job.id || "");
+          if (!jobId) {
+            continue;
+          }
+          jobsById.set(jobId, job);
+        }
+
+        lastTopUpAtMs = nowMs;
+        progress.info(
+          `queue_topup reason=${reason} claimed=${topUpClaims.length} queued=${topUpJobs.length} expected_jobs=${expectedJobsInCycle} cycle_claimed=${cycleClaimedCount} finalized=${finalizedCount} outstanding=${Math.max(0, expectedJobsInCycle - (seenCompletedJobIds.size + seenFailedJobIds.size))}`,
+        );
+      }
 
       async function flushPendingWrites(reason: string): Promise<void> {
         if (pendingSuccessItems.length === 0 && pendingErrors.length === 0) {
@@ -1292,28 +1530,50 @@ async function main(): Promise<void> {
 
         const successBatch = pendingSuccessItems.slice();
         const errorBatch = pendingErrors.slice();
-        let writeStats: { uploadedCount: number; notUploadedCount: number };
-        try {
-          writeStats = await updateSuccessRows(pool, successBatch);
-          await updateFailureRows(pool, errorBatch, "bullmq_dispatch");
-        } catch (error: unknown) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          progress.fail(`writeback_failed reason=${reason} message=${message}`);
-          await queue.pause().catch(() => undefined);
-          await publishRunnerStatus({
-            mode: "failed",
-            gateReason: "db_writeback_failed_queue_paused",
-            pendingSuccessBuffer: pendingSuccessItems.length,
-            pendingErrorBuffer: pendingErrors.length,
-          }).catch(() => undefined);
-          throw new Error(
-            `db writeback failed; queue paused to avoid status loss: ${message}`,
-          );
+        let writeStats: {
+          uploadedCount: number;
+          notUploadedCount: number;
+          missingCount: number;
+          missingWorkIds: string[];
+        } = {
+          uploadedCount: 0,
+          notUploadedCount: 0,
+          missingCount: 0,
+          missingWorkIds: [],
+        };
+        if (!options.dryRunCloud) {
+          try {
+            writeStats = await updateSuccessRows(pool, successBatch);
+            const failureStats = await updateFailureRows(
+              pool,
+              errorBatch,
+              "bullmq_dispatch",
+            );
+            writeStats.missingCount += failureStats.missingCount;
+            writeStats.missingWorkIds.push(...failureStats.missingWorkIds);
+          } catch (error: unknown) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            progress.fail(
+              `writeback_failed reason=${reason} message=${message}`,
+            );
+            await queue.pause().catch(() => undefined);
+            await publishRunnerStatus({
+              mode: "failed",
+              gateReason: "db_writeback_failed_queue_paused",
+              pendingSuccessBuffer: pendingSuccessItems.length,
+              pendingErrorBuffer: pendingErrors.length,
+            }).catch(() => undefined);
+            throw new Error(
+              `db writeback failed; queue paused to avoid status loss: ${message}`,
+            );
+          }
         }
 
         pendingSuccessItems.length = 0;
         pendingErrors.length = 0;
+        pendingSuccessBufferCount = 0;
+        pendingErrorBufferCount = 0;
 
         allSuccessItems.push(...successBatch);
         allErrors.push(...errorBatch);
@@ -1323,18 +1583,31 @@ async function main(): Promise<void> {
         flushedProcessedItems += successBatch.length;
         flushedFailedItems += errorBatch.length;
         flushedWithheldItems += writeStats.notUploadedCount;
-        report.processed_items = flushedProcessedItems;
-        report.failed_items = flushedFailedItems;
+        report.processed_items =
+          cycleProcessedStartTotal + flushedProcessedItems;
+        report.failed_items = cycleFailedStartTotal + flushedFailedItems;
         flushBatchCount += 1;
         lastFlushAt = new Date().toISOString();
 
         progress.info(
-          `writeback_flush reason=${reason} batch=${flushBatchCount} success_items=${successBatch.length} errors=${errorBatch.length} uploaded=${writeStats.uploadedCount} withheld=${writeStats.notUploadedCount} totals_processed=${flushedProcessedItems} totals_failed=${flushedFailedItems} totals_withheld=${flushedWithheldItems}`,
+          `writeback_flush reason=${reason} batch=${flushBatchCount} success_items=${successBatch.length} errors=${errorBatch.length} uploaded=${writeStats.uploadedCount} withheld=${writeStats.notUploadedCount} missing=${writeStats.missingCount} totals_processed=${flushedProcessedItems} totals_failed=${flushedFailedItems} totals_withheld=${flushedWithheldItems}`,
         );
+        if (writeStats.missingCount > 0) {
+          const sample =
+            writeStats.missingWorkIds.slice(0, 5).join(",") || "n/a";
+          progress.warn(
+            `writeback_flush_missing_ids reason=${reason} batch=${flushBatchCount} count=${writeStats.missingCount} sample=${sample}`,
+          );
+        }
+        if (options.dryRunCloud) {
+          progress.info(
+            `writeback_flush_db_skipped reason=${reason} dry_run_cloud=true`,
+          );
+        }
 
         await publishRunnerStatus({
           mode: "running",
-          gateReason: "gate=open",
+          gateReason: openGateReason,
           pendingSuccessBuffer: pendingSuccessItems.length,
           pendingErrorBuffer: pendingErrors.length,
         });
@@ -1369,6 +1642,7 @@ async function main(): Promise<void> {
               code: "missing_job_result",
               message: `bullmq result missing for jobId=${jobId} after ${misses} reload attempts`,
             });
+            pendingErrorBufferCount = pendingErrors.length;
             handledJobIds.add(jobId);
             progress.warn(
               `job_missing_result job_id=${jobId} work_id=${job.data.workId} reload_attempts=${misses}`,
@@ -1387,6 +1661,7 @@ async function main(): Promise<void> {
               code: "worker_error",
               message: failedReason,
             });
+            pendingErrorBufferCount = pendingErrors.length;
             report.jobs.push({
               job_id: jobId,
               work_id: String(job.data.workId),
@@ -1415,6 +1690,8 @@ async function main(): Promise<void> {
           const errors = Array.isArray(result.errors) ? result.errors : [];
           pendingSuccessItems.push(...items);
           pendingErrors.push(...errors);
+          pendingSuccessBufferCount = pendingSuccessItems.length;
+          pendingErrorBufferCount = pendingErrors.length;
 
           const modes = [
             ...new Set(items.map((row) => row.source_network_mode)),
@@ -1474,106 +1751,30 @@ async function main(): Promise<void> {
         progress.phase("waiting for worker completion");
         await publishRunnerStatus({
           mode: "running",
-          gateReason: "gate=open",
+          gateReason: openGateReason,
           pendingSuccessBuffer: pendingSuccessItems.length,
           pendingErrorBuffer: pendingErrors.length,
         });
-        let completion: { completedJobIds: string[]; failedJobIds: string[] };
         const totalWaitMs = Math.max(1, options.waitTimeoutSeconds) * 1000;
-        const waitDeadlineMs = Date.now() + totalWaitMs;
-
-        while (true) {
-          const remainingMs = waitDeadlineMs - Date.now();
-          if (remainingMs <= 0) {
-            throw new Error(
-              `timeout waiting for queue completion queue=${IMAGE_QUEUE_NAME} completed=${seenCompletedJobIds.size} failed=${seenFailedJobIds.size} expected=${queuedJobs.length}`,
+        const completion: {
+          completedJobIds: string[];
+          failedJobIds: string[];
+        } = await waitForOpsRunCompletion({
+          queueEvents,
+          queueName: IMAGE_QUEUE_NAME,
+          expectedJobs: expectedJobsInCycle,
+          expectedJobsProvider: () => expectedJobsInCycle,
+          timeoutMs: totalWaitMs,
+          reconcileIntervalMs: 250,
+          reconcile: async () => {
+            const unresolvedJobIds = [...jobsById.keys()].filter(
+              (jobId) =>
+                !seenCompletedJobIds.has(jobId) && !seenFailedJobIds.has(jobId),
             );
-          }
 
-          const waitSliceMs = Math.min(15_000, remainingMs);
+            await maybeTopUpQueue("reconcile");
 
-          try {
-            completion = await waitForOpsRunCompletion({
-              queueEvents,
-              queueName: IMAGE_QUEUE_NAME,
-              expectedJobs: queuedJobs.length,
-              timeoutMs: waitSliceMs,
-              onProgress: ({
-                completed,
-                failed,
-                expected,
-                processedItems,
-                failedItems,
-                completedJobIds,
-                failedJobIds,
-              }) => {
-                report.completed_jobs = completed;
-                report.failed_jobs = failed;
-
-                for (const jobId of completedJobIds) {
-                  seenCompletedJobIds.add(jobId);
-                }
-                for (const jobId of failedJobIds) {
-                  seenFailedJobIds.add(jobId);
-                }
-
-                // Use whichever is higher so live telemetry does not regress between flushes.
-                report.processed_items = Math.max(
-                  flushedProcessedItems,
-                  processedItems,
-                );
-                report.failed_items = Math.max(flushedFailedItems, failedItems);
-
-                const finalized = completed + failed;
-                const completedTotal = cycleCompletedBase + completed;
-                const failedTotal = cycleFailedBase + failed;
-                const line = formatModeProgressLine({
-                  mode: "desktop-bullmq",
-                  completed: finalized,
-                  total: expected,
-                  startedAtMs,
-                  text:
-                    `jobs_completed=${completed} jobs_failed=${failed} ` +
-                    `op_images_processed=${report.processed_items}/${report.claimed_count} ` +
-                    `system_images_processed=n/a ` +
-                    `items_failed=${report.failed_items}`,
-                });
-                progress.progress(`queue ${line}`);
-                report.completed_jobs = completedTotal;
-                report.failed_jobs = failedTotal;
-                void publishRunnerStatus({
-                  mode: "running",
-                  gateReason: "gate=open",
-                  pendingSuccessBuffer: pendingSuccessItems.length,
-                  pendingErrorBuffer: pendingErrors.length,
-                }).catch((error: unknown) => {
-                  const message =
-                    error instanceof Error ? error.message : String(error);
-                  progress.warn(`status_publish_failed message=${message}`);
-                });
-              },
-            });
-            break;
-          } catch (error: unknown) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            const isSliceTimeout = message.includes(
-              "timeout waiting for queue completion",
-            );
-            if (!isSliceTimeout) {
-              throw error;
-            }
-
-            const snapshot = await readQueueSnapshot().catch(() => null);
-            const queueDrained =
-              snapshot !== null &&
-              snapshot.backlog === 0 &&
-              snapshot.waiting === 0 &&
-              snapshot.active === 0 &&
-              snapshot.delayed === 0 &&
-              snapshot.paused === 0;
-
-            for (const jobId of jobsById.keys()) {
+            for (const jobId of unresolvedJobIds) {
               const reloaded = await readOpsQueueJobById(queue, jobId);
               if (!reloaded) {
                 continue;
@@ -1586,24 +1787,101 @@ async function main(): Promise<void> {
               }
             }
 
+            const snapshot = await readQueueSnapshot().catch(() => null);
+            const queueDrained =
+              snapshot !== null &&
+              snapshot.backlog === 0 &&
+              snapshot.waiting === 0 &&
+              snapshot.active === 0 &&
+              snapshot.delayed === 0 &&
+              snapshot.paused === 0;
+
             const finalizedByState =
               seenCompletedJobIds.size + seenFailedJobIds.size;
             const nearCompleteByState =
-              finalizedByState >= queuedJobs.length - 1;
+              finalizedByState >= Math.max(0, expectedJobsInCycle - 1);
+            const done =
+              finalizedByState >= expectedJobsInCycle ||
+              (queueDrained && nearCompleteByState);
 
-            if (queueDrained && nearCompleteByState) {
+            if (done && finalizedByState < expectedJobsInCycle) {
               progress.warn(
-                `completion_wait_reconcile queue_drained=true finalized_by_state=${finalizedByState}/${queuedJobs.length} resolving_with_state=true`,
+                `completion_wait_reconcile queue_drained=${queueDrained} finalized_by_state=${finalizedByState}/${expectedJobsInCycle} resolving_with_state=true`,
               );
-              completion = {
-                completedJobIds: [...seenCompletedJobIds],
-                failedJobIds: [...seenFailedJobIds],
-              };
-              break;
             }
-          }
-        }
 
+            return {
+              completedJobIds: [...seenCompletedJobIds],
+              failedJobIds: [...seenFailedJobIds],
+              done,
+            };
+          },
+          onProgress: ({
+            completed,
+            failed,
+            expected,
+            processedItems,
+            failedItems,
+            completedJobIds,
+            failedJobIds,
+          }) => {
+            report.completed_jobs = completed;
+            report.failed_jobs = failed;
+
+            for (const jobId of completedJobIds) {
+              seenCompletedJobIds.add(jobId);
+            }
+            for (const jobId of failedJobIds) {
+              seenFailedJobIds.add(jobId);
+            }
+
+            // Use whichever is higher so live telemetry does not regress between flushes.
+            report.processed_items =
+              cycleProcessedStartTotal +
+              Math.max(flushedProcessedItems, processedItems);
+            report.failed_items =
+              cycleFailedStartTotal + Math.max(flushedFailedItems, failedItems);
+
+            const finalized = completed + failed;
+            const completedTotal = cycleCompletedBase + completed;
+            const failedTotal = cycleFailedBase + failed;
+            const line = formatModeProgressLine({
+              mode: "desktop-bullmq",
+              completed: finalized,
+              total: expected,
+              startedAtMs,
+              text:
+                `jobs_completed=${completed} jobs_failed=${failed} ` +
+                `op_images_processed=${report.processed_items}/${report.claimed_count} ` +
+                `system_images_processed=n/a ` +
+                `items_failed=${report.failed_items}`,
+            });
+            progress.progress(`queue ${line}`);
+            report.completed_jobs = completedTotal;
+            report.failed_jobs = failedTotal;
+
+            // Trigger top-up checks from live completion events so refill can react
+            // while jobs are still flowing, not only on reconcile ticks.
+            void maybeTopUpQueue("progress").catch((error: unknown) => {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              progress.warn(
+                `queue_topup_failed source=progress message=${message}`,
+              );
+            });
+
+            void publishRunnerStatus({
+              mode: "running",
+              gateReason: openGateReason,
+              pendingSuccessBuffer: pendingSuccessItems.length,
+              pendingErrorBuffer: pendingErrors.length,
+            }).catch((error: unknown) => {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              progress.warn(`status_publish_failed message=${message}`);
+            });
+          },
+        });
         progress.phase("collecting results and applying writeback");
 
         for (const jobId of completion.completedJobIds) {
@@ -1615,6 +1893,8 @@ async function main(): Promise<void> {
 
         await enqueueHarvestCycle("finalize", false);
         await enqueueHarvestCycle("final-pass", true);
+        pendingSuccessBufferCount = pendingSuccessItems.length;
+        pendingErrorBufferCount = pendingErrors.length;
 
         // Final job counts should come from harvested results so they remain
         // accurate even if queue event progress callbacks were sparse/stale.
@@ -1632,23 +1912,19 @@ async function main(): Promise<void> {
           report.failed_jobs = failedFromHarvest;
         }
 
-        report.processed_items = flushedProcessedItems;
-        report.failed_items = flushedFailedItems;
-        lastCycleFeedback = {
-          claimedCount: claimedItems.length,
-          processedItems: Math.max(
-            0,
-            report.processed_items - cycleProcessedStart,
-          ),
-          failedItems: Math.max(0, report.failed_items - cycleFailedStart),
-          durationSec: Math.max(1, (Date.now() - cycleStartedAtMs) / 1000),
-        };
+        report.processed_items =
+          cycleProcessedStartTotal + flushedProcessedItems;
+        report.failed_items = cycleFailedStartTotal + flushedFailedItems;
+        const cycleDurationSec = Math.max(
+          1,
+          (Date.now() - cycleStartedAtMs) / 1000,
+        );
         progress.info(
-          `cycle_feedback claimed=${lastCycleFeedback.claimedCount} processed=${lastCycleFeedback.processedItems} failed=${lastCycleFeedback.failedItems} duration_sec=${roundToOne(lastCycleFeedback.durationSec)}`,
+          `cycle_feedback claimed=${claimedItems.length} processed=${Math.max(0, flushedProcessedItems)} failed=${Math.max(0, flushedFailedItems)} duration_sec=${roundToOne(cycleDurationSec)}`,
         );
         await publishRunnerStatus({
           mode: "done",
-          gateReason: "gate=open",
+          gateReason: openGateReason,
           pendingSuccessBuffer: pendingSuccessItems.length,
           pendingErrorBuffer: pendingErrors.length,
         });
@@ -1657,10 +1933,7 @@ async function main(): Promise<void> {
           progress.done(
             `cycle_complete claimed_total=${report.claimed_count} queued_total=${report.queued_count} processed_total=${report.processed_items} failed_total=${report.failed_items}`,
           );
-          if (startupRampActive) {
-            rampCyclesRemaining = Math.max(0, rampCyclesRemaining - 1);
-          }
-          await sleepMs(idleSleepMs);
+          await sleepMs(500);
           continue;
         }
 
@@ -1761,6 +2034,8 @@ async function main(): Promise<void> {
     );
   } finally {
     clearInterval(heartbeat);
+    queueEvents.off("completed", onCompletedEvent);
+    queueEvents.off("failed", onFailedEvent);
     await closeWithTimeout("queue_runtime_close", queueRuntime.close());
     await closeWithTimeout("pool_end", pool.end());
   }

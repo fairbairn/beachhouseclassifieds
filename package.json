@@ -255,6 +255,8 @@
     "workers:image:ops:metrics:export:from-env": "npm run workers:image:ops:metrics:export:from-env:raw --",
     "workers:image:ops:reactive:probe:raw": "tsx src/lib/scripts/run-image-ops-reactive-probe.ts",
     "workers:image:ops:reactive:probe": "npm run workers:image:ops:reactive:probe:raw --",
+    "workers:image:ops:bullmq:harness:raw": "tsx src/lib/scripts/run-image-ops-bullmq-observability-harness.ts",
+    "workers:image:ops:bullmq:harness": "npm run workers:image:ops:bullmq:harness:raw --",
     "ops:image": "npm run workers:image:ops --",
     "ops:image:top": "npm run workers:image:ops:hqtui --",
     "runner:image": "npm run workers:image:desktop --",

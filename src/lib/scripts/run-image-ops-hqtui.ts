@@ -30,7 +30,6 @@ import {
   type OpsMetricSliceId,
   type OpsMetricSliceValueType,
   type OpsMetricSystemSnapshot,
-  type OpsQueueWindowAverages,
   type OpsRedisIoAggregateStats,
   type OpsRedisIoInstanceStats,
   type OpsRedisIoStats,
@@ -148,14 +147,6 @@ type DashboardSnapshot = {
 const SNAPSHOT_METRIC_NAME_SET = new Set(
   OPS_SNAPSHOT_TREND_METRIC_REGISTRY.map((metric) => metric.name),
 );
-
-const ZERO_QUEUE_WINDOW_AVERAGES: OpsQueueWindowAverages = {
-  w15s: { pending: 0, active: 0 },
-  w1m: { pending: 0, active: 0 },
-  w15m: { pending: 0, active: 0 },
-  w60m: { pending: 0, active: 0 },
-  w24h: { pending: 0, active: 0 },
-};
 
 type State = {
   appName: string;
@@ -552,6 +543,35 @@ function lockYAxisMaxFromSeries(input: {
   return nextMax;
 }
 
+function latestSeriesValue(values: number[]): number | null {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    const candidate = values[index];
+    if (Number.isFinite(candidate)) {
+      return Number(candidate);
+    }
+  }
+  return null;
+}
+
+function formatChartLegendHeader(input: {
+  label: string;
+  low: number;
+  high: number;
+  values: number[];
+  digits?: number;
+}): { title: string; subtitle: string } {
+  const digits = Math.max(0, input.digits ?? 1);
+  const safeLow = Number.isFinite(input.low) ? Math.max(0, input.low) : 0;
+  const safeHigh = Number.isFinite(input.high) ? Math.max(0, input.high) : 0;
+  const latest = latestSeriesValue(input.values);
+  const latestLabel =
+    latest === null ? "n/a" : Number(latest).toFixed(Math.max(1, digits));
+  return {
+    title: `${input.label} (${safeLow.toFixed(digits)}-${safeHigh.toFixed(digits)})`,
+    subtitle: `[${latestLabel}]`,
+  };
+}
+
 function pushHistory(values: number[], next: number, max = 120): number[] {
   values.push(next);
   if (values.length > max) {
@@ -719,6 +739,64 @@ function buildStableWindowSeriesFromRows(input: {
   });
 }
 
+function buildIpsSeriesFromProcessedEventRows(input: {
+  rows: Array<{ atMs: number; value: number }> | null | undefined;
+  nowMs: number;
+  lookbackWindowMs: number;
+  targetPoints: number;
+  rateWindowMs?: number;
+}): number[] {
+  const sourceRows = Array.isArray(input.rows) ? input.rows : [];
+  const rows = sourceRows
+    .filter((row) => Number.isFinite(row.atMs) && Number.isFinite(row.value))
+    .map((row) => ({
+      atMs: Math.floor(Number(row.atMs)),
+      value: Math.max(0, Number(row.value)),
+    }))
+    .sort((left, right) => left.atMs - right.atMs);
+
+  const targetPoints = Math.max(2, Math.floor(input.targetPoints));
+  const nowMs = Number.isFinite(input.nowMs) ? Number(input.nowMs) : Date.now();
+  const lookbackWindowMs = Math.max(1000, Math.floor(input.lookbackWindowMs));
+  const rateWindowMs = Math.max(1000, Math.floor(input.rateWindowMs ?? 15_000));
+  const startAtMs = nowMs - lookbackWindowMs;
+  const stepMs =
+    targetPoints <= 1
+      ? lookbackWindowMs
+      : Math.max(1, Math.floor(lookbackWindowMs / (targetPoints - 1)));
+
+  const anchors: number[] = [];
+  for (let index = 0; index < targetPoints; index += 1) {
+    anchors.push(startAtMs + index * stepMs);
+  }
+
+  const output: number[] = [];
+  let includeIndex = 0;
+  let excludeIndex = 0;
+  let rollingSum = 0;
+
+  for (const anchorAtMs of anchors) {
+    while (
+      includeIndex < rows.length &&
+      rows[includeIndex].atMs <= anchorAtMs
+    ) {
+      rollingSum += rows[includeIndex].value;
+      includeIndex += 1;
+    }
+
+    const minAtMs = anchorAtMs - rateWindowMs;
+    while (excludeIndex < includeIndex && rows[excludeIndex].atMs < minAtMs) {
+      rollingSum -= rows[excludeIndex].value;
+      excludeIndex += 1;
+    }
+
+    const ips = rollingSum / Math.max(1, rateWindowMs / 1000);
+    output.push(Number.isFinite(ips) ? Math.max(0, ips) : 0);
+  }
+
+  return output;
+}
+
 async function updateRunnerSettings(
   updater: (current: RunnerControlSettings) => RunnerControlSettings,
 ): Promise<RunnerControlSettings> {
@@ -747,6 +825,47 @@ function machineStateSummary(machines: OpsUiSnapshot["machines"]): string {
     .sort((a, b) => b[1] - a[1])
     .map(([state, count]) => `${state}:${count}`)
     .join(" ");
+}
+
+function nextScreen(current: State["activeScreen"]): State["activeScreen"] {
+  const order: State["activeScreen"][] = [
+    "summary",
+    "infra",
+    "processing",
+    "queuejobs",
+    "observability",
+  ];
+  const currentIndex = order.indexOf(current);
+  if (currentIndex < 0) {
+    return "summary";
+  }
+  return order[(currentIndex + 1) % order.length];
+}
+
+function previousScreen(current: State["activeScreen"]): State["activeScreen"] {
+  const order: State["activeScreen"][] = [
+    "summary",
+    "infra",
+    "processing",
+    "queuejobs",
+    "observability",
+  ];
+  const currentIndex = order.indexOf(current);
+  if (currentIndex < 0) {
+    return "summary";
+  }
+  return order[(currentIndex - 1 + order.length) % order.length];
+}
+
+function shortInstance(instanceId: string | null | undefined): string {
+  const value = String(instanceId || "").trim();
+  if (!value) {
+    return "n/a";
+  }
+  if (value.length <= 12) {
+    return value;
+  }
+  return `${value.slice(0, 8)}..${value.slice(-4)}`;
 }
 
 function shouldUseMachineNotice(state: State): boolean {
@@ -918,6 +1037,7 @@ async function main(): Promise<void> {
     includeRecentJobs24h: false,
     includePerformanceRollups: false,
     reconcileBullmqStatus: false,
+    writeTrendSamples: false,
   });
   const metricRole = startupProbe.snapshot.metricSystem?.role || "master";
   bootLog(`metric role=${metricRole}`, "ok");
@@ -999,6 +1119,7 @@ async function main(): Promise<void> {
       includeRecentJobs24h: true,
       includePerformanceRollups: true,
       reconcileBullmqStatus: false,
+      writeTrendSamples: false,
     });
     const startupRefreshElapsedMs = Date.now() - startupRefreshStartedAtMs;
     const startupRefreshIoAfter = readOpsRedisIoStats();
@@ -1026,6 +1147,7 @@ async function main(): Promise<void> {
       includeRecentJobs24h: true,
       includePerformanceRollups: true,
       reconcileBullmqStatus: false,
+      writeTrendSamples: false,
     });
     const startupRefreshElapsedMs = Date.now() - startupRefreshStartedAtMs;
     const startupRefreshIoAfter = readOpsRedisIoStats();
@@ -1053,11 +1175,12 @@ async function main(): Promise<void> {
     fallbackRefreshIntervalMs: initialIntervalMs,
     subscribeToSignals: true,
     enableCollectors: true,
-    ingestDerivedSamplesOnRefresh: false,
+    ingestDerivedSamplesOnRefresh: true,
+    pollEventDrivenCollectorsOnInterval: true,
     collectors: ["db", "fly", "redis", "bullmq"],
     skipInitialRefresh: true,
     hydrateOnInit: false,
-    waitForQueueEventsReadyOnInit: false,
+    waitForQueueEventsReadyOnInit: true,
     seedCollectorsOnInit: true,
     trendProjectionLimit: trendPointLimitForWindow(24 * 60 * 60 * 1000),
     trendSampleMode: "interpolated",
@@ -1461,7 +1584,9 @@ async function main(): Promise<void> {
         0,
         Number.isFinite(statusIpsSample ?? NaN)
           ? Number(statusIpsSample)
-          : Math.max(rollupIpsSample, projectionIpsSample),
+          : Number.isFinite(rollupIpsSample)
+            ? rollupIpsSample
+            : projectionIpsSample,
       );
 
       pushHistory(state.historyBacklog, currentBacklog, historyMax);
@@ -1477,12 +1602,15 @@ async function main(): Promise<void> {
           0.001,
           (nowMs - state.lastSampleAtMs) / 1000,
         );
-        const completedDelta = Math.max(
+        const processedDelta = Math.max(
           0,
-          currentCompleted - (state.lastQueueCompleted ?? currentCompleted),
+          currentProcessed - state.lastDbProcessed,
         );
-        const ipsFromDelta = completedDelta / elapsedSeconds;
-        const ipsNow = Math.max(preferredIpsSample, ipsFromDelta);
+        const ipsFromDelta = processedDelta / elapsedSeconds;
+        const ipsNow = Math.max(
+          0,
+          Number.isFinite(ipsFromDelta) ? ipsFromDelta : 0,
+        );
         const backlogDeltaNow =
           (currentBacklog - state.lastBacklog) / elapsedSeconds;
         pushHistory(state.historyIps, Number(ipsNow.toFixed(3)), historyMax);
@@ -2397,6 +2525,17 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (
+      event.key === "backtab" ||
+      event.key === "shift+tab" ||
+      (event.key === "tab" && Boolean((event as { shift?: boolean }).shift))
+    ) {
+      state.activeScreen = previousScreen(state.activeScreen);
+      state.notice = `screen=${state.activeScreen}`;
+      app.invalidate();
+      return;
+    }
+
     if (event.key === "tab") {
       state.activeScreen = nextScreen(state.activeScreen);
       state.notice = `screen=${state.activeScreen}`;
@@ -2498,34 +2637,72 @@ async function main(): Promise<void> {
         0,
         Math.round(readModuleMetricValue(metricName, sliceId, valueType)),
       );
-    const buildSliceRollupView = (sliceId: OpsMetricSliceId) => {
-      const ipm = Math.max(
+    const sliceWindowSeconds = (sliceId: OpsMetricSliceId): number => {
+      switch (sliceId) {
+        case "w5s":
+          return 5;
+        case "w15s":
+          return 15;
+        case "w1m":
+          return 60;
+        case "w15m":
+          return 15 * 60;
+        case "w60m":
+          return 60 * 60;
+        case "w24h":
+          return 24 * 60 * 60;
+        case "wDeep":
+          return 24 * 60 * 60;
+      }
+    };
+    const throughputAverageForSlice = (
+      sliceId: OpsMetricSliceId,
+    ): {
+      ips: number;
+      ipm: number;
+    } => {
+      const processedSum = Math.max(
         0,
-        sliceValue("statusThroughputImagesPerMinute", sliceId, "avg"),
+        sliceValue("statusProcessedItems", sliceId, "sum"),
       );
-      const ips = ipm / 60;
+      const ips = processedSum / Math.max(1, sliceWindowSeconds(sliceId));
+      const ipm = ips * 60;
+      return {
+        ips,
+        ipm,
+      };
+    };
+    const processedItemsForSlice = (sliceId: OpsMetricSliceId): number => {
+      return Math.max(0, sliceValue("statusProcessedItems", sliceId, "sum"));
+    };
+    const completedJobsForSlice = (sliceId: OpsMetricSliceId): number => {
+      return Math.max(0, sliceValue("statusCompletedJobs", sliceId, "sum"));
+    };
+    const failedItemsForSlice = (sliceId: OpsMetricSliceId): number => {
+      const statusItemAvg = Math.max(
+        0,
+        sliceValue("statusFailedItems", sliceId, "sum"),
+      );
+      const statusJobAvg = Math.max(
+        0,
+        sliceValue("statusFailedJobs", sliceId, "sum"),
+      );
+      return Math.max(statusItemAvg, statusJobAvg);
+    };
+    const buildSliceRollupView = (sliceId: OpsMetricSliceId) => {
+      const throughput = throughputAverageForSlice(sliceId);
+      const ipm = throughput.ipm;
+      const ips = throughput.ips;
       const sampledAtMs =
         snapshot.metricSlices?.statusThroughputImagesPerMinute?.[sliceId]
           ?.sampledAtMs ?? null;
       return {
         ips,
         ipm,
-        processedItems: Math.max(
-          0,
-          sliceValue("statusProcessedItems", sliceId, "latest"),
-        ),
-        failedItems: Math.max(
-          0,
-          sliceValue("statusFailedItems", sliceId, "latest"),
-        ),
-        completedJobs: Math.max(
-          0,
-          sliceValue("statusCompletedJobs", sliceId, "latest"),
-        ),
-        failedJobs: Math.max(
-          0,
-          sliceValue("statusFailedJobs", sliceId, "latest"),
-        ),
+        processedItems: processedItemsForSlice(sliceId),
+        failedItems: failedItemsForSlice(sliceId),
+        completedJobs: completedJobsForSlice(sliceId),
+        failedJobs: Math.max(0, sliceValue("statusFailedJobs", sliceId, "sum")),
         avgFetchMs: Math.max(0, sliceValue("avgFetchMs", sliceId, "avg")),
         avgTransformMs: Math.max(
           0,
@@ -2544,15 +2721,11 @@ async function main(): Promise<void> {
       };
     };
     const rollup15s = buildSliceRollupView("w15s");
-    const rollup1m = buildSliceRollupView("w1m");
-    const rollup15m = buildSliceRollupView("w15m");
-    const rollup60m = buildSliceRollupView("w60m");
-    const rollup24h = buildSliceRollupView("w24h");
     const trendPointLimit = trendPointLimitForWindow(state.trendWindowMs);
     const nowMs = state.lastSampleAtMs ?? Date.now();
     const queueBacklogRows = snapshot.trendRowsByMetric?.queueBacklogLive ?? [];
-    const throughputRows =
-      snapshot.trendRowsByMetric?.statusThroughputImagesPerMinute ?? [];
+    const processedEventRows =
+      snapshot.trendRowsByMetric?.statusProcessedItems ?? [];
     const queueTrendMetricSeries = buildStableWindowSeriesFromRows({
       rows: queueBacklogRows,
       nowMs,
@@ -2585,12 +2758,13 @@ async function main(): Promise<void> {
       trendPointLimit,
       LONG_IPS_DISPLAY_POINT_MAX,
     );
-    const ips5mMetricSeries = buildStableWindowSeriesFromRows({
-      rows: throughputRows,
+    const ips5mMetricSeries = buildIpsSeriesFromProcessedEventRows({
+      rows: processedEventRows,
       nowMs,
-      windowMs: state.trendWindowMs,
+      lookbackWindowMs: state.trendWindowMs,
       targetPoints: trendPointLimit,
-    }).map((value) => Math.max(0, value / 60));
+      rateWindowMs: 15_000,
+    });
     const ips5mHistorySeries = buildWindowHistorySeries({
       values: state.historyIpsLong,
       windowMs: state.trendWindowMs,
@@ -2599,12 +2773,13 @@ async function main(): Promise<void> {
       endAtMs: state.lastSampleAtMs ?? nowMs,
       stepMs: state.intervalMs,
     });
-    const ips15mMetricSeries = buildStableWindowSeriesFromRows({
-      rows: throughputRows,
+    const ips15mMetricSeries = buildIpsSeriesFromProcessedEventRows({
+      rows: processedEventRows,
       nowMs,
-      windowMs: LONG_TREND_WINDOW_MINUTES * 60 * 1000,
+      lookbackWindowMs: LONG_TREND_WINDOW_MINUTES * 60 * 1000,
       targetPoints: longIpsDisplayLimit,
-    }).map((value) => Math.max(0, value / 60));
+      rateWindowMs: 15_000,
+    });
     const ips15mHistorySeries = buildWindowHistorySeries({
       values: state.historyIpsLong,
       windowMs: LONG_TREND_WINDOW_MINUTES * 60 * 1000,
@@ -2614,8 +2789,8 @@ async function main(): Promise<void> {
       stepMs: state.intervalMs,
     });
     const moduleIpsTrend = selectDisplaySeries({
-      primary: ips5mMetricSeries,
-      secondary: ips5mHistorySeries,
+      primary: ips5mHistorySeries,
+      secondary: ips5mMetricSeries,
       fallback: [
         Math.max(0, Number(status?.throughputImagesPerMinute || 0) / 60),
       ],
@@ -2623,8 +2798,8 @@ async function main(): Promise<void> {
       maxPoints: LONG_IPS_DISPLAY_POINT_MAX,
     });
     const longIpsTrend = selectDisplaySeries({
-      primary: ips15mMetricSeries,
-      secondary: ips15mHistorySeries,
+      primary: ips15mHistorySeries,
+      secondary: ips15mMetricSeries,
       fallback: moduleIpsTrend,
       targetPoints: longIpsDisplayLimit,
       maxPoints: LONG_IPS_DISPLAY_POINT_MAX,
@@ -2651,75 +2826,25 @@ async function main(): Promise<void> {
       plottedValues: moduleBacklogTrend,
       minMax: 1,
     });
-    const historyIpsNow =
-      state.historyIps.length > 0
-        ? state.historyIps[state.historyIps.length - 1] || 0
-        : 0;
-    const statusIpsNow = Math.max(
-      0,
-      readModuleMetricValue("statusThroughputImagesPerMinute", "w15s", "avg") /
-        60,
-    );
-    const projectionIpsNow =
-      projection.sampleCount > 0
-        ? Math.max(0, projection.headline.ipsSmoothedNow)
-        : 0;
-    const rollup15sIpsNow = Math.max(
-      0,
-      sliceValue("statusThroughputImagesPerMinute", "w15s", "avg") / 60,
-    );
-    const rollup1mIpsNow = Math.max(
-      0,
-      sliceValue("statusThroughputImagesPerMinute", "w1m", "avg") / 60,
-    );
-    const rollup15mIpsNow = Math.max(
-      0,
-      sliceValue("statusThroughputImagesPerMinute", "w15m", "avg") / 60,
-    );
-    const ipsNow = Math.max(
-      historyIpsNow,
-      projectionIpsNow,
-      statusIpsNow,
-      rollup15sIpsNow,
-      rollup1mIpsNow,
-      rollup15mIpsNow,
-    );
+    const rollup15sIpsNow = Math.max(0, throughputAverageForSlice("w15s").ips);
+    const ipsNow = Math.max(0, rollup15sIpsNow);
     const processed5m = readModuleMetricInt(
       "statusProcessedItems",
       "w15s",
-      "latest",
+      "sum",
     );
-    const failed5m = readModuleMetricInt("statusFailedItems", "w15s", "latest");
-    const ips5m = Math.max(
-      0,
-      statusIpsNow,
-      rollup15sIpsNow,
-      projectionIpsNow,
-      historyIpsNow,
-    );
-    const ipm5m = readModuleMetricValue(
-      "statusThroughputImagesPerMinute",
-      "w15s",
-      "avg",
-    );
+    const failed5m = readModuleMetricInt("statusFailedItems", "w15s", "sum");
+    const ips5m = Math.max(0, rollup15sIpsNow);
+    const ipm5m = throughputAverageForSlice("w15s").ipm;
     const completedJobs5m = readModuleMetricInt(
       "statusCompletedJobs",
       "w15s",
-      "latest",
+      "sum",
     );
-    const failedJobs5m = readModuleMetricInt(
-      "statusFailedJobs",
-      "w15s",
-      "latest",
-    );
+    const failedJobs5m = readModuleMetricInt("statusFailedJobs", "w15s", "sum");
     const secPerImageNow = ipsNow > 0 ? 1 / ipsNow : null;
-    const backlog = readModuleMetricInt("queueBacklogLive", "w15s", "latest");
-    const etaQueueEmptySeconds =
-      backlog === 0 ? 0 : ipsNow > 0 ? backlog / ipsNow : null;
-    const maxBacklog = Math.max(1, settings?.maxQueueBacklog ?? 1);
-    const backlogFillRatio = clamp(backlog / maxBacklog, 0, 1);
-    const queueWaiting = readModuleMetricInt(
-      "queueWaitingLive",
+    const queuePendingLive = readModuleMetricInt(
+      "queuePendingLive",
       "w15s",
       "latest",
     );
@@ -2728,18 +2853,13 @@ async function main(): Promise<void> {
       "w15s",
       "latest",
     );
-    const queueDelayed = readModuleMetricInt(
-      "queueDelayedLive",
-      "w15s",
-      "latest",
-    );
-    const queuePaused = readModuleMetricInt(
-      "queuePausedLive",
-      "w15s",
-      "latest",
-    );
-    const queuePendingNonActive = queueWaiting + queueDelayed + queuePaused;
-    const activeJobRatio = backlog > 0 ? queueActive / backlog : 0;
+    const queueInSystem = Math.max(0, queuePendingLive + queueActive);
+    const backlog = Math.max(0, queuePendingLive);
+    const etaQueueEmptySeconds =
+      queueInSystem === 0 ? 0 : ipsNow > 0 ? queueInSystem / ipsNow : null;
+    const maxBacklog = Math.max(1, settings?.maxQueueBacklog ?? 1);
+    const backlogFillRatio = clamp(backlog / maxBacklog, 0, 1);
+    const activeJobRatio = queueInSystem > 0 ? queueActive / queueInSystem : 0;
     const ipsLive = Math.max(0, rollup15sIpsNow);
     const ipsGaugeMax = Math.max(
       1,
@@ -2850,6 +2970,58 @@ async function main(): Promise<void> {
             !Number.isFinite(input.avgElapsedMs)
               ? "n/a"
               : String(Math.max(0, Math.round(input.avgElapsedMs))),
+        },
+      ];
+    };
+
+    const imageProcessingSliceFields = (sliceId: OpsMetricSliceId) => {
+      const throughput = throughputAverageForSlice(sliceId);
+      const ipm = throughput.ipm;
+      return imageProcessingFields({
+        ips: throughput.ips,
+        ipm,
+        processedItems: Math.round(processedItemsForSlice(sliceId)),
+        completedItems: Math.round(completedJobsForSlice(sliceId)),
+        failedItems: Math.round(failedItemsForSlice(sliceId)),
+        avgFetchMs: readModuleMetricValue("avgFetchMs", sliceId, "avg"),
+        avgTransformMs: readModuleMetricValue("avgTransformMs", sliceId, "avg"),
+        avgUploadMs: readModuleMetricValue("avgUploadMs", sliceId, "avg"),
+        avgElapsedMs: readModuleMetricValue("avgEndToEndMs", sliceId, "avg"),
+      });
+    };
+
+    const queueJobsFields = (
+      sliceId: OpsMetricSliceId,
+      mode: "state" | "change" = "change",
+    ) => {
+      const pendingValueType: OpsMetricSliceValueType =
+        mode === "state" ? "latest" : "delta";
+      const activeValueType: OpsMetricSliceValueType =
+        mode === "state" ? "latest" : "delta";
+      return [
+        {
+          label: UI_LABELS.queue.pending,
+          value: String(
+            readModuleMetricInt("queuePendingLive", sliceId, pendingValueType),
+          ),
+        },
+        {
+          label: UI_LABELS.queue.active,
+          value: String(
+            readModuleMetricInt("queueActiveLive", sliceId, activeValueType),
+          ),
+        },
+        {
+          label: UI_LABELS.queue.completed,
+          value: String(
+            readModuleMetricInt("statusCompletedJobs", sliceId, "sum"),
+          ),
+        },
+        {
+          label: UI_LABELS.queue.failed,
+          value: String(
+            readModuleMetricInt("statusFailedJobs", sliceId, "sum"),
+          ),
         },
       ];
     };
@@ -3017,6 +3189,13 @@ async function main(): Promise<void> {
           grid.panel(
             { title: "Database Completeness", colSpan: 2 },
             (panel) => {
+              const dbCollectorUpdatedAtMs = Number(
+                state.snapshotTrendLatestAtMsByName.dbProcessed || 0,
+              );
+              const dbCollectorUpdatedAt =
+                dbCollectorUpdatedAtMs > 0
+                  ? new Date(dbCollectorUpdatedAtMs).toISOString()
+                  : "n/a";
               panel.keyValues([
                 {
                   label: "processed",
@@ -3035,32 +3214,29 @@ async function main(): Promise<void> {
                   label: "progress",
                   value: `${(snapshot.db?.pct ?? 0).toFixed(2)}%`,
                 },
+                {
+                  label: "collector_updated_at",
+                  value: dbCollectorUpdatedAt,
+                },
               ]);
             },
           );
 
           grid.panel(
-            { title: "Image Processing (5m)", colSpan: 2 },
+            { title: "Image Processing (live 5s)", colSpan: 2 },
             (panel) => {
-              panel.keyValues(
-                imageProcessingFields({
-                  ips: Number(rollup15s?.ips ?? ips5m),
-                  ipm: Number(rollup15s?.ipm ?? ipm5m),
-                  processedItems: rollup15s?.processedItems ?? processed5m,
-                  completedItems: rollup15s?.completedJobs ?? null,
-                  failedItems: rollup15s?.failedItems ?? failed5m,
-                  avgFetchMs: rollup15s?.avgFetchMs ?? null,
-                  avgTransformMs: rollup15s?.avgTransformMs ?? null,
-                  avgUploadMs: rollup15s?.avgUploadMs ?? null,
-                  avgElapsedMs: rollup15s?.metricJobElapsedMsAvg ?? null,
-                }),
-              );
+              panel.keyValues(imageProcessingSliceFields("w15s"));
             },
           );
 
           grid.panel(
             {
-              title: `IPS Trend (${trendWindowMinutes}m) (0-${ipsTrendSharedMax.toFixed(1)})`,
+              ...formatChartLegendHeader({
+                label: `IPS Trend (${trendWindowMinutes}m)`,
+                low: 0,
+                high: ipsTrendSharedMax,
+                values: moduleIpsTrend.length > 0 ? moduleIpsTrend : [0],
+              }),
               colSpan: 2,
             },
             (panel) => {
@@ -3095,7 +3271,7 @@ async function main(): Promise<void> {
               },
               {
                 label: UI_LABELS.queue.pending,
-                value: String(queuePendingNonActive),
+                value: String(queuePendingLive),
               },
               { label: UI_LABELS.queue.active, value: String(queueActive) },
               {
@@ -3115,7 +3291,12 @@ async function main(): Promise<void> {
 
           grid.panel(
             {
-              title: `Queue Trend (${trendWindowMinutes}m) (${queueTrendRange.min.toFixed(1)}-${queueTrendMax.toFixed(1)})`,
+              ...formatChartLegendHeader({
+                label: `Queue Trend (${trendWindowMinutes}m)`,
+                low: queueTrendRange.min,
+                high: queueTrendMax,
+                values: moduleBacklogTrend,
+              }),
               colSpan: 2,
             },
             (panel) => {
@@ -3132,32 +3313,25 @@ async function main(): Promise<void> {
           grid.panel({ title: "Queue Size (live)", colSpan: 2 }, (panel) => {
             panel.gauge({
               value: backlogFillRatio,
-              label: `backlog_live ${backlog}`,
+              label: `pending_live ${backlog}`,
             });
           });
 
           grid.panel(
             { title: "Image Processing (15m)", colSpan: 2 },
             (panel) => {
-              panel.keyValues(
-                imageProcessingFields({
-                  ips: Number(rollup15m?.ips ?? 0),
-                  ipm: Number(rollup15m?.ipm ?? 0),
-                  processedItems: rollup15m?.processedItems ?? null,
-                  completedItems: rollup15m?.completedJobs ?? null,
-                  failedItems: rollup15m?.failedItems ?? null,
-                  avgFetchMs: rollup15m?.avgFetchMs ?? null,
-                  avgTransformMs: rollup15m?.avgTransformMs ?? null,
-                  avgUploadMs: rollup15m?.avgUploadMs ?? null,
-                  avgElapsedMs: rollup15m?.metricJobElapsedMsAvg ?? null,
-                }),
-              );
+              panel.keyValues(imageProcessingSliceFields("w15m"));
             },
           );
 
           grid.panel(
             {
-              title: `IPS Trend (${LONG_TREND_WINDOW_MINUTES}m) (0-${ipsTrendSharedMax.toFixed(1)})`,
+              ...formatChartLegendHeader({
+                label: `IPS Trend (${LONG_TREND_WINDOW_MINUTES}m)`,
+                low: 0,
+                high: ipsTrendSharedMax,
+                values: longIpsTrend.length > 0 ? longIpsTrend : [0],
+              }),
               colSpan: 4,
             },
             (panel) => {
@@ -3254,24 +3428,48 @@ async function main(): Promise<void> {
         60,
         LONG_IPS_DISPLAY_POINT_MAX,
       );
-      const ips60mSeries =
-        state.historyIps60m.length > 0
-          ? buildWindowHistorySeries({
-              values: state.historyIps60m,
-              windowMs: 60 * 60 * 1000,
-              targetPoints: ips60mDisplayPoints,
-              padMissingCoverage: true,
-            })
-          : moduleIpsTrend;
-      const ips24hSeries =
-        state.historyIps24h.length > 0
-          ? buildWindowHistorySeries({
-              values: state.historyIps24h,
-              windowMs: 24 * 60 * 60 * 1000,
-              targetPoints: ips24hDisplayPoints,
-              padMissingCoverage: true,
-            })
-          : longIpsTrend;
+      const ips60mSeries = selectDisplaySeries({
+        primary: buildIpsSeriesFromProcessedEventRows({
+          rows: processedEventRows,
+          nowMs,
+          lookbackWindowMs: 60 * 60 * 1000,
+          targetPoints: ips60mDisplayPoints,
+          rateWindowMs: 15_000,
+        }),
+        secondary:
+          state.historyIps60m.length > 0
+            ? buildWindowHistorySeries({
+                values: state.historyIps60m,
+                windowMs: 60 * 60 * 1000,
+                targetPoints: ips60mDisplayPoints,
+                padMissingCoverage: true,
+              })
+            : [],
+        fallback: moduleIpsTrend,
+        targetPoints: ips60mDisplayPoints,
+        maxPoints: LONG_IPS_DISPLAY_POINT_MAX,
+      });
+      const ips24hSeries = selectDisplaySeries({
+        primary: buildIpsSeriesFromProcessedEventRows({
+          rows: processedEventRows,
+          nowMs,
+          lookbackWindowMs: 24 * 60 * 60 * 1000,
+          targetPoints: ips24hDisplayPoints,
+          rateWindowMs: 15_000,
+        }),
+        secondary:
+          state.historyIps24h.length > 0
+            ? buildWindowHistorySeries({
+                values: state.historyIps24h,
+                windowMs: 24 * 60 * 60 * 1000,
+                targetPoints: ips24hDisplayPoints,
+                padMissingCoverage: true,
+              })
+            : [],
+        fallback: longIpsTrend,
+        targetPoints: ips24hDisplayPoints,
+        maxPoints: LONG_IPS_DISPLAY_POINT_MAX,
+      });
       const ipsProcessingTrendMax = lockYAxisMaxFromSeries({
         state,
         chartId: "processing.ipsTrendShared",
@@ -3283,43 +3481,12 @@ async function main(): Promise<void> {
         {
           columns: ["1fr", "1fr"],
           rows: [11],
+          size: 11,
           gap: 1,
         },
         (grid) => {
           grid.panel({ title: "Image Processing - live" }, (panel) => {
-            panel.keyValues(
-              imageProcessingFields({
-                ips: ipsLive,
-                ipm: ipsLive * 60,
-                processedItems: readModuleMetricInt(
-                  "statusProcessedItems",
-                  "w15s",
-                  "latest",
-                ),
-                completedItems: readModuleMetricInt(
-                  "statusCompletedJobs",
-                  "w15s",
-                  "latest",
-                ),
-                failedItems: readModuleMetricInt(
-                  "statusFailedItems",
-                  "w15s",
-                  "latest",
-                ),
-                avgFetchMs: readModuleMetricValue("avgFetchMs", "w15s", "avg"),
-                avgTransformMs: readModuleMetricValue(
-                  "avgTransformMs",
-                  "w15s",
-                  "avg",
-                ),
-                avgUploadMs: readModuleMetricValue("avgUploadMs", "w15s", "avg"),
-                avgElapsedMs: readModuleMetricValue(
-                  "avgEndToEndMs",
-                  "w15s",
-                  "avg",
-                ),
-              }),
-            );
+            panel.keyValues(imageProcessingSliceFields("w15s"));
           });
 
           grid.panel({ title: "Live IPS Gauge" }, (panel) => {
@@ -3335,87 +3502,28 @@ async function main(): Promise<void> {
         {
           columns: Array.from({ length: 5 }, () => "1fr"),
           rows: [11],
+          size: 11,
           gap: 1,
         },
         (grid) => {
           grid.panel({ title: "Image Processing - 15s" }, (panel) => {
-            panel.keyValues(
-              imageProcessingFields({
-                ips: Number(rollup15s?.ips || 0),
-                ipm: Number(rollup15s?.ipm || 0),
-                processedItems: rollup15s?.processedItems ?? null,
-                completedItems: rollup15s?.completedJobs ?? null,
-                failedItems: rollup15s?.failedItems ?? null,
-                avgFetchMs: rollup15s?.avgFetchMs ?? null,
-                avgTransformMs: rollup15s?.avgTransformMs ?? null,
-                avgUploadMs: rollup15s?.avgUploadMs ?? null,
-                avgElapsedMs: rollup15s?.metricJobElapsedMsAvg ?? null,
-              }),
-            );
+            panel.keyValues(imageProcessingSliceFields("w15s"));
           });
 
           grid.panel({ title: "Image Processing - 1m" }, (panel) => {
-            panel.keyValues(
-              imageProcessingFields({
-                ips: Number(rollup1m?.ips || 0),
-                ipm: Number(rollup1m?.ipm || 0),
-                processedItems: rollup1m?.processedItems ?? null,
-                completedItems: rollup1m?.completedJobs ?? null,
-                failedItems: rollup1m?.failedItems ?? null,
-                avgFetchMs: rollup1m?.avgFetchMs ?? null,
-                avgTransformMs: rollup1m?.avgTransformMs ?? null,
-                avgUploadMs: rollup1m?.avgUploadMs ?? null,
-                avgElapsedMs: rollup1m?.metricJobElapsedMsAvg ?? null,
-              }),
-            );
+            panel.keyValues(imageProcessingSliceFields("w1m"));
           });
 
           grid.panel({ title: "Image Processing - 15m" }, (panel) => {
-            panel.keyValues(
-              imageProcessingFields({
-                ips: Number(rollup15m?.ips || 0),
-                ipm: Number(rollup15m?.ipm || 0),
-                processedItems: rollup15m?.processedItems ?? null,
-                completedItems: rollup15m?.completedJobs ?? null,
-                failedItems: rollup15m?.failedItems ?? null,
-                avgFetchMs: rollup15m?.avgFetchMs ?? null,
-                avgTransformMs: rollup15m?.avgTransformMs ?? null,
-                avgUploadMs: rollup15m?.avgUploadMs ?? null,
-                avgElapsedMs: rollup15m?.metricJobElapsedMsAvg ?? null,
-              }),
-            );
+            panel.keyValues(imageProcessingSliceFields("w15m"));
           });
 
           grid.panel({ title: "Image Processing - 60m" }, (panel) => {
-            panel.keyValues(
-              imageProcessingFields({
-                ips: Number(rollup60m?.ips || 0),
-                ipm: Number(rollup60m?.ipm || 0),
-                processedItems: rollup60m?.processedItems ?? null,
-                completedItems: rollup60m?.completedJobs ?? null,
-                failedItems: rollup60m?.failedItems ?? null,
-                avgFetchMs: rollup60m?.avgFetchMs ?? null,
-                avgTransformMs: rollup60m?.avgTransformMs ?? null,
-                avgUploadMs: rollup60m?.avgUploadMs ?? null,
-                avgElapsedMs: rollup60m?.metricJobElapsedMsAvg ?? null,
-              }),
-            );
+            panel.keyValues(imageProcessingSliceFields("w60m"));
           });
 
           grid.panel({ title: "Image Processing - 24h" }, (panel) => {
-            panel.keyValues(
-              imageProcessingFields({
-                ips: Number(rollup24h?.ips || 0),
-                ipm: Number(rollup24h?.ipm || 0),
-                processedItems: rollup24h?.processedItems ?? null,
-                completedItems: rollup24h?.completedJobs ?? null,
-                failedItems: rollup24h?.failedItems ?? null,
-                avgFetchMs: rollup24h?.avgFetchMs ?? null,
-                avgTransformMs: rollup24h?.avgTransformMs ?? null,
-                avgUploadMs: rollup24h?.avgUploadMs ?? null,
-                avgElapsedMs: rollup24h?.metricJobElapsedMsAvg ?? null,
-              }),
-            );
+            panel.keyValues(imageProcessingSliceFields("w24h"));
           });
         },
       );
@@ -3424,11 +3532,19 @@ async function main(): Promise<void> {
         {
           columns: ["1fr", "1fr", "1fr"],
           rows: [10],
+          size: 10,
           gap: 1,
         },
         (grid) => {
           grid.panel(
-            { title: `IPS Trend 15m (0-${ipsProcessingTrendMax.toFixed(1)})` },
+            {
+              ...formatChartLegendHeader({
+                label: "IPS Trend 15m",
+                low: 0,
+                high: ipsProcessingTrendMax,
+                values: longIpsTrend.length > 0 ? longIpsTrend : [0],
+              }),
+            },
             (panel) => {
               panel.graph({
                 values: longIpsTrend.length > 0 ? longIpsTrend : [0],
@@ -3441,7 +3557,14 @@ async function main(): Promise<void> {
           );
 
           grid.panel(
-            { title: `IPS Trend 60m (0-${ipsProcessingTrendMax.toFixed(1)})` },
+            {
+              ...formatChartLegendHeader({
+                label: "IPS Trend 60m",
+                low: 0,
+                high: ipsProcessingTrendMax,
+                values: ips60mSeries.length > 0 ? ips60mSeries : [0],
+              }),
+            },
             (panel) => {
               panel.graph({
                 values: ips60mSeries.length > 0 ? ips60mSeries : [0],
@@ -3454,7 +3577,14 @@ async function main(): Promise<void> {
           );
 
           grid.panel(
-            { title: `IPS Trend 24h (0-${ipsProcessingTrendMax.toFixed(1)})` },
+            {
+              ...formatChartLegendHeader({
+                label: "IPS Trend 24h",
+                low: 0,
+                high: ipsProcessingTrendMax,
+                values: ips24hSeries.length > 0 ? ips24hSeries : [0],
+              }),
+            },
             (panel) => {
               panel.graph({
                 values: ips24hSeries.length > 0 ? ips24hSeries : [0],
@@ -3470,6 +3600,13 @@ async function main(): Promise<void> {
     }
 
     if (state.activeScreen === "queuejobs") {
+      const queuePendingLive5s = readModuleMetricInt(
+        "queuePendingLive",
+        "w5s",
+        "latest",
+      );
+      const backlogFillRatio5s = clamp(queuePendingLive5s / maxBacklog, 0, 1);
+      const queue15mLimit = trendPointLimitForWindow(15 * 60 * 1000);
       const queue60mLimit = trendPointLimitForWindow(60 * 60 * 1000);
       const queue24hLimit = clamp(
         trendPointLimitForWindow(24 * 60 * 60 * 1000),
@@ -3478,6 +3615,12 @@ async function main(): Promise<void> {
       );
       const queueBacklogRows =
         state.snapshot.trendRowsByMetric?.queueBacklogLive ?? [];
+      const queue15mMetricSeries = buildStableWindowSeriesFromRows({
+        rows: queueBacklogRows,
+        nowMs,
+        windowMs: 15 * 60 * 1000,
+        targetPoints: queue15mLimit,
+      });
       const queue60mMetricSeries = buildStableWindowSeriesFromRows({
         rows: queueBacklogRows,
         nowMs,
@@ -3491,189 +3634,93 @@ async function main(): Promise<void> {
         targetPoints: queue24hLimit,
       });
 
+      const queue15mSeries = queue15mMetricSeries;
       const queue60mSeries = queue60mMetricSeries;
       const queue24hSeries = queue24hMetricSeries;
-      const queue60mRange = chartRangeForSeries(queue60mSeries, {
-        forceZeroMin: true,
-        minSpan: 5,
-        minPad: 1,
-        padRatio: 0.08,
+      const queueTrendSharedMax = lockYAxisMaxFromSeries({
+        state,
+        chartId: "queuejobs.backlogTrendShared",
+        plottedValues: [
+          ...queue15mSeries,
+          ...queue60mSeries,
+          ...queue24hSeries,
+        ],
+        minMax: 1,
       });
-      const queue60mMax = Math.max(1, seriesMax(queue60mSeries));
-      const queue24hRange = chartRangeForSeries(queue24hSeries, {
-        forceZeroMin: true,
-        minSpan: 5,
-        minPad: 1,
-        padRatio: 0.08,
-      });
-      const queue24hMax = Math.max(1, seriesMax(queue24hSeries));
 
-      const queueCompletedLive = readModuleMetricInt(
-        "queueCompletedLive",
-        "w15s",
-        "latest",
-      );
-      const queueFailedLive = readModuleMetricInt(
-        "queueFailedLive",
-        "w15s",
-        "latest",
+      ui.grid(
+        {
+          columns: ["1fr", "1fr"],
+          rows: [8],
+          size: 8,
+          gap: 1,
+        },
+        (grid) => {
+          grid.panel({ title: "Queue & Jobs - live (5s)" }, (panel) => {
+            panel.keyValues(queueJobsFields("w5s", "state"));
+          });
+
+          grid.panel({ title: "Queue Size Gauge" }, (panel) => {
+            panel.gauge({
+              value: backlogFillRatio5s,
+              label: `pending_live ${queuePendingLive5s}`,
+            });
+          });
+        },
       );
 
-      const queueWindowAverages =
-        snapshot.queueWindowAverages ?? ZERO_QUEUE_WINDOW_AVERAGES;
-      const queue15sSummary = queueWindowAverages.w15s;
-      const queue1mSummary = queueWindowAverages.w1m;
-      const queue15mSummary = queueWindowAverages.w15m;
-      const queue60mSummary = queueWindowAverages.w60m;
-      const queue24hSummary = queueWindowAverages.w24h;
+      ui.grid(
+        {
+          columns: Array.from({ length: 5 }, () => "1fr"),
+          rows: [8],
+          size: 8,
+          gap: 1,
+        },
+        (grid) => {
+          grid.panel({ title: "Queue & Jobs - 15s" }, (panel) => {
+            panel.keyValues(queueJobsFields("w15s"));
+          });
+
+          grid.panel({ title: "Queue & Jobs - 1m" }, (panel) => {
+            panel.keyValues(queueJobsFields("w1m"));
+          });
+
+          grid.panel({ title: "Queue & Jobs - 15m" }, (panel) => {
+            panel.keyValues(queueJobsFields("w15m"));
+          });
+
+          grid.panel({ title: "Queue & Jobs - 60m" }, (panel) => {
+            panel.keyValues(queueJobsFields("w60m"));
+          });
+
+          grid.panel({ title: "Queue & Jobs - 24h" }, (panel) => {
+            panel.keyValues(queueJobsFields("w24h"));
+          });
+        },
+      );
 
       ui.grid(
         {
           columns: ["1fr", "1fr", "1fr"],
-          rows: [8, 8, 6, 10, 10],
+          rows: [10],
+          size: 10,
           gap: 1,
         },
         (grid) => {
-          grid.panel({ title: "Queue & Jobs - live" }, (panel) => {
-            panel.keyValues([
-              {
-                label: UI_LABELS.queue.pending,
-                value: String(queuePendingNonActive),
-              },
-              { label: UI_LABELS.queue.active, value: String(queueActive) },
-              {
-                label: UI_LABELS.queue.completed,
-                value: String(queueCompletedLive),
-              },
-              {
-                label: UI_LABELS.queue.failed,
-                value: String(queueFailedLive),
-              },
-            ]);
-          });
-
-          grid.panel({ title: "Queue & Jobs - 15s" }, (panel) => {
-            panel.keyValues([
-              {
-                label: UI_LABELS.queue.pending,
-                value: String(queue15sSummary.pending),
-              },
-              {
-                label: UI_LABELS.queue.active,
-                value: String(queue15sSummary.active),
-              },
-              {
-                label: UI_LABELS.queue.completed,
-                value: String(rollup15s?.completedJobs ?? 0),
-              },
-              {
-                label: UI_LABELS.queue.failed,
-                value: String(rollup15s?.failedJobs ?? 0),
-              },
-            ]);
-          });
-
-          grid.panel({ title: "Queue & Jobs - 1m" }, (panel) => {
-            panel.keyValues([
-              {
-                label: UI_LABELS.queue.pending,
-                value: String(queue1mSummary.pending),
-              },
-              {
-                label: UI_LABELS.queue.active,
-                value: String(queue1mSummary.active),
-              },
-              {
-                label: UI_LABELS.queue.completed,
-                value: String(rollup1m?.completedJobs ?? 0),
-              },
-              {
-                label: UI_LABELS.queue.failed,
-                value: String(rollup1m?.failedJobs ?? 0),
-              },
-            ]);
-          });
-
-          grid.panel({ title: "Queue & Jobs - 15m" }, (panel) => {
-            panel.keyValues([
-              {
-                label: UI_LABELS.queue.pending,
-                value: String(queue15mSummary.pending),
-              },
-              {
-                label: UI_LABELS.queue.active,
-                value: String(queue15mSummary.active),
-              },
-              {
-                label: UI_LABELS.queue.completed,
-                value: String(rollup15m?.completedJobs ?? 0),
-              },
-              {
-                label: UI_LABELS.queue.failed,
-                value: String(rollup15m?.failedJobs ?? 0),
-              },
-            ]);
-          });
-
-          grid.panel({ title: "Queue & Jobs - 60m" }, (panel) => {
-            panel.keyValues([
-              {
-                label: UI_LABELS.queue.pending,
-                value: String(queue60mSummary.pending),
-              },
-              {
-                label: UI_LABELS.queue.active,
-                value: String(queue60mSummary.active),
-              },
-              {
-                label: UI_LABELS.queue.completed,
-                value: String(rollup60m?.completedJobs ?? 0),
-              },
-              {
-                label: UI_LABELS.queue.failed,
-                value: String(rollup60m?.failedJobs ?? 0),
-              },
-            ]);
-          });
-
-          grid.panel({ title: "Queue & Jobs - 24h" }, (panel) => {
-            panel.keyValues([
-              {
-                label: UI_LABELS.queue.pending,
-                value: String(queue24hSummary.pending),
-              },
-              {
-                label: UI_LABELS.queue.active,
-                value: String(queue24hSummary.active),
-              },
-              {
-                label: UI_LABELS.queue.completed,
-                value: String(rollup24h?.completedJobs ?? 0),
-              },
-              {
-                label: UI_LABELS.queue.failed,
-                value: String(rollup24h?.failedJobs ?? 0),
-              },
-            ]);
-          });
-
-          grid.panel({ title: "Queue Size Gauge", colSpan: 3 }, (panel) => {
-            panel.gauge({
-              value: backlogFillRatio,
-              label: `backlog_live ${backlog}`,
-            });
-          });
-
           grid.panel(
             {
-              title: `Queue Trend 60m (${queue60mRange.min.toFixed(1)}-${queue60mMax.toFixed(1)})`,
-              colSpan: 3,
+              ...formatChartLegendHeader({
+                label: "Queue Trend 15m",
+                low: 0,
+                high: queueTrendSharedMax,
+                values: queue15mSeries.length > 0 ? queue15mSeries : [0],
+              }),
             },
             (panel) => {
               panel.graph({
-                values: queue60mSeries.length > 0 ? queue60mSeries : [0],
-                min: queue60mRange.min,
-                max: queue60mMax,
+                values: queue15mSeries.length > 0 ? queue15mSeries : [0],
+                min: 0,
+                max: queueTrendSharedMax,
                 axis: false,
                 color:
                   state.metricReferenceErrors.length > 0
@@ -3685,14 +3732,41 @@ async function main(): Promise<void> {
 
           grid.panel(
             {
-              title: `Queue Trend 24h (${queue24hRange.min.toFixed(1)}-${queue24hMax.toFixed(1)})`,
-              colSpan: 3,
+              ...formatChartLegendHeader({
+                label: "Queue Trend 60m",
+                low: 0,
+                high: queueTrendSharedMax,
+                values: queue60mSeries.length > 0 ? queue60mSeries : [0],
+              }),
+            },
+            (panel) => {
+              panel.graph({
+                values: queue60mSeries.length > 0 ? queue60mSeries : [0],
+                min: 0,
+                max: queueTrendSharedMax,
+                axis: false,
+                color:
+                  state.metricReferenceErrors.length > 0
+                    ? theme.danger
+                    : theme.warning,
+              });
+            },
+          );
+
+          grid.panel(
+            {
+              ...formatChartLegendHeader({
+                label: "Queue Trend 24h",
+                low: 0,
+                high: queueTrendSharedMax,
+                values: queue24hSeries.length > 0 ? queue24hSeries : [0],
+              }),
             },
             (panel) => {
               panel.graph({
                 values: queue24hSeries.length > 0 ? queue24hSeries : [0],
-                min: queue24hRange.min,
-                max: queue24hMax,
+                min: 0,
+                max: queueTrendSharedMax,
                 axis: false,
                 color:
                   state.metricReferenceErrors.length > 0
@@ -3939,23 +4013,33 @@ async function main(): Promise<void> {
             ]);
           });
 
-          grid.panel({ title: "Workers Running Trend (5m)" }, (panel) => {
-            panel.graph({
-              values: workersTrend,
-              min: 0,
-              max: workersTrendMax,
-              axis: false,
-              color: theme.info,
-            });
-            panel.statusBar({
-              items: [{ label: "■ workers_running", color: theme.info }],
-              right: [
-                { label: `live ${telemetry.liveWorkersRunning}` },
-                { label: `y:0-${workersTrendMax.toFixed(1)}` },
-              ],
-              keyStyle: "plain",
-            });
-          });
+          grid.panel(
+            {
+              ...formatChartLegendHeader({
+                label: "Workers Running Trend (5m)",
+                low: 0,
+                high: workersTrendMax,
+                values: workersTrend,
+              }),
+            },
+            (panel) => {
+              panel.graph({
+                values: workersTrend,
+                min: 0,
+                max: workersTrendMax,
+                axis: false,
+                color: theme.info,
+              });
+              panel.statusBar({
+                items: [{ label: "■ workers_running", color: theme.info }],
+                right: [
+                  { label: `live ${telemetry.liveWorkersRunning}` },
+                  { label: `y:0-${workersTrendMax.toFixed(1)}` },
+                ],
+                keyStyle: "plain",
+              });
+            },
+          );
 
           grid.panel({ title: "Infra: Redis Aggregate" }, (panel) => {
             panel.keyValues([
@@ -4009,7 +4093,12 @@ async function main(): Promise<void> {
 
           grid.panel(
             {
-              title: `Infra: Redis Wire Trend (Kbps 0-${redisTrendMax.toFixed(1)})`,
+              ...formatChartLegendHeader({
+                label: "Infra: Redis Wire Trend (Kbps)",
+                low: 0,
+                high: redisTrendMax,
+                values: redisTotalSeries,
+              }),
             },
             (panel) => {
               panel.multiGraph(
@@ -5056,6 +5145,13 @@ async function main(): Promise<void> {
           }
         },
       );
+    }
+
+    if (
+      state.activeScreen === "processing" ||
+      state.activeScreen === "queuejobs"
+    ) {
+      ui.spacer("1fr");
     }
 
     ui.statusBar({

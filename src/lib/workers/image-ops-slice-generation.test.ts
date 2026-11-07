@@ -117,6 +117,7 @@ describe("image ops slice generation", () => {
         ],
       },
       windowMsById: {
+        w5s: 5_000,
         w15s: 15_000,
         w1m: 60_000,
         w15m: 900_000,
@@ -196,6 +197,7 @@ describe("image ops slice generation", () => {
         ],
       },
       windowMsById: {
+        w5s: 5_000,
         w15s: 15_000,
         w1m: 60_000,
         w15m: 900_000,
@@ -224,6 +226,7 @@ describe("image ops slice generation", () => {
         queuePausedLive: [{ atMs: nowMs - 10_000_000, value: 3 }],
       },
       windowMsById: {
+        w5s: 5_000,
         w15s: 15_000,
         w1m: 60_000,
         w15m: 900_000,
@@ -237,9 +240,13 @@ describe("image ops slice generation", () => {
     expect(cache.queuePausedLive.w15s.high).toBe(0);
     expect(cache.queuePausedLive.w15s.avg).toBe(0);
     expect(cache.queuePausedLive.w15s.latest).toBe(0);
+    expect(cache.queuePausedLive.w15m.low).toBe(3);
+    expect(cache.queuePausedLive.w15m.high).toBe(3);
+    expect(cache.queuePausedLive.w15m.avg).toBe(3);
+    expect(cache.queuePausedLive.w15m.latest).toBe(3);
   });
 
-  it("returns zero for non-live metrics when window has no samples", () => {
+  it("carries latest non-live metric when window has no in-range samples", () => {
     const nowMs = 5_000_000;
     const cache = buildMetricSliceCacheFromTrendRows({
       nowMs,
@@ -259,9 +266,9 @@ describe("image ops slice generation", () => {
       },
     });
 
-    expect(cache.statusThroughputImagesPerMinute.w15s.low).toBe(0);
-    expect(cache.statusThroughputImagesPerMinute.w15s.high).toBe(0);
-    expect(cache.statusThroughputImagesPerMinute.w15s.avg).toBe(0);
-    expect(cache.statusThroughputImagesPerMinute.w15s.latest).toBe(0);
+    expect(cache.statusThroughputImagesPerMinute.w15s.low).toBe(3);
+    expect(cache.statusThroughputImagesPerMinute.w15s.high).toBe(3);
+    expect(cache.statusThroughputImagesPerMinute.w15s.avg).toBe(3);
+    expect(cache.statusThroughputImagesPerMinute.w15s.latest).toBe(3);
   });
 });
