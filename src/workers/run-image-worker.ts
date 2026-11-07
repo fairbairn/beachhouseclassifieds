@@ -393,7 +393,12 @@ async function run(): Promise<void> {
     progress.warn(`shutdown signal=${signal} ${formatCounters()}`);
     await worker.close().catch(() => undefined);
     await connection.quit().catch(() => undefined);
-    process.exit(130);
+    const interactiveCancel =
+      signal === "SIGINT" &&
+      Boolean(process.stdin.isTTY) &&
+      Boolean(process.stdout.isTTY);
+    const exitCode = interactiveCancel ? 130 : 0;
+    process.exit(exitCode);
   };
 
   process.on("SIGINT", () => {

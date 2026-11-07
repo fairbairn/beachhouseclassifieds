@@ -1,5 +1,24 @@
 # BullMQ Observability and Collector Recommendations
 
+Status: active
+Last updated: 2026-11-06
+
+## Recent Decisions (2026-11-06)
+
+1. Counter windows and throughput now follow strict event-sum semantics.
+2. Historical seed for completed-job-derived metrics is limited to the trailing 24h.
+3. Seed and live writes use stable sample identifiers to support idempotent append behavior.
+4. Completed/failed queue metrics are interpreted as counter/event series in slices.
+5. Pending/active queue metrics remain gauge/state series in slices.
+6. Completion wait behavior uses a progress-aware idle timeout, not a fixed wall-clock timeout.
+
+## Latency Interpretation Update
+
+1. `transform_elapsed_ms` in payload items is measured around Sharp execution and reflects wall time under runtime contention.
+2. Large source dimensions materially increase transform cost, especially when combined with a high-quality transform profile.
+3. Shared Fly CPU contention can inflate wall time substantially compared to single-item local runs.
+4. Operationally, treat high `transform_ms` as a combination of workload shape (source size/profile) and scheduling contention, not as a metric pipeline defect.
+
 ## Why this exists
 
 We need collector behavior based on observed BullMQ runtime facts, not assumptions.

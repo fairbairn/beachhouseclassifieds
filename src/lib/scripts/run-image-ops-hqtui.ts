@@ -15,6 +15,7 @@ import {
   OPS_UI_METRIC_LABELS,
   pauseOpsSystemFlow,
   readOpsMetricSliceValue,
+  readOpsQueuePausedState,
   readOpsRedisIoStats,
   readOpsRedisPreflight,
   readOpsRedisServerIoStats,
@@ -355,13 +356,11 @@ function commandMenuItems(
       id: "action:pause-system",
       label: "Pause system flow",
       hint: isPaused ? "already paused" : "pause queue + disable enqueue",
-      disabled: isPaused,
     },
     {
       id: "action:resume-system",
       label: "Resume system flow",
       hint: isPaused ? "resume queue + enable enqueue" : "already running",
-      disabled: !isPaused,
     },
     {
       id: "action:clear-queue",
@@ -632,9 +631,15 @@ function formatDuration(seconds: number | null): string {
   }
 
   const totalSeconds = Math.floor(seconds);
+  const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const secs = totalSeconds % 60;
+
+  if (days > 0) {
+    const remHours = Math.floor((totalSeconds % 86400) / 3600);
+    return `${days}d ${remHours}h ${minutes}m`;
+  }
 
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
@@ -1410,6 +1415,7 @@ async function main(): Promise<void> {
         return;
       }
       const previous = state.snapshot;
+      const bullmqPausedNow = await readOpsQueuePausedState().catch(() => null);
       const merged: DashboardSnapshot = {
         ...snapshot,
         machines: snapshot.machines ?? previous.machines,
@@ -1421,7 +1427,7 @@ async function main(): Promise<void> {
         metricSlices: snapshot.metricSlices ?? previous.metricSlices,
         queueWindowAverages:
           snapshot.queueWindowAverages ?? previous.queueWindowAverages,
-        queuePaused: snapshot.queuePaused ?? previous.queuePaused,
+        queuePaused: bullmqPausedNow,
         db: snapshot.db ?? previous.db,
         settings: snapshot.settings ?? previous.settings,
         infra: snapshot.infra ?? previous.infra,
@@ -1700,7 +1706,7 @@ async function main(): Promise<void> {
         state.redisIoAggregate = merged.redisIoAggregate;
       }
       state.redisIoInstances = merged.redisIoInstances ?? [];
-      state.queueGloballyPaused = merged.queuePaused;
+      state.queueGloballyPaused = bullmqPausedNow;
 
       if (state.lastRedisSampleAtMs !== null) {
         const elapsedSeconds = Math.max(
@@ -2002,12 +2008,14 @@ async function main(): Promise<void> {
     }
 
     if (lower === "pause" || lower === "pause-system") {
-      if (state.queueGloballyPaused) {
-        state.notice = "system already paused";
-        app.invalidate();
-        return;
-      }
       try {
+        const pausedNow = await readOpsQueuePausedState().catch(() => null);
+        if (pausedNow === true) {
+          state.queueGloballyPaused = true;
+          state.notice = "system already paused";
+          app.invalidate();
+          return;
+        }
         const result = await pauseOpsSystemFlow();
         state.queueGloballyPaused = result.queuePaused;
         state.notice =
@@ -2025,12 +2033,14 @@ async function main(): Promise<void> {
     }
 
     if (lower === "resume" || lower === "resume-system") {
-      if (state.queueGloballyPaused === false) {
-        state.notice = "system already running";
-        app.invalidate();
-        return;
-      }
       try {
+        const pausedNow = await readOpsQueuePausedState().catch(() => null);
+        if (pausedNow === false) {
+          state.queueGloballyPaused = false;
+          state.notice = "system already running";
+          app.invalidate();
+          return;
+        }
         const result = await resumeOpsSystemFlow();
         state.queueGloballyPaused = result.queuePaused;
         state.notice =
@@ -2551,20 +2561,22 @@ async function main(): Promise<void> {
     }
 
     if (event.key === "p") {
-      if (state.queueGloballyPaused === null) {
-        state.notice = "pause/resume unavailable: queue pause state unknown";
+      void (async () => {
+        const pausedNow = await readOpsQueuePausedState().catch(() => null);
+        if (pausedNow === null) {
+          state.notice = "pause/resume unavailable: queue pause state unknown";
+          app.invalidate();
+          return;
+        }
+        state.queueGloballyPaused = pausedNow;
+        const command = pausedNow ? "resume-system" : "pause-system";
+        state.notice =
+          command === "resume-system"
+            ? "resuming system flow"
+            : "pausing system flow";
         app.invalidate();
-        return;
-      }
-      const command = state.queueGloballyPaused
-        ? "resume-system"
-        : "pause-system";
-      state.notice =
-        command === "resume-system"
-          ? "resuming system flow"
-          : "pausing system flow";
-      app.invalidate();
-      void executePromptCommand(command);
+        await executePromptCommand(command);
+      })();
       return;
     }
 
@@ -2688,6 +2700,45 @@ async function main(): Promise<void> {
         sliceValue("statusFailedJobs", sliceId, "sum"),
       );
       return Math.max(statusItemAvg, statusJobAvg);
+    };
+    const sliceWindowMs = (sliceId: OpsMetricSliceId): number =>
+      Math.max(1000, sliceWindowSeconds(sliceId) * 1000);
+    const snapshotAnchorMs = Number.isFinite(Date.parse(snapshot.at || ""))
+      ? Date.parse(snapshot.at || "")
+      : Date.now();
+    const strictWindowRows = (
+      metricName: string,
+      sliceId: OpsMetricSliceId,
+    ): Array<{ atMs: number; value: number }> => {
+      const nowMsLocal = snapshotAnchorMs;
+      const startMs = nowMsLocal - sliceWindowMs(sliceId);
+      const rows = snapshot.trendRowsByMetric?.[metricName] ?? [];
+      return rows
+        .map((row) => ({ atMs: Number(row.atMs), value: Number(row.value) }))
+        .filter(
+          (row) =>
+            Number.isFinite(row.atMs) &&
+            Number.isFinite(row.value) &&
+            row.atMs >= startMs &&
+            row.atMs <= nowMsLocal,
+        );
+    };
+    const latestSampleAgeSeconds = (metricName: string): number | null => {
+      const rows = snapshot.trendRowsByMetric?.[metricName] ?? [];
+      if (rows.length <= 0) {
+        return null;
+      }
+      let latestAtMs = 0;
+      for (const row of rows) {
+        const atMs = Number(row.atMs);
+        if (Number.isFinite(atMs) && atMs > latestAtMs) {
+          latestAtMs = atMs;
+        }
+      }
+      if (latestAtMs <= 0) {
+        return null;
+      }
+      return Math.max(0, (Date.now() - latestAtMs) / 1000);
     };
     const buildSliceRollupView = (sliceId: OpsMetricSliceId) => {
       const throughput = throughputAverageForSlice(sliceId);
@@ -2826,16 +2877,17 @@ async function main(): Promise<void> {
       plottedValues: moduleBacklogTrend,
       minMax: 1,
     });
-    const rollup15sIpsNow = Math.max(0, throughputAverageForSlice("w15s").ips);
-    const ipsNow = Math.max(0, rollup15sIpsNow);
+    const liveIpsFrom15s = Math.max(0, throughputAverageForSlice("w15s").ips);
+    const liveIpmFrom15s = Math.max(0, throughputAverageForSlice("w15s").ipm);
+    const ipsNow = Math.max(0, liveIpsFrom15s);
     const processed5m = readModuleMetricInt(
       "statusProcessedItems",
       "w15s",
       "sum",
     );
     const failed5m = readModuleMetricInt("statusFailedItems", "w15s", "sum");
-    const ips5m = Math.max(0, rollup15sIpsNow);
-    const ipm5m = throughputAverageForSlice("w15s").ipm;
+    const ips5m = Math.max(0, liveIpsFrom15s);
+    const ipm5m = Math.max(0, liveIpmFrom15s);
     const completedJobs5m = readModuleMetricInt(
       "statusCompletedJobs",
       "w15s",
@@ -2857,10 +2909,13 @@ async function main(): Promise<void> {
     const backlog = Math.max(0, queuePendingLive);
     const etaQueueEmptySeconds =
       queueInSystem === 0 ? 0 : ipsNow > 0 ? queueInSystem / ipsNow : null;
+    const dbPending = Math.max(0, Number(snapshot.db?.pending ?? 0));
+    const etaDbCompleteSeconds =
+      dbPending === 0 ? 0 : ipsNow > 0 ? dbPending / ipsNow : null;
     const maxBacklog = Math.max(1, settings?.maxQueueBacklog ?? 1);
     const backlogFillRatio = clamp(backlog / maxBacklog, 0, 1);
     const activeJobRatio = queueInSystem > 0 ? queueActive / queueInSystem : 0;
-    const ipsLive = Math.max(0, rollup15sIpsNow);
+    const ipsLive = Math.max(0, liveIpsFrom15s);
     const ipsGaugeMax = Math.max(
       1,
       ipsLive,
@@ -2975,19 +3030,69 @@ async function main(): Promise<void> {
     };
 
     const imageProcessingSliceFields = (sliceId: OpsMetricSliceId) => {
-      const throughput = throughputAverageForSlice(sliceId);
-      const ipm = throughput.ipm;
-      return imageProcessingFields({
-        ips: throughput.ips,
-        ipm,
-        processedItems: Math.round(processedItemsForSlice(sliceId)),
-        completedItems: Math.round(completedJobsForSlice(sliceId)),
-        failedItems: Math.round(failedItemsForSlice(sliceId)),
-        avgFetchMs: readModuleMetricValue("avgFetchMs", sliceId, "avg"),
-        avgTransformMs: readModuleMetricValue("avgTransformMs", sliceId, "avg"),
-        avgUploadMs: readModuleMetricValue("avgUploadMs", sliceId, "avg"),
-        avgElapsedMs: readModuleMetricValue("avgEndToEndMs", sliceId, "avg"),
+      const latestLatencyAgeSeconds = latestSampleAgeSeconds("avgEndToEndMs");
+      const latestJobAgeSeconds = latestSampleAgeSeconds("statusCompletedJobs");
+      const rollup = buildSliceRollupView(sliceId);
+      const rollup15s = buildSliceRollupView("w15s");
+      const liveWindowFallbackMaxAgeSeconds = 20;
+      const canUseLiveFallback =
+        sliceId === "w5s" &&
+        rollup.ips <= 0 &&
+        rollup.processedItems <= 0 &&
+        rollup.completedJobs <= 0 &&
+        rollup.failedItems <= 0 &&
+        rollup15s.ips > 0 &&
+        latestJobAgeSeconds !== null &&
+        latestJobAgeSeconds <= liveWindowFallbackMaxAgeSeconds;
+      const effectiveSliceId: OpsMetricSliceId = canUseLiveFallback
+        ? "w15s"
+        : sliceId;
+      const effectiveRollup = canUseLiveFallback ? rollup15s : rollup;
+      const latencySampleCount = strictWindowRows(
+        "avgEndToEndMs",
+        effectiveSliceId,
+      ).length;
+      const fields = imageProcessingFields({
+        ips: effectiveRollup.ips,
+        ipm: effectiveRollup.ipm,
+        processedItems: Math.round(effectiveRollup.processedItems),
+        completedItems: Math.round(effectiveRollup.completedJobs),
+        failedItems: Math.round(effectiveRollup.failedItems),
+        avgFetchMs:
+          latencySampleCount > 0
+            ? Math.max(0, effectiveRollup.avgFetchMs)
+            : null,
+        avgTransformMs:
+          latencySampleCount > 0
+            ? Math.max(0, effectiveRollup.avgTransformMs)
+            : null,
+        avgUploadMs:
+          latencySampleCount > 0
+            ? Math.max(0, effectiveRollup.avgUploadMs)
+            : null,
+        avgElapsedMs:
+          latencySampleCount > 0
+            ? Math.max(0, effectiveRollup.avgEndToEndMs)
+            : null,
       });
+      fields.push(
+        {
+          label: "latency_samples",
+          value: String(Math.max(0, latencySampleCount)),
+        },
+        {
+          label: "latency_last_age",
+          value: formatDuration(latestLatencyAgeSeconds),
+        },
+        {
+          label: "jobs_last_age",
+          value: formatDuration(latestJobAgeSeconds),
+        },
+      );
+      if (canUseLiveFallback) {
+        fields.push({ label: "window_source", value: "w15s_fallback" });
+      }
+      return fields;
     };
 
     const queueJobsFields = (
@@ -3097,6 +3202,10 @@ async function main(): Promise<void> {
                 value: `${(snapshot.db?.pct ?? 0).toFixed(2)}%`,
               },
               {
+                label: "eta_db_complete",
+                value: formatDuration(etaDbCompleteSeconds),
+              },
+              {
                 label: "queue_flow",
                 value: queueFlowStateLabel,
                 color:
@@ -3203,7 +3312,7 @@ async function main(): Promise<void> {
                 },
                 {
                   label: "pending",
-                  value: String(snapshot.db?.pending ?? 0),
+                  value: String(dbPending),
                 },
                 {
                   label: "failed",
@@ -3213,6 +3322,10 @@ async function main(): Promise<void> {
                 {
                   label: "progress",
                   value: `${(snapshot.db?.pct ?? 0).toFixed(2)}%`,
+                },
+                {
+                  label: "eta_at_live_ips",
+                  value: formatDuration(etaDbCompleteSeconds),
                 },
                 {
                   label: "collector_updated_at",
@@ -3225,7 +3338,7 @@ async function main(): Promise<void> {
           grid.panel(
             { title: "Image Processing (live 5s)", colSpan: 2 },
             (panel) => {
-              panel.keyValues(imageProcessingSliceFields("w15s"));
+              panel.keyValues(imageProcessingSliceFields("w5s"));
             },
           );
 
@@ -3486,7 +3599,7 @@ async function main(): Promise<void> {
         },
         (grid) => {
           grid.panel({ title: "Image Processing - live" }, (panel) => {
-            panel.keyValues(imageProcessingSliceFields("w15s"));
+            panel.keyValues(imageProcessingSliceFields("w5s"));
           });
 
           grid.panel({ title: "Live IPS Gauge" }, (panel) => {
@@ -4487,6 +4600,19 @@ async function main(): Promise<void> {
           label: "db_pct",
           value: formatTrackedValue(
             readModuleMetricValue("dbProgressPct", "w15s", "avg"),
+          ),
+        },
+        {
+          label: "db_eta_at_live_ips",
+          value: formatDuration(
+            (() => {
+              const pending = Math.max(
+                0,
+                readModuleMetricInt("dbPending", "w15s", "latest"),
+              );
+              const liveIps = Math.max(0, liveIpsFrom15s);
+              return pending === 0 ? 0 : liveIps > 0 ? pending / liveIps : null;
+            })(),
           ),
         },
       ];

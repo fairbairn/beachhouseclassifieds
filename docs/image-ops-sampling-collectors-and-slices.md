@@ -1,7 +1,28 @@
 # Image Ops Sampling, Collectors, Slices, and Timing
 
 Status: active
-Last updated: 2026-11-05
+Last updated: 2026-11-06
+
+## Recent Metric Modifications (2026-11-06)
+
+1. Status throughput semantics are event-sum based.
+2. Throughput for a window is computed from count sums over the window duration, not from latest snapshots.
+3. Queue gauge and counter families are split by behavior:
+4. `queuePendingLive` and `queueActiveLive` are treated as gauge-like state.
+5. `queueCompletedLive` and `queueFailedLive` are treated as counter-like event streams.
+6. BullMQ historical seeding is bounded to the most recent 24 hours to reduce startup cost and stale history effects.
+7. BullMQ seed/live writes use stable sample IDs for idempotent ingestion and collision resistance.
+8. Latency status metrics (`avgFetchMs`, `avgTransformMs`, `avgUploadMs`, `avgEndToEndMs`) are derived from completed job payload item timings.
+9. Mixed-source latency writes were intentionally avoided so one source owns these `_ms` metrics at a time.
+10. Completion waiting moved to a progress-aware idle watchdog to avoid false runner aborts during long active cycles.
+
+## Semantics Checklist (Operator Facing)
+
+1. Counter/event windows: use `sum` as the canonical window value.
+2. Throughput windows: derive IPS/IPM from summed processed events and window length.
+3. Gauge/state windows: use `avg` and `latest` for occupancy interpretation.
+4. Do not infer throughput from queue depth gauges.
+5. Treat `_ms` latency fields as completed-work payload metrics, not queue state metrics.
 
 ## Ingestion Model
 

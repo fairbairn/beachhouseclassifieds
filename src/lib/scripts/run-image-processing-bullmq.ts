@@ -86,6 +86,11 @@ type RunnerReport = {
   jobs: ReportBatchRow[];
 };
 
+type HarvestBudget = {
+  maxJobs?: number;
+  maxMs?: number;
+};
+
 function parsePositiveInt(
   rawValue: string | undefined,
   fallback: number,
@@ -980,8 +985,7 @@ async function main(): Promise<void> {
           const queueResult = results[0];
           const snapshot =
             queueResult.status === "fulfilled" ? queueResult.value : null;
-          const pendingWriteback =
-            pendingCompletedEventJobIds.size + pendingFailedEventJobIds.size;
+          const pendingWriteback = pendingWritebackCount();
           if (snapshot) {
             progress.progress(
               `heartbeat backlog=${snapshot.backlog} waiting=${snapshot.waiting} active=${snapshot.active} workers=${workersRunning} processed=${report.processed_items} failed_items=${report.failed_items} pending_writeback=${pendingWriteback}`,
@@ -1018,12 +1022,36 @@ async function main(): Promise<void> {
   const pendingCompletedEventJobIds = new Set<string>();
   const pendingFailedEventJobIds = new Set<string>();
   const handledEventJobIds = new Set<string>();
+  const eventWritebackIntervalMs = clampInt(
+    Number(process.env.IMAGE_WRITEBACK_INTERVAL_MS || 1000),
+    250,
+    10_000,
+  );
+  const eventWritebackBackpressureThreshold = clampInt(
+    Number(process.env.IMAGE_WRITEBACK_BACKPRESSURE_THRESHOLD || 250),
+    25,
+    10_000,
+  );
+  const eventWritebackInspectChunkSize = clampInt(
+    Number(process.env.IMAGE_WRITEBACK_INSPECT_CHUNK_SIZE || 50),
+    10,
+    250,
+  );
   let eventWritebackBatchCount = 0;
   const enableEventSweepFallback =
     String(process.env.IMAGE_WRITEBACK_EVENT_SWEEP || "")
       .trim()
       .toLowerCase() === "true";
   let lastEnqueueGateOpen: boolean | null = null;
+
+  const pendingWritebackCount = (): number =>
+    pendingCompletedEventJobIds.size + pendingFailedEventJobIds.size;
+
+  const markEventJobHandled = (jobId: string): void => {
+    handledEventJobIds.add(jobId);
+    pendingCompletedEventJobIds.delete(jobId);
+    pendingFailedEventJobIds.delete(jobId);
+  };
 
   const onCompletedEvent = (event: { jobId: string }): void => {
     const jobId = String(event?.jobId || "");
@@ -1032,7 +1060,7 @@ async function main(): Promise<void> {
     }
     pendingCompletedEventJobIds.add(jobId);
     progress.info(
-      `completion_detected state=completed job_id=${jobId} pending_writeback=${pendingCompletedEventJobIds.size + pendingFailedEventJobIds.size}`,
+      `completion_detected state=completed job_id=${jobId} pending_writeback=${pendingWritebackCount()}`,
     );
   };
 
@@ -1043,7 +1071,7 @@ async function main(): Promise<void> {
     }
     pendingFailedEventJobIds.add(jobId);
     progress.info(
-      `completion_detected state=failed job_id=${jobId} pending_writeback=${pendingCompletedEventJobIds.size + pendingFailedEventJobIds.size}`,
+      `completion_detected state=failed job_id=${jobId} pending_writeback=${pendingWritebackCount()}`,
     );
   };
 
@@ -1095,7 +1123,7 @@ async function main(): Promise<void> {
     let candidateIds = [
       ...pendingCompletedEventJobIds,
       ...pendingFailedEventJobIds,
-    ].filter((jobId) => !handledEventJobIds.has(jobId));
+    ];
 
     if (enableEventSweepFallback && candidateIds.length === 0) {
       await sweepRecentFinalizedJobsForWriteback(reason).catch(
@@ -1110,7 +1138,7 @@ async function main(): Promise<void> {
       candidateIds = [
         ...pendingCompletedEventJobIds,
         ...pendingFailedEventJobIds,
-      ].filter((jobId) => !handledEventJobIds.has(jobId));
+      ];
     }
 
     if (candidateIds.length === 0) {
@@ -1120,35 +1148,66 @@ async function main(): Promise<void> {
     const successItems: ImageProcessingItemResult[] = [];
     const failedItems: ImageProcessingTaskError[] = [];
 
-    for (const jobId of candidateIds) {
-      const job = await readOpsQueueJobById(queue, jobId);
-      if (!job) {
-        handledEventJobIds.add(jobId);
-        continue;
-      }
+    for (
+      let candidateIndex = 0;
+      candidateIndex < candidateIds.length;
+      candidateIndex += eventWritebackInspectChunkSize
+    ) {
+      const candidateChunk = candidateIds.slice(
+        candidateIndex,
+        candidateIndex + eventWritebackInspectChunkSize,
+      );
 
-      const state = await job.getState();
-      if (state === "completed") {
-        const result = (job.returnvalue || {}) as {
-          items?: ImageProcessingItemResult[];
-          errors?: ImageProcessingTaskError[];
-        };
-        const items = Array.isArray(result.items) ? result.items : [];
-        const errors = Array.isArray(result.errors) ? result.errors : [];
-        successItems.push(...items);
-        failedItems.push(...errors);
-        handledEventJobIds.add(jobId);
-        continue;
-      }
+      const chunkRows = await Promise.all(
+        candidateChunk.map(async (jobId) => {
+          if (handledEventJobIds.has(jobId)) {
+            markEventJobHandled(jobId);
+            return null;
+          }
 
-      if (state === "failed") {
-        failedItems.push({
-          work_id: String(job.data?.workId || ""),
-          source_image_url: String(job.data?.sourceImageUrl || ""),
-          code: "worker_error",
-          message: String(job.failedReason || "job failed without reason"),
-        });
-        handledEventJobIds.add(jobId);
+          const job = await readOpsQueueJobById(queue, jobId);
+          if (!job) {
+            markEventJobHandled(jobId);
+            return null;
+          }
+
+          const state = await job.getState();
+          return {
+            jobId,
+            state,
+            job,
+          };
+        }),
+      );
+
+      for (const row of chunkRows) {
+        if (!row) {
+          continue;
+        }
+
+        const { jobId, state, job } = row;
+        if (state === "completed") {
+          const result = (job.returnvalue || {}) as {
+            items?: ImageProcessingItemResult[];
+            errors?: ImageProcessingTaskError[];
+          };
+          const items = Array.isArray(result.items) ? result.items : [];
+          const errors = Array.isArray(result.errors) ? result.errors : [];
+          successItems.push(...items);
+          failedItems.push(...errors);
+          markEventJobHandled(jobId);
+          continue;
+        }
+
+        if (state === "failed") {
+          failedItems.push({
+            work_id: String(job.data?.workId || ""),
+            source_image_url: String(job.data?.sourceImageUrl || ""),
+            code: "worker_error",
+            message: String(job.failedReason || "job failed without reason"),
+          });
+          markEventJobHandled(jobId);
+        }
       }
     }
 
@@ -1207,6 +1266,24 @@ async function main(): Promise<void> {
       `writeback_applied reason=${reason} jobs=${candidateIds.length} batches=${flushedBatches} success_items=${successItems.length} errors=${failedItems.length} uploaded=${flushUploadedCount} withheld=${flushWithheldCount} missing=${flushMissingCount}`,
     );
   };
+
+  let eventWritebackDrainInFlight = false;
+  const eventWritebackTimer = setInterval(() => {
+    if (eventWritebackDrainInFlight) {
+      return;
+    }
+    eventWritebackDrainInFlight = true;
+    void processEventWriteback("interval")
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        progress.warn(
+          `writeback_event_failed reason=interval message=${message}`,
+        );
+      })
+      .finally(() => {
+        eventWritebackDrainInFlight = false;
+      });
+  }, eventWritebackIntervalMs);
 
   try {
     while (true) {
@@ -1272,6 +1349,25 @@ async function main(): Promise<void> {
       const effectiveTargetCount = enqueueGateOpen
         ? computedEffectiveTargetCount
         : 0;
+
+      const pendingBeforeClaim = pendingWritebackCount();
+      if (pendingBeforeClaim >= eventWritebackBackpressureThreshold) {
+        progress.warn(
+          `writeback_backpressure pending_writeback=${pendingBeforeClaim} threshold=${eventWritebackBackpressureThreshold} action=drain_before_claim`,
+        );
+        await processEventWriteback("backpressure").catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          progress.warn(
+            `writeback_event_failed reason=backpressure message=${message}`,
+          );
+        });
+        await sleepMs(250);
+        if (!continuousMode) {
+          break;
+        }
+        continue;
+      }
 
       if (effectiveTargetCount <= 0) {
         const skipReason = !enqueueGateOpen
@@ -1351,6 +1447,33 @@ async function main(): Promise<void> {
       progress.info(
         `enqueue_performed jobs=${queuedJobs.length} claimed=${claimedItems.length} backlog_after=${postEnqueueSnapshot.backlog}`,
       );
+
+      if (continuousMode) {
+        // In continuous mode, avoid blocking on per-cycle exhaustive
+        // finalized-job harvesting. Event-driven writeback drains results
+        // asynchronously, while this loop keeps queue refill responsive.
+        await processEventWriteback("continuous-post-enqueue").catch(
+          (error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            progress.warn(
+              `writeback_event_failed reason=continuous-post-enqueue message=${message}`,
+            );
+          },
+        );
+        await publishRunnerStatus({
+          mode: "running",
+          gateReason: openGateReason,
+          pendingSuccessBuffer: pendingSuccessBufferCount,
+          pendingErrorBuffer: pendingErrorBufferCount,
+        }).catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          progress.warn(`status_publish_failed message=${message}`);
+        });
+        await sleepMs(250);
+        continue;
+      }
 
       const jobsById = new Map<string, Job<ImageProcessingQueueJob>>();
       for (const job of queuedJobs) {
@@ -1616,8 +1739,27 @@ async function main(): Promise<void> {
       async function processFinalizedJobs(options: {
         reason: string;
         finalPass: boolean;
+        budget?: HarvestBudget;
       }): Promise<void> {
+        const maxJobs = Math.max(
+          1,
+          Math.floor(options.budget?.maxJobs ?? Number.MAX_SAFE_INTEGER),
+        );
+        const maxMs = Math.max(
+          1,
+          Math.floor(options.budget?.maxMs ?? Number.MAX_SAFE_INTEGER),
+        );
+        const startedAtMs = Date.now();
+        let processedJobs = 0;
+
         for (const [jobId, job] of jobsById) {
+          if (processedJobs >= maxJobs || Date.now() - startedAtMs >= maxMs) {
+            progress.info(
+              `job_harvest_budget_hit reason=${options.reason} processed_jobs=${processedJobs} max_jobs=${maxJobs} elapsed_ms=${Date.now() - startedAtMs} max_ms=${maxMs}`,
+            );
+            break;
+          }
+
           if (handledJobIds.has(jobId)) {
             continue;
           }
@@ -1647,6 +1789,7 @@ async function main(): Promise<void> {
             progress.warn(
               `job_missing_result job_id=${jobId} work_id=${job.data.workId} reload_attempts=${misses}`,
             );
+            processedJobs += 1;
             continue;
           }
 
@@ -1675,6 +1818,7 @@ async function main(): Promise<void> {
             progress.warn(
               `job_failed job_id=${jobId} work_id=${job.data.workId} reason=${failedReason}`,
             );
+            processedJobs += 1;
             continue;
           }
 
@@ -1715,6 +1859,7 @@ async function main(): Promise<void> {
           progress.info(
             `job_buffered reason=${options.reason} job_id=${jobId} work_id=${job.data.workId} items=${items.length} errors=${errors.length} modes=${modes.join(",") || "none"}`,
           );
+          processedJobs += 1;
         }
       }
 
@@ -1728,9 +1873,10 @@ async function main(): Promise<void> {
       const enqueueHarvestCycle = (
         reason: string,
         finalPass: boolean,
+        budget?: HarvestBudget,
       ): Promise<void> => {
         harvestChain = harvestChain.then(async () => {
-          await processFinalizedJobs({ reason, finalPass });
+          await processFinalizedJobs({ reason, finalPass, budget });
           await flushPendingWrites(reason);
         });
         return harvestChain;
@@ -1891,8 +2037,15 @@ async function main(): Promise<void> {
           seenFailedJobIds.add(jobId);
         }
 
-        await enqueueHarvestCycle("finalize", false);
-        await enqueueHarvestCycle("final-pass", true);
+        if (continuousMode) {
+          await enqueueHarvestCycle("finalize", false, {
+            maxJobs: 200,
+            maxMs: 1500,
+          });
+        } else {
+          await enqueueHarvestCycle("finalize", false);
+          await enqueueHarvestCycle("final-pass", true);
+        }
         pendingSuccessBufferCount = pendingSuccessItems.length;
         pendingErrorBufferCount = pendingErrors.length;
 
@@ -2034,6 +2187,7 @@ async function main(): Promise<void> {
     );
   } finally {
     clearInterval(heartbeat);
+    clearInterval(eventWritebackTimer);
     queueEvents.off("completed", onCompletedEvent);
     queueEvents.off("failed", onFailedEvent);
     await closeWithTimeout("queue_runtime_close", queueRuntime.close());

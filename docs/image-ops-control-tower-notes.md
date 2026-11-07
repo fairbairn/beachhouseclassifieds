@@ -1,7 +1,7 @@
 # Image Ops Control Tower Notes
 
 Status: exploratory (interaction-first)
-Last updated: 2026-11-03
+Last updated: 2026-11-06
 
 ## Why This Exists
 
@@ -58,3 +58,11 @@ The goal is to start with practical behavior, gather feedback from live usage, a
 1. Capture one short run log per worker tier (for example 2, 5, 10 workers) with current queue settings.
 2. Identify first oscillation or starvation pattern and annotate root cause.
 3. Decide whether next implementation step is UI visibility or refill algorithm behavior.
+
+## Overnight Long-Run Posture (Current)
+
+1. Keep runner in continuous mode with periodic status checks rather than frequent control changes.
+2. Monitor completion pace from event-sum throughput and processed-item windows.
+3. Prefer interpreting queue pending/active as occupancy and completed/failed as event totals.
+4. If run appears stalled, first verify progress events and reconcile counts before treating it as a hard failure.
+5. For throughput regressions, separate workload shape effects (large source dimensions) from infrastructure contention effects.

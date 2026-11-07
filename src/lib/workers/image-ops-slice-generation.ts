@@ -146,10 +146,9 @@ function computeCounterDeltaFromRows(input: {
   }
 
   const windowMs = Math.max(1, input.nowMs - input.windowStartMs);
-  // Allow baseline carry-over only for near-adjacent samples.
-  // This keeps short windows (5s/15s) usable under sparse sampling,
-  // while preventing long-window inflation that looks like cumulative sums.
-  const baselineGapMaxMs = Math.max(1, Math.min(windowMs, 30_000));
+  // Carry a boundary baseline when the prior sample is no older than one full
+  // window from the first in-window sample.
+  const baselineGapMaxMs = windowMs;
   const firstInWindow = rows[startIndex];
 
   let previousValue = toFiniteNonNegative(firstInWindow?.value ?? 0);
@@ -183,8 +182,8 @@ function computeCounterDeltaFromRows(input: {
     if (currentValue >= previousValue) {
       delta += currentValue - previousValue;
     } else {
-      // Counter reset within the window; treat current value as post-reset progress.
-      delta += currentValue;
+      // Counter moved backward; ignore negative movement in window deltas.
+      delta += 0;
     }
     previousValue = currentValue;
     transitions += 1;
@@ -227,26 +226,6 @@ function computeStatsFromRows(input: {
   };
 }
 
-function computeWindowSumFromRows(input: {
-  rows: OpsTrendRow[] | undefined;
-  windowStartMs: number;
-  nowMs: number;
-}): number {
-  const values = sortedRows(input.rows, input.nowMs)
-    .filter((row) => row.atMs >= input.windowStartMs)
-    .map((row) => toFiniteNonNegative(row.value));
-
-  if (values.length <= 0) {
-    return 0;
-  }
-
-  let sum = 0;
-  for (const value of values) {
-    sum += value;
-  }
-  return Math.max(0, Math.round(sum));
-}
-
 export function buildPerformanceRollupFromTrendRows(input: {
   windowId: OpsSliceWindowId;
   windowMs: number;
@@ -257,22 +236,22 @@ export function buildPerformanceRollupFromTrendRows(input: {
   const safeWindowMs = Math.max(1000, Math.floor(input.windowMs));
   const windowStartMs = input.nowMs - safeWindowMs;
 
-  const completedJobs = computeWindowSumFromRows({
+  const completedJobs = computeCounterDeltaFromRows({
     rows: input.trendRowsByMetric.statusCompletedJobs,
     windowStartMs,
     nowMs: input.nowMs,
   });
-  const failedJobs = computeWindowSumFromRows({
+  const failedJobs = computeCounterDeltaFromRows({
     rows: input.trendRowsByMetric.statusFailedJobs,
     windowStartMs,
     nowMs: input.nowMs,
   });
-  const processedItems = computeWindowSumFromRows({
+  const processedItems = computeCounterDeltaFromRows({
     rows: input.trendRowsByMetric.statusProcessedItems,
     windowStartMs,
     nowMs: input.nowMs,
   });
-  const failedItems = computeWindowSumFromRows({
+  const failedItems = computeCounterDeltaFromRows({
     rows: input.trendRowsByMetric.statusFailedItems,
     windowStartMs,
     nowMs: input.nowMs,
@@ -415,8 +394,7 @@ function computeGaugeAverageFromRows(input: {
   const samples = rows.filter((row) => row.atMs >= startMs);
 
   if (samples.length <= 0) {
-    const latest = rows[rows.length - 1];
-    return latest ? toFiniteNonNegative(latest.value) : 0;
+    return 0;
   }
 
   let sum = 0;
@@ -501,17 +479,21 @@ function computeMetricSliceFromRows(input: {
 }): OpsMetricSlice {
   const rows = sortedRows(input.rows, input.nowMs);
   const latestRow = rows[rows.length - 1];
+  const safeWindowMs = Math.max(1000, Math.floor(input.windowMs));
+  const startMs = input.nowMs - safeWindowMs;
   const latestMaxAgeMs = Number.isFinite(input.latestMaxAgeMs)
     ? Math.max(1, Math.floor(Number(input.latestMaxAgeMs)))
     : null;
+  const latestInWindow = latestRow ? latestRow.atMs >= startMs : false;
   const latestIsFresh = latestRow
     ? latestMaxAgeMs === null || input.nowMs - latestRow.atMs <= latestMaxAgeMs
     : false;
 
   if (input.singleSampleOnly) {
-    const liveValue = latestIsFresh
-      ? toFiniteNonNegative(latestRow?.value ?? 0)
-      : 0;
+    const liveValue =
+      latestInWindow && latestIsFresh
+        ? toFiniteNonNegative(latestRow?.value ?? 0)
+        : 0;
     return {
       low: liveValue,
       high: liveValue,
@@ -523,25 +505,9 @@ function computeMetricSliceFromRows(input: {
     };
   }
 
-  const safeWindowMs = Math.max(1000, Math.floor(input.windowMs));
-  const startMs = input.nowMs - safeWindowMs;
   const inWindow = rows.filter((row) => row.atMs >= startMs);
 
   if (inWindow.length <= 0) {
-    const fallbackLatest = rows[rows.length - 1];
-    if (fallbackLatest) {
-      const fallbackValue = toFiniteNonNegative(fallbackLatest.value);
-      return {
-        low: fallbackValue,
-        high: fallbackValue,
-        avg: fallbackValue,
-        latest: fallbackValue,
-        sum: input.counterSumAsDelta ? 0 : fallbackValue,
-        delta: 0,
-        sampledAtMs: input.nowMs,
-      };
-    }
-
     return {
       low: 0,
       high: 0,

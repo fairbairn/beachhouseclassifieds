@@ -15,6 +15,12 @@ import {
   resolveRedisUrl,
   type ImageProcessingQueueJob,
 } from "../../workers/image-queue";
+import { resolveBullmqPollingConfig } from "./bullmq-polling-config";
+import {
+  nextBullmqLastProcessedJobId,
+  shouldIncludeBullmqPolledRow,
+  type BullmqPollCursor,
+} from "./bullmq-polling-cursor";
 import {
   fetchFlyAppSnapshot,
   fetchFlyMachines,
@@ -514,9 +520,23 @@ const OPS_REDIS_IO_PUBLISH_MIN_INTERVAL_MS = 5_000;
 const OPS_METRIC_OWNER_REFRESH_MIN_INTERVAL_MS = 5_000;
 const OPS_SAMPLE_FLUSH_INTERVAL_MS_DEFAULT = 1_000;
 const OPS_SAMPLE_FLUSH_BATCH_SIZE_DEFAULT = 2_000;
-const OPS_EVENT_DRIVEN_COLLECTOR_MIN_INTERVAL_MS = 250;
+const OPS_BULLMQ_CONFIG = resolveBullmqPollingConfig();
+const OPS_EVENT_DRIVEN_COLLECTOR_MIN_INTERVAL_MS =
+  OPS_BULLMQ_CONFIG.eventMinIntervalMs;
 const OPS_PIPELINE_TRACE_MAX_CHARS = 1200;
 const OPS_BULLMQ_SEED_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const OPS_BULLMQ_POLL_BATCH_LIMIT = OPS_BULLMQ_CONFIG.pollBatchLimit;
+const OPS_BULLMQ_POLL_LOOKBACK_MS = OPS_BULLMQ_CONFIG.pollLookbackMs;
+const OPS_BULLMQ_POLL_INGEST_MAX_ROWS = (() => {
+  const raw = process.env.IMAGE_OPS_BULLMQ_POLL_INGEST_MAX_ROWS;
+  const parsed = Number.parseInt(String(raw || "").trim(), 10);
+  if (!Number.isFinite(parsed)) {
+    return 250;
+  }
+  return Math.max(50, Math.min(5000, parsed));
+})();
+const OPS_REALTIME_SAMPLE_MAX_AGE_MS = 30_000;
+const OPS_REALTIME_SAMPLE_MAX_FUTURE_MS = 5_000;
 
 type OpsStagedMetricSample = {
   key: string;
@@ -525,8 +545,19 @@ type OpsStagedMetricSample = {
 };
 
 const opsStagedMetricSamples: OpsStagedMetricSample[] = [];
+const opsLastSampleAtMsByMetricKey = new Map<string, number>();
 let opsSampleFlushTimer: ReturnType<typeof setInterval> | null = null;
 let opsSampleFlushInFlight = false;
+
+function nextMonotonicMetricSampleAtMs(
+  metricKey: string,
+  atMs: number,
+): number {
+  const previousAtMs = opsLastSampleAtMsByMetricKey.get(metricKey) ?? 0;
+  const monotonicAtMs = atMs <= previousAtMs ? previousAtMs + 1 : atMs;
+  opsLastSampleAtMsByMetricKey.set(metricKey, monotonicAtMs);
+  return monotonicAtMs;
+}
 
 function opsSampleFlushIntervalMs(): number {
   const raw = process.env.IMAGE_OPS_SAMPLE_FLUSH_INTERVAL_MS;
@@ -1109,7 +1140,7 @@ const OPS_COLLECTOR_DEFAULT_INTERVALS_MS: Record<
   db: 5_000,
   fly: 15_000,
   redis: 15_000,
-  bullmq: 1_000,
+  bullmq: OPS_BULLMQ_CONFIG.collectorIntervalMs,
 };
 
 const OPS_TREND_METRIC_KEYS = {
@@ -2079,7 +2110,6 @@ function buildTrendSamplesFromUiSnapshot(
     nowMs?: number;
     statusMaxAgeMs?: number;
     includeStatusCounterMetrics?: boolean;
-    includeStatusLatencyMetrics?: boolean;
   },
 ): OpsMetricSample[] {
   const nowMs = Number.isFinite(options?.nowMs)
@@ -2090,8 +2120,6 @@ function buildTrendSamplesFromUiSnapshot(
     : OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS;
   const includeStatusCounterMetrics =
     options?.includeStatusCounterMetrics === true;
-  const includeStatusLatencyMetrics =
-    options?.includeStatusLatencyMetrics !== false;
   const statusUpdatedAtMs = runnerStatusUpdatedAtMs(snapshot.status);
   const statusIsFresh =
     statusUpdatedAtMs > 0 && nowMs - statusUpdatedAtMs <= statusMaxAgeMs;
@@ -2130,7 +2158,9 @@ function buildTrendSamplesFromUiSnapshot(
     if (isStatusCounterMetric(metric.name) && !includeStatusCounterMetrics) {
       continue;
     }
-    if (isStatusLatencyMetric(metric.name) && !includeStatusLatencyMetrics) {
+    // Latency trend keys are job-event-owned. Never write snapshot-derived
+    // latency samples; they can repeat stale status values across tight windows.
+    if (isStatusLatencyMetric(metric.name)) {
       continue;
     }
 
@@ -2255,7 +2285,7 @@ function resolveCollectorIntervalsMs(
       input?.redis ?? OPS_COLLECTOR_DEFAULT_INTERVALS_MS.redis,
     ),
     bullmq: Math.max(
-      1000,
+      250,
       input?.bullmq ?? OPS_COLLECTOR_DEFAULT_INTERVALS_MS.bullmq,
     ),
   };
@@ -2354,7 +2384,6 @@ async function collectBullmqMetricSamples(): Promise<OpsMetricSample[]> {
       nowMs,
       statusMaxAgeMs: OPS_STATUS_DERIVED_SNAPSHOT_MAX_AGE_MS,
       includeStatusCounterMetrics: false,
-      includeStatusLatencyMetrics: false,
     },
   );
 }
@@ -2559,10 +2588,11 @@ function stageOpsMetricSamples(input: {
       continue;
     }
     assertOpsMetricKeyRegistered(sample.key);
-    const atMs =
+    const candidateAtMs =
       Number.isFinite(sample.atMs) && (sample.atMs || 0) > 0
         ? Number(sample.atMs)
         : sharedAtMs;
+    const atMs = nextMonotonicMetricSampleAtMs(sample.key, candidateAtMs);
     opsStagedMetricSamples.push({
       key: sample.key,
       value: normalizeSampleValue(sample.value),
@@ -3813,6 +3843,11 @@ export async function createOpsUiStateWatcher(input: {
     input.collectors && input.collectors.length > 0
       ? input.collectors
       : ["db", "fly", "redis", "bullmq"];
+  const bullmqCollectorConfigured = configuredCollectors.includes("bullmq");
+  const bullmqEventsEnabled =
+    bullmqCollectorConfigured && OPS_BULLMQ_CONFIG.eventsEnabled;
+  const bullmqPollingEnabled =
+    bullmqCollectorConfigured && OPS_BULLMQ_CONFIG.pollingEnabled;
   const wantsQueueEventSignals =
     collectorsEnabled && configuredCollectors.some(isEventDrivenCollector);
 
@@ -3862,7 +3897,26 @@ export async function createOpsUiStateWatcher(input: {
   let bullmqBootstrapSampleWritten = false;
   let bullmqWritesEnabled = false;
   let bullmqEventSampleChain: Promise<void> = Promise.resolve();
-  const queueReadConnection = wantsQueueEventSignals
+  const buildInitialBullmqPollCursor = (): BullmqPollCursor => ({
+    // Keep first poll bounded, then advance cursor-only from there.
+    atMs: Math.max(0, Date.now() - OPS_BULLMQ_POLL_LOOKBACK_MS),
+    jobId: "",
+  });
+  const bullmqPollCursors: {
+    completed: BullmqPollCursor;
+    failed: BullmqPollCursor;
+  } = {
+    completed: buildInitialBullmqPollCursor(),
+    failed: buildInitialBullmqPollCursor(),
+  };
+  const bullmqLastProcessedJobIdByStream: {
+    completed: number;
+    failed: number;
+  } = {
+    completed: 0,
+    failed: 0,
+  };
+  const queueReadConnection = bullmqPollingEnabled
     ? createRedisConnection()
     : null;
   const queueReadQueue = queueReadConnection
@@ -4073,6 +4127,18 @@ export async function createOpsUiStateWatcher(input: {
     });
   };
 
+  const normalizeRealtimeSampleAtMs = (candidateAtMs: number): number => {
+    const nowMs = Date.now();
+    const atMs = Math.max(1, Math.floor(Number(candidateAtMs) || nowMs));
+    if (atMs < nowMs - OPS_REALTIME_SAMPLE_MAX_AGE_MS) {
+      return nowMs;
+    }
+    if (atMs > nowMs + OPS_REALTIME_SAMPLE_MAX_FUTURE_MS) {
+      return nowMs;
+    }
+    return atMs;
+  };
+
   const seedBullmqCounterSamplesFromLegacyJobs = async (): Promise<void> => {
     if (
       bullmqLegacyCounterSeeded ||
@@ -4154,6 +4220,53 @@ export async function createOpsUiStateWatcher(input: {
     completedRows.reverse();
     seedLog(`phase=parse_completed status=done rows=${completedRows.length}`);
 
+    const failedRows: Array<{ jobId: string; atMs: number }> = [];
+    for (let index = 0; index + 1 < failedRaw.length; index += 2) {
+      const jobId = String(failedRaw[index] || "");
+      const atMs = Number(failedRaw[index + 1]);
+      if (!jobId || !Number.isFinite(atMs)) {
+        continue;
+      }
+      failedRows.push({ jobId, atMs: Math.floor(atMs) });
+    }
+    failedRows.reverse();
+    seedLog(`phase=parse_failed status=done rows=${failedRows.length}`);
+
+    if (completedRows.length > 0) {
+      const lastCompleted = completedRows[completedRows.length - 1];
+      bullmqPollCursors.completed = {
+        atMs: lastCompleted.atMs,
+        jobId: lastCompleted.jobId,
+      };
+      let seededLastCompletedJobId = bullmqLastProcessedJobIdByStream.completed;
+      for (const row of completedRows) {
+        seededLastCompletedJobId = nextBullmqLastProcessedJobId({
+          previous: seededLastCompletedJobId,
+          jobId: row.jobId,
+        });
+      }
+      bullmqLastProcessedJobIdByStream.completed = seededLastCompletedJobId;
+    }
+
+    if (failedRows.length > 0) {
+      const lastFailed = failedRows[failedRows.length - 1];
+      bullmqPollCursors.failed = {
+        atMs: lastFailed.atMs,
+        jobId: lastFailed.jobId,
+      };
+      let seededLastFailedJobId = bullmqLastProcessedJobIdByStream.failed;
+      for (const row of failedRows) {
+        seededLastFailedJobId = nextBullmqLastProcessedJobId({
+          previous: seededLastFailedJobId,
+          jobId: row.jobId,
+        });
+      }
+      bullmqLastProcessedJobIdByStream.failed = seededLastFailedJobId;
+    }
+    seedLog(
+      `seed_frontier completed_cursor=${bullmqPollCursors.completed.atMs}:${bullmqPollCursors.completed.jobId || "none"} failed_cursor=${bullmqPollCursors.failed.atMs}:${bullmqPollCursors.failed.jobId || "none"} completed_last_job_id=${bullmqLastProcessedJobIdByStream.completed} failed_last_job_id=${bullmqLastProcessedJobIdByStream.failed}`,
+    );
+
     seedLog(
       `phase=read_payloads status=pending mode=pipeline rows=${completedRows.length}`,
     );
@@ -4207,15 +4320,10 @@ export async function createOpsUiStateWatcher(input: {
       }
     }
 
-    for (let index = 0; index + 1 < failedRaw.length; index += 2) {
-      const jobId = String(failedRaw[index] || "");
-      const atMs = Number(failedRaw[index + 1]);
-      if (!jobId || !Number.isFinite(atMs)) {
-        continue;
-      }
+    for (const row of failedRows) {
       events.push({
-        atMs: Math.floor(atMs),
-        sampleId: `legacy:failed:${jobId}`,
+        atMs: row.atMs,
+        sampleId: `legacy:failed:${row.jobId}`,
         completedDelta: 0,
         failedJobsDelta: 1,
         processedDelta: 0,
@@ -4225,9 +4333,9 @@ export async function createOpsUiStateWatcher(input: {
         avgUploadMs: null,
         avgEndToEndMs: null,
       });
-      if ((index / 2 + 1) % 10_000 === 0) {
+      if (events.length % 10_000 === 0) {
         seedLog(
-          `phase=build_events status=progress failed_jobs=${Math.floor(index / 2) + 1}/${Math.floor(failedRaw.length / 2)}`,
+          `phase=build_events status=progress failed_jobs=${events.length}/${completedRows.length + failedRows.length}`,
         );
       }
     }
@@ -4398,7 +4506,7 @@ export async function createOpsUiStateWatcher(input: {
     }
 
     await writeBullmqEventSampleAt({
-      atMs,
+      atMs: normalizeRealtimeSampleAtMs(atMs),
       sampleId: `live:${inputEvent.eventKey}`,
       processedValue: inputEvent.type === "completed" ? processedCount : 0,
       completedValue: inputEvent.type === "completed" ? processedCount : 0,
@@ -4418,6 +4526,191 @@ export async function createOpsUiStateWatcher(input: {
           : null,
     });
     triggerBullmqEventCollector();
+  };
+
+  const ingestBullmqCounterSamplesByPolling = async (): Promise<void> => {
+    if (!bullmqPollingEnabled || !queueReadQueue) {
+      return;
+    }
+
+    const readRowsAfterCursor = async (
+      key: string,
+      cursor: BullmqPollCursor,
+      minJobIdExclusive: number,
+    ): Promise<{
+      rows: Array<{ jobId: string; atMs: number }>;
+      latestRow: { jobId: string; atMs: number } | null;
+    }> => {
+      const rows: Array<{ jobId: string; atMs: number }> = [];
+      let offset = 0;
+      const minScore = Math.max(0, Math.floor(cursor.atMs));
+
+      while (rows.length < OPS_BULLMQ_POLL_INGEST_MAX_ROWS) {
+        const remaining = OPS_BULLMQ_POLL_INGEST_MAX_ROWS - rows.length;
+        const pageSize = Math.max(
+          1,
+          Math.min(OPS_BULLMQ_POLL_BATCH_LIMIT, remaining),
+        );
+        const raw = await refreshRedisConnection.zrangebyscore(
+          key,
+          String(minScore),
+          "+inf",
+          "WITHSCORES",
+          "LIMIT",
+          offset,
+          pageSize,
+        );
+        if (!raw || raw.length <= 0) {
+          break;
+        }
+
+        const pageRows: Array<{ jobId: string; atMs: number }> = [];
+        for (let index = 0; index + 1 < raw.length; index += 2) {
+          const jobId = String(raw[index] || "");
+          const atMs = Number(raw[index + 1]);
+          if (!jobId || !Number.isFinite(atMs) || atMs <= 0) {
+            continue;
+          }
+          pageRows.push({ jobId, atMs: Math.floor(atMs) });
+        }
+
+        if (pageRows.length <= 0) {
+          break;
+        }
+
+        for (const row of pageRows) {
+          if (
+            !shouldIncludeBullmqPolledRow({
+              row,
+              cursor,
+              minJobIdExclusive,
+            })
+          ) {
+            continue;
+          }
+          rows.push(row);
+          if (rows.length >= OPS_BULLMQ_POLL_INGEST_MAX_ROWS) {
+            break;
+          }
+        }
+
+        offset += pageRows.length;
+        if (pageRows.length < pageSize) {
+          break;
+        }
+      }
+
+      const latestRow = rows.length > 0 ? rows[rows.length - 1] : null;
+      return { rows, latestRow };
+    };
+
+    const completedKey = queueReadQueue.toKey("completed");
+    const completedRead = await readRowsAfterCursor(
+      completedKey,
+      bullmqPollCursors.completed,
+      bullmqLastProcessedJobIdByStream.completed,
+    );
+    const completedRows = completedRead.rows;
+    if (completedRows.length > 0) {
+      const payloadRead = refreshRedisConnection.pipeline();
+      for (const row of completedRows) {
+        payloadRead.hget(queueReadQueue.toKey(row.jobId), "returnvalue");
+      }
+      const payloadRows = await payloadRead.exec();
+      let completedMaxProcessedJobId =
+        bullmqLastProcessedJobIdByStream.completed;
+
+      for (let index = 0; index < completedRows.length; index += 1) {
+        const row = completedRows[index];
+        completedMaxProcessedJobId = nextBullmqLastProcessedJobId({
+          previous: completedMaxProcessedJobId,
+          jobId: row.jobId,
+        });
+        const payloadRow = payloadRows?.[index];
+        const payload =
+          payloadRow && payloadRow[0] === null
+            ? (payloadRow[1] as string | null)
+            : null;
+        const parsed = parseCountsFromReturnValue(payload);
+        const sampleAtMs =
+          parsed.completedAtMs && parsed.completedAtMs > 0
+            ? Math.floor(parsed.completedAtMs)
+            : row.atMs;
+        const eventKey = `${row.jobId}:completed`;
+        if (opsBullmqEventCounterLedger.seenCompletedEventKeys.has(eventKey)) {
+          continue;
+        }
+
+        applyOpsBullmqCompletedEvent({
+          eventKey,
+          processedCount: Math.max(0, parsed.processedCount || 0),
+          failedCount: Math.max(0, parsed.failedCount || 0),
+        });
+
+        await writeBullmqEventSampleAt({
+          atMs: normalizeRealtimeSampleAtMs(sampleAtMs),
+          sampleId: `poll:${eventKey}`,
+          processedValue: Math.max(0, parsed.processedCount || 0),
+          completedValue: Math.max(0, parsed.processedCount || 0),
+          failedItemsValue: Math.max(0, parsed.failedCount || 0),
+          failedJobsValue: 0,
+          avgFetchMs: parsed.avgFetchMs,
+          avgTransformMs: parsed.avgTransformMs,
+          avgUploadMs: parsed.avgUploadMs,
+          avgEndToEndMs: parsed.avgEndToEndMs,
+        });
+      }
+
+      if (completedRead.latestRow) {
+        bullmqPollCursors.completed = {
+          atMs: completedRead.latestRow.atMs,
+          jobId: completedRead.latestRow.jobId,
+        };
+      }
+      bullmqLastProcessedJobIdByStream.completed = completedMaxProcessedJobId;
+    }
+
+    const failedKey = queueReadQueue.toKey("failed");
+    const failedRead = await readRowsAfterCursor(
+      failedKey,
+      bullmqPollCursors.failed,
+      bullmqLastProcessedJobIdByStream.failed,
+    );
+    const failedRows = failedRead.rows;
+    if (failedRows.length > 0) {
+      let failedMaxProcessedJobId = bullmqLastProcessedJobIdByStream.failed;
+      for (const row of failedRows) {
+        failedMaxProcessedJobId = nextBullmqLastProcessedJobId({
+          previous: failedMaxProcessedJobId,
+          jobId: row.jobId,
+        });
+        const eventKey = `${row.jobId}:failed`;
+        if (opsBullmqEventCounterLedger.seenFailedEventKeys.has(eventKey)) {
+          continue;
+        }
+        applyOpsBullmqFailedEvent({
+          eventKey,
+          failedCount: 1,
+        });
+
+        await writeBullmqEventSampleAt({
+          atMs: normalizeRealtimeSampleAtMs(row.atMs),
+          sampleId: `poll:${eventKey}`,
+          processedValue: 0,
+          completedValue: 0,
+          failedItemsValue: 1,
+          failedJobsValue: 1,
+        });
+      }
+
+      if (failedRead.latestRow) {
+        bullmqPollCursors.failed = {
+          atMs: failedRead.latestRow.atMs,
+          jobId: failedRead.latestRow.jobId,
+        };
+      }
+      bullmqLastProcessedJobIdByStream.failed = failedMaxProcessedJobId;
+    }
   };
 
   const readMetricOwnership = async (
@@ -4495,6 +4788,10 @@ export async function createOpsUiStateWatcher(input: {
       return;
     }
 
+    if (dueCollectors.includes("bullmq") && bullmqPollingEnabled) {
+      await ingestBullmqCounterSamplesByPolling().catch(() => undefined);
+    }
+
     await runOpsCollectorsAndIngestSamples({
       appName: input.appName,
       collectors: dueCollectors,
@@ -4511,6 +4808,7 @@ export async function createOpsUiStateWatcher(input: {
       closed ||
       (!bullmqWritesEnabled && !allowBullmqCollectorsInStandby) ||
       !collectorsEnabled ||
+      (!bullmqEventsEnabled && !bullmqPollingEnabled) ||
       !configuredCollectors.includes("bullmq")
     ) {
       return;
@@ -4524,6 +4822,9 @@ export async function createOpsUiStateWatcher(input: {
     bullmqEventCollectorInFlight = (async () => {
       while (bullmqEventCollectorPending && !closed) {
         bullmqEventCollectorPending = false;
+        if (bullmqPollingEnabled) {
+          await ingestBullmqCounterSamplesByPolling().catch(() => undefined);
+        }
         await runOpsCollectorsAndIngestSamples({
           appName: input.appName,
           collectors: ["bullmq"],
@@ -4654,6 +4955,10 @@ export async function createOpsUiStateWatcher(input: {
     jobId?: string;
     returnvalue?: unknown;
   }) => {
+    if (!bullmqEventsEnabled) {
+      onQueueSignal();
+      return;
+    }
     if (
       (!bullmqWritesEnabled && !allowBullmqCollectorsInStandby) ||
       !bullmqHistoricalSeedReady
@@ -4673,6 +4978,10 @@ export async function createOpsUiStateWatcher(input: {
   };
 
   const onQueueFailed = (event: { jobId?: string }) => {
+    if (!bullmqEventsEnabled) {
+      onQueueSignal();
+      return;
+    }
     if (
       (!bullmqWritesEnabled && !allowBullmqCollectorsInStandby) ||
       !bullmqHistoricalSeedReady
@@ -4696,11 +5005,13 @@ export async function createOpsUiStateWatcher(input: {
       return;
     }
     queueEvents.on("active", onQueueSignal);
-    queueEvents.on("completed", onQueueCompleted);
-    queueEvents.on("failed", onQueueFailed);
     queueEvents.on("waiting", onQueueSignal);
     queueEvents.on("delayed", onQueueSignal);
     queueEvents.on("progress", onQueueSignal);
+    if (bullmqEventsEnabled) {
+      queueEvents.on("completed", onQueueCompleted);
+      queueEvents.on("failed", onQueueFailed);
+    }
     queueEventsBound = true;
   };
 
@@ -4708,11 +5019,26 @@ export async function createOpsUiStateWatcher(input: {
     if (profile !== "cli" || bullmqHistoricalSeedReady) {
       return;
     }
+    if (!bullmqEventsEnabled && !bullmqPollingEnabled) {
+      bullmqHistoricalSeedReady = true;
+      return;
+    }
 
     const ownership = await readMetricOwnership(Date.now()).catch(() =>
       defaultOpsMetricSystemOwnership(),
     );
     bullmqWritesEnabled = ownership.isOwner;
+    if (!bullmqWritesEnabled && allowBullmqCollectorsInStandby) {
+      // In CLI standby mode we still need live BullMQ events so short windows
+      // (15s/1m) do not starve when another instance is elected owner.
+      bullmqHistoricalSeedReady = true;
+      bindQueueEventHandlers();
+      if (bullmqPollingEnabled) {
+        await ingestBullmqCounterSamplesByPolling().catch(() => undefined);
+      }
+      triggerBullmqEventCollector();
+      return;
+    }
     if (!bullmqWritesEnabled) {
       return;
     }
@@ -4835,7 +5161,19 @@ export async function createOpsUiStateWatcher(input: {
 
       const existing = snapshotTrendRowsByMetric[name] ?? [];
       const tailAtMs = existing[existing.length - 1]?.atMs ?? 0;
-      const fresh = incoming.filter((row) => row.atMs > tailAtMs);
+      const tailValue = existing[existing.length - 1]?.value;
+      const fresh = incoming.filter((row) => {
+        if (row.atMs > tailAtMs) {
+          return true;
+        }
+        if (row.atMs < tailAtMs) {
+          return false;
+        }
+        if (!Number.isFinite(tailValue)) {
+          return false;
+        }
+        return Number(row.value) !== Number(tailValue);
+      });
       if (fresh.length === 0) {
         continue;
       }
@@ -5062,9 +5400,11 @@ export async function createOpsUiStateWatcher(input: {
     }));
     const sinceAtMsExclusiveByName: Record<string, number> = {};
     for (const descriptor of descriptorList) {
+      // Overlap 1ms on incremental reads so same-millisecond samples that arrive
+      // after the previous fetch are not skipped by the exclusive lower bound.
       sinceAtMsExclusiveByName[descriptor.name] = Math.max(
         0,
-        Math.floor(snapshotTrendLastAtMsByMetric[descriptor.name] ?? 0),
+        Math.floor(snapshotTrendLastAtMsByMetric[descriptor.name] ?? 0) - 1,
       );
     }
 
@@ -5363,6 +5703,7 @@ export async function waitForOpsRunCompletion(input: {
     string,
     { succeeded: number; failed: number }
   >();
+  let lastProgressAtMs = Date.now();
 
   const summarizeLiveItems = (): {
     processedItems: number;
@@ -5400,16 +5741,27 @@ export async function waitForOpsRunCompletion(input: {
       Math.min(5000, input.reconcileIntervalMs ?? 1000),
     );
     let reconcileTimer: NodeJS.Timeout | null = null;
+    let watchdogTimer: NodeJS.Timeout | null = null;
     let reconcileInFlight = false;
 
-    const timeout = setTimeout(() => {
+    const markProgress = (): void => {
+      lastProgressAtMs = Date.now();
+    };
+
+    watchdogTimer = setInterval(() => {
+      const nowMs = Date.now();
+      const idleMs = nowMs - lastProgressAtMs;
+      if (idleMs < input.timeoutMs) {
+        return;
+      }
+
       cleanup();
       reject(
         new Error(
-          `timeout waiting for queue completion queue=${input.queueName} completed=${completedSet.size} failed=${failedSet.size} expected=${resolveExpectedJobs()}`,
+          `timeout waiting for queue completion queue=${input.queueName} completed=${completedSet.size} failed=${failedSet.size} expected=${resolveExpectedJobs()} idle_ms=${idleMs}`,
         ),
       );
-    }, input.timeoutMs);
+    }, 1000);
 
     const maybeDone = (): void => {
       const expectedJobs = resolveExpectedJobs();
@@ -5435,11 +5787,13 @@ export async function waitForOpsRunCompletion(input: {
 
     const onCompleted = (event: { jobId: string }): void => {
       completedSet.add(String(event.jobId));
+      markProgress();
       maybeDone();
     };
 
     const onFailed = (event: { jobId: string }): void => {
       failedSet.add(String(event.jobId));
+      markProgress();
       maybeDone();
     };
 
@@ -5470,13 +5824,16 @@ export async function waitForOpsRunCompletion(input: {
         succeeded: Number.isFinite(succeeded) ? Math.max(0, succeeded) : 0,
         failed: Number.isFinite(failed) ? Math.max(0, failed) : 0,
       });
+      markProgress();
       maybeDone();
     };
 
     const cleanup = (): void => {
-      clearTimeout(timeout);
       if (reconcileTimer) {
         clearInterval(reconcileTimer);
+      }
+      if (watchdogTimer) {
+        clearInterval(watchdogTimer);
       }
       input.queueEvents.off("completed", onCompleted);
       input.queueEvents.off("failed", onFailed);
@@ -5501,6 +5858,7 @@ export async function waitForOpsRunCompletion(input: {
         for (const jobId of reconcileResult.failedJobIds || []) {
           failedSet.add(String(jobId));
         }
+        markProgress();
 
         maybeDone();
         if (reconcileResult.done) {

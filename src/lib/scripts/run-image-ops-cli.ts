@@ -609,7 +609,7 @@ async function panelControl(): Promise<void> {
     ["snapshot_queue_completed", status.queueCompleted],
     ["snapshot_queue_failed", status.queueFailed],
     ["snapshot_queue_delayed", status.queueDelayed],
-    ["snapshot_queue_paused", status.queuePaused],
+    ["snapshot_queue_paused_jobs", status.queuePaused],
     ["snapshot_queue_backlog", status.queueBacklog],
     ["snapshot_pending_success_buffer", status.pendingSuccessBuffer],
     ["snapshot_pending_error_buffer", status.pendingErrorBuffer],
@@ -1533,15 +1533,29 @@ async function runControlSet(args: ParsedArgs): Promise<void> {
 
 async function runPauseSystem(): Promise<void> {
   const result = await pauseOpsSystemFlow();
+  const [queuePausedNow, settingsNow] = await Promise.all([
+    readOpsQueuePausedState(),
+    readOpsControlSettings(),
+  ]);
   process.stdout.write(
     `${chalk.green("pause-system complete")} desired_mode=${result.settings.desiredMode} enqueue_enabled=${result.settings.enqueueEnabled} queue_paused=${result.queuePaused}\n`,
+  );
+  process.stdout.write(
+    `${chalk.gray("pause-system verified")} desired_mode=${settingsNow.desiredMode} enqueue_enabled=${settingsNow.enqueueEnabled} queue_globally_paused=${queuePausedNow}\n`,
   );
 }
 
 async function runResumeSystem(): Promise<void> {
   const result = await resumeOpsSystemFlow();
+  const [queuePausedNow, settingsNow] = await Promise.all([
+    readOpsQueuePausedState(),
+    readOpsControlSettings(),
+  ]);
   process.stdout.write(
     `${chalk.green("resume-system complete")} desired_mode=${result.settings.desiredMode} enqueue_enabled=${result.settings.enqueueEnabled} queue_paused=${result.queuePaused}\n`,
+  );
+  process.stdout.write(
+    `${chalk.gray("resume-system verified")} desired_mode=${settingsNow.desiredMode} enqueue_enabled=${settingsNow.enqueueEnabled} queue_globally_paused=${queuePausedNow}\n`,
   );
 }
 
